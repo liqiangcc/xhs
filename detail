@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# 1. 基础参数检查
+if [ "$#" -ne 2 ]; then
+    echo "使用指南: $0 <笔记ID> <xsec_token>"
+    exit 1
+fi
+
+NOTE_ID=$1
+TOKEN=$2
+RAW_FILE="raw_curl_detail.txt"
+SAVE_PATH="note_detail"
+TARGET_FILE="$SAVE_PATH/${NOTE_ID}.html"
+
+# 2. 检查文件是否已存在 (快速跳过)
+if [ -f "$TARGET_FILE" ]; then
+    echo "⏭️  跳过：文件 $TARGET_FILE 已存在。"
+    exit 0
+fi
+
+# 3. 确保模板存在
+if [ ! -f "$RAW_FILE" ]; then
+    echo "❌ 错误: 未找到模板文件 $RAW_FILE"
+    exit 1
+fi
+
+mkdir -p "$SAVE_PATH"
+
+echo "--- 📡 正在请求 ID: $NOTE_ID ---"
+
+# 4. 核心流处理逻辑 (从模板生成命令)
+COMMAND=$(cat "$RAW_FILE" | \
+    sed -E "s|explore/[a-zA-Z0-9]+|explore/$NOTE_ID|g" | \
+    sed -E "s|xsec_token=[^&' ]+|xsec_token=$TOKEN|g")
+
+# 5. 执行请求并存入变量 (不直接写盘，先校验)
+RESPONSE=$(eval "$COMMAND -s")
+
+# 6. 多重安全校验逻辑
+# 校验 A: 是否触发频次风控 (300013)
+if [[ "$RESPONSE" == *"error_code=300013"* ]] || [[ "$RESPONSE" == *"访问频次异常"* ]]; then
+    echo "🛑 报警：触发风控拦截 (300013)！请立即停止并更换 IP/Cookie。"
+    exit 1  # 返回失败，触发主脚本熔断
+fi
+
+# 校验 B: 是否包含有效数据载体 (INITIAL_STATE)
+# 理由：有时虽然包含 ID，但只是重定向页，没有 INITIAL_STATE 就没有 JSON
+if [[ "$RESPONSE" == *"window.__INITIAL_STATE__"* ]]; then
+    
+    # 校验 C: 再次确认 ID 是否在内容中 (双重保险)
+    if [[ "$RESPONSE" == *"$NOTE_ID"* ]]; then
+        echo "$RESPONSE" > "$TARGET_FILE"
+        echo "✅ 验证通过，成功保存: $TARGET_FILE"
+        exit 0
+    else
+        echo "⚠️  警告：包含数据载体但未找到匹配 ID，内容可能异常。"
+        exit 1
+    fi
+else
+    echo "❌ 失败：返回内容不完整或非预期页面 (未发现 INITIAL_STATE)。"
+    exit 1
+fi
