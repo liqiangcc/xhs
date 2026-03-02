@@ -1,0 +1,71 @@
+thought
+I have processed the user's request and received the content of the three image files. Now I need to output the extracted text directly as requested.小米二面
+
+函数
+构造函数能是虚函数吗?为什么?
+
+不能,因为在如果构造函数是虚函数,那么在创建对象的时候会找vptr(指向虚函数表的
+指针),而这个指针的初始化是发生在运行期。
+
+析构函数可以是虚函数吗?
+如果作为接口类,那么需要是虚函数。否则会造成内存泄漏
+遇到过内存泄漏吗?怎么排查?
+
+没有,因为不涉及多线程,以及裸指针,内存泄漏很难
+智能指针什么时候会涉及内存泄漏
+
+因为shared_ptr要维护count和堆上的地址,而这两个操作不是原子的,因此在多线程写
+写同一个shared_ptr的时候会发生内存泄漏或者悬空指针(具体是哪种问题和shared_ptr
+的设计有关)https://www.cnblogs.com/ggtcgq/p/7492772.html
+
+小米
+计算点到线的距离
+C++
+1```
+2 #include <iostream>
+3 #include <cmath>
+4 #include <algorithm>
+5 using namespace std;
+6
+7 struct Point {
+8 Point() = default;
+9 Point(double_x, double_y):x(_x), y(_y){}
+10
+11 double x;
+12 double y;
+13 };
+14 bool is_in_line(const Point& p1, const Point& start_p, const Point&
+15 double norm = sqrt(pow(start_p.x-end_p.x, 2)+pow(start_p.y
+16 cout << "norm: " << norm << endl;
+17
+18 Point vec1(p1.x - start_p.x, p1.y - start_p.y);
+19 Point vec2(end_p.x - start_p.x, end_p.y - start_p.y);
+20 double inliner = vec1.x*vec2.x+vec1.y*vec2.y;
+21 cout << "inliner: " << inliner << endl;
+22 double project_length = inliner/norm;
+23 cout << "project_length: " << project_length << endl;
+24 if(project_length>norm){
+25 return false;
+26 }
+27 return true;
+28 }
+29 }
+30 double half_area(const Point& p1, const Point& p2){
+31 double x = p1.x * p2.y - p1.y * p2.x;
+32 double y = p1.x * p2.y - p1.y * p2.x;
+33 double z = p1.x * p2.y - p1.y * p2.x;
+34 return sqrt(x*x + y*y + z*z);
+35 }
+36 }
+37 double get_distance(double p1_x, double p1_y, double start_x, doubdl
+38 Point p(p1_x, p1_y);
+39 Point start(start_x, start_y);
+40 Point end(end_x, end_y);
+41 if(is_in_line(p, start, end)){
+42 return half_area(Point(p.x - start_x, p.y - start_y), Point
+43 }
+44 }
+复制
+自动驾驶
+算法面经
+小米汽车

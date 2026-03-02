@@ -1,0 +1,158 @@
+**图片内容：**
+
+**来自 `downloaded_images/657d92d4000000001502fcdf/3.webp`:**
+腾讯音乐娱乐
+腾讯音乐社招笔试题题
+
+算法题
+1. Merge k个排序链表
+
+```java
+public class TX01 {
+    public ListNode mergeKLists(ArrayList<ListNode> lists) {
+        // write code here
+        if (lists == null || lists.size() == 0) return null;
+        return merge(lists, 0, lists.size() - 1);
+    }
+
+    public ListNode merge(ArrayList<ListNode> lists, int left, int right) {
+        if (left == right) {
+            return lists.get(left);
+        }
+        int mid = left + (right - left) / 2;
+        ListNode l1 = merge(lists, left, mid);
+        ListNode l2 = merge(lists, mid + 1, right);
+        return mergeTwoList(l1, l2);
+    }
+
+    public ListNode mergeTwoList(ListNode l1, ListNode l2) {
+        if (l1 == null) return l2;
+        if (l2 == null) return l1;
+        if (l1.val < l2.val) {
+            l1.next = mergeTwoList(l1.next, l2);
+            return l1;
+        } else {
+            l2.next = mergeTwoList(l1, l2.next);
+            return l2;
+        }
+    }
+}
+```
+
+**来自 `downloaded_images/657d92d4000000001502fcdf/4.webp`:**
+腾讯音乐娱乐
+腾讯音乐社招笔试题
+
+算法题
+2. 判断括号是否合法 (({}))() 合法
+
+自动探测 -
+```java
+public class TX02 {
+    public boolean function(String input) {
+        Stack<Character> stack = new Stack<>();
+        for (int i = 0; i < input.length(); i++) {
+            if (input.charAt(i) == '(' || input.charAt(i) == '[' || input.charAt(i) == '{') {
+                stack.push(input.charAt(i));
+            } else if (input.charAt(i) == ')') {
+                if (stack.isEmpty() || stack.pop() != '(') {
+                    return false;
+                }
+            } else if (input.charAt(i) == ']') {
+                if (stack.isEmpty() || stack.pop() != '[') {
+                    return false;
+                }
+            } else if (input.charAt(i) == '}') {
+                if (stack.isEmpty() || stack.pop() != '{') {
+                    return false;
+                }
+            }
+        }
+        return stack.isEmpty();
+    }
+}
+```
+
+**来自 `downloaded_images/657d92d4000000001502fcdf/2.webp`:**
+腾讯音乐娱乐
+腾讯音乐社招笔试题
+
+问答题
+3. 操作系统实现进程间通信有哪些方法 他们的优缺点是?
+a. 管道: 有名管道一种半双工的通信方式, 它允许无关亲缘关系进程间的通信,
+可以实现任意关系的进程间通信
+b. 信号量: 一个计数器, 可以用来控制多个线程对共享资源的访问. 缺点: 信号量有限
+c. 消息队列: 优点: 通过系统调用函数实现消息发送和接收之间的同步.
+缺点: 信息量的复制需要额外消耗CPU的时间, 不适宜于信息量大或操作频繁的场合
+d. 套接字socket 优点: 传输协议可自定义, 数据量小效率高传输数据时间短, 性能高
+缺点: 需传输的数据进行解析, 转化成应用层的数据。
+e. 共享内存: 优点: 映射一段能被其他进程所访问的内存, 这段内存由一个进程创建,
+但多个进程都可以访问, 无须复制, 快捷, 信息量大, 缺点: 只能同一个计算机系统中的
+诸多进程共享, 不方便网络通信
+4. 一个大文件进行TCP传输请问你有什么传输办法来提升TCP传输效率?
+a. 将文件进行顺序切割, 每个包大小为64kb, 并标记顺序号, 然后进行并行传输, 控制并并发两大,
+比如控制并发量大小为10, 同一时间可以发送10个包出去, 但是需要等等其中有ack了, 才能继续发送。
+接受端收到包之后根据标记的顺序号进行编排。当然也可能会出现, 后面的包比前面包更快到。这个时候可以
+采用tcp的滑动窗口原理来控制发送端, 不能让前面的包拉太多。
+b. 或许大文件可以存在时候就按照拆分包的方式进行存储。这样就算接收端的断网了,
+也可以进行请求没有拿到的包, 而不需要把所有的数据都获取一遍。
+
+**来自 `downloaded_images/657d92d4000000001502fcdf/1.webp`:**
+腾讯音乐娱乐
+腾讯音乐社招笔试题
+
+问答题
+1. 什么是数据库索引?
+a. 索引是对数据库表中一列或多列的值进行排序的一种结构,
+使用索引可快速访问数据库表中的特定信息。
+2. 索引的数据结构? 优缺点?
+a. hash散列表 优点: 插入和查询O(1)时间复杂度效率很高, 比其他数据结构都要快,
+缺点: 无法进行范围查询
+b. 有序数组 查询时间复杂度O(logn), 但是插入的复杂度很高, 需要挪动后面的元素位置。
+c. B树的叶子结点和非叶子结点都是存储的该行的全部数据, 一个阶段存储的是一页数据,
+好处: 节点数据从左到右是有序排列, 查找和插入数据的效率是o (logn),
+通过树的中序遍历可以支持范围查询。
+d. B+树的非叶子结点存储索引的值, 叶子结点存储全部数据, 一个非叶子结点是一页数据。
+叶子结点通过双向链表进行连接起来, 这样范围查询的时候直接找到头尾节点就可以查询出来,
+另外因为B+树的非叶子结点存储的是索引数据, 所以非叶子结点可以存储更多的数据, 让整个叉树的
+高度都更低一些, 查询效率也就更高一些。但是因为除了存储整体数据之外还额外多存储了一份
+索引数据, 所以会导致整体多占用一份索引的内存。
+
+**来自 `downloaded_images/657d92d4000000001502fcdf/5.webp`:**
+腾讯音乐娱乐
+腾讯音乐社招笔试题
+
+算法题
+3. 字符串解码 3a4[bc] -> aaabcbcbc
+
+```java
+public class TX03 {
+    public String function(String input) {
+        return dfs(input, 0)[0];
+    }
+
+    public String[] dfs(String s, int i) {
+        StringBuilder res = new StringBuilder();
+        int m = 0;
+        while (i < s.length()) {
+            if (s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+                m = m * 10 + Integer.parseInt(String.valueOf(s.charAt(i)));
+                i++;
+            } else if (s.charAt(i) == '[') {
+                String[] temp = dfs(s, i + 1);
+                i = Integer.parseInt(temp[0]);
+                while (m > 0) {
+                    res.append(temp[1]);
+                    m--;
+                }
+            } else if (s.charAt(i) == ']') {
+                return new String[]{String.valueOf(i), res.toString()};
+            } else {
+                res.append(s.charAt(i));
+                i++;
+            }
+        }
+        return new String[]{String.valueOf(i), res.toString()};
+    }
+}
+```

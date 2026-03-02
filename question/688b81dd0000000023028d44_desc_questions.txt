@@ -1,0 +1,337 @@
+```python
+import re
+
+def extract_questions(text_content):
+    """
+    从文本内容中按顺序提取面试问题。
+    """
+    questions = []
+    # 使用正则表达式匹配常见的标题和列表项，以便进行清理
+    lines = text_content.split('\n')
+    
+    question_keywords = ["如何", "为什么", "哪些", "区别", "作用", "优缺点", "如何解决", "什么", "吗"]
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # 过滤掉明显的非问题行
+        if any(keyword in line for keyword in [
+            "📌", "（腾讯必考！", "（手撕代码重点）", "（MySQL+Redis）", "💡", "🌟", "📚", "答：", "→", "如：", "#",
+            "欢迎分享你的面试经历！", "操作系统", "计算机网络", "数据结构与算法", "数据库基础", "面试官最爱追问的细节",
+            "场景题：", "原理深挖：", "互动挑战", "资源推荐：", "算法题："
+        ]):
+            continue
+        
+        # 尝试拆分一行中的多个问题
+        sub_questions = re.split(r'([?？])', line)
+        current_segment = ""
+        
+        for i, segment in enumerate(sub_questions):
+            if segment in ['?', '？']:
+                # 这是一个问句的结束
+                potential_question = (current_segment + segment).strip()
+                current_segment = "" # 重置
+                
+                # 清理并添加问题
+                if potential_question:
+                    # 移除开头的列表标记和主题词
+                    potential_question = re.sub(r'^\s*-\s*', '', potential_question)
+                    potential_question = re.sub(r'^\s*\d+\.\s*', '', potential_question)
+                    # 移除像 "XXX：" 这样的前缀，但保留内容
+                    potential_question = re.sub(r'^(进程 vs 线程|死锁条件|内存管理|Linux命令|TCP三次握手/四次挥手|HTTP vs HTTPS|DNS解析过程|Socket编程|数组 vs 链表|哈希表冲突解决|二叉树遍历|算法题|索引原理|事务隔离级别|Redis持久化)：\s*', '', potential_question)
+                    potential_question = re.sub(r'^\s*“|”\s*$', '', potential_question) # 移除引号
+                    potential_question = re.sub(r'（[^）]*）', '', potential_question) # 移除括号内内容
+                    potential_question = potential_question.replace('（答：', '').replace('）', '') # 特殊处理答案括号
+                    potential_question = potential_question.replace('；', '') # 移除分号
+                    potential_question = potential_question.replace('\n', ' ').strip() # 移除换行符并清理多余空格
+                    
+                    if len(potential_question) > 5 and potential_question not in questions: # 避免重复和过短的问题
+                        questions.append(potential_question)
+            else:
+                current_segment += segment
+        
+        # 处理没有问号但包含特定关键词的隐式问题或任务
+        if current_segment.strip():
+            cleaned_segment = current_segment.strip()
+            # 移除开头的列表标记和主题词
+            cleaned_segment = re.sub(r'^\s*-\s*', '', cleaned_segment)
+            cleaned_segment = re.sub(r'^\s*\d+\.\s*', '', cleaned_segment)
+            cleaned_segment = re.sub(r'^(进程 vs 线程|死锁条件|内存管理|Linux命令|TCP三次握手/四次挥手|HTTP vs HTTPS|DNS解析过程|Socket编程|数组 vs 链表|哈希表冲突解决|二叉树遍历|算法题|索引原理|事务隔离级别|Redis持久化)：\s*', '', cleaned_segment)
+            cleaned_segment = re.sub(r'^\s*“|”\s*$', '', cleaned_segment) # 移除引号
+            cleaned_segment = re.sub(r'（[^）]*）', '', cleaned_segment) # 移除括号内内容
+            cleaned_segment = cleaned_segment.replace('；', '') # 移除分号
+            cleaned_segment = cleaned_segment.replace('\n', ' ').strip() # 移除换行符并清理多余空格
+
+            if "反转链表" in cleaned_segment and "递归+迭代" in cleaned_segment:
+                cleaned_segment = "如何反转链表（递归+迭代）？"
+            elif "实现LRU缓存" in cleaned_segment and "哈希表+双向链表" in cleaned_segment:
+                cleaned_segment = "如何实现LRU缓存（哈希表+双向链表）？"
+            elif "你的答案是什么" in cleaned_segment:
+                cleaned_segment = "你的答案是什么？"
+            elif any(kw in cleaned_segment for kw in question_keywords):
+                 if len(cleaned_segment) > 5 and cleaned_segment not in questions:
+                    questions.append(cleaned_segment)
+    
+    # 最终的清理，处理可能因为分词导致的碎片问题
+    final_cleaned_questions = []
+    seen_questions = set()
+    for q in questions:
+        q_clean = re.sub(r'（[^）]*）', '', q) # 再次移除括号内容
+        q_clean = q_clean.replace('\n', ' ').strip()
+        q_clean = re.sub(r'\s+', ' ', q_clean)
+        
+        # 避免像 "如何用" 这种不完整的问题
+        if q_clean.endswith("如何用") or q_clean.endswith("如何"):
+            continue
+
+        # 合并相邻的类似问题，例如 "如何用" 和紧随其后的 "top"查看CPU占用？
+        if final_cleaned_questions and final_cleaned_questions[-1].endswith("如何用") and "查看CPU占用" in q_clean:
+            final_cleaned_questions[-1] = final_cleaned_questions[-1] + ' ' + q_clean
+            continue
+        elif final_cleaned_questions and final_cleaned_questions[-1].endswith("如何") and "过滤日志中的关键字" in q_clean:
+            final_cleaned_questions[-1] = final_cleaned_questions[-1] + ' ' + q_clean
+            continue
+
+        if len(q_clean) > 5 and q_clean not in seen_questions:
+            final_cleaned_questions.append(q_clean)
+            seen_questions.add(q_clean)
+
+    # 再次人工校正一些特定的合并和错漏
+    # 针对 "Linux命令：如何用 "top"查看CPU占用？ "grep"如何过滤日志中的关键字？"
+    # 和 "TCP三次握手/四次挥手：为什么握手是三次？TIME_WAIT状态的作用？" 等情况进行细化
+    
+    # 最终输出列表
+    output_questions = []
+    current_index = 1
+    for q in final_cleaned_questions:
+        # Re-verify against original content to ensure context is not lost and is a valid question
+        # This part is complex to fully automate with regex without being overly specific.
+        # A simpler approach is to use the generated list and manually review for small corrections.
+        # Based on the manual review from my thought process:
+        
+        # Remove any leading number/bullet point that might have slipped through
+        q = re.sub(r'^\d+\.\s*', '', q)
+        q = re.sub(r'^-?\s*', '', q)
+        q = q.replace('：', '： ').strip() # Add space after colon for readability if it's a topic separator
+        
+        # Specific fixes from manual review
+        if q.startswith('"top"查看CPU占用？'):
+            q = '如何用 "top"查看CPU占用？'
+        if q.startswith('"grep"如何过滤日志中的关键字？'):
+            q = '"grep"如何过滤日志中的关键字？'
+        
+        output_questions.append(f"{current_index}. {q}")
+        current_index += 1
+            
+    return output_questions
+
+# 读取文件内容
+file_content = read_file(file_path="note_desc/688b81dd0000000023028d44.txt")
+
+# 提取问题
+questions = extract_questions(file_content.content)
+
+# 打印结果
+for q in questions:
+    print(q)
+```
+```
+1. 进程 vs 线程：区别是什么？
+2. 线程共享哪些资源？
+3. 为什么线程切换开销更小？
+4. 死锁条件：列举四个必要条件，如何避免？
+5. 内存管理：分页和分段的区别？
+6. 虚拟内存的作用是什么？
+7. 如何用 "top"查看CPU占用？
+8. "grep"如何过滤日志中的关键字？
+9. TCP三次握手/四次挥手：为什么握手是三次？
+10. TIME_WAIT状态的作用？
+11. HTTP vs HTTPS：SSL/TLS加密流程？
+12. HTTP/2的多路复用如何实现？
+13. DNS解析过程：递归查询 vs 迭代查询？
+14. DNS缓存的作用？
+15. Socket编程：TCP Socket的 "accept()"和 "connect()"分别在哪端调用？
+16. 数组 vs 链表：内存存储方式、插入/删除时间复杂度？
+17. 适用场景？
+18. 哈希表冲突解决：开放定址法 vs 链地址法？
+19. HashMap的负载因子为什么是0.75？
+20. 二叉树遍历：非递归实现中序/层序遍历？
+21. 如何判断平衡二叉树？
+22. 如何反转链表（递归+迭代）？
+23. 如何实现LRU缓存（哈希表+双向链表）？
+24. 索引原理：B+树 vs B树？
+25. 为什么MySQL用B+树？
+26. 事务隔离级别：读已提交 vs 可重复读？
+27. MVCC如何实现？
+28. Redis持久化：RDB和AOF的优缺点？
+29. 混合持久化如何工作？
+30. 如果服务器CPU占用突然飙到100%，如何排查？
+31. HTTP请求从输入URL到页面加载完成，经历了哪些步骤？
+32. TCP的拥塞控制算法有哪些？
+33. 腾讯视频如何优化流媒体传输？
+34. Java的HashMap为什么线程不安全？
+35. ConcurrentHashMap如何解决？
+36. 死锁预防：除了破坏循环等待，还有哪些方法？
+37. B+树优势：为什么比B树更适合数据库索引？
+38. 手撕代码：你能5分钟写出非递归的二叉树前序遍历吗？
+39. 你的答案是什么？
+```
+我将按顺序从 `note_desc/688b81dd0000000023028d44.txt` 文件中提取面试问题并编号。
+
+```python
+import re
+
+# 读取文件内容
+file_content_object = read_file(file_path="note_desc/688b81dd0000000023028d44.txt")
+text_content = file_content_object.content
+
+# 初始化问题列表
+questions = []
+question_counter = 1
+
+# 按行处理文本内容
+lines = text_content.split('\n')
+
+for line in lines:
+    line = line.strip()
+    if not line:
+        continue
+
+    # 过滤掉明显的非问题行
+    # 这包括标题、分隔符、答案示例、资源推荐和话题标签
+    if any(keyword in line for keyword in [
+        "📌", "（腾讯必考！", "（手撕代码重点）", "（MySQL+Redis）", "💡", "🌟", "📚", "答：", "→", "如：", "#",
+        "欢迎分享你的面试经历！", "操作系统", "计算机网络", "数据结构与算法", "数据库基础", "面试官最爱追问的细节",
+        "场景题：", "原理深挖：", "互动挑战", "资源推荐：", "算法题："
+    ]):
+        continue
+
+    # 识别并拆分一行中的多个问题
+    # 使用正则表达式匹配中文和英文问号作为分隔符，并保留分隔符
+    sub_segments = re.split(r'([?？])', line)
+    
+    current_question_part = ""
+    for segment in sub_segments:
+        if segment in ['?', '？']:
+            # 如果遇到问号，则当前 accumulated_part 构成一个完整的问题
+            full_question = (current_question_part + segment).strip()
+            current_question_part = "" # 重置，准备下一个问题部分
+
+            # 清理问题文本
+            full_question = re.sub(r'^\s*-\s*', '', full_question) # 移除开头的连字符
+            full_question = re.sub(r'^\s*\d+\.\s*', '', full_question) # 移除开头的数字列表标记
+            full_question = re.sub(r'^(进程 vs 线程|死锁条件|内存管理|Linux命令|TCP三次握手/四次挥手|HTTP vs HTTPS|DNS解析过程|Socket编程|数组 vs 链表|哈希表冲突解决|二叉树遍历|算法题|索引原理|事务隔离级别|Redis持久化)：\s*', '', full_question) # 移除主题前缀
+            full_question = re.sub(r'^\s*“|”\s*$', '', full_question) # 移除引号
+            full_question = re.sub(r'（[^）]*）', '', full_question) # 移除括号内容
+            full_question = full_question.replace('；', '').strip() # 移除分号并清理空格
+
+            if full_question and len(full_question) > 5 and full_question not in questions:
+                questions.append(full_question)
+        else:
+            current_question_part += segment
+    
+    # 处理不以问号结尾，但可能是隐式问题或任务的行
+    if current_question_part.strip():
+        cleaned_segment = current_question_part.strip()
+        # 进一步清理
+        cleaned_segment = re.sub(r'^\s*-\s*', '', cleaned_segment)
+        cleaned_segment = re.sub(r'^\s*\d+\.\s*', '', cleaned_segment)
+        cleaned_segment = re.sub(r'^(进程 vs 线程|死锁条件|内存管理|Linux命令|TCP三次握手/四次挥手|HTTP vs HTTPS|DNS解析过程|Socket编程|数组 vs 链表|哈希表冲突解决|二叉树遍历|算法题|索引原理|事务隔离级别|Redis持久化)：\s*', '', cleaned_segment)
+        cleaned_segment = re.sub(r'^\s*“|”\s*$', '', cleaned_segment)
+        cleaned_segment = re.sub(r'（[^）]*）', '', cleaned_segment)
+        cleaned_segment = cleaned_segment.replace('；', '').strip()
+
+        # 特定任务重写为问题形式
+        if "反转链表" in cleaned_segment and "递归+迭代" in cleaned_segment:
+            cleaned_segment = "如何反转链表（递归+迭代）？"
+        elif "实现LRU缓存" in cleaned_segment and "哈希表+双向链表" in cleaned_segment:
+            cleaned_segment = "如何实现LRU缓存（哈希表+双向链表）？"
+        elif "你的答案是什么" in cleaned_segment:
+            cleaned_segment = "你的答案是什么？"
+        
+        # 如果经过清理后仍然像一个问题，则添加
+        if cleaned_segment and len(cleaned_segment) > 5 and cleaned_segment not in questions:
+            # 检查是否包含疑问词
+            if any(kw in cleaned_segment for kw in ["如何", "为什么", "哪些", "区别", "作用", "优缺点", "什么", "吗", "分别在哪端调用"]):
+                questions.append(cleaned_segment)
+
+
+# 最终的格式化和编号
+final_output = []
+seen = set() # 用于避免重复
+for q in questions:
+    q_cleaned_final = q.strip()
+    # 进一步处理可能残留的引导词
+    q_cleaned_final = re.sub(r'^\s*(TCP三次握手/四次挥手|HTTP vs HTTPS|DNS解析过程|Socket编程|数组 vs 链表|哈希表冲突解决|二叉树遍历|索引原理|事务隔离级别|Redis持久化)\s*：\s*', '', q_cleaned_final)
+    q_cleaned_final = re.sub(r'^\s*(进程 vs 线程|死锁条件|内存管理|Linux命令)\s*：\s*', '', q_cleaned_final)
+    q_cleaned_final = re.sub(r'^\s*“|”\s*$', '', q_cleaned_final)
+    q_cleaned_final = re.sub(r'（[^）]*）', '', q_cleaned_final) # 再次移除括号内容，以防有漏网之鱼
+    q_cleaned_final = q_cleaned_final.replace('\n', ' ').strip()
+    q_cleaned_final = re.sub(r'\s+', ' ', q_cleaned_final) # 合并多余空格
+
+    # 人工校正一些特殊情况，例如 "Linux命令：" 后面的两个问题被分开了
+    if q_cleaned_final.startswith('"top"查看CPU占用？'):
+        q_cleaned_final = '如何用 "top"查看CPU占用？'
+    elif q_cleaned_final.startswith('"grep"如何过滤日志中的关键字？'):
+        q_cleaned_final = '"grep"如何过滤日志中的关键字？'
+    elif q_cleaned_final == 'HTTP请求从输入URL到页面加载完成，经历了哪些步骤？':
+        pass # 保持原样
+    elif q_cleaned_final == '你的答案是什么？':
+        pass # 保持原样
+    elif q_cleaned_final.startswith('死锁预防：除了破坏循环等待，还有哪些方法？'):
+        q_cleaned_final = '死锁预防：除了破坏循环等待，还有哪些方法？'
+    elif q_cleaned_final.startswith('B+树优势：为什么比B树更适合数据库索引？'):
+        q_cleaned_final = 'B+树优势：为什么比B树更适合数据库索引？'
+    
+    if q_cleaned_final and q_cleaned_final not in seen:
+        final_output.append(f"{question_counter}. {q_cleaned_final}")
+        seen.add(q_cleaned_final)
+        question_counter += 1
+
+# 输出结果
+for q_str in final_output:
+    print(q_str)
+```
+```
+1. 进程 vs 线程：区别是什么？
+2. 线程共享哪些资源？
+3. 为什么线程切换开销更小？
+4. 死锁条件：列举四个必要条件，如何避免？
+5. 内存管理：分页和分段的区别？
+6. 虚拟内存的作用是什么？
+7. 如何用 "top"查看CPU占用？
+8. "grep"如何过滤日志中的关键字？
+9. TCP三次握手/四次挥手：为什么握手是三次？
+10. TIME_WAIT状态的作用？
+11. HTTP vs HTTPS：SSL/TLS加密流程？
+12. HTTP/2的多路复用如何实现？
+13. DNS解析过程：递归查询 vs 迭代查询？
+14. DNS缓存的作用？
+15. Socket编程：TCP Socket的 "accept()"和 "connect()"分别在哪端调用？
+16. 数组 vs 链表：内存存储方式、插入/删除时间复杂度？
+17. 适用场景？
+18. 哈希表冲突解决：开放定址法 vs 链地址法？
+19. HashMap的负载因子为什么是0.75？
+20. 二叉树遍历：非递归实现中序/层序遍历？
+21. 如何判断平衡二叉树？
+22. 如何反转链表（递归+迭代）？
+23. 如何实现LRU缓存（哈希表+双向链表）？
+24. 索引原理：B+树 vs B树？
+25. 为什么MySQL用B+树？
+26. 事务隔离级别：读已提交 vs 可重复读？
+27. MVCC如何实现？
+28. Redis持久化：RDB和AOF的优缺点？
+29. 混合持久化如何工作？
+30. 如果服务器CPU占用突然飙到100%，如何排查？
+31. HTTP请求从输入URL到页面加载完成，经历了哪些步骤？
+32. TCP的拥塞控制算法有哪些？
+33. 腾讯视频如何优化流媒体传输？
+34. Java的HashMap为什么线程不安全？
+35. ConcurrentHashMap如何解决？
+36. 死锁预防：除了破坏循环等待，还有哪些方法？
+37. B+树优势：为什么比B树更适合数据库索引？
+38. 手撕代码：你能5分钟写出非递归的二叉树前序遍历吗？
+39. 你的答案是什么？
+```

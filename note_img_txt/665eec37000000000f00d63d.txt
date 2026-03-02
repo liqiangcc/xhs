@@ -1,0 +1,110 @@
+好的，我将识别图片中的内容并直接输出文字。
+
+**图片1 (downloaded_images/665eec37000000000f00d63d/3.webp) 内容：**
+
+说一下跨进程通信的几种方式
+Intent,比如拨打电话
+ContentProvider 数据库存储数据
+Broadcast 广播通信 AIDL通信,通过接口共享数据
+
+说一下 wait 和 sleep 的区别
+wait 是 Object 的方法,wait 是对象锁,锁定方法不让继续执行,当 notify 方法后就会继续执行,sleep 是
+Thread 的方法,sleep 是使线程睡眠,让出 cpu,结束后自动继续执行
+
+说一下 String,StringBuffer,StringBuilder 的区别
+String 不可改变对象,一旦创建就不能修改
+String str="aaa";
+str="bbb";
+以上代码虽然改变了 str,但是执行过程是回收 str,把值赋给一个新的 str
+StringBuffer 创建之后,可以去修改 StringBuilder 也可修改,执行效率高于 StringBuffer,不安全
+当字符串值少使用 String
+字符串值频繁使用 StringBuilder
+当多个线程同步操作数据,使用 StringBuffer
+
+说一下 View 和 SurfaceView 的区别
+View 基于主线程刷新 UI,SurfaceView 子线程又可以刷新 UI
+
+说一下 View 的绘制原理
+View 为所有图形控件的基类,View 的绘制由3函数完成
+measure,计算视图的大小
+layout,提供视图要显示的位置
+draw,绘制
+
+简述 JNI
+是 java 和 c 语言之间的桥梁,由于 java 是一种半解释语言,可以被反编译出来,一种重要要涉及及安全的代码就使
+用了 c 编程,再者很多底层功能调 c 语言都实现了 java 没必要重复造轮子,所以定义了 JNI 接口的实现
+
+简述 TCP,UDP,Socket
+
+**图片2 (downloaded_images/665eec37000000000f00d63d/2.webp) 内容：**
+
+简述 TCP,UDP,Socket
+TCP 是经过 3 次握手,4 次挥手完成一串数据的传送
+UDP 是无连接的,知道 IP 地址和端口号,向其发送数据即可,不管数据是否发送成功
+Socket 是一种不同计算机机,实时连接,比如说传送文件,即时通讯
+
+说一下音视频相关类
+总体来说,分为几个类
+视频录制方面,Camera 摄像头视频类,MediaProjection 屏幕录制视频类
+编码方面,MediaCodec,MediaRecorder
+预览方面,SurfaceView,GLSurfaceView,TextureView,VideoView
+
+说一下进程和线程的区别
+概念:进程包括多个线程,一个程序一个进程,多线程的优点可以提高执行效率,提高资源利用率
+创建:Thread 类和 Runnable 接口,
+常用方法有:
+start()用于启动线程
+run()调用线程对象中 的 run 方法
+join()合并队列到当前线程
+selip()睡眠释放 cpu 资源
+setpriority()设置线程优先级
+
+说一下内存泄露如何查看和解决
+概念:有些对象只有有限的生命周期,当他们的任务完成之后,它们将被垃圾回收,如果在对象的生命周期期本该
+结束的时候,这个对象还被一列的引用,着就会导致内存泄露。
+解决办法:使用开源框架 LeakCanary 检测针对性解决
+常见的内存泄露有:
+单例造成的内存泄露,例如单例中的 Context 生命周期大于本身 Context 生命周期
+线程使用 Handler 造成的内存泄露,当 activity 已经结束,线程依然在更新 UI
+非静态类使用静态变量导致无法回收释放造成泄露
+WebView 网页过多造成内存泄露
+资源类未关闭造成泄露,例如数据库使用完之后关闭连接
+
+简述一下 View 的分发机制,滑动冲突
+View 的事件传递顺序有3个重要的方法,dispatchTouchEvent()是否消耗了本次事件,onInterceptTouchEvent()
+是否拦截了本次事件,onTouchEvent()是否处理本次事件,滑动冲突分为同方向滑动冲突,例如 ScrollView 和
+ListView,同方向滑动冲突,可以计算 ListView 高度而动态设置 ListView 的高度,ScrollView 高度可变。例如
+轴是横向还是竖向滑动,如果判断到是横向滑动,就拦截 ListView 的事件,竖向反之。
+
+**图片3 (downloaded_images/665eec37000000000f00d63d/1.webp) 内容：**
+
+说一下 View 的分发机制,滑动冲突
+View 的事件传递顺序有3个重要的方法,dispatchTouchEvent()是否消耗了本次事件,onInterceptTouchEvent()
+是否拦截了本次事件,onTouchEvent()是否处理本次事件,滑动冲突分为同方向滑动冲突,例如 ScrollView 和
+ListView,同方向滑动冲突,可以计算 ListView 高度而动态设置 ListView 的高度,ScrollView 高度可变。例如
+轴是横向还是竖向滑动,如果判断到是横向滑动,就拦截 ListView 的事件,竖向反之。
+
+说一下 RecyclerView 和 ListView 的区别
+缓存上前者缓存的是 View+ViewHolder+flag,不用每次调用 findViewById,后者则只是缓存 View
+刷新数据方面,前者提供了局部刷新,后者则全部刷新
+
+recyclerView 嵌套卡顿解决方案
+设置预加载的数量 LinearLayoutManager.setInitialPrefetchItemCount(4),默认是预加载2个,
+设置子项缓存。
+设置自带滑动冲突解决属性 setHasFixedSize(true); rv.setNestedScrollingEnabled(false);
+可以完美解决,不过 Google 不推荐 RecyclerView 嵌套使用,需要嵌套尽量找类似于 ExpandableList View 第三
+方控件来解决
+
+说一下对 MVC,MVP,MVVM 的理解
+MVC:View 是可以直接访问到 Model 的!从而,View 里会包含 Model,不可避免的还要包括一些业务逻
+辑。在 MVC 模型里,更关注 View 的 Model 的不变,而同时有多个对 Model 的不同显示。及 View。所以在 MVC
+模型里,Model 也不依赖于 View,但是 View 是依赖于 Model 的。不仅如此,因为有一些业务逻辑在 View 里实现
+了,导致要更改 View 也是比较困难的,至少那些业务逻辑是在 View 里的。
+MVP:MVP 是经典的模式 MVC 演变而来,它们的基本思想有相通的地方:Controller/Presenter 负责逻辑的处理。
+Model 提供数据,View 负责显示,作为一种新的模式,MVP 与 MVC 有着一个重大的区别:在 MVP 中 View 并
+不直接使用 Model,在它们之间的通信是通过 Presenter (MVC 中的 Controller)来进行的,所有的交互都发生在
+Presenter 内部,而它与 View 中会直接把 Model 中读取数据而不是通过 Controller.
+MVVM:数据双向绑定,通过数据驱动 UI,M 提供数据,V 视图,VM 即数据驱动层
+
+了解 dagger2 吗?
+Dagger2 是一个主要用于依赖的框架,减少初始化对象操作,降低耦合度

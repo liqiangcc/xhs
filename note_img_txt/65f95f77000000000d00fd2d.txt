@@ -1,0 +1,112 @@
+好的，我将直接输出图片中的文字内容，不进行额外处理。
+
+**图片1: downloaded_images/65f95f77000000000d00fd2d/3.webp 的文字内容**
+
+面试常问
+1. 从前的项目中选中一个项目，说说你在其中遇到了什么重大挑战? 以及你的解决方案的思路?
+2. 一般代码里执行多个redis命令，不加锁的情况下如何保证原子性?
+使用Redlock: https://segmentfault.com/a/1190000009811453
+3. 介绍你熟悉的io模型，比如:红黑树。
+理解红黑树: https://juejin.im/post/5ca27f2f6d1a04500906248
+4. 说说B-tree、B+tree的区别和使用场景?
+1. B-tree:
+
+[B-tree 结构图和描述]
+B-tree 利用了磁盘的特性进行构建的树，每个节点由一个节点，每个节点包含了做关键字，把树的节点关键字增多后树的层数也就减少了，减少数据查找的次数和磁盘io。
+B-tree为啥可以存储海量数据呢，将一个节点的大小设置为一个页(每页为4K)，这样每个节点只需要一次IO就可以完全载入。
+B-tree的数据可以存储在任何节点中。
+2. B+tree:
+
+[B+tree 结构图和描述]
+B+tree是B-tree的一种，B+tree把数据都存储在叶子节点上，这样在树的层级上每个节点存储的关键字数更多，树的层级更小所以查询速度更快。所有非叶子节点只存储指针，所有叶子节点构成一个双向的链表相互指向可以提高查询效率。
+5. mysql哪个版本不支持倒排索引的?使用B+tree的，为什么不使用红黑树?
+需要先理解B+tree、红黑树的实现原理。B+tree带有顺序访问指针，是红黑树不具备的。
+6. 说说几种常见的消息中间件的区别?
+
+**图片2: downloaded_images/65f95f77000000000d00fd2d/4.webp 的文字内容**
+
+| 特性     | ActiveMQ      | RabbitMQ      | RocketMQ      | kafka                               |
+| -------- | ------------- | ------------- | ------------- | ----------------------------------- |
+| 开发语言 | java          | erlang        | java          | scala                               |
+| 单机吞吐量 | 万级          | 万级          | 10万级        | 10万级                              |
+| 时效性   | ms级          | us级          | ms级          | ms级以内                            |
+| 可靠性   | 高(主从架构)  | 高(主从架构)  | 异常高(分布式架构)  | 非常高(分布式架构)                  |
+| 功能特性 | 成熟的产品，在很多公司都有应用，开源产品支持较好。 | 轻量级，易于erlang开发，所以对并发支持很好，易于轻量级管理，界面较好。 | 功能完善，吞吐量高，稳定。         | 专注于日志传输，吞吐量极高，支持数据持久化，分布式，多副本，数据容错。 |
+
+1. 中小型公司首选RabbitMQ，管理界面简单，易于开发。
+2. 大型公司可以选择RocketMQ，更易于开发，对RocketMQ进行定制化开发。
+3. 日志采集功能，首选kafka，专为大数据准备。
+7. rabbitmq消费者如何保证消息不丢?
+详见"面试那些事/rabbitmq"
+8. springcloud服务发现原理?
+a. 服务注册：每个服务节点启动时，如果需要被客户端多次查询发现，它将在Eureka服务注册中心注册。
+b. 注册信息会被复制到所有其他Eureka节点。所有任何区域的客户端可以查询到注册中心信息，每30s发生一次复制来定位他们。
+c. 服务端并不是为了调用。
+b. 客户端可以提供一个服务实例信息，所以即便Eureka全部挂掉，客户端也可以定位到服务地址的。
+
+2. 当license服务调用organization服务，license服务会通过
+ribbon去找或者本功能是否organization服务实例的缓存的
+Eureka
+License Service
+Organization service
+[图示: License Service -> Ribbon -> Organization Service]
+[图示: Organization service -> Eureka]
+3. ribbon动态负载均衡。
+Eureka服务本地缓存。
+
+Service discovery
+[图示: License Service -> Eureka]
+[图示: Organization Service -> Eureka]
+
+1. 当一个服务实例启动
+后，将自己的服务信息
+注册到Eureka Server。
+
+9. 介绍下Springcloud各个组件? springcloud的注册中心除了Eureka还可以用什么?
+springcloud的工作原理
+
+**图片3: downloaded_images/65f95f77000000000d00fd2d/2.webp 的文字内容**
+
+Zuul
+[图示: Zuul -> Eureka]
+[图示: Zuul -> 服务发现]
+
+步骤1: 服务注册
+步骤2: 服务发现
+步骤3: 负载均衡
+步骤4: 服务调用
+
+Eureka Server
+[图示: Eureka Server]
+
+[图示: Zuul, Ribbon, Eureka Client, Eureka Server, 服务注册, 服务发现, 负载均衡, 服务调用 流程图]
+
+springcloud由以下几个核心组件构成:
+Eureka: 各个服务启动时，Eureka Client都会将服务注册到Eureka Server，并且Eureka Client还可以反过来从Eureka Server拉取注册信息，获得其他服务的实例。
+Ribbon: 服务间发起请求的时候，基于Ribbon做负载均衡，从一个服务的多个实例中选择一个
+Feign: 基于Feign的动态代理机制，根据注解和选择的机器，拼接请求URL地址，发起请求
+Hystrix: 对熔断限流服务调用的组件叫做Hystrix，当服务调用失败的时候，实现对不同服务的调用隔离，避免了服务雪崩的问题
+Zuul: 如果需要调用微服务后端系统，统一从Zuul网关进入，由Zuul网关转发请求到对应的服务
+
+注册中心还有zookeeper，
+10. 微服务有几种限流方式?
+https://www.cnblogs.com/wxfred/p/9201509.spring-cloud-15-spring-cloud-gateway-ratelimiter/
+11. 微服务除了网关还能解决什么?
+https://www.jianshu.com/p/25964.html
+12. 微服务中如何实现RPC调用? 说说你理解的Dubbo是啥?
+Dubbo有哪些负载均衡策略? Dubbo内部是怎样一个负载均衡?
+a. RandomLoadBalance 随机负载均衡: 选择的一个，是Dubbo的默认负载均衡器。
+b. RoundRobinLoadBalance 轮询负载均衡: 选呼叫一个。
+c. LeastActiveBalance 最少活跃数负载均衡: 调用次数的随机，选择调用前后计数器，使慢的Provider收到更少请求。
+d. 最少连接的Provider: 调用前后计数器越大。
+13. ConcurrentHashMap源码? 线程安全的hashmap?
+https://juejin.im/post/5cb42f0a6d1a042e61a6d97c
+14. 说说你看到的源码? 其中用到了什么设计模式或者设计难点?
+https://www.cnblogs.com/chenleideblog/p/springcloud11.html
+如何实现aop? 项目中哪些地方用到了aop?
+https://juejin.im/post/5cb4fc8d6d1a04611b57906
+15. 线程池原理和作用?
+Spring#ThreadPoolTaskExecutor BeanPostProcessor: https://www.jianshu.com/p/fb0c77d65d39
+17. spring bean作用域，什么时候使用request作用域。
+
+**图片4: downloaded_images/65f95f770

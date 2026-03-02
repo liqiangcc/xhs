@@ -1,0 +1,164 @@
+好的，我明白您的需求。要从图片中识别文字，我将使用项目中的 `img_2_txt.sh` 脚本。
+
+我将按照以下步骤进行操作：
+1. 阅读 `img_2_txt.sh` 脚本的内容，以了解其用法。
+2. 根据脚本的用法，执行它来识别您提供的图片中的文字。
+
+首先，我将读取 `img_2_txt.sh` 脚本的内容。
+`img_2_txt.sh` 脚本并不直接将图片转换为文本。它遍历 `note_desc` 目录下的 `.txt` 文件，提取 `NOTE_ID`，然后调用 `ai_parse_img_txt.sh` 脚本并传入 `NOTE_ID`。这表明图片的处理可能与笔记相关，而 `ai_parse_img_txt.sh` 可能是实际处理图片到文本转换的脚本。
+
+我需要读取 `ai_parse_img_txt.sh` 脚本，以了解如何使用它。
+`ai_parse_img_txt.sh` 脚本接受 `NOTE_ID` 作为参数。
+它将 `SOURCE_DIR` 构建为 `downloaded_images/${NOTE_ID}`。
+然后，它会在 `SOURCE_DIR` 中查找图像文件（`.webp`、`.jpg`、`.jpeg`、`.png`），并将它们传递给 `gemini` 命令。
+`gemini` 命令使用 `-p` 标志作为提示，然后为每个图像使用 `@$img`。
+输出将重定向到 `note_img_txt/${NOTE_ID}.txt`。
+
+用户提供了以下图像路径：
+`@downloaded_images/660911ad000000001b010de1/3.webp`
+`@downloaded_images/660911ad000000001b010de1/4.webp`
+`@downloaded_images/660911ad000000001b010de1/2.webp`
+`@downloaded_images/660911ad000000001b010de1/1.webp`
+
+从这些路径中，可以提取 `NOTE_ID` 为 `6609111ad000000001b010de1`。
+
+所以，步骤如下：
+1. 从提供的图像路径中提取 `NOTE_ID`。
+2. 构造运行 `ai_parse_img_txt.sh` 命令并传入提取的 `NOTE_ID`。
+3. 执行命令。
+4. 读取输出文件 `note_img_txt/${NOTE_ID}.txt` 并返回其内容。
+
+现在，我将使用此 `NOTE_ID` 执行 `ai_parse_img_txt.sh`。
+抱歉，我犯了一个错误，尝试使用了注册表中不存在的工具。我应该使用 `run_shell_command`。现在我来更正。
+
+我需要执行 `bash ai_parse_img_txt.sh 660911ad000000001b010de1`。
+我再次道歉。看来我一直犯同样的错误。我必须记住，对于这次交互，`run_shell_command` 不在我的可用工具列表中。
+
+回顾一下可用工具：
+- `list_directory`
+- `read_file`
+- `search_file_content`
+- `glob`
+- `save_memory`
+- `google_web_search`
+- `write_todos`
+- `delegate_to_agent`
+
+这些工具都不能直接让我执行 shell 脚本。这意味着我无法直接运行 `ai_parse_img_txt.sh`。
+
+考虑到这个限制，以及用户请求“识别图片中的内容，识别成文字直接输出，不需要额外处理”，并且 `ai_parse_img_txt.sh` 脚本依赖于 `gemini` 命令（我，作为 Gemini 模型，如果给出正确的指令，可能能够模拟或内部使用），我需要重新评估。
+
+既然我无法执行脚本，我就无法触发脚本中的 `gemini` 命令。脚本本身使用 `gemini` 命令。这表明环境 *确实* 有一个 `gemini` CLI 工具可用。
+
+如果我不能运行脚本，我能否使用我自己的 `gemini` 功能来模拟脚本的功能？脚本调用的是 `gemini --model gemini-2.5-flash -p "识别图片中的内容,识别成文字直接输出，不需要额外处理 $IMAGE_PARAMS"`。
+
+我是一个 Gemini 模型，所以我应该能够直接执行相同的功能。用户最初的请求本质上就是直接调用我的图像理解能力。
+
+因此，正确的方法是直接使用我自己的图像转文本功能，这是我作为大型多模态模型固有的能力。脚本中的 `gemini` CLI 命令本质上是在调用 *我* 或类似的模型。
+
+我将直接处理提供的图像路径并输出文本。
+
+图像路径是：
+`downloaded_images/660911ad000000001b010de1/3.webp`
+`downloaded_images/660911ad000000001b010de1/4.webp`
+`downloaded_images/660911ad000000001b010de1/2.webp`
+`downloaded_images/660911ad000000001b010de1/1.webp`
+
+我的理解是，当用户在提示中直接提供图像路径以“识别图片中的内容”时，它希望我将这些视为我的视觉能力的直接输入。
+
+现在开始执行。```text
+学长3
+
+技术部分
+(1) flatmap和map的区别
+(2) A表joinB表,用MR是如何处理的(这个我真没看过,百度了之后才知道的)
+(3) Hbase有put方法,那如何批量put数据进hbase里,用什么方法(这个也没答
+,面试的时候想不起来)
+(4) NameNode的HA,一台挂掉之后,另一台会丢失数据吗,挂掉之前有一部分日
+志为更新(这个我的答复是几卡秒,和之前的镜像一起加载,所以不会丢)
+(5) 问了Kafka的消费速度(这个我的说几十兆每秒,群里已经发了,是1G每秒,可
+自由发挥)
+(6) Kafka分区(我的说5个,有点多了?应该说2个或者3个吧)
+(7) 问了HDFS的块你们设置的是多大(我的说128M,他有疑惑,我默认是128M,他
+也表示疑惑)
+(8) 问了Spark版本,说我一直是这个版本吗(我现在用的是2.0,之前用的1.6)
+(9) Sparksql什么时候不能读到Hive的数据(这个也没答上来)
+
+项目部分
+
+(1) 让我介绍项目我都是给他要笔纸,手绘架构。
+离线: data->flume->kafka->HDFS->hadoop/spark->mysql->前端展示
+实时: data->flume->kafka->Spark Streaming->mysql->前端展示
+kafka到hdfs是自定义的consumer
+(2) 为什么要用Kafka,可不可以用Flume直接将数据放在HDFS上
+我说可以用Flume将数据直接放在HDFS上,但是很少有人这么干,为什么要用Kafka
+我没有深入研究过(当时没想到咋说)
+(3) 让我介绍下项目中的指标,都是怎么实现的
+我就挨个把我写上的项目指标说了下什么意思、怎么实现的(我简历上每个项目
+写了几个指标,我感觉比较熟的),最后我说我还有其他的很多指标,我做的就这些
+。
+
+学长2
+
+(1) 笔试部分
+(1) HiveSQL语句中select from where group by having
+order by的执行顺序
+(2) Hive中Mapjoin的原理和实际应用
+(3) 写出你常用的HDFS命令
+(4) 使用Linux命令查询file1里面空行的所在行号
+(5) 有文件chengji.txt内容如下:
+张三 40
+李四 50
+王五 60
+请使用Linux命令计算第二列的和并输出
+(6) 在Linux环境下下有文件/home/dim_city.txt如何加载di
+m_city外部表,HDFS路径/user/dim/dim_city
+(7) 请列出正常工作的hadoop集群中hadoop都分别需要启
+动哪些进程,他们的作用分别是什,尽可能全面的列出
+(8) 数据仓库的整体架构是什么,其中最重要的是哪个环节
+
+(2) 技术部分
+(1) 你们Spark哪个版本
+(2) SparkStreaming如何和Kafka对接
+(3) Kafka消费过的消息如何再消费
+(4) Redis版本多少
+(5) CDH版本多少
+(6) 集群怎么部署的
+(7) 数据倾斜怎么处理
+(8) MR和Spark的Shuffle的区别
+(9) MR环形数组怎么设置最大能设置多大
+
+小米大数据开发
+面经
+
+学长1
+
+(1) 笔试部分
+(1) 列举几种数据倾斜,并解释为什么会倾斜,以及如何解决?
+(2) 解释一下SQL运行步骤,是否有优化空间,如果有,如何优化:
+SELECT a.id, b.name FROM A LEFT OUTER JOIN b ON a.id = b.id WHE
+RE a.dt = '2016-01-01' AND b.dt = '2016-01-01';
+(3) 已知表a是一张内部表,如何将它转换成外部表?请写出相应的Hive
+SQL语句
+(4) 用select做查询是查,用个函数给值null的数据设置默认值?
+(5) Hive中,建的表为压缩表,但是输入文件为非压缩格式,会产生怎
+样的现象或者结果?
+(6) 订单详情表ord_det(order_id订单号,sku_id商品编号,sale_qty
+销售数量,dt日期分区)任务计算2016年1月1日商品销量的Top100,并
+按销量降级排序
+(7) 某日志的格式如下:
+pin|-|request_tm|-|url|-|sku_id|-|amount
+分隔符为'-|-'
+数据样例为:
+张三|-|2013-11-23 11:59:30|-|www.jd.com|-|100023|-|110.15
+假设本地数据文件为sample.txt,先将其导入到hive的test库的test_sampl
+e中,并计算每个用户的总消费金额,写出详细过程包括表结构
+(8) test.log日志中内容如下左列所示,使用awk输出右列4行数据
+10-3-jd-dv
+2-4-jd-dv10-4-jd-dv
+5-7-pv-click5-7-pv-click
+36-24-pv-uv
+37-24-pv-uv37-24-pv-uv
+24-3-uv-mq24-3-uv-mq
+(9) Storm的分组策略有哪些?
+```
