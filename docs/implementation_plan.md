@@ -44,16 +44,19 @@
 
 如果采用 Agent Skill 架构，我们需要做的是 **定义规则（编写 Prompt 流程），而非编写死板的代码**。
 
-### Phase 1: 编写知识萃取 Skill
-- 创建系统工作流文件：`workflows/extract_xhs_questions.md`
-- 用一小批数据（比如 10 个 note）让 Agent 进行跑通测试，验证其能否漂亮地聚合相似题目，并产出高质量结构化文件 `question_bank.json`。
+### Phase 2: 全局题库聚合与二次打标 (Aggregation & AI Tagging)
+将上千个 JSON 文件聚类、去重，并对唯一题库进行**高像素 AI 深度加工**。
 
-### Phase 2: 编写面试官 Skill
-- 创建系统工作流文件：`workflows/interview_tutor.md`
-- 设定面试官的 Prompt 调性（严厉/和蔼/深度挖掘），以及阅读本地 JSON 题库的出题轮询逻辑。
+1.  **合并与去重 (Dedup)**：编写 Python 脚本读取 `note_structured/`，通过文本相似度算法将“JVM内存模型”与“JVM运行时数据区”等含义重复的问题合并。
+2.  **AI 深度打标 (AI Enrichment)**：对去重后的约 300-500 道核心题，调用满血版 LLM 生成：
+    *   `tags`: 精细化知识点标签（如 `["MVCC", "ReadView"]`）。
+    *   `core_keywords`: 破题核心词。
+    *   `follow_ups`: 预测式追问。
+3.  **持久化**：产出最终的 `question_bank_final.json` 主数据库。
 
-### Phase 3: 直接开始刷题演练
-- 你只需要一句：`/interview_tutor focus="并发编程" company="美团"`，你和我的对话就正式进入沉浸式刷题状态。
+### Phase 3: 全真模拟面试官 (Interactive Tutor)
+- 开发面试官 Skill，设定不同调性（严厉/和蔼）。
+- 根据 `question_bank_final.json` 的统计频率和标签进行智能化出题。
 
 ---
 
