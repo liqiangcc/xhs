@@ -12,6 +12,9 @@
  *   entity  --value <keyword>  Filter by tech_entities (partial match)
  *   stats                      Print count summary across all dimensions
  *   hotspot                    Show questions appearing in 2+ notes (same question_id)
+ *
+ * Global options:
+ *   --slim   Only output question_id + original_question (saves tokens for downstream use)
  */
 
 'use strict';
@@ -66,9 +69,12 @@ function flattenQuestions(notes) {
 }
 
 // ─── Formatters ────────────────────────────────────────────────────────────
-function printTable(rows) {
+function printTable(rows, slim = false) {
     if (rows.length === 0) { console.log('(无匹配结果)'); return; }
-    console.log(JSON.stringify(rows, null, 2));
+    const output = slim
+        ? rows.map(r => ({ question_id: r.question_id, original_question: r.original_question }))
+        : rows;
+    console.log(JSON.stringify(output, null, 2));
     console.error(`\n共 ${rows.length} 条结果`);  // summary to stderr so JSON stdout stays clean
 }
 
@@ -99,7 +105,7 @@ function printStats(rows) {
     console.log(`\n总题目数: ${rows.length}  |  有效题(is_valid): ${rows.filter(r => r.is_valid_for_library).length}`);
 }
 
-function printHotspot(rows) {
+function printHotspot(rows, slim = false) {
     // group by question_id
     const byId = {};
     for (const r of rows) {
@@ -112,8 +118,9 @@ function printHotspot(rows) {
 
     if (hot.length === 0) { console.log('(当前数据集中暂无重复出现的题目)'); return; }
 
-    console.log(JSON.stringify(
-        hot.map(arr => ({
+    const output = slim
+        ? hot.map(arr => ({ question_id: arr[0].question_id, original_question: arr[0].original_question, frequency: arr.length }))
+        : hot.map(arr => ({
             question_id: arr[0].question_id,
             original_question: arr[0].original_question,
             frequency: arr.length,
@@ -121,9 +128,8 @@ function printHotspot(rows) {
             domain_l2: arr[0].domain_l2,
             question_type: arr[0].question_type,
             appearances: arr.map(r => ({ company: r.company, note_id: r.note_id, round: r.round })),
-        })),
-        null, 2
-    ));
+        }));
+    console.log(JSON.stringify(output, null, 2));
     console.error(`\n共 ${hot.length} 道高频题（出现 ≥2 次）`);
 }
 
@@ -132,10 +138,17 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const cmd = args[0];
     const opts = {};
-    for (let i = 1; i < args.length; i += 2) {
+    // Collect boolean flags (e.g. --slim) and key-value pairs (e.g. --l1 Java基础)
+    const boolFlags = new Set(['slim']);
+    for (let i = 1; i < args.length; i++) {
         const key = args[i]?.replace(/^--/, '');
-        const val = args[i + 1];
-        if (key) opts[key] = val;
+        if (!key) continue;
+        if (boolFlags.has(key)) {
+            opts[key] = true;
+        } else {
+            opts[key] = args[i + 1];
+            i++; // consume value
+        }
     }
     return { cmd, opts };
 }
@@ -143,6 +156,7 @@ function parseArgs(argv) {
 // ─── Main ──────────────────────────────────────────────────────────────────
 function main() {
     const { cmd, opts } = parseArgs(process.argv);
+    const slim = !!opts.slim;
 
     if (!cmd || cmd === 'help') {
         console.log([
@@ -160,6 +174,9 @@ function main() {
             '  stats                     各维度统计汇总',
             '  hotspot                   高频题（跨笔记重复出现）',
             '  help                      显示此帮助',
+            '',
+            'Global options:',
+            '  --slim   只输出 question_id + original_question（减少 token，适合 Agent 分析）',
         ].join('\n'));
         return;
     }
@@ -172,26 +189,26 @@ function main() {
             const key = opts.l1 ? 'domain_l1' : 'domain_l2';
             const val = (opts.l1 || opts.l2 || '').trim();
             if (!val) { console.error('Usage: domain --l1 <name>  OR  domain --l2 <name>'); process.exit(1); }
-            printTable(rows.filter(r => r[key] === val));
+            printTable(rows.filter(r => r[key] === val), slim);
             break;
         }
         case 'company': {
             const name = (opts.name || '').trim();
             if (!name) { console.error('Usage: company --name <name>'); process.exit(1); }
             // fuzzy: allow partial match (e.g. "字节" matches "字节跳动")
-            printTable(rows.filter(r => r.company.includes(name)));
+            printTable(rows.filter(r => r.company.includes(name)), slim);
             break;
         }
         case 'type': {
             const val = (opts.value || '').trim();
             if (!val) { console.error('Usage: type --value <question_type>'); process.exit(1); }
-            printTable(rows.filter(r => r.question_type === val));
+            printTable(rows.filter(r => r.question_type === val), slim);
             break;
         }
         case 'depth': {
             const val = (opts.value || '').trim();
             if (!val) { console.error('Usage: depth --value <cognitive_depth>'); process.exit(1); }
-            printTable(rows.filter(r => r.cognitive_depth === val));
+            printTable(rows.filter(r => r.cognitive_depth === val), slim);
             break;
         }
         case 'entity': {
@@ -199,15 +216,15 @@ function main() {
             if (!kw) { console.error('Usage: entity --value <keyword>'); process.exit(1); }
             printTable(rows.filter(r =>
                 r.tech_entities.some(e => e.toLowerCase().includes(kw))
-            ));
+            ), slim);
             break;
         }
         case 'stats': {
-            printStats(rows);
+            printStats(rows); // stats always shows full breakdown
             break;
         }
         case 'hotspot': {
-            printHotspot(rows);
+            printHotspot(rows, slim);
             break;
         }
         default:
