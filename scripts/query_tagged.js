@@ -15,7 +15,11 @@
  *   note    --id <note_id>     Show all questions from a specific note
  *
  * Global options:
- *   --slim   Only output question_id + original_question (saves tokens for downstream use)
+ *   --slim                    Only output question_id + original_question
+ *   --filter-valid            Only include is_valid_for_library=true questions
+ *   --filter-level <value>    Filter by level (partial match, e.g. 校招)
+ *   --filter-year  <value>    Filter by year  (exact match, e.g. 2024)
+ *   --filter-round <value>    Filter by round (partial match, e.g. 一面)
  */
 
 'use strict';
@@ -139,8 +143,8 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const cmd = args[0];
     const opts = {};
-    // Collect boolean flags (e.g. --slim) and key-value pairs (e.g. --l1 Java基础)
-    const boolFlags = new Set(['slim']);
+    // Collect boolean flags (e.g. --slim, --filter-valid) and key-value pairs
+    const boolFlags = new Set(['slim', 'filter-valid']);
     for (let i = 1; i < args.length; i++) {
         const key = args[i]?.replace(/^--/, '');
         if (!key) continue;
@@ -178,13 +182,27 @@ function main() {
             '  help                      显示此帮助',
             '',
             'Global options:',
-            '  --slim   只输出 question_id + original_question（减少 token，适合 Agent 分析）',
+            '  --slim                    只输出 question_id + original_question（减少 token，适合 Agent 分析）',
+            '  --filter-valid            只保留 is_valid_for_library=true 的题',
+            '  --filter-level <value>    按 level 过滤（模糊匹配，如 校招）',
+            '  --filter-year  <value>    按 year 过滤（精确匹配，如 2024）',
+            '  --filter-round <value>    按 round 过滤（模糊匹配，如 一面）',
+            '',
+            'Filter options are composable and apply to all filter commands.',
         ].join('\n'));
         return;
     }
 
     const notes = loadAllNotes();
-    const rows = flattenQuestions(notes);
+    let rows = flattenQuestions(notes);
+
+    // ── Apply global filters ──────────────────────────────────────────────
+    if (opts['filter-valid']) rows = rows.filter(r => r.is_valid_for_library);
+    if (opts['filter-level']) { const v = opts['filter-level'].trim(); rows = rows.filter(r => String(r.level).includes(v)); }
+    if (opts['filter-year']) { const v = String(opts['filter-year']).trim(); rows = rows.filter(r => String(r.year) === v); }
+    if (opts['filter-round']) { const v = opts['filter-round'].trim(); rows = rows.filter(r => String(r.round).includes(v)); }
+
+    if (rows.length === 0) { console.error('(过滤后无匹配记录)'); return; }
 
     switch (cmd) {
         case 'domain': {
