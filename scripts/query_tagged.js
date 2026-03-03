@@ -108,6 +108,17 @@ function printStats(rows) {
     section('level', count(rows, 'level'));
     section('year', count(rows, 'year'));
 
+    // tech_entities is an array field — flatten and count each entity
+    const entityCount = {};
+    for (const r of rows) {
+        for (const e of r.tech_entities) {
+            entityCount[e] = (entityCount[e] || 0) + 1;
+        }
+    }
+    section('tech_entities (top 30)', Object.fromEntries(
+        Object.entries(entityCount).sort((a, b) => b[1] - a[1]).slice(0, 30)
+    ));
+
     console.log(`\n总题目数: ${rows.length}  |  有效题(is_valid): ${rows.filter(r => r.is_valid_for_library).length}`);
 }
 
