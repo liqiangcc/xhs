@@ -17,6 +17,7 @@
  * Global options:
  *   --slim                    Only output question_id + original_question
  *   --filter-valid            Only include is_valid_for_library=true questions
+ *   --filter-company <value>  Filter by company (partial match, e.g. 美团)
  *   --filter-level <value>    Filter by level (partial match, e.g. 校招)
  *   --filter-year  <value>    Filter by year  (exact match, e.g. 2024)
  *   --filter-round <value>    Filter by round (partial match, e.g. 一面)
@@ -184,6 +185,7 @@ function main() {
             'Global options:',
             '  --slim                    只输出 question_id + original_question（减少 token，适合 Agent 分析）',
             '  --filter-valid            只保留 is_valid_for_library=true 的题',
+            '  --filter-company <value>  按公司过滤（模糊匹配，如 美团）',
             '  --filter-level <value>    按 level 过滤（模糊匹配，如 校招）',
             '  --filter-year  <value>    按 year 过滤（精确匹配，如 2024）',
             '  --filter-round <value>    按 round 过滤（模糊匹配，如 一面）',
@@ -198,9 +200,11 @@ function main() {
 
     // ── Apply global filters ──────────────────────────────────────────────
     if (opts['filter-valid']) rows = rows.filter(r => r.is_valid_for_library);
+    if (opts['filter-company']) { const v = opts['filter-company'].trim(); rows = rows.filter(r => String(r.company).includes(v)); }
     if (opts['filter-level']) { const v = opts['filter-level'].trim(); rows = rows.filter(r => String(r.level).includes(v)); }
     if (opts['filter-year']) { const v = String(opts['filter-year']).trim(); rows = rows.filter(r => String(r.year) === v); }
     if (opts['filter-round']) { const v = opts['filter-round'].trim(); rows = rows.filter(r => String(r.round).includes(v)); }
+
 
     if (rows.length === 0) { console.error('(过滤后无匹配记录)'); return; }
 

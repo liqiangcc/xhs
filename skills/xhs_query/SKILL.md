@@ -43,6 +43,7 @@ node scripts/query_tagged.js <command> [options] [filters]
 |------|------|
 | `--slim` | 只输出 `question_id` + `original_question`，减少 token，**凡后续需要 Agent 分析的场景均应加上** |
 | `--filter-valid` | 只保留 `is_valid_for_library=true` 的题 |
+| `--filter-company <值>` | 按公司过滤（模糊匹配，如 `美团`、`字节`） |
 | `--filter-level <值>` | 按 level 过滤（模糊匹配，如 `校招`、`社招`、`实习`） |
 | `--filter-year <值>` | 按 year 过滤（精确匹配，如 `2024`） |
 | `--filter-round <值>` | 按 round 过滤（模糊匹配，如 `一面`、`二面`） |
@@ -66,7 +67,12 @@ node scripts/query_tagged.js <command> [options] [filters]
 **cognitive_depth 枚举**：
 `L1_Principle` / `L2_Mechanism` / `L3_Diagnostic` / `N_A`
 
-> 💡 **快速映射**：说"JVM题" → `domain --l2 JVM`；说"算法题" → `type --value 算法手撕_Coding`；说"系统设计" → `domain --l1 系统设计`；说"有效题/高质量" → 加 `--filter-valid`
+> 💡 **快速映射**：
+> - "X公司社招/校招喜欢考哪些方面" → `stats --filter-company X --filter-level 社招/校招 --filter-valid`
+> - "JVM题" → `domain --l2 JVM`
+> - "算法题" → `type --value 算法手撕_Coding`
+> - "系统设计" → `domain --l1 系统设计`
+> - "有效题/高质量" → 加 `--filter-valid`
 
 ### Step 2：构造完整命令
 
@@ -74,10 +80,13 @@ node scripts/query_tagged.js <command> [options] [filters]
 
 **典型组合示例**：
 ```bash
-# 字节跳动校招2024年一面的JVM有效题（精准复习）
-node scripts/query_tagged.js domain --l2 JVM --filter-valid --filter-level 校招 --filter-year 2024 --filter-round 一面 --slim
+# X公司社招考哪些方向 → stats + filter-company + filter-level
+node scripts/query_tagged.js stats --filter-company 美团 --filter-level 社招 --filter-valid
 
-# 腾讯考过哪些高频题
+# 字节跳动校招2024年一面的JVM有效题（精准复习）
+node scripts/query_tagged.js domain --l2 JVM --filter-company 字节 --filter-level 校招 --filter-year 2024 --filter-round 一面 --filter-valid --slim
+
+# 腾讯考过哪些有效题（题目列表）
 node scripts/query_tagged.js company --name 腾讯 --filter-valid --slim
 
 # 查看社招题库各领域分布
