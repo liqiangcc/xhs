@@ -12,6 +12,7 @@
  *   entity  --value <keyword>  Filter by tech_entities (partial match)
  *   stats                      Print count summary across all dimensions
  *   hotspot                    Show questions appearing in 2+ notes (same question_id)
+ *   note    --id <note_id>     Show all questions from a specific note
  *
  * Global options:
  *   --slim   Only output question_id + original_question (saves tokens for downstream use)
@@ -173,6 +174,7 @@ function main() {
             '  entity  --value <kw>      按 tech_entities 模糊匹配 (e.g. Redis)',
             '  stats                     各维度统计汇总',
             '  hotspot                   高频题（跨笔记重复出现）',
+            '  note    --id <note_id>    指定笔记 ID 的全部题目',
             '  help                      显示此帮助',
             '',
             'Global options:',
@@ -225,6 +227,24 @@ function main() {
         }
         case 'hotspot': {
             printHotspot(rows, slim);
+            break;
+        }
+        case 'note': {
+            const id = (opts.id || '').trim();
+            if (!id) { console.error('Usage: note --id <note_id>'); process.exit(1); }
+            const matched = rows.filter(r => r.note_id === id);
+            if (matched.length === 0) {
+                console.error(`未找到 note_id=${id} 的记录，请确认 ID 正确`);
+                process.exit(1);
+            }
+            // Print note-level metadata once, then questions
+            const meta = {
+                note_id: matched[0].note_id, company: matched[0].company,
+                position: matched[0].position, round: matched[0].round,
+                level: matched[0].level, year: matched[0].year
+            };
+            if (!slim) console.error(JSON.stringify(meta, null, 2));
+            printTable(matched, slim);
             break;
         }
         default:
