@@ -69,6 +69,8 @@ node scripts/query_tagged.js <command> [options] [filters]
 
 > 💡 **快速映射**：
 > - "X公司社招/校招喜欢考哪些方面" → `stats --filter-company X --filter-level 社招/校招 --filter-valid`
+> - "哪些技术实体/知识点被考得最多" → `stats --filter-valid`（查看 tech_entities 维度）
+> - "索引/锁/事务/Kafka 相关的题" → `entity --value <关键词> --filter-valid --slim`
 > - "JVM题" → `domain --l2 JVM`
 > - "算法题" → `type --value 算法手撕_Coding`
 > - "系统设计" → `domain --l1 系统设计`
@@ -111,7 +113,7 @@ node scripts/query_tagged.js hotspot --slim
 |---|------|------|------|----------|
 ```
 
-**stats 类**：直接呈现各维度计数排行。
+**stats 类**：直接呈现各维度计数排行（domain.l1, question_type, cognitive_depth, company, level, year, **tech_entities top 30**）。
 
 **hotspot 类**：
 ```markdown
