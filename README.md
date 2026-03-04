@@ -16,6 +16,7 @@
  search.sh           xhs_extractor       xhs_tagger          query_tagged.js
  fetch.sh            SKILL.md            SKILL.md            xhs_query SKILL
  fetch_detail.sh     xhs_process.js      generate_hashes.js
+                     └─ xhs_pipeline (Orchestrator)
 ```
 
 ### 数据流
@@ -98,7 +99,8 @@ xhs/
 ├── skills/                     # Agent Skill 定义
 │   ├── xhs_extractor/SKILL.md  # 结构化提取技能
 │   ├── xhs_tagger/SKILL.md     # 多维度打标签技能
-│   └── xhs_query/SKILL.md      # 智能查询技能
+│   ├── xhs_query/SKILL.md      # 智能查询技能
+│   └── xhs_pipeline/SKILL.md   # 全流程自动化管线 (Orchestrator)
 │
 ├── note_structured/            # 结构化 JSON（135 篇）
 ├── note_tagged/                # 打标签后的 JSON（135 篇）
@@ -148,10 +150,14 @@ bash img_2_txt.sh
 通过 Agent Skill（`xhs_extractor` + `xhs_tagger`）驱动 AI 完成：
 - **结构化**：提取公司、岗位、轮次、层级、年份及面试题列表
 - **打标签**：为每道题标注 domain (l1/l2)、question_type、cognitive_depth、tech_entities 等
+- **全流程管线**：通过 `xhs_pipeline` 技能串联上述步骤，实现批量自动化处理。
 
 ```bash
 # 单笔记处理流水线
 node scripts/xhs_process.js <note_id>
+
+# 批量全流程自动化 (推荐用法)
+# 使用 xhs_pipeline 技能引导：Discovery -> Extraction -> Hashing -> Tagging -> Commit
 ```
 
 ---
