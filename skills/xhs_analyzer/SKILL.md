@@ -19,20 +19,31 @@ description: 按题型（question_type）深度分析面试题。输入题目文
 
 ## 使用方式
 
-**方式一：指定题目**
+**方式一：配合 `query_tagged.js` 查询并分析（推荐）**
+1. 先使用脚本查询感兴趣的题目（获取 `question_id`）：
+```bash
+# 查询 Redis 相关的高频题
+node scripts/query_tagged.js domain --l2 Redis --filter-valid --slim
+```
+2. 告诉 AI 你想分析的题目 ID：
+```
+使用 xhs_analyzer 分析题目 question_id: ab7e5c2c58960dabc4095ca8a234d4bc
+```
+
+**方式二：指定题目全文本**
 ```
 使用 xhs_analyzer 分析：HashMap 为什么不是线程安全的？
 ```
 
-**方式二：配合查询批量分析**
-```bash
-node scripts/query_tagged.js domain --l2 JVM --filter-valid --slim
-# 然后选择题目让 AI 分析
+**方式三：按维度定向练习（让 AI 代为提取）**
 ```
+分析美团面试中关于「ThreadLocal」的 3 道题
+```
+*(AI 会自动组合 query 命令检索出题目的 question_id 并逐一分析)*
 
-**方式三：按笔记 ID 复盘**
+**方式四：按笔记复盘（限制题数）**
 ```
-使用 xhs_analyzer 分析笔记 67ed5649000000001d02cbac 的全部题目
+分析笔记 67ed5649 的第 1 到 3 题
 ```
 
 ---

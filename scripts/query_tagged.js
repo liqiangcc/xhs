@@ -191,6 +191,7 @@ function main() {
             '  stats                     各维度统计汇总',
             '  hotspot                   高频题（跨笔记重复出现）',
             '  note    --id <note_id>    指定笔记 ID 的全部题目',
+            '  question --id <id>        指定题目 ID 查询单道题',
             '  help                      显示此帮助',
             '',
             'Global options:',
@@ -278,6 +279,18 @@ function main() {
             };
             if (!slim) console.error(JSON.stringify(meta, null, 2));
             printTable(matched, slim);
+            break;
+        }
+        case 'question': {
+            const id = (opts.id || '').trim();
+            if (!id) { console.error('Usage: question --id <question_id>'); process.exit(1); }
+            const matched = rows.filter(r => r.question_id === id);
+            if (matched.length === 0) { console.error('未找到题目'); process.exit(1); }
+            if (slim) {
+                printTable(matched, slim);
+            } else {
+                console.log(JSON.stringify(matched[0], null, 2));
+            }
             break;
         }
         default:
