@@ -5,7 +5,7 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 
 # 小红书面经全流程自动化管线 (XHS Pipeline Orchestrator)
 
-// turbo-all
+> **执行入口**：请使用 `/xhs_pipeline` workflow 触发，该 workflow 包含 `// turbo-all` 注解，所有命令自动执行。
 
 ## 技能描述
 
@@ -18,6 +18,7 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 1. **唯一脚本入口**：只允许调用 `node scripts/xhs_pipeline.js` 和 `node scripts/commit_changes.js`，禁止调用其他脚本。
 2. **自动循环**：一批处理完并提交后，**立即**执行 `node scripts/xhs_pipeline.js` 获取下一批，循环直到输出的 `summary` 中所有 actionable 任务为 0。
 3. **SafeToAutoRun = true**：所有 `run_command` 调用都必须设置此参数。
+4. **禁止 shell 命令做文件检查**：不允许运行 `ls`、`dir`、`Get-Item`、`head`、`cat` 等命令。文件检查必须使用 `find_by_name`、`list_dir`、`view_file` 等内置工具。
 
 ---
 
