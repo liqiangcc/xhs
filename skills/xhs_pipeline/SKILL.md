@@ -9,160 +9,110 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 
 ## 技能描述
 
-你现在是一个**全自动化数据处理管线的执行者**。你的任务是按照以下固定的 5 个阶段，依次处理一批小红书面经笔记，将其从原始文本转化为结构化、已打标的题库，最后提交到 Git。
-
-**每次执行本管线时，确保严格按阶段顺序处理，不要跳过任何一步。**
-
-> ⚠️ **自动化要求**：本管线中的所有命令（`node scripts/filter_notes.js`、`node scripts/xhs_process.js`、`node scripts/commit_changes.js`）均为**安全的只读或幂等操作**，执行 `run_command` 时必须设置 `SafeToAutoRun = true`。文件检查（幂等性判断）请使用 `find_by_name` 或 `list_dir` 等内置工具，**禁止使用 shell 命令**做文件检查。
+你现在是一个**全自动化数据处理管线的执行者**。你只需执行一个脚本，获取任务清单，然后逐个完成 AI 专属任务（提取与打标）。
 
 ---
 
-## 执行阶段 (Execution Phases)
+## 执行流程 (3 步完成)
 
-### 阶段 1：发现待处理笔记 (Discovery)
+### 第 1 步：获取任务清单
 
-**目标**：获取本批次需要处理的笔记 ID 列表。
+执行命令（`SafeToAutoRun = true`）：
+```bash
+node scripts/xhs_pipeline.js
+```
 
-**操作**：
-1. 执行命令（`SafeToAutoRun = true`）：
-   ```bash
-   node scripts/filter_notes.js
-   ```
-2. 该命令会输出若干行 `{uuid}.txt` 格式的文件名。**取前 10 个** `uuid`（去掉 `.txt` 后缀）作为本批次的处理列表。
-3. **幂等性检查**：使用 `find_by_name` 工具在 `note_tagged/` 目录下搜索这些 uuid 对应的 `.json` 文件。若已存在，从处理列表中移除。
-   - ✅ 正确做法：`find_by_name(SearchDirectory="note_tagged", Pattern="{uuid}.json")`
-   - ❌ 错误做法：`run_command("dir note_tagged/{uuid}.json")` ← **禁止**
+该脚本会**一次性**完成以下所有机械性工作：
+- 筛选高质量面经笔记
+- 幂等性检查（跳过已处理的笔记）
+- 为已结构化的笔记生成 Hash
+
+输出为 JSON 格式的任务清单，每个任务有两种 `action`：
+
+| action | 含义 | AI 需要做什么 |
+|--------|------|------------|
+| `extract_and_tag` | 笔记尚未结构化 | ① 读取 `desc_path` 和 `img_path` → 提取问题 → 写入 `note_structured/{uuid}.json`<br>② 执行 `node scripts/xhs_process.js {uuid}` 获取 hash<br>③ 打标签 → 写入 `note_tagged/{uuid}.json` |
+| `tag_only` | 已结构化，只需打标 | 直接用任务中提供的 `hashes` 和 `metadata` → 打标签 → 写入 `note_tagged/{uuid}.json` |
+| `skip` | 已完成或无效 | 无需操作 |
 
 ---
 
-### 阶段 2：结构化提取 (Extraction)
+### 第 2 步：逐个执行任务
 
-**目标**：对本批次每一个 uuid，从文本中萃取面试题，生成 `note_structured/{uuid}.json`。
+#### 对于 `extract_and_tag` 类型的任务：
 
-**操作（对每个 uuid 循环执行）**：
-
-1. 使用 `find_by_name` 检查 `note_structured/{uuid}.json` 是否已存在。若已存在，跳过本 uuid 的提取，直接进入阶段 3。
-2. 使用 `view_file` 读取原始文本：
-   - `note_desc/{uuid}.txt`（笔记正文）
-   - `note_img_txt/{uuid}.txt`（图片 OCR 文本，如存在）
-3. 按照 `xhs_extractor` skill 的**提取规则**进行分析与提取。核心规则：
-   - **忠于原味**：保留作者原话
-   - **加前缀**：代码题加 `算法：`，设计题加 `场景：`
-   - **过滤**：纯项目追问、情绪吐槽、答案思路 → 不入库
-   - **去重**：desc 和 img_txt 重复部分只保留一份
-4. 使用 `write_to_file` 将结构化 JSON 写入 `note_structured/{uuid}.json`，格式如下：
+1. 使用 `view_file` 读取任务中的 `desc_path` 和 `img_path`（如非 null）
+2. **提取面试题**，遵循 `xhs_extractor` skill 规则：
+   - 忠于原味，保留原话
+   - 代码题加 `算法：` 前缀，设计题加 `场景：` 前缀
+   - 过滤情绪吐槽、项目隐私、答案思路
+   - desc 和 img 去重
+3. 使用 `write_to_file` 写入 `note_structured/{uuid}.json`：
    ```json
    {
-     "note_id": "{uuid}",
-     "source": "小红书",
-     "company": "推断的公司名，无则填 未知",
-     "position": "推断的岗位，无则填 未知",
-     "round": "例如 一面，无则填 未注明",
-     "level": "例如 校招/社招，无则填 未知",
-     "year": "推断年份，无则填 未知",
-     "date": "推断日期，无则填 未知",
-     "questions": [
-       "问题原文 1",
-       "算法：手写快排",
-       "场景：高并发下如何限流"
-     ]
+     "note_id": "{uuid}", "source": "小红书",
+     "company": "...", "position": "...", "round": "...",
+     "level": "...", "year": "...", "date": "...",
+     "questions": ["问题1", "算法：手写快排"]
    }
    ```
-5. **无效笔记**（吐槽帖、offer 对比、资料分享等）：`questions` 设为空数组 `[]`，文件仍需创建。
-
----
-
-### 阶段 3：生成题目 Hash ID (Hashing)
-
-**目标**：为每道题生成全局唯一的 `question_id`，同时输出 Hash 清单以备打标阶段使用。
-
-**操作（对每个 uuid 循环执行）**：
-
-1. 执行命令（`SafeToAutoRun = true`）：
+4. 执行命令获取 hash（`SafeToAutoRun = true`）：
    ```bash
    node scripts/xhs_process.js {uuid}
    ```
-2. 若输出包含 `[DONE]` 字样，说明该笔记已完成过打标，**跳过**。
-3. 若输出包含 `[CONTINUE]`，说明需要继续打标，**保留 Hash 输出结果**（表格中的 `hash` 和 `question` 列），进入阶段 4。
-4. 若 `questions` 为空，`xhs_process.js` 会提示 0 hashes，**跳过阶段 4**，直接标记为已处理。
+5. 从命令输出的表格中提取 `hash` 列作为 `question_id`
+6. **打标签**（见下方通用打标规则），写入 `note_tagged/{uuid}.json`
+
+#### 对于 `tag_only` 类型的任务：
+
+1. 任务 JSON 中已包含 `metadata` 和 `hashes` 数组
+2. 直接使用 `hashes[i].hash` 作为 `question_id`，`hashes[i].question` 作为原始题目
+3. **打标签**，写入 `note_tagged/{uuid}.json`
+
+#### 通用打标规则（来自 `xhs_tagger` skill）：
+
+对每道题分配：
+- `domain`: `{ "l1": "技术大领域", "l2": "技术子方向" }`
+- `question_type`: `八股文_Concept` / `原理深度_UnderTheHood` / `场景设计_Scenario` / `算法手撕_Coding` / `项目深挖_Project`
+- `cognitive_depth`: `L1_Principle` / `L2_Mechanism` / `L3_Diagnostic`
+- `tech_entities`: `["HashMap", "红黑树"]`
+- `business_context`: 特定业务场景，通用题设为 `[]`
+- `is_valid_for_library`: `true` / `false`
+
+输出 JSON 格式：
+```json
+{
+  "note_id": "{uuid}", "source": "小红书",
+  "company": "...", "position": "...", "round": "...",
+  "level": "...", "year": "...", "date": "...",
+  "tagged_questions": [
+    {
+      "question_id": "32位md5",
+      "original_question": "原始题目",
+      "domain": { "l1": "Java基础", "l2": "JVM" },
+      "question_type": "八股文_Concept",
+      "cognitive_depth": "L1_Principle",
+      "tech_entities": ["GC"],
+      "business_context": [],
+      "is_valid_for_library": true
+    }
+  ]
+}
+```
 
 ---
 
-### 阶段 4：多维度打标 (Tagging)
+### 第 3 步：提交
 
-**目标**：为每道题打上领域、题型、认知深度、技术实体等多维标签，生成 `note_tagged/{uuid}.json`。
+所有任务处理完毕后，执行命令（`SafeToAutoRun = true`）：
+```bash
+node scripts/commit_changes.js
+```
 
-**操作（对每个 uuid 循环执行）**：
-
-1. 使用 `view_file` 读取 `note_structured/{uuid}.json` 中的 `questions` 数组和元数据。
-2. 从阶段 3 中 `xhs_process.js` 的输出获取每道题的 `question_id`（32 位 MD5）。
-3. 按照 `xhs_tagger` skill 定义的**标签约束契约**，对每道题逐一分析并分配以下字段：
-   - `domain.l1`：技术大领域（如 `Java基础`、`数据库`、`中间件`）
-   - `domain.l2`：技术子方向（如 `JVM`、`MySQL`、`Kafka`）
-   - `question_type`：`八股文_Concept` / `原理深度_UnderTheHood` / `场景设计_Scenario` / `算法手撕_Coding` / `项目深挖_Project`
-   - `cognitive_depth`：`L1_Principle` / `L2_Mechanism` / `L3_Diagnostic`
-   - `tech_entities`：如 `["HashMap", "红黑树"]`
-   - `business_context`：特定业务场景标记，通用题设为 `[]`
-   - `is_valid_for_library`：是否具有复习价值（`true`/`false`）
-4. 使用 `write_to_file` 将打标结果写入 `note_tagged/{uuid}.json`，格式如下：
-   ```json
-   {
-     "note_id": "{uuid}",
-     "source": "小红书",
-     "company": "...",
-     "position": "...",
-     "round": "...",
-     "level": "...",
-     "year": "...",
-     "date": "...",
-     "tagged_questions": [
-       {
-         "question_id": "32位md5",
-         "original_question": "原始题目文本",
-         "domain": { "l1": "Java基础", "l2": "JVM" },
-         "question_type": "八股文_Concept",
-         "cognitive_depth": "L1_Principle",
-         "tech_entities": ["GC", "垃圾回收算法"],
-         "business_context": [],
-         "is_valid_for_library": true
-       }
-     ]
-   }
-   ```
-
----
-
-### 阶段 5：提交持久化 (Commit)
-
-**目标**：将本批次所有处理结果提交到 Git，确保进度可追溯。
-
-**操作（所有 uuid 处理完毕后执行一次）**：
-
-1. 执行命令（`SafeToAutoRun = true`）：
-   ```bash
-   node scripts/commit_changes.js
-   ```
-2. 若输出 `[SUCCESS]` 则本批次完成。
-3. 提交完成后，输出**批次汇总报告**，包含：
-   - 本批处理的 uuid 数量
-   - 有效笔记数 / 无效笔记数
-   - 新增面试题总数
-   - 涉及的主要公司和技术领域
-
----
-
-## 幂等性保证 (Idempotency)
-
-| 检查点 | 检查方式 | 若已存在 |
-|--------|---------|---------|
-| `note_tagged/{uuid}.json` | `find_by_name` 工具 | 跳过全部阶段 |
-| `note_structured/{uuid}.json` | `find_by_name` 工具 | 跳过阶段 2，从阶段 3 开始 |
-| `xhs_process.js` 输出 `[DONE]` | 命令输出判断 | 跳过阶段 4 |
-
-> **重要**：所有文件存在性检查必须使用 `find_by_name` 或 `list_dir` 工具，**禁止**使用 `run_command` 执行 `dir`/`ls`/`Get-Item` 等 shell 命令。
+然后输出批次汇总报告：处理数量、有效/无效、新增题目数、涉及公司。
 
 ---
 
 ## 示例调用
 
-用户只需说：**"使用 xhs_pipeline 处理下一批笔记"**，AI 即可自主完成全部 5 个阶段，无需人工干预。
+用户只需说：**"使用 xhs_pipeline 处理下一批笔记"**，AI 即可自主完成全部流程。
