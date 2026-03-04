@@ -5,11 +5,15 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 
 # 小红书面经全流程自动化管线 (XHS Pipeline Orchestrator)
 
+// turbo-all
+
 ## 技能描述
 
 你现在是一个**全自动化数据处理管线的执行者**。你的任务是按照以下固定的 5 个阶段，依次处理一批小红书面经笔记，将其从原始文本转化为结构化、已打标的题库，最后提交到 Git。
 
 **每次执行本管线时，确保严格按阶段顺序处理，不要跳过任何一步。**
+
+> ⚠️ **自动化要求**：本管线中的所有命令（`node scripts/filter_notes.js`、`node scripts/xhs_process.js`、`node scripts/commit_changes.js`）均为**安全的只读或幂等操作**，执行 `run_command` 时必须设置 `SafeToAutoRun = true`。文件检查（幂等性判断）请使用 `find_by_name` 或 `list_dir` 等内置工具，**禁止使用 shell 命令**做文件检查。
 
 ---
 
@@ -20,17 +24,14 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 **目标**：获取本批次需要处理的笔记 ID 列表。
 
 **操作**：
-1. 执行命令：
+1. 执行命令（`SafeToAutoRun = true`）：
    ```bash
    node scripts/filter_notes.js
    ```
 2. 该命令会输出若干行 `{uuid}.txt` 格式的文件名。**取前 10 个** `uuid`（去掉 `.txt` 后缀）作为本批次的处理列表。
-3. 在继续之前，使用以下命令**逐一确认幂等性**——若 `note_tagged/{uuid}.json` 已存在，则跳过该 uuid：
-   ```bash
-   # 示例：检查某 uuid 是否已完成
-   # 若文件存在则跳过，否则加入处理队列
-   Get-Item note_tagged/{uuid}.json 2>$null
-   ```
+3. **幂等性检查**：使用 `find_by_name` 工具在 `note_tagged/` 目录下搜索这些 uuid 对应的 `.json` 文件。若已存在，从处理列表中移除。
+   - ✅ 正确做法：`find_by_name(SearchDirectory="note_tagged", Pattern="{uuid}.json")`
+   - ❌ 错误做法：`run_command("dir note_tagged/{uuid}.json")` ← **禁止**
 
 ---
 
@@ -40,11 +41,15 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 
 **操作（对每个 uuid 循环执行）**：
 
-1. 检查 `note_structured/{uuid}.json` 是否已存在。若已存在，跳过本 uuid 的提取，直接进入阶段 3。
-2. 读取原始文本：
+1. 使用 `find_by_name` 检查 `note_structured/{uuid}.json` 是否已存在。若已存在，跳过本 uuid 的提取，直接进入阶段 3。
+2. 使用 `view_file` 读取原始文本：
    - `note_desc/{uuid}.txt`（笔记正文）
    - `note_img_txt/{uuid}.txt`（图片 OCR 文本，如存在）
-3. 按照 `xhs_extractor` skill 的**提取规则**进行分析与提取。
+3. 按照 `xhs_extractor` skill 的**提取规则**进行分析与提取。核心规则：
+   - **忠于原味**：保留作者原话
+   - **加前缀**：代码题加 `算法：`，设计题加 `场景：`
+   - **过滤**：纯项目追问、情绪吐槽、答案思路 → 不入库
+   - **去重**：desc 和 img_txt 重复部分只保留一份
 4. 使用 `write_to_file` 将结构化 JSON 写入 `note_structured/{uuid}.json`，格式如下：
    ```json
    {
@@ -73,12 +78,12 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 
 **操作（对每个 uuid 循环执行）**：
 
-1. 执行命令：
+1. 执行命令（`SafeToAutoRun = true`）：
    ```bash
    node scripts/xhs_process.js {uuid}
    ```
 2. 若输出包含 `[DONE]` 字样，说明该笔记已完成过打标，**跳过**。
-3. 若输出包含 `[CONTINUE]`，说明需要继续打标，**保留 Hash 输出结果**（格式为 `index|md5hash|问题原文`），进入阶段 4。
+3. 若输出包含 `[CONTINUE]`，说明需要继续打标，**保留 Hash 输出结果**（表格中的 `hash` 和 `question` 列），进入阶段 4。
 4. 若 `questions` 为空，`xhs_process.js` 会提示 0 hashes，**跳过阶段 4**，直接标记为已处理。
 
 ---
@@ -89,8 +94,8 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 
 **操作（对每个 uuid 循环执行）**：
 
-1. 读取 `note_structured/{uuid}.json` 中的 `questions` 数组。
-2. 读取阶段 3 中 `xhs_process.js` 输出的 Hash 清单，获取每道题的 `question_id`（32 位 MD5）。
+1. 使用 `view_file` 读取 `note_structured/{uuid}.json` 中的 `questions` 数组和元数据。
+2. 从阶段 3 中 `xhs_process.js` 的输出获取每道题的 `question_id`（32 位 MD5）。
 3. 按照 `xhs_tagger` skill 定义的**标签约束契约**，对每道题逐一分析并分配以下字段：
    - `domain.l1`：技术大领域（如 `Java基础`、`数据库`、`中间件`）
    - `domain.l2`：技术子方向（如 `JVM`、`MySQL`、`Kafka`）
@@ -133,7 +138,7 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 
 **操作（所有 uuid 处理完毕后执行一次）**：
 
-1. 执行命令：
+1. 执行命令（`SafeToAutoRun = true`）：
    ```bash
    node scripts/commit_changes.js
    ```
@@ -148,11 +153,13 @@ description: 全自动驱动小红书面经笔记的完整处理管线：筛选 
 
 ## 幂等性保证 (Idempotency)
 
-| 检查文件 | 若已存在 | 操作 |
-|---------|---------|------|
-| `note_tagged/{uuid}.json` | 该 uuid 已全部完成 | 直接跳过全部阶段 |
-| `note_structured/{uuid}.json` | 提取已完成 | 跳过阶段 2，从阶段 3 开始 |
-| `xhs_process.js` 输出 `[DONE]` | 打标已完成 | 跳过阶段 4 |
+| 检查点 | 检查方式 | 若已存在 |
+|--------|---------|---------|
+| `note_tagged/{uuid}.json` | `find_by_name` 工具 | 跳过全部阶段 |
+| `note_structured/{uuid}.json` | `find_by_name` 工具 | 跳过阶段 2，从阶段 3 开始 |
+| `xhs_process.js` 输出 `[DONE]` | 命令输出判断 | 跳过阶段 4 |
+
+> **重要**：所有文件存在性检查必须使用 `find_by_name` 或 `list_dir` 工具，**禁止**使用 `run_command` 执行 `dir`/`ls`/`Get-Item` 等 shell 命令。
 
 ---
 
