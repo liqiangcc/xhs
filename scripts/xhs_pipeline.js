@@ -1,27 +1,23 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const crypto = require('crypto');
 
 /**
  * XHS Pipeline Orchestrator
  * 
- * 一次性完成所有机械性工作，输出 JSON 任务清单供 AI 执行。
+ * 统一入口，AI 只需要调用这一个脚本。
  * 
- * Usage: node scripts/xhs_pipeline.js [limit]
+ * 用法：
+ *   node scripts/xhs_pipeline.js [limit]       获取任务清单（默认 10 条）
+ *   node scripts/xhs_pipeline.js hash <uuid>    为指定笔记生成 hash（用于 extract_and_tag 后）
  * 
- * 输出 JSON 格式：
+ * 任务清单 JSON 格式：
  * {
  *   "batch_size": 10,
- *   "tasks": [
- *     { "uuid": "...", "action": "extract_and_tag", "desc_path": "...", "img_path": "..." },
- *     { "uuid": "...", "action": "tag_only", "structured_path": "...", "hashes": [...] },
- *     { "uuid": "...", "action": "skip", "reason": "already tagged" }
- *   ],
+ *   "tasks": [...],
  *   "summary": { "total": 10, "extract_and_tag": 5, "tag_only": 3, "skip": 2 }
  * }
  */
-
-const limit = parseInt(process.argv[2]) || 10;
 
 const DIRS = {
     desc: 'note_desc',
@@ -30,7 +26,28 @@ const DIRS = {
     tagged: 'note_tagged'
 };
 
-// ── Scoring (from filter_notes.js) ───────────────────────────────────────
+// ── Hash Generation (inline, no external command) ────────────────────────
+
+function computeHash(question) {
+    const normalized = question.toLowerCase().replace(/[^\w\u4e00-\u9fa5]/g, '');
+    return crypto.createHash('md5').update(normalized).digest('hex');
+}
+
+function generateHashes(structuredPath) {
+    try {
+        const data = JSON.parse(fs.readFileSync(structuredPath, 'utf-8'));
+        const questions = data.questions || [];
+        return questions.map((q, i) => ({
+            index: String(i),
+            hash: computeHash(q),
+            question: q
+        }));
+    } catch (e) {
+        return [];
+    }
+}
+
+// ── Scoring ──────────────────────────────────────────────────────────────
 
 const SCORE_THRESHOLD = 3;
 const EXCLUDE_JD = /内推码|内推链接|工作职责|任职资格|岗位要求|招聘要求/;
@@ -63,23 +80,38 @@ function scoreNote(combined) {
     return score;
 }
 
-// ── Hash Generation ──────────────────────────────────────────────────────
+// ── Sub-command: hash ────────────────────────────────────────────────────
 
-function generateHashes(structuredPath) {
-    try {
-        const output = execSync(`node scripts/generate_hashes.js ${structuredPath}`, { encoding: 'utf-8' });
-        return output.split('\n').filter(line => line.trim()).map(line => {
-            const [index, hash, ...rest] = line.split('|');
-            return { index: index.trim(), hash: hash.trim(), question: rest.join('|').trim() };
-        });
-    } catch (e) {
-        return [];
+function runHashCommand(uuid) {
+    const structuredPath = path.join(DIRS.structured, `${uuid}.json`);
+    if (!fs.existsSync(structuredPath)) {
+        console.error(JSON.stringify({ error: `File not found: ${structuredPath}` }));
+        process.exit(1);
     }
+
+    const hashes = generateHashes(structuredPath);
+    const data = JSON.parse(fs.readFileSync(structuredPath, 'utf-8'));
+
+    const output = {
+        uuid,
+        question_count: hashes.length,
+        metadata: {
+            company: data.company || '未知',
+            position: data.position || '未知',
+            round: data.round || '未注明',
+            level: data.level || '未知',
+            year: data.year || '未知',
+            date: data.date || '未知'
+        },
+        hashes
+    };
+
+    console.log(JSON.stringify(output, null, 2));
 }
 
-// ── Main Pipeline ────────────────────────────────────────────────────────
+// ── Main: Task List ──────────────────────────────────────────────────────
 
-function run() {
+function runTaskList(limit) {
     const structuredSet = new Set(
         fs.existsSync(DIRS.structured)
             ? fs.readdirSync(DIRS.structured).filter(f => f.endsWith('.json')).map(f => path.basename(f, '.json'))
@@ -142,7 +174,6 @@ function run() {
         summary.total++;
 
         if (c.preState === 'structured') {
-            // Need hash + tag
             const structuredPath = path.join(DIRS.structured, `${c.uuid}.json`);
             const structuredData = JSON.parse(fs.readFileSync(structuredPath, 'utf-8'));
             const questions = structuredData.questions || [];
@@ -171,7 +202,6 @@ function run() {
             });
             summary.tag_only++;
         } else {
-            // Need full pipeline: extract + hash + tag
             const descPath = path.join(DIRS.desc, `${c.uuid}.txt`);
             const imgPath = path.join(DIRS.img, `${c.uuid}.txt`);
             const hasImg = fs.existsSync(imgPath);
@@ -188,8 +218,16 @@ function run() {
     }
 
     const output = { batch_size: limit, tasks, summary };
-
     console.log(JSON.stringify(output, null, 2));
 }
 
-run();
+// ── Entry Point ──────────────────────────────────────────────────────────
+
+const args = process.argv.slice(2);
+
+if (args[0] === 'hash' && args[1]) {
+    runHashCommand(args[1]);
+} else {
+    const limit = parseInt(args[0]) || 10;
+    runTaskList(limit);
+}
