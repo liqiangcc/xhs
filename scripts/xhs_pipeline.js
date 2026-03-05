@@ -71,7 +71,7 @@ function hasQuestionListPattern(text) {
 function scoreNote(combined) {
     if (EXCLUDE_JD.test(combined)) return -1;
     if (EXCLUDE_OFFER.test(combined) && countChineseQuestionMarks(combined) < 3) return -1;
-    if (!/Java|Spring|MySQL|Redis|架构|算法|线程|JVM|消息队列|Kafka|分布式|前端|React|Vue|TCP|HTTP|CSS/.test(combined)) return -1;
+    if (!/Java|Spring|MySQL|Redis|架构|算法|线程|JVM|消息队列|Kafka|分布式|前端|React|Vue|TCP|HTTP|CSS/i.test(combined)) return -1;
 
     let score = 0;
     if (countChineseQuestionMarks(combined) >= 3) score += 3;
