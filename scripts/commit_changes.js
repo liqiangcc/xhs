@@ -15,6 +15,10 @@ try {
     console.log('Adding structured and tagged notes...');
     execSync('git add note_structured/*.json note_tagged/*.json');
 
+    // Add OCR results
+    console.log('Adding OCR results...');
+    try { execSync('git add note_img_txt/*.txt'); } catch (_) { /* no new OCR files */ }
+
     // Commit
     const commitMessage = 'feat: auto-processed XHS notes and updated scripts';
     console.log(`Committing with message: "${commitMessage}"`);
