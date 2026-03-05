@@ -49,19 +49,20 @@ function generateHashes(structuredPath) {
 
 // ── Scoring ──────────────────────────────────────────────────────────────
 
-const SCORE_THRESHOLD = 3;
+const SCORE_THRESHOLD = 2;
 const EXCLUDE_JD = /内推码|内推链接|工作职责|任职资格|岗位要求|招聘要求/;
 const EXCLUDE_OFFER = /offer选择|offer对比|offer比较|背调完|薪资待遇|offer\s*PK/i;
 
-function countChineseQuestionMarks(text) {
-    return (text.match(/？/g) || []).length;
+function countQuestionMarks(text) {
+    return (text.match(/[？?]/g) || []).length;
 }
 
 function hasQuestionListPattern(text) {
     const lines = text.split(/\r?\n/);
     let count = 0;
     for (const line of lines) {
-        if (/^\s*\d+[\.\、\)]/.test(line) && line.length > 6 && line.length < 200) {
+        // Match: 1. 1、 1) 1️⃣ 1．  and also ● ✅ ⭕ bullet markers
+        if ((/^\s*\d+[\.\.\、\)️⃣]/.test(line) || /^\s*[●✅⭕☑►▸•]/.test(line)) && line.length > 6 && line.length < 200) {
             count++;
         }
     }
@@ -70,11 +71,11 @@ function hasQuestionListPattern(text) {
 
 function scoreNote(combined) {
     if (EXCLUDE_JD.test(combined)) return -1;
-    if (EXCLUDE_OFFER.test(combined) && countChineseQuestionMarks(combined) < 3) return -1;
-    if (!/Java|Spring|MySQL|Redis|架构|算法|线程|JVM|消息队列|Kafka|分布式|前端|React|Vue|TCP|HTTP|CSS/i.test(combined)) return -1;
+    if (EXCLUDE_OFFER.test(combined) && countQuestionMarks(combined) < 3) return -1;
+    if (!/Java|Spring|MySQL|Redis|架构|算法|线程|JVM|消息队列|Kafka|分布式|前端|React|Vue|TCP|HTTP|CSS|Go|Golang|Python|C\+\+|Rust|Flink|Spark|Hadoop|Hive|HDFS|Docker|K8s|Kubernetes|Linux|Git|操作系统|数据库|索引|锁|事务|网络|进程|协程|面经|八股|MongoDB|Elasticsearch|RabbitMQ|RocketMQ|Nginx|Nacos|Dubbo|Netty|Zookeeper/i.test(combined)) return -1;
 
     let score = 0;
-    if (countChineseQuestionMarks(combined) >= 3) score += 3;
+    if (countQuestionMarks(combined) >= 3) score += 3;
     if (hasQuestionListPattern(combined)) score += 2;
     if (combined.length > 800) score += 1;
     return score;
