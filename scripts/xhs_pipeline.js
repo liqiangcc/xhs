@@ -161,6 +161,9 @@ function runTaskList(limit) {
             candidates.push({ uuid, preState: 'raw', score: score + 2 });
         } else if (score >= SCORE_THRESHOLD) {
             candidates.push({ uuid, preState: 'raw', score });
+        } else if (descText.length >= 300 && score >= 0) {
+            // Rescue gate: substantial text with tech keywords but non-standard format
+            candidates.push({ uuid, preState: 'raw', score: score + 1 });
         }
     }
 
