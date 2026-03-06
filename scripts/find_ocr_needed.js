@@ -63,11 +63,12 @@ function safeSize(filePath) {
 // ── Main ─────────────────────────────────────────────────────────────
 function main() {
     const args = process.argv.slice(2);
-    const mode = args.find(a => a.startsWith('--') && !['--limit', '--offset'].includes(a)) || '';
+    const mode = args.find(a => a.startsWith('--') && !['--limit', '--offset', '--local-images-only'].includes(a)) || '';
     const limitIdx = args.indexOf('--limit');
     const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1], 10) : Infinity;
     const offsetIdx = args.indexOf('--offset');
     const offset = offsetIdx >= 0 ? parseInt(args[offsetIdx + 1], 10) : 0;
+    const localImagesOnly = args.includes('--local-images-only');
 
     const descIds = listIds(DIRS.desc, '.txt');
     const structuredIds = listIds(DIRS.structured, '.json');
@@ -83,11 +84,30 @@ function main() {
         }
     }
 
+    // 检查本地已下载的图片
+    const downloadedImagesIds = new Set();
+    const downloadedDir = path.join(ROOT, 'downloaded_images');
+    if (fs.existsSync(downloadedDir)) {
+        for (const f of fs.readdirSync(downloadedDir)) {
+            const dirPath = path.join(downloadedDir, f);
+            if (fs.statSync(dirPath).isDirectory()) {
+                const files = fs.readdirSync(dirPath);
+                const hasValidImage = files.some(file => safeSize(path.join(dirPath, file)) > 0);
+                if (hasValidImage) {
+                    downloadedImagesIds.add(f);
+                }
+            }
+        }
+    }
+
     const results = [];
 
     for (const id of descIds) {
         // 已结构化的不需要
         if (structuredIds.has(id)) continue;
+
+        const hasLocalImages = downloadedImagesIds.has(id);
+        if (localImagesOnly && !hasLocalImages) continue;
 
         const descText = safeRead(path.join(DIRS.desc, `${id}.txt`));
         if (!descText) continue;
