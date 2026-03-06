@@ -112,7 +112,7 @@ function runHashCommand(uuid) {
 
 // ── Main: Task List ──────────────────────────────────────────────────────
 
-function runTaskList(limit) {
+function runTaskList(limit, filter) {
     const structuredSet = new Set(
         fs.existsSync(DIRS.structured)
             ? fs.readdirSync(DIRS.structured).filter(f => f.endsWith('.json')).map(f => path.basename(f, '.json'))
@@ -137,9 +137,13 @@ function runTaskList(limit) {
 
         // Already structured → only need tagging
         if (structuredSet.has(uuid)) {
+            if (filter === 'extract_only') continue; // skip tag_only when filter is extract_only
             candidates.push({ uuid, preState: 'structured' });
             continue;
         }
+
+        // Not structured → need extract_and_tag
+        if (filter === 'tag_only') continue; // skip extract_and_tag when filter is tag_only
 
         // Not structured → need scoring + full pipeline
         let descText = '';
@@ -233,5 +237,6 @@ if (args[0] === 'hash' && args[1]) {
     runHashCommand(args[1]);
 } else {
     const limit = parseInt(args[0]) || 10;
-    runTaskList(limit);
+    const filter = args[1]; // 'tag_only' | 'extract_only' | undefined (all)
+    runTaskList(limit, filter);
 }
