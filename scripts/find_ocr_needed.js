@@ -11,9 +11,10 @@
  *      c) 完全没有 OCR 结果，但 desc 暗示笔记含图片面试题
  *
  * Usage:
- *   node scripts/find_ocr_needed.js              输出摘要 + ID 列表
- *   node scripts/find_ocr_needed.js --json        输出 JSON 格式
- *   node scripts/find_ocr_needed.js --ids-only    仅输出 ID（每行一个）
+ *   node scripts/find_ocr_needed.js                        输出摘要 + ID 列表
+ *   node scripts/find_ocr_needed.js --json                  输出 JSON 格式
+ *   node scripts/find_ocr_needed.js --ids-only              仅输出 ID（每行一个）
+ *   node scripts/find_ocr_needed.js --ids-only --limit 5    仅输出前 N 个 ID
  */
 
 'use strict';
@@ -61,7 +62,12 @@ function safeSize(filePath) {
 
 // ── Main ─────────────────────────────────────────────────────────────
 function main() {
-    const mode = process.argv[2] || '';
+    const args = process.argv.slice(2);
+    const mode = args.find(a => a.startsWith('--') && !['--limit', '--offset'].includes(a)) || '';
+    const limitIdx = args.indexOf('--limit');
+    const limit = limitIdx >= 0 ? parseInt(args[limitIdx + 1], 10) : Infinity;
+    const offsetIdx = args.indexOf('--offset');
+    const offset = offsetIdx >= 0 ? parseInt(args[offsetIdx + 1], 10) : 0;
 
     const descIds = listIds(DIRS.desc, '.txt');
     const structuredIds = listIds(DIRS.structured, '.json');
@@ -149,7 +155,8 @@ function main() {
     }
 
     if (mode === '--ids-only') {
-        for (const r of results) console.log(r.id);
+        const output = results.slice(offset, offset + limit);
+        for (const r of output) console.log(r.id);
         return;
     }
 
