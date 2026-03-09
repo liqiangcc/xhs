@@ -35,6 +35,16 @@ const synonymMap = {
     'xss': 'xss',
     'epoll': 'epoll',
     'select': 'select',
+    // 框架
+    'spring boot': 'springboot',
+    'spring mvc': 'springmvc',
+    'spring cloud': 'springcloud',
+    // 并发与集合 (高级合并)
+    'threadpoolexecutor': '线程池',
+    'concurrenthashmap': 'hashmap',
+    'reentrantlock': '锁', // Optional: 锁 is a very broad category, but useful for aggregation
+    'redis cluster': 'redis集群',
+    'redis Sentinel': 'redis哨兵',
     // 旧的字典
     'red-black tree': '红黑树',
     'distributed lock': '分布式锁',
