@@ -42,12 +42,12 @@ depthsOrder.forEach(depth => {
     const qs = groups[depth];
     if (qs && qs.length > 0) {
         md += `## ${depth} (${qs.length} 道题目)\n\n`;
-        md += `| 题目 | 相关技术点 (Entities) | 题型 (Type) |\n`;
-        md += `|---|---|---|\n`;
+        md += `| Question ID | 题目 | 相关技术点 (Entities) | 题型 (Type) |\n`;
+        md += `|---|---|---|---|\n`;
 
         qs.forEach(q => {
             const ents = (q.tech_entities || []).join(', ');
-            md += `| ${safeString(q.original_question)} | ${safeString(ents)} | ${safeString(q.question_type)} |\n`;
+            md += `| ${q.question_id} | ${safeString(q.original_question)} | ${safeString(ents)} | ${safeString(q.question_type)} |\n`;
         });
         md += `\n`;
     }
