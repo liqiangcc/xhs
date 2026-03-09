@@ -16,6 +16,9 @@ files.forEach(f => {
         const ents = q.tech_entities || [];
         if (ents.length === 0) emptyCount++;
         ents.forEach(e => {
+            // FIX null reference issue here
+            if (typeof e !== 'string' || !e) return;
+
             entityCount[e] = (entityCount[e] || 0) + 1;
             if (e.length > 25 && !longEntities.includes(e)) longEntities.push(e);
             if (/[!@#$%^&*()_+={}\[\]:;"'<>?/\\]/.test(e) && !specialCharEntities.includes(e) && !e.includes('B+') && !e.includes('C++') && !e.includes('C#')) {
