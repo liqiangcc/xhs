@@ -216,6 +216,7 @@ function main() {
     if (opts['filter-level']) { const v = opts['filter-level'].trim(); rows = rows.filter(r => String(r.level).includes(v)); }
     if (opts['filter-year']) { const v = String(opts['filter-year']).trim(); rows = rows.filter(r => String(r.year) === v); }
     if (opts['filter-round']) { const v = opts['filter-round'].trim(); rows = rows.filter(r => String(r.round).includes(v)); }
+    if (opts['filter-entity']) { const v = String(opts['filter-entity']).trim().toLowerCase(); rows = rows.filter(r => r.tech_entities && r.tech_entities.some(e => String(e).toLowerCase().includes(v))); }
 
 
     if (rows.length === 0) { console.error('(过滤后无匹配记录)'); return; }
