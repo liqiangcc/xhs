@@ -24,7 +24,10 @@ mysqlQuestions.forEach(q => {
 
     // Entities
     (q.tech_entities || []).forEach(e => {
-        entityStats[e] = (entityStats[e] || 0) + 1;
+        const cleanE = e.trim();
+        if (cleanE) {
+            entityStats[cleanE] = (entityStats[cleanE] || 0) + 1;
+        }
     });
 });
 
@@ -54,16 +57,18 @@ sortedType.forEach(([qType, count]) => {
     md += `| ${qType} | ${count} | ${percentage} |\n`;
 });
 
-md += `\n## 👑 核心技术实体 Top 30 (Tech Entities)\n\n`;
+md += `\n## 👑 核心技术实体大全 (All Tech Entities)\n\n`;
 md += `| 排名 | 技术点 (Entity) | 出现频次 | 重点建议 |\n`;
 md += `|---|---|---|---|\n`;
 
-sortedEntities.slice(0, 30).forEach(([entity, count], index) => {
+sortedEntities.forEach(([entity, count], index) => {
     const rank = index + 1;
     let focus = '';
     if (rank <= 5) focus = '⭐⭐⭐⭐⭐ 必考核心';
     else if (rank <= 15) focus = '⭐⭐⭐⭐ 高频重点';
-    else focus = '⭐⭐⭐ 常见考点';
+    else if (rank <= 30) focus = '⭐⭐⭐ 常见考点';
+    else if (count >= 2) focus = '⭐⭐ 适当了解';
+    else focus = '⭐ 长尾词汇';
 
     md += `| ${rank} | **${entity}** | ${count} | ${focus} |\n`;
 });
