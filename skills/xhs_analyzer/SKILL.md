@@ -84,3 +84,4 @@ node scripts/query_tagged.js domain --l2 Redis --filter-valid --slim
 - 代码语言默认 **Java**，除非用户指定
 - 批量分析时题目之间用 `---` 分隔
 - 不要输出与面试无关的铺垫和客套话
+- **分析完成后**：主动询问用户「是否需要将分析结果写入文件以便复习？」，如果用户确认，则将内容写入到 `review/ans/` 目录下，文件名建议使用 `analysis_{question_id}.md`（如果是已知 ID）或 `analysis_{timestamp}.md`。
