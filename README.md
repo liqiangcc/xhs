@@ -96,11 +96,13 @@ xhs/
 │   ├── filter_notes.js         # 笔记筛选
 │   └── commit_changes.js       # 批量提交
 │
-├── skills/                     # Agent Skill 定义
+├── skills/                     # Agent Skill 定义（唯一维护入口）
 │   ├── xhs_extractor/SKILL.md  # 结构化提取技能
 │   ├── xhs_tagger/SKILL.md     # 多维度打标签技能
 │   ├── xhs_query/SKILL.md      # 智能查询技能
+│   ├── xhs_batch_analyzer/SKILL.md # 按技术实体批量查询+分析+落盘
 │   └── xhs_pipeline/SKILL.md   # 全流程自动化管线 (Orchestrator)
+├── .github/skills -> ../skills # GitHub Copilot Skills 入口（软链接到 skills/）
 │
 ├── note_structured/            # 结构化 JSON（135 篇）
 ├── note_tagged/                # 打标签后的 JSON（135 篇）
@@ -184,6 +186,26 @@ node scripts/xhs_process.js <note_id>
 - **幂等执行** — 重复运行不会产生重复数据
 - **Agent 友好** — `--slim` 模式减少 token，stdout/stderr 分离便于程序化处理
 - **可组合过滤** — 6 个全局 filter 可自由组合，适用于所有查询命令
+
+## 🤖 Copilot Skills 加载方式
+
+- `skills/` 是 Skill 定义的唯一维护目录。
+- GitHub Copilot 从 `.github/skills` 加载 Skill；该目录已通过软链接指向 `skills/`。
+- 新增或修改 Skill 时，只需要维护 `skills/<skill_name>/SKILL.md`，无需再复制到其他目录。
+
+### 批量分析工作流示例
+
+- `使用 xhs_batch_analyzer 分析 MySQL 相关题目`
+- `使用 xhs_batch_analyzer 分析 Redis 的 3 道题`
+- `使用 xhs_batch_analyzer 分析 ThreadLocal 相关题，限定美团社招，取 4 道`
+
+该工作流会自动执行三步：
+- 通过 `node scripts/query_tagged.js entity --value <技术实体> --filter-valid --slim` 查询题目
+- 通过 `node scripts/check_existing_analyses.js --ids <id1,id2,...>` 跳过 `review/ans/` 中已存在的分析文件
+- 按题型复用 `xhs_analyzer` 的分析框架逐题生成答案
+- 将每题结果写入 `review/ans/analysis_{question_id}.md`
+
+如果匹配题目已经分析过，工作流会直接跳过，避免重复生成。
 
 ## 依赖
 
