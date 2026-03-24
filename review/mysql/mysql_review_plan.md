@@ -3,6 +3,7 @@
 > 基于 645 道 MySQL 面试真题的数据分析生成。
 > 策略：**按知识模块分阶段递进，每个模块内按"概念→原理→实战"三段式推进**
 > **详细题目清单：** [detailed_review_questions.md](file:///c:/Users/liqiang12/IdeaProjects/xhs/review/mysql/detailed_review_questions.md)
+> **7 天执行版：** [mysql_7day_plan.md](file:///c:/Users/liqiang12/IdeaProjects/xhs/review/mysql/mysql_7day_plan.md)
 
 ---
 
