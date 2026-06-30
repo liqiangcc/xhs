@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadCanonicalQuestions } = require('../lib/canonical_store');
 const { ensureDir } = require('../lib/io');
+const { loadIssueLinks, issueLinkMap } = require('../lib/issue_store');
 const {
     loadProgress,
     saveProgress,
@@ -25,6 +26,7 @@ function defaultPaths(root) {
         reviewDir: path.join(root, 'review'),
         progressPath: path.join(root, 'review', 'progress.json'),
         plansDir: path.join(root, 'review', 'plans'),
+        issueLinksPath: path.join(root, 'review', 'issue_links.json'),
     };
 }
 
@@ -32,10 +34,13 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0];
     const options = { _: [] };
+    const booleanFlags = new Set(['with-issues']);
     for (let index = 1; index < args.length; index++) {
         const arg = args[index];
         if (arg.startsWith('--')) {
-            options[arg.replace(/^--/, '')] = args[++index];
+            const key = arg.replace(/^--/, '');
+            if (booleanFlags.has(key)) options[key] = true;
+            else options[key] = args[++index];
         } else {
             options._.push(arg);
         }
@@ -48,10 +53,10 @@ function printHelp() {
         'Usage: node scripts/xhs.js review <prepare|today|mark|weak> [options]',
         '',
         'Commands:',
-        '  prepare --target <name> [--limit <n>] [--priority <P0|P1>] [--domain <l1>]',
-        '  today [--limit <n>]',
+        '  prepare --target <name> [--limit <n>] [--priority <P0|P1>] [--domain <l1>] [--with-issues]',
+        '  today [--limit <n>] [--with-issues]',
         '  mark --canonical-id <id> --result <again|hard|good|easy> [--notes <text>]',
-        '  weak [--limit <n>]',
+        '  weak [--limit <n>] [--with-issues]',
     ].join('\n'));
 }
 
@@ -61,15 +66,19 @@ function priorityRank(priority) {
 
 function canonicalRows(records, progress, options = {}) {
     const byProgress = progressMap(progress);
-    return records.map((record) => ({
-        canonical_id: record.canonical_id,
-        canonical_title: record.canonical_title,
-        review_priority: record.review_priority,
-        answer_status: record.answer_status,
-        frequency: record.frequency,
-        primary_domain: record.primary_domain,
-        progress: byProgress.get(record.canonical_id),
-    }));
+    return records.map((record) => {
+        const row = {
+            canonical_id: record.canonical_id,
+            canonical_title: record.canonical_title,
+            review_priority: record.review_priority,
+            answer_status: record.answer_status,
+            frequency: record.frequency,
+            primary_domain: record.primary_domain,
+            progress: byProgress.get(record.canonical_id),
+        };
+        if (options.issueLinks) row.issue_url = options.issueLinks.get(record.canonical_id)?.issue_url || null;
+        return row;
+    });
 }
 
 function dueRows(records, progress, options = {}) {
@@ -90,18 +99,22 @@ function loadReviewState(root, options = {}) {
     let progress = loadProgress({ progressPath: paths.progressPath, date: options.date });
     progress = ensureProgressItems(progress, records, { date: options.date });
     progress = saveProgress(progress, { progressPath: paths.progressPath, date: options.date });
-    return { paths, records, progress };
+    const issueLinks = options['with-issues']
+        ? issueLinkMap(loadIssueLinks({ filePath: paths.issueLinksPath, date: options.date }))
+        : null;
+    return { paths, records, progress, issueLinks };
 }
 
 function runToday(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const { records, progress } = loadReviewState(root, options);
+    const { records, progress, issueLinks } = loadReviewState(root, options);
     const limit = Number(options.limit || 20);
-    const rows = dueRows(records, progress, options).slice(0, limit);
+    const rowOptions = { ...options, issueLinks };
+    const rows = dueRows(records, progress, rowOptions).slice(0, limit);
     return {
         schema_version: 'review_today.v1',
         date: todayString(options),
-        total_due_count: dueRows(records, progress, options).length,
+        total_due_count: dueRows(records, progress, rowOptions).length,
         returned_count: rows.length,
         rows,
     };
@@ -116,14 +129,24 @@ function safeName(value) {
 
 function writePlan(filePath, target, rows, options = {}) {
     ensureDir(path.dirname(filePath));
+    const withIssues = Boolean(options['with-issues']);
+    const table = withIssues
+        ? [
+            '| canonical_id | priority | answer | due | issue | title |',
+            '|---|---|---|---|---|---|',
+            ...rows.map((row) => `| ${row.canonical_id} | ${row.review_priority} | ${row.answer_status} | ${row.progress.next_review_at || ''} | ${row.issue_url || ''} | ${row.canonical_title} |`),
+        ]
+        : [
+            '| canonical_id | priority | answer | due | title |',
+            '|---|---|---|---|---|',
+            ...rows.map((row) => `| ${row.canonical_id} | ${row.review_priority} | ${row.answer_status} | ${row.progress.next_review_at || ''} | ${row.canonical_title} |`),
+        ];
     const lines = [
         `# ${target}`,
         '',
         `Generated: ${todayString(options)}`,
         '',
-        '| canonical_id | priority | answer | due | title |',
-        '|---|---|---|---|---|',
-        ...rows.map((row) => `| ${row.canonical_id} | ${row.review_priority} | ${row.answer_status} | ${row.progress.next_review_at || ''} | ${row.canonical_title} |`),
+        ...table,
         '',
     ];
     fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
@@ -131,11 +154,12 @@ function writePlan(filePath, target, rows, options = {}) {
 
 function runPrepare(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const { paths, records, progress } = loadReviewState(root, options);
+    const { paths, records, progress, issueLinks } = loadReviewState(root, options);
     const target = options.target;
     if (!target) throw new Error('Usage: review prepare --target <name>');
     const limit = Number(options.limit || 20);
-    let rows = dueRows(records, progress, options);
+    const rowOptions = { ...options, issueLinks };
+    let rows = dueRows(records, progress, rowOptions);
     if (options.priority) rows = rows.filter((row) => row.review_priority === options.priority);
     if (options.domain) rows = rows.filter((row) => row.primary_domain?.l1 === options.domain);
     rows = rows.slice(0, limit);
@@ -186,9 +210,9 @@ function runMark(options = {}) {
 
 function runWeak(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const { records, progress } = loadReviewState(root, options);
+    const { records, progress, issueLinks } = loadReviewState(root, options);
     const limit = Number(options.limit || 20);
-    const rows = canonicalRows(records, progress, options)
+    const rows = canonicalRows(records, progress, { ...options, issueLinks })
         .filter((row) => row.progress.status === 'weak' || row.progress.mistake_count > 0 || (row.progress.review_count > 0 && row.progress.confidence < 0.5))
         .sort((a, b) =>
             b.progress.mistake_count - a.progress.mistake_count

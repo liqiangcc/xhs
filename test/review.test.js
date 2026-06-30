@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readJson, writeJsonl } = require('../scripts/lib/io');
+const { readJson, writeJson, writeJsonl } = require('../scripts/lib/io');
 const { runToday, runMark, runWeak, runPrepare } = require('../scripts/commands/review');
 
 function canonical(canonicalId, title) {
@@ -34,6 +34,7 @@ test('prepares due review items and updates progress from marks', () => {
 
     const today = runToday({ root, date: '2026-06-30', limit: 10 });
     assert.equal(today.returned_count, 2);
+    assert.equal(Object.hasOwn(today.rows[0], 'issue_url'), false);
     const markedGood = runMark({ root, date: '2026-06-30', 'canonical-id': 'cq_redis_fast', result: 'good' });
     assert.equal(markedGood.progress.level, 1);
     assert.equal(markedGood.progress.next_review_at, '2026-07-01');
@@ -69,6 +70,40 @@ test('applies hard good and easy review intervals deterministically', () => {
     const session = readJson(path.join(root, 'review', 'sessions', '2026-07-02.json'));
     assert.equal(session.events.length, 1);
     assert.equal(session.events[0].result, 'easy');
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('adds issue urls to review rows when requested', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-review-issues-'));
+    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
+    writeJsonl(canonicalPath, [canonical('cq_redis_fast', 'Redis 为什么快？')]);
+    writeJson(path.join(root, 'review', 'issue_links.json'), {
+        schema_version: 'review_issue_links.v1',
+        updated_at: '2026-06-30',
+        items: [
+            {
+                canonical_id: 'cq_redis_fast',
+                issue_number: 12,
+                issue_url: 'https://github.com/liqiangcc/xhs/issues/12',
+                answer_status: 'ready',
+                synced_at: '2026-06-30',
+                body_hash: 'hash-a',
+            },
+        ],
+    });
+
+    const today = runToday({ root, date: '2026-06-30', limit: 10, 'with-issues': true });
+    assert.equal(today.rows[0].issue_url, 'https://github.com/liqiangcc/xhs/issues/12');
+
+    const prepared = runPrepare({ root, date: '2026-06-30', target: 'redis', limit: 10, 'with-issues': true });
+    const plan = fs.readFileSync(path.join(root, prepared.plan_path), 'utf8');
+    assert.match(plan, /\| canonical_id \| priority \| answer \| due \| issue \| title \|/);
+    assert.match(plan, /https:\/\/github.com\/liqiangcc\/xhs\/issues\/12/);
+
+    runMark({ root, date: '2026-06-30', 'canonical-id': 'cq_redis_fast', result: 'again' });
+    const weak = runWeak({ root, date: '2026-06-30', limit: 10, 'with-issues': true });
+    assert.equal(weak.rows[0].issue_url, 'https://github.com/liqiangcc/xhs/issues/12');
 
     fs.rmSync(root, { recursive: true, force: true });
 });

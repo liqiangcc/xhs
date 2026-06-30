@@ -30,6 +30,7 @@ function printHelp() {
         '  answer validate|sync      Validate answer metadata and sync statuses',
         '  review prepare|today      Prepare and list due review items',
         '  review mark|weak          Mark review result and inspect weak items',
+        '  issue render|sync|check   Render and sync GitHub review issue cards',
     ].join('\n'));
 }
 
@@ -48,6 +49,7 @@ function main(argv = process.argv) {
     if (command === 'canonical') return require('./commands/canonical').main(forwarded);
     if (command === 'answer') return require('./commands/answer').main(forwarded);
     if (command === 'review') return require('./commands/review').main(forwarded);
+    if (command === 'issue') return require('./commands/issue').main(forwarded);
 
     console.error(`Unknown command: ${command}`);
     printHelp();

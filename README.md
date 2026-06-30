@@ -106,8 +106,9 @@ Review progress is also bound to `canonical_id`.
 ```bash
 node scripts/xhs.js review prepare --target redis --limit 20 --priority P0
 node scripts/xhs.js review today --limit 20
+node scripts/xhs.js review today --limit 20 --with-issues
 node scripts/xhs.js review mark --canonical-id <cq_id> --result good --notes "<text>"
-node scripts/xhs.js review weak --limit 20
+node scripts/xhs.js review weak --limit 20 --with-issues
 ```
 
 Review data lives in:
@@ -115,6 +116,19 @@ Review data lives in:
 - `review/progress.json`
 - `review/sessions/{YYYY-MM-DD}.json`
 - `review/plans/{target}.md`
+
+## GitHub Issue Cards
+
+GitHub issues are optional mobile-friendly review cards. The source of truth remains local: canonical questions, answer Markdown, and review progress are still keyed by `canonical_id`.
+
+```bash
+node scripts/xhs.js issue render --canonical-id <cq_id>
+node scripts/xhs.js issue sync --canonical-id <cq_id> --repo liqiangcc/xhs
+node scripts/xhs.js issue sync --priority P0 --answer-status ready --repo liqiangcc/xhs --apply
+node scripts/xhs.js issue check
+```
+
+`issue sync` is a dry run by default. Add `--apply` to create or update GitHub issues through `gh`. Local issue links live in `review/issue_links.json`.
 
 ## Verification
 
@@ -127,6 +141,7 @@ node scripts/xhs.js validate all
 node scripts/xhs.js index build --check
 node scripts/xhs.js canonical check
 node scripts/xhs.js answer validate
+node scripts/xhs.js issue check
 ```
 
 With npm:
