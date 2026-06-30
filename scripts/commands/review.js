@@ -66,13 +66,9 @@ function printHelp() {
         '  weak [--limit <n>] [--with-issues]',
         '',
         'Options:',
-        '  --noWrite     Do not initialize progress or write run manifests for read-only commands',
+        '  --noWrite     Do not initialize progress, write plans, or write run manifests for read-only commands',
         '  --noManifest  Do not write the run manifest',
     ].join('\n'));
-}
-
-function priorityRank(priority) {
-    return { P0: 0, P1: 1, P2: 2, P3: 3 }[priority] ?? 9;
 }
 
 function questionMetadata(records, questions) {
@@ -222,12 +218,16 @@ function runPrepare(options = {}) {
     }
     rows = rows.slice(0, limit);
     const filePath = path.join(paths.plansDir, `${safeName(target)}.md`);
-    writePlan(filePath, target, rows, options);
+    const relativePlanPath = path.relative(root, filePath);
+    if (!options.noWrite) {
+        writePlan(filePath, target, rows, options);
+    }
     return {
         schema_version: 'review_prepare_result.v1',
         ok: true,
+        dry_run: Boolean(options.noWrite),
         target,
-        plan_path: path.relative(root, filePath),
+        plan_path: options.noWrite ? null : relativePlanPath,
         item_count: rows.length,
         rows,
     };
