@@ -235,6 +235,11 @@ on:
         description: Limit for review list or canonical suggestion tasks
         required: false
         default: "50"
+      create_pr:
+        description: Create a pull request for generated canonical candidates
+        required: false
+        type: boolean
+        default: false
 ```
 
 ### 6.3 任务映射
@@ -245,7 +250,7 @@ on:
 | migrate-check | `npm run ci:migrate:check` | 否 | 直接执行 |
 | index-check | `npm run ci:index:check` | 否 | 直接执行 |
 | canonical-check | `npm run ci:canonical:check` | 否 | 直接执行 |
-| canonical-suggest-hotspot | `node scripts/xhs.js canonical suggest --hotspot --limit <limit> --noManifest` | 是 | 上传 `canonical_candidates.json` artifact，不提交 |
+| canonical-suggest-hotspot | `node scripts/xhs.js canonical suggest --hotspot --limit <limit> --noManifest` | 是 | 默认上传 artifact；`create_pr=true` 时创建 PR |
 | answer-validate | `npm run ci:answer:validate` | 否 | 直接执行 |
 | review-today | `node scripts/xhs.js review today --limit <limit> --with-issues --noWrite` | 否 | 直接输出 |
 | review-weak | `node scripts/xhs.js review weak --limit <limit> --with-issues --noWrite` | 否 | 直接输出 |
@@ -281,7 +286,15 @@ node scripts/xhs.js review weak --limit 20 --with-issues --noWrite
 node scripts/xhs.js canonical suggest --hotspot --limit 50 --noManifest
 ```
 
-它会更新工作区里的 `data/manifests/canonical/canonical_candidates.json`，workflow 随后把该文件上传为 `canonical-candidates` artifact。该任务当前不提交文件、不创建 PR；`create_pr=true` 仍属于后续阶段。
+它会更新工作区里的 `data/manifests/canonical/canonical_candidates.json`。默认路径只上传 `canonical-candidates` artifact；当 `create_pr=true` 时，workflow 会使用单独的写权限 job 创建分支和 PR。
+
+权限边界：
+
+```text
+1. 普通 xhs-manage 任务使用 contents: read
+2. canonical-suggest-hotspot + create_pr=true 才使用 contents: write / pull-requests: write
+3. 生成 PR 只提交 data/manifests/canonical/canonical_candidates.json
+```
 
 ---
 
@@ -381,6 +394,15 @@ gh workflow run xhs-manage.yml \
 ```
 
 当前该任务上传 `canonical-candidates` artifact，不创建 PR。
+
+#### 生成热点 canonical 候选 PR
+
+```bash
+gh workflow run xhs-manage.yml \
+  -f task=canonical-suggest-hotspot \
+  -f limit=50 \
+  -f create_pr=true
+```
 
 #### 针对 Redis 生成 canonical 候选（后续阶段）
 
@@ -650,7 +672,7 @@ AI 不直接污染主数据
 [x] 在 package.json 增加 ci:* 只读检查脚本
 [x] 让 xhs-manage 支持 validate / review-today / review-weak 等只读任务
 [x] 再支持 canonical-suggest-hotspot，并生成 manifest artifact
-[ ] 最后加入 create_pr=true 的写入路径
+[x] 为 canonical-suggest-hotspot 加入 create_pr=true 的写入路径
 ```
 
 ---
@@ -1147,10 +1169,9 @@ issue-sync-apply
 ```text
 1. 保持 ci.yml 和 xhs-manage.yml 的只读任务稳定
 2. 修正并持续维护 docs/refactor/05_execution_checklist.md 状态
-3. 新增 create_pr=true，让 canonical-suggest-hotspot 可生成候选 PR
-4. 新增 answer-missing-p0-report 或质量报告命令
-5. weekly-report 汇总 canonical / answer / review / taxonomy 指标
-6. 最后再考虑 issue-sync-apply
+3. 新增 answer-missing-p0-report 或质量报告命令
+4. weekly-report 汇总 canonical / answer / review / taxonomy 指标
+5. 最后再考虑 issue-sync-apply
 ```
 
 原因：
@@ -1172,8 +1193,8 @@ issue-sync-apply
 
 目标：
 1. 保持第一阶段只读任务不回退，所有新增 task 继续走白名单。
-2. 为 canonical-suggest-hotspot 增加 create_pr=true 分支/PR 路径。
-3. 新增其他写入型任务时，默认只允许 create_pr=true 的分支/PR 路径。
+2. 新增 answer-missing-p0-report 或 quality-report 任务。
+3. 新增写入型任务时，默认只允许 artifact 预览或 create_pr=true 的分支/PR 路径。
 4. 不允许传入任意 shell command。
 5. 默认权限 contents: read；需要写权限时单独说明。
 6. 不修改 note_tagged，不引入外部存储。
@@ -1181,6 +1202,6 @@ issue-sync-apply
 
 验收：
 - 第一阶段 validate / review 只读任务仍不产生业务数据变更。
-- canonical-suggest-hotspot 可选择 artifact 预览或 PR 审批路径。
+- answer / canonical / review 的缺口能被单一报告稳定暴露。
 - docs/refactor/06_github_actions_ai_management.md 同步更新任务状态。
 ```
