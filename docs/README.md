@@ -19,6 +19,8 @@ refactor/02_domain_model.md         领域模型与核心对象
 refactor/03_technical_design.md     技术方案与架构设计
 refactor/04_refactor_plan.md        分阶段路线图
 refactor/05_execution_checklist.md  执行清单与验收标准
+refactor/06_github_actions_ai_management.md  GitHub Actions + AI 管理层
+refactor/07_actions_review_todo.md  Actions 管理层 review 后的修复 TODO
 ```
 
 当前有效方向：
@@ -30,6 +32,7 @@ Taxonomy / Schema 是单一事实源
 Index 是查询能力
 Answer 和 ReviewProgress 绑定 canonical_id
 AI / Skill 只生成候选，脚本负责校验、入库和状态推进
+GitHub Actions 是自动化管理层，AI 只触发白名单任务
 ```
 
 ## 历史归档
