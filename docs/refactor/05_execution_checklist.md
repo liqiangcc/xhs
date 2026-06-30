@@ -20,10 +20,13 @@
 ```text
 TODO
 IN_PROGRESS
+PARTIAL
 DONE
 BLOCKED
 DEFERRED
 ```
+
+当前状态快照：2026-06-30。状态按仓库中实际代码、测试和数据文件同步；`PARTIAL` 表示已有可用能力，但尚未完全达到本清单最初设定的接口或验收范围。
 
 ---
 
@@ -103,7 +106,7 @@ Answer 和 ReviewProgress 绑定 canonical_id
 
 ## 3.1 抽取 hash 工具
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -125,7 +128,7 @@ check_consistency.js 可复用该模块
 
 ## 3.2 增加 JSONL IO 工具
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -147,7 +150,7 @@ check_consistency.js 可复用该模块
 
 ## 3.3 构建 questions.jsonl
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -171,7 +174,7 @@ questions.jsonl 行数 = 所有 tagged_questions 展开数量
 
 ## 3.4 增加 question_store
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -196,7 +199,7 @@ build_index 可以复用
 
 ## 4.1 提取 taxonomy
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -218,7 +221,7 @@ taxonomy 能表达 normalize_tags 中的历史映射
 
 ## 4.2 增加 taxonomy 工具
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -239,7 +242,7 @@ query/review 不再硬编码 taxonomy
 
 ## 4.3 增加 schema
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -258,7 +261,7 @@ schema_version 字段存在
 
 ## 4.4 增加 validate 命令
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -284,7 +287,7 @@ schema_version 字段存在
 
 ## 5.1 构建 entity index
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -302,7 +305,7 @@ Redis / MySQL / HashMap 等实体可查到 question_id 列表
 
 ## 5.2 构建 company index
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -318,7 +321,7 @@ Redis / MySQL / HashMap 等实体可查到 question_id 列表
 
 ## 5.3 构建 domain index
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -334,7 +337,7 @@ Redis / MySQL / HashMap 等实体可查到 question_id 列表
 
 ## 5.4 构建基础 hotspot index
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -352,7 +355,7 @@ Redis / MySQL / HashMap 等实体可查到 question_id 列表
 
 ## 5.5 新 query 命令
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -377,7 +380,7 @@ Redis / MySQL / HashMap 等实体可查到 question_id 列表
 
 ## 6.1 设计 canonical 数据文件
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -395,7 +398,7 @@ question_ids 均存在于 questions.jsonl
 
 ## 6.2 实现 canonical suggest
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -412,7 +415,7 @@ node scripts/xhs.js canonical suggest --entity HashMap 可输出候选簇
 
 ## 6.3 实现 canonical merge
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -431,7 +434,7 @@ merge 可重复检查
 
 ## 6.4 实现 canonical split
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -453,7 +456,9 @@ split 后 validate canonical 通过
 
 ## 7.1 定义答案模板
 
-状态：TODO
+状态：PARTIAL
+
+说明：已支持 `review/answers/{canonical_id}.md` 模板和内嵌 metadata；当前模板是“核心结论 / 关键细节 / 常见追问”，尚未覆盖原计划中的 1 分钟版、3 分钟版、项目经验版、易错点等完整结构。
 
 任务：
 
@@ -470,7 +475,9 @@ split 后 validate canonical 通过
 
 ## 7.2 实现 answer generate
 
-状态：TODO
+状态：PARTIAL
+
+说明：`scripts/commands/answer.js` 已支持 `init`、`status`、`validate`、`sync`；尚未实现 AI 生成型的 `generate` / `batch`。
 
 任务：
 
@@ -489,7 +496,9 @@ split 后 validate canonical 通过
 
 ## 7.3 答案元数据
 
-状态：TODO
+状态：PARTIAL
+
+说明：答案文件首行已内嵌 `xhs-answer` metadata，并可通过 `answer validate` / `answer sync` 使用；尚未新增独立的 `review/answers/metadata.json`。
 
 任务：
 
@@ -529,7 +538,7 @@ prepare 和 review_scheduler 从配置读取策略
 
 ## 8.2 review progress
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -546,7 +555,9 @@ prepare 和 review_scheduler 从配置读取策略
 
 ## 8.3 review scheduler
 
-状态：TODO
+状态：PARTIAL
+
+说明：复习间隔和 weak 优先逻辑已在 `scripts/lib/review_store.js` 与 `review weak` 中落地；尚未抽出独立的 `scripts/lib/review_scheduler.js` 或配置化 strategy。
 
 任务：
 
@@ -565,7 +576,9 @@ mastered 题权重下降
 
 ## 8.4 prepare 命令
 
-状态：TODO
+状态：PARTIAL
+
+说明：已实现 `node scripts/xhs.js review prepare --target ...`，可生成 `review/plans/*.md`；尚未按原计划单独提供 `scripts/commands/prepare.js`，也未覆盖 `--company / --topic / --level / --days` 全部参数。
 
 任务：
 
@@ -583,7 +596,9 @@ mastered 题权重下降
 
 ## 8.5 review 命令
 
-状态：TODO
+状态：PARTIAL
+
+说明：已支持 `review today`、`review mark --result`、`review weak`，并支持 issue 链接展示；尚未实现 `review next`，原计划中的 `--status` 实际实现为 `--result`。
 
 任务：
 
@@ -607,7 +622,9 @@ mastered 题权重下降
 
 ## 9.1 pipeline manifest
 
-状态：TODO
+状态：PARTIAL
+
+说明：已支持 `data/manifests/runs/latest_*.json` 形式的命令运行 manifest；尚未实现按 `pipeline_runs/<run_id>` 保存 steps / counts / errors 的完整 pipeline run 体系。
 
 任务：
 
@@ -625,7 +642,9 @@ mastered 题权重下降
 
 ## 9.2 migration runner
 
-状态：TODO
+状态：PARTIAL
+
+说明：已支持 `migrate build-questions`、`migrate status`、`migrate run all --check` 和 `config/migrations.json`；尚未抽出独立 `scripts/lib/migration_runner.js`，也未实现 `up / apply` 语义。
 
 任务：
 
@@ -643,7 +662,9 @@ migration 执行有 manifest
 
 ## 9.3 ADR
 
-状态：TODO
+状态：PARTIAL
+
+说明：`docs/adr/` 已有 3 篇 ADR，覆盖 JSONL 主存储、canonical/answer/review 绑定、AI 候选与脚本状态；尚未完全对应本清单最初列出的 4 个文件名和主题。
 
 任务：
 
@@ -668,7 +689,7 @@ migration 执行有 manifest
 
 ## 10.1 package.json
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -684,15 +705,15 @@ migration 执行有 manifest
   "scripts": {
     "test": "node --test",
     "validate": "node scripts/xhs.js validate all",
-    "index": "node scripts/xhs.js index build",
-    "check": "npm run test && npm run validate"
+    "index:check": "node scripts/xhs.js index build --check",
+    "ci:check": "npm test && npm run ci:migrate:check && npm run ci:validate && npm run ci:index:check && npm run ci:canonical:check && npm run ci:answer:validate"
   }
 }
 ```
 
 ## 10.2 tests
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -701,25 +722,29 @@ migration 执行有 manifest
 新增 test/taxonomy.test.js
 新增 test/build_questions.test.js
 新增 test/build_index.test.js
-新增 test/review_scheduler.test.js
+新增 test/review.test.js
+新增 test/canonical.test.js
+新增 test/answer.test.js
+新增 test/issue.test.js
+新增 test/no_write.test.js
 ```
 
 ## 10.3 CI
 
-状态：TODO
+状态：DONE
 
 任务：
 
 ```text
 新增 .github/workflows/ci.yml
-运行 node --test
-运行 validate all
-运行 index build --check
+新增 .github/workflows/xhs-manage.yml
+运行 npm run ci:check
+运行 git diff --exit-code 保证只读检查不写仓库
 ```
 
 ## 10.4 README 更新
 
-状态：TODO
+状态：DONE
 
 任务：
 
@@ -747,15 +772,15 @@ README 改为推荐 node scripts/xhs.js 统一入口
 
 ## 12. 第一轮建议执行任务
 
-建议立即开始：
+第一轮已完成：
 
 ```text
-[ ] scripts/lib/hash.js
-[ ] scripts/lib/io.js
-[ ] scripts/migrate/build_questions_from_tagged.js
-[ ] data/questions/questions.jsonl
-[ ] data/questions/question_sources.jsonl
-[ ] scripts/xhs.js validate questions
+[x] scripts/lib/hash.js
+[x] scripts/lib/io.js
+[x] scripts/migrate/build_questions_from_tagged.js
+[x] data/questions/questions.jsonl
+[x] data/questions/question_sources.jsonl
+[x] node scripts/xhs.js validate all
 ```
 
 这 6 项完成后，系统就有了长期可迭代的主数据底座。

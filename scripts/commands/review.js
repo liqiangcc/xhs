@@ -17,6 +17,7 @@ const {
     todayString,
 } = require('../lib/review_store');
 const { writeRunManifest } = require('../lib/run_manifest');
+const { applyGlobalBooleanOption } = require('../lib/cli_options');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -39,6 +40,7 @@ function parseArgs(argv) {
         const arg = args[index];
         if (arg.startsWith('--')) {
             const key = arg.replace(/^--/, '');
+            if (applyGlobalBooleanOption(options, key)) continue;
             if (booleanFlags.has(key)) options[key] = true;
             else options[key] = args[++index];
         } else {
@@ -57,6 +59,10 @@ function printHelp() {
         '  today [--limit <n>] [--with-issues]',
         '  mark --canonical-id <id> --result <again|hard|good|easy> [--notes <text>]',
         '  weak [--limit <n>] [--with-issues]',
+        '',
+        'Options:',
+        '  --noWrite     Do not initialize progress or write run manifests for read-only commands',
+        '  --noManifest  Do not write the run manifest',
     ].join('\n'));
 }
 
@@ -98,7 +104,9 @@ function loadReviewState(root, options = {}) {
     const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
     let progress = loadProgress({ progressPath: paths.progressPath, date: options.date });
     progress = ensureProgressItems(progress, records, { date: options.date });
-    progress = saveProgress(progress, { progressPath: paths.progressPath, date: options.date });
+    if (!options.noWrite) {
+        progress = saveProgress(progress, { progressPath: paths.progressPath, date: options.date });
+    }
     const issueLinks = options['with-issues']
         ? issueLinkMap(loadIssueLinks({ filePath: paths.issueLinksPath, date: options.date }))
         : null;

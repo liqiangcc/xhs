@@ -18,6 +18,7 @@ const {
     buildQuestionToCanonicalMap,
 } = require('../lib/canonical_store');
 const { writeRunManifest } = require('../lib/run_manifest');
+const { applyGlobalBooleanOption } = require('../lib/cli_options');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_BUILD_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
@@ -333,6 +334,7 @@ function parseArgs(argv) {
         else if (arg === '--tagged-dir') options.taggedDir = path.resolve(args[++index]);
         else if (arg === '--root') options.root = path.resolve(args[++index]);
         else if (arg === '--build-date') options.buildDate = args[++index];
+        else if (arg.startsWith('--') && applyGlobalBooleanOption(options, arg.replace(/^--/, ''))) continue;
         else if (arg === '--help' || arg === 'help') options.help = true;
     }
     return options;
@@ -347,6 +349,8 @@ function printHelp() {
         '  --tagged-dir <path>  Override note_tagged input directory',
         '  --root <path>        Override repository root',
         '  --build-date <date>  Stable created_at/updated_at value',
+        '  --noWrite            Do not write run manifests in check mode',
+        '  --noManifest         Do not write the run manifest',
     ].join('\n'));
 }
 

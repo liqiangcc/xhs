@@ -5,6 +5,7 @@ const path = require('path');
 const { main: buildQuestionsMain } = require('../migrate/build_questions_from_tagged');
 const { readJson } = require('../lib/io');
 const { writeRunManifest } = require('../lib/run_manifest');
+const { applyGlobalBooleanOption } = require('../lib/cli_options');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -38,6 +39,8 @@ function runMigration(root, id, options = {}) {
     }
     const args = ['node', 'scripts/migrate/build_questions_from_tagged.js', '--root', root];
     if (options.check) args.push('--check');
+    if (options.noWrite) args.push('--noWrite');
+    if (options.noManifest) args.push('--noManifest');
     return buildQuestionsMain(args);
 }
 
@@ -47,6 +50,7 @@ function parseOptions(args) {
         if (args[index] === '--root') options.root = path.resolve(args[++index]);
         else if (args[index] === '--id') options.id = args[++index];
         else if (args[index] === '--check') options.check = true;
+        else if (args[index].startsWith('--') && applyGlobalBooleanOption(options, args[index].replace(/^--/, ''))) continue;
     }
     return options;
 }
@@ -61,7 +65,7 @@ function main(argv = process.argv) {
     }
     if (subcommand === 'status') {
         const result = runStatus({ root });
-        writeRunManifest(root, 'migrate_status', result, {});
+        writeRunManifest(root, 'migrate_status', result, options);
         console.log(JSON.stringify(result, null, 2));
         return 0;
     }
@@ -79,7 +83,7 @@ function main(argv = process.argv) {
                 ran: (registry.migrations || []).map((migration) => migration.id),
                 check: Boolean(options.check),
             };
-            writeRunManifest(root, 'migrate_run_all', result, {});
+            writeRunManifest(root, 'migrate_run_all', result, options);
             console.log(JSON.stringify(result, null, 2));
             return 0;
         }
@@ -90,7 +94,7 @@ function main(argv = process.argv) {
             ran: [id],
             check: Boolean(options.check),
         };
-        writeRunManifest(root, `migrate_run_${id}`, result, {});
+        writeRunManifest(root, `migrate_run_${id}`, result, options);
         return code;
     }
     console.error('Usage: node scripts/xhs.js migrate <build-questions|status|run> [--check]');

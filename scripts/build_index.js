@@ -6,6 +6,7 @@ const { loadQuestions } = require('./lib/question_store');
 const { loadCanonicalQuestions } = require('./lib/canonical_store');
 const { buildIndexes, writeIndexes, checkIndexes } = require('./lib/index_store');
 const { writeRunManifest } = require('./lib/run_manifest');
+const { applyGlobalBooleanOption } = require('./lib/cli_options');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..');
 
@@ -18,6 +19,7 @@ function parseArgs(argv) {
         else if (arg === '--root') options.root = path.resolve(args[++index]);
         else if (arg === '--questions') options.questionsPath = path.resolve(args[++index]);
         else if (arg === '--index-dir') options.indexDir = path.resolve(args[++index]);
+        else if (arg.startsWith('--') && applyGlobalBooleanOption(options, arg.replace(/^--/, ''))) continue;
         else if (arg === '--help' || arg === 'help') options.help = true;
     }
     return options;
@@ -32,6 +34,8 @@ function printHelp() {
         '  --questions <path>  Override questions.jsonl path',
         '  --index-dir <path>  Override output index directory',
         '  --root <path>       Override repository root',
+        '  --noWrite           Do not write run manifests',
+        '  --noManifest        Do not write the run manifest',
     ].join('\n'));
 }
 

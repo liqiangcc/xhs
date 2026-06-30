@@ -13,6 +13,7 @@ const {
 const { loadIndexes, buildIndexes, writeIndexes } = require('../lib/index_store');
 const { normalizeEntity, validateDomain } = require('../lib/taxonomy');
 const { writeRunManifest } = require('../lib/run_manifest');
+const { applyGlobalBooleanOption, shouldWriteReports } = require('../lib/cli_options');
 const {
     loadCanonicalQuestions,
     saveCanonicalQuestions,
@@ -45,6 +46,7 @@ function parseArgs(argv) {
         if (!arg) continue;
         if (arg.startsWith('--')) {
             const key = arg.replace(/^--/, '');
+            if (applyGlobalBooleanOption(options, key)) continue;
             if (booleanFlags.has(key)) options[key] = true;
             else options[key] = args[++index];
         } else {
@@ -67,6 +69,10 @@ function printHelp() {
         '  merge --target <canonical_id> --source <canonical_id> --reason <text>',
         '  split --canonical-id <id> --question-id <qid> --new-canonical-id <id> --title <title>',
         '  stats',
+        '',
+        'Options:',
+        '  --noWrite     Do not write reports or run manifests for read-only commands',
+        '  --noManifest  Do not write the run manifest',
     ].join('\n'));
 }
 
@@ -535,7 +541,9 @@ function runCheck(options = {}) {
         unlisted_bindings: unlistedBindings,
         suspected_duplicates: suspectedDuplicates,
     };
-    writeJson(paths.qualityReport, report);
+    if (shouldWriteReports(options)) {
+        writeJson(paths.qualityReport, report);
+    }
     return report;
 }
 

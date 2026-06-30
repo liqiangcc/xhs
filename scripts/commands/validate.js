@@ -14,6 +14,7 @@ const {
 } = require('../lib/taxonomy');
 const { writeJson } = require('../lib/io');
 const { writeRunManifest } = require('../lib/run_manifest');
+const { applyGlobalBooleanOption, shouldWriteReports } = require('../lib/cli_options');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -90,7 +91,9 @@ function runSchemaValidation(options = {}) {
         error_count: errors.length,
         errors,
     };
-    writeJson(path.join(paths.qualityDir, 'validate_schema_report.json'), report);
+    if (shouldWriteReports(options)) {
+        writeJson(path.join(paths.qualityDir, 'validate_schema_report.json'), report);
+    }
     return report;
 }
 
@@ -127,7 +130,9 @@ function runHashValidation(options = {}) {
         missing,
         mismatches,
     };
-    writeJson(path.join(paths.qualityDir, 'validate_hash_report.json'), report);
+    if (shouldWriteReports(options)) {
+        writeJson(path.join(paths.qualityDir, 'validate_hash_report.json'), report);
+    }
     return report;
 }
 
@@ -207,7 +212,9 @@ function runTaxonomyValidation(options = {}) {
         legacy_aliases: legacyAliases,
         unknown,
     };
-    writeJson(path.join(paths.qualityDir, 'validate_taxonomy_report.json'), report);
+    if (shouldWriteReports(options)) {
+        writeJson(path.join(paths.qualityDir, 'validate_taxonomy_report.json'), report);
+    }
 
     const summary = {
         schema_version: 'validate_taxonomy_summary_report.v1',
@@ -222,7 +229,9 @@ function runTaxonomyValidation(options = {}) {
         top_legacy_aliases: countBy(legacyAliases, (item) => `${item.field}: ${item.reason}: ${JSON.stringify(item.value)} -> ${JSON.stringify(item.normalized_value)}`, 100),
         reason_counts: countBy([...legacyAliases, ...unknown], (item) => `${item.field}: ${item.reason}`, 50),
     };
-    writeJson(path.join(paths.qualityDir, 'validate_taxonomy_summary_report.json'), summary);
+    if (shouldWriteReports(options)) {
+        writeJson(path.join(paths.qualityDir, 'validate_taxonomy_summary_report.json'), summary);
+    }
     return report;
 }
 
@@ -261,6 +270,7 @@ function parseArgs(argv) {
         else if (arg === '--questions') options.questionsPath = path.resolve(args[++index]);
         else if (arg === '--schema') options.schemaPath = path.resolve(args[++index]);
         else if (arg === '--taxonomy') options.taxonomyPath = path.resolve(args[++index]);
+        else if (arg.startsWith('--') && applyGlobalBooleanOption(options, arg.replace(/^--/, ''))) continue;
         else if (arg === '--help' || arg === 'help') options.help = true;
     }
     return { target, options };
@@ -275,6 +285,9 @@ function printHelp() {
         '  --schema <path>     Override question schema path',
         '  --taxonomy <path>   Override taxonomy path',
         '  --root <path>       Override repository root',
+        '  --noWrite           Do not write reports or run manifests',
+        '  --noManifest        Do not write the run manifest',
+        '  --noReport          Do not write validation report files',
     ].join('\n'));
 }
 

@@ -14,7 +14,7 @@ function safeName(value) {
 }
 
 function writeRunManifest(root, command, result, options = {}) {
-    if (options.noManifest) return null;
+    if (options.noWrite || options.noManifest) return null;
     const repoRoot = root || DEFAULT_ROOT;
     const filePath = path.join(repoRoot, 'data', 'manifests', 'runs', `latest_${safeName(command)}.json`);
     const manifest = {

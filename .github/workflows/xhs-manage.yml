@@ -1,0 +1,73 @@
+name: XHS Manage
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Task to run
+        required: true
+        type: choice
+        options:
+          - validate
+          - migrate-check
+          - index-check
+          - canonical-check
+          - answer-validate
+          - review-today
+          - review-weak
+      limit:
+        description: Limit for review list tasks
+        required: false
+        default: "20"
+
+permissions:
+  contents: read
+
+jobs:
+  run-task:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run selected task
+        env:
+          TASK: ${{ inputs.task }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          set -euo pipefail
+          case "$TASK" in
+            validate)
+              npm run ci:check
+              ;;
+            migrate-check)
+              npm run ci:migrate:check
+              ;;
+            index-check)
+              npm run ci:index:check
+              ;;
+            canonical-check)
+              npm run ci:canonical:check
+              ;;
+            answer-validate)
+              npm run ci:answer:validate
+              ;;
+            review-today)
+              node scripts/xhs.js review today --limit "$LIMIT" --with-issues --noWrite
+              ;;
+            review-weak)
+              node scripts/xhs.js review weak --limit "$LIMIT" --with-issues --noWrite
+              ;;
+            *)
+              echo "Unsupported task: $TASK" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Verify no generated changes
+        run: git diff --exit-code

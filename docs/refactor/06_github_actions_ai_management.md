@@ -30,6 +30,15 @@ node scripts/xhs.js <command> [subcommand] [options]
 
 因此下一步应该引入 GitHub Actions，形成自动化管理层。
 
+当前第一阶段已落地：
+
+```text
+1. .github/workflows/ci.yml 已新增
+2. .github/workflows/xhs-manage.yml 已新增
+3. package.json 已新增 ci:* 只读检查脚本
+4. validate / migrate-check / index-check / canonical-check / answer-validate / review-today / review-weak 支持 --noWrite 只读运行
+```
+
 ---
 
 ## 2. 核心判断
@@ -76,19 +85,13 @@ Action 应该提供明确的 `task` 枚举，例如：
 validate
 migrate-check
 index-check
-rebuild-index
-canonical-suggest-hotspot
-canonical-suggest-entity
 canonical-check
 answer-validate
-answer-sync
 review-today
 review-weak
-issue-sync-dry-run
-quality-report
 ```
 
-AI 只能选择这些任务，并传入有限参数。
+第一阶段只开放这些只读任务。`rebuild-index`、`canonical-suggest-*`、`answer-sync`、`issue-sync-*`、`quality-report` 等会写文件或需要外部权限的任务保留到后续阶段。
 
 ---
 
@@ -179,12 +182,8 @@ on:
 ### 5.3 执行命令
 
 ```bash
-npm test
-npm run migrate:check
-npm run validate
-npm run index:check
-npm run canonical:check
-npm run answer:validate
+npm run ci:check
+git diff --exit-code
 ```
 
 ### 5.4 权限
@@ -225,50 +224,50 @@ on:
           - validate
           - migrate-check
           - index-check
-          - rebuild-index
-          - canonical-suggest-hotspot
-          - canonical-suggest-entity
           - canonical-check
           - answer-validate
-          - answer-sync
           - review-today
           - review-weak
-          - issue-sync-dry-run
-          - quality-report
-      entity:
-        description: Entity for canonical-suggest-entity
-        required: false
-      canonical_id:
-        description: Canonical id for single-item tasks
-        required: false
       limit:
-        description: Limit for list/suggest tasks
+        description: Limit for review list tasks
         required: false
-        default: "50"
-      create_pr:
-        description: Create PR for generated changes
-        required: false
-        type: boolean
-        default: false
+        default: "20"
 ```
 
 ### 6.3 任务映射
 
 | task | 命令 | 是否写入 | 默认策略 |
 |---|---|---:|---|
-| validate | `npm test && npm run validate && npm run index:check && npm run canonical:check && npm run answer:validate` | 否 | 直接执行 |
-| migrate-check | `npm run migrate:check` | 否 | 直接执行 |
-| index-check | `npm run index:check` | 否 | 直接执行 |
-| rebuild-index | `node scripts/xhs.js index build` | 是 | create_pr=true 时提交 PR |
-| canonical-suggest-hotspot | `node scripts/xhs.js canonical suggest --hotspot --limit <limit>` | 是 | 生成候选 manifest，走 PR |
-| canonical-suggest-entity | `node scripts/xhs.js canonical suggest --entity <entity> --limit <limit>` | 是 | 生成候选 manifest，走 PR |
-| canonical-check | `node scripts/xhs.js canonical check` | 是 | 质量报告可走 PR |
-| answer-validate | `node scripts/xhs.js answer validate` | 否 | 直接执行 |
-| answer-sync | `node scripts/xhs.js answer validate && node scripts/xhs.js answer sync` | 是 | create_pr=true 时提交 PR |
-| review-today | `node scripts/xhs.js review today --limit <limit> --with-issues` | 否 | 直接输出 |
-| review-weak | `node scripts/xhs.js review weak --limit <limit> --with-issues` | 否 | 直接输出 |
-| issue-sync-dry-run | `node scripts/xhs.js issue sync --priority P0 --repo liqiangcc/xhs` | 否 | 只预览 |
-| quality-report | 后续新增 `node scripts/xhs.js report quality` | 是 | 生成报告，走 PR 或 issue |
+| validate | `npm run ci:check` | 否 | 直接执行 |
+| migrate-check | `npm run ci:migrate:check` | 否 | 直接执行 |
+| index-check | `npm run ci:index:check` | 否 | 直接执行 |
+| canonical-check | `npm run ci:canonical:check` | 否 | 直接执行 |
+| answer-validate | `npm run ci:answer:validate` | 否 | 直接执行 |
+| review-today | `node scripts/xhs.js review today --limit <limit> --with-issues --noWrite` | 否 | 直接输出 |
+| review-weak | `node scripts/xhs.js review weak --limit <limit> --with-issues --noWrite` | 否 | 直接输出 |
+
+### 6.4 只读契约
+
+第一阶段的 Actions 必须使用 `--noWrite` 或 `ci:*` 脚本：
+
+```bash
+npm run ci:migrate:check
+npm run ci:validate
+npm run ci:index:check
+npm run ci:canonical:check
+npm run ci:answer:validate
+node scripts/xhs.js review today --limit 20 --with-issues --noWrite
+node scripts/xhs.js review weak --limit 20 --with-issues --noWrite
+```
+
+`--noWrite` 的语义是：
+
+```text
+1. 不写 data/manifests/runs/latest_*.json
+2. 不写 validate / canonical 质量报告
+3. review today / review weak 不初始化或保存 review/progress.json
+4. workflow 最后用 git diff --exit-code 验证没有生成变更
+```
 
 ---
 
@@ -518,16 +517,15 @@ permissions:
 
 先保证所有提交都不会破坏主数据和索引。
 
+状态：DONE
+
 ### 任务
 
 ```text
 1. 新增 .github/workflows/ci.yml
-2. CI 执行 npm test
-3. CI 执行 migrate:check
-4. CI 执行 validate
-5. CI 执行 index:check
-6. CI 执行 canonical:check
-7. CI 执行 answer:validate
+2. CI 执行 npm run ci:check
+3. CI 执行 git diff --exit-code
+4. ci:* 脚本使用 --noWrite，避免写 report / manifest / progress
 ```
 
 ### 验收
@@ -540,22 +538,25 @@ master 分支始终处于可校验状态
 
 ---
 
-## Phase 2：建立 xhs-manage 手动入口
+## Phase 2：建立 xhs-manage 只读手动入口
 
 ### 目标
 
 让人和 AI 都能通过一个 workflow 触发标准任务。
+
+状态：DONE
 
 ### 任务
 
 ```text
 1. 新增 .github/workflows/xhs-manage.yml
 2. 支持 validate
-3. 支持 canonical-suggest-hotspot
-4. 支持 canonical-suggest-entity
-5. 支持 answer-sync
-6. 支持 review-today / review-weak
-7. 支持 issue-sync-dry-run
+3. 支持 migrate-check
+4. 支持 index-check
+5. 支持 canonical-check
+6. 支持 answer-validate
+7. 支持 review-today / review-weak
+8. 所有任务只读，不支持任意 shell command
 ```
 
 ### 验收
@@ -628,10 +629,10 @@ AI 不直接污染主数据
 下一步建议按这个顺序做：
 
 ```text
-[ ] 新增 .github/workflows/ci.yml
-[ ] 新增 .github/workflows/xhs-manage.yml
-[ ] 在 package.json 增加 check 脚本：npm run test && npm run validate && npm run index:check
-[ ] 让 xhs-manage 支持 validate / review-today / review-weak 三个只读任务
+[x] 新增 .github/workflows/ci.yml
+[x] 新增 .github/workflows/xhs-manage.yml
+[x] 在 package.json 增加 ci:* 只读检查脚本
+[x] 让 xhs-manage 支持 validate / review-today / review-weak 等只读任务
 [ ] 再支持 canonical-suggest-hotspot，并生成 manifest
 [ ] 最后加入 create_pr=true 的写入路径
 ```
@@ -648,12 +649,8 @@ AI 不直接污染主数据
 目标：
 1. 新增 .github/workflows/ci.yml。
 2. CI 在 push / pull_request 到 master 时运行：
-   - npm test
-   - npm run migrate:check
-   - npm run validate
-   - npm run index:check
-   - npm run canonical:check
-   - npm run answer:validate
+   - npm run ci:check
+   - git diff --exit-code
 3. 新增 .github/workflows/xhs-manage.yml。
 4. xhs-manage 使用 workflow_dispatch，支持 task 白名单：
    - validate
@@ -667,7 +664,7 @@ AI 不直接污染主数据
 6. 不允许传入任意 shell 命令。
 7. 使用 Node 20。
 8. 执行后更新 docs/refactor/06_github_actions_ai_management.md 的 Phase 1 状态。
-9. 提交前确保 npm test、npm run validate、npm run index:check 通过。
+9. 提交前确保 node --test、npm run ci:check、git diff --check 通过。
 
 约束：
 - 不要修改业务数据。
@@ -729,12 +726,8 @@ GitHub Actions 应该成为 xhs 的自动化管理层，AI 只负责调度，不
 并执行：
 
 ```bash
-npm test
-npm run migrate:check
-npm run validate
-npm run index:check
-npm run canonical:check
-npm run answer:validate
+npm run ci:check
+git diff --exit-code
 ```
 
 #### 验收标准
@@ -1136,13 +1129,12 @@ issue-sync-apply
 结合本次 review，下一轮不要先做复杂的全自动流程，而应该按下面顺序推进：
 
 ```text
-1. 新增 ci.yml，先建立质量守门
-2. 新增 xhs-manage.yml，只开放只读任务
-3. 修正 docs/refactor/05_execution_checklist.md 状态
-4. 新增 canonical-suggest-hotspot Action 任务
-5. 新增 answer-missing-p0-report 或质量报告命令
-6. weekly-report 汇总 canonical / answer / review / taxonomy 指标
-7. 最后再考虑 create_pr=true 和 issue-sync-apply
+1. 保持 ci.yml 和 xhs-manage.yml 的只读任务稳定
+2. 修正并持续维护 docs/refactor/05_execution_checklist.md 状态
+3. 新增 canonical-suggest-hotspot Action 任务
+4. 新增 answer-missing-p0-report 或质量报告命令
+5. weekly-report 汇总 canonical / answer / review / taxonomy 指标
+6. 最后再考虑 create_pr=true 和 issue-sync-apply
 ```
 
 原因：
@@ -1160,37 +1152,19 @@ issue-sync-apply
 ## 20. 更新后的 Codex 执行提示词
 
 ```text
-请基于当前 liqiangcc/xhs 仓库继续实现 GitHub Actions + AI 管理层的第一阶段，并同时修复 review 发现的工程化问题。
+请基于当前 liqiangcc/xhs 仓库继续推进 GitHub Actions + AI 管理层第二阶段。
 
 目标：
-1. 新增 .github/workflows/ci.yml。
-2. CI 在 push / pull_request 到 master 时运行：
-   - npm test
-   - npm run migrate:check
-   - npm run validate
-   - npm run index:check
-   - npm run canonical:check
-   - npm run answer:validate
-3. 新增 .github/workflows/xhs-manage.yml。
-4. xhs-manage 使用 workflow_dispatch，第一阶段只支持只读 task：
-   - validate
-   - migrate-check
-   - index-check
-   - canonical-check
-   - answer-validate
-   - review-today
-   - review-weak
-5. 不允许传入任意 shell command，只能使用 task 白名单。
-6. 默认权限 contents: read。
-7. 使用 Node 20。
-8. 修正 docs/refactor/05_execution_checklist.md 中明显已经完成但仍标记 TODO 的状态，至少覆盖 hash/io/question_store/index/canonical/answer/review/test 相关条目。
-9. 不修改业务数据，不修改 note_tagged，不引入外部存储。
-10. 提交前确认 npm test、npm run validate、npm run index:check 可以通过。
+1. 保持第一阶段只读任务不回退，所有新增 task 继续走白名单。
+2. 新增 canonical-suggest-hotspot 任务时，必须明确它会写 candidate manifest。
+3. 新增写入型任务时，默认只允许 create_pr=true 的分支/PR 路径。
+4. 不允许传入任意 shell command。
+5. 默认权限 contents: read；需要写权限时单独说明。
+6. 不修改 note_tagged，不引入外部存储。
+7. 提交前确认 node --test、npm run ci:check、git diff --check 通过。
 
 验收：
-- GitHub Actions 文件存在。
-- xhs-manage 只能执行白名单任务。
-- CI 命令和 package.json 中已有 scripts 对齐。
-- checklist 状态与当前代码基本一致。
-- 不产生业务数据变更。
+- 第一阶段 validate / review 只读任务仍不产生业务数据变更。
+- 新增写入任务有明确 PR 或人工审批路径。
+- docs/refactor/06_github_actions_ai_management.md 同步更新任务状态。
 ```

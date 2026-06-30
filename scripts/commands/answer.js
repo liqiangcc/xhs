@@ -14,6 +14,7 @@ const {
     statusByCanonicalId,
 } = require('../lib/answer_store');
 const { writeRunManifest } = require('../lib/run_manifest');
+const { applyGlobalBooleanOption } = require('../lib/cli_options');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_BUILD_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
@@ -34,6 +35,7 @@ function parseArgs(argv) {
         const arg = args[index];
         if (arg.startsWith('--')) {
             const key = arg.replace(/^--/, '');
+            if (applyGlobalBooleanOption(options, key)) continue;
             if (booleanFlags.has(key)) options[key] = true;
             else options[key] = args[++index];
         }
@@ -50,6 +52,10 @@ function printHelp() {
         '  status [--missing|--draft|--ready]',
         '  validate',
         '  sync',
+        '',
+        'Options:',
+        '  --noWrite     Do not write run manifests for read-only commands',
+        '  --noManifest  Do not write the run manifest',
     ].join('\n'));
 }
 
