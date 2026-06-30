@@ -12,7 +12,7 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0];
     const options = { _: [] };
-    const booleanFlags = new Set(['slim', 'valid', 'filter-valid']);
+    const booleanFlags = new Set(['slim', 'valid', 'filter-valid', 'canonical']);
     for (let index = 1; index < args.length; index++) {
         const arg = args[index];
         if (!arg) continue;
@@ -203,6 +203,33 @@ function formatHotspots(hotspots, options) {
     return limited;
 }
 
+function formatIndexedHotspots(entries, options) {
+    const filtered = options.canonical
+        ? entries.filter((entry) => entry.canonical_id)
+        : entries;
+    const limited = options.limit ? filtered.slice(0, Number(options.limit)) : filtered;
+    if (options.slim) {
+        return limited.map((item) => ({
+            canonical_id: item.canonical_id || null,
+            question_id: item.question_id,
+            original_question: item.original_question,
+            frequency: item.frequency,
+        }));
+    }
+    return limited.map((item) => ({
+        canonical_id: item.canonical_id || null,
+        question_id: item.question_id,
+        question_ids: item.question_ids || [item.question_id],
+        original_question: item.original_question,
+        frequency: item.frequency,
+        companies: item.companies || [],
+        source_note_ids: item.source_note_ids || [],
+        domain_l1: item.domain?.l1 || '',
+        domain_l2: item.domain?.l2 || '',
+        appearances: item.refs || [],
+    }));
+}
+
 function runQuery(command, options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const questionsPath = options.questions ? path.resolve(options.questions) : path.join(root, 'data', 'questions', 'questions.jsonl');
@@ -224,6 +251,9 @@ function runQuery(command, options = {}) {
         if (!options.l1 && !options.l2 && !options._[0]) throw new Error('Usage: query domain --l1 <value> [--l2 <value>]');
         resultQuestions = queryDomain(indexes, questionMap, options);
     } else if (command === 'hotspot') {
+        if (options.canonical) {
+            return formatIndexedHotspots(indexes.hotspot.entries || [], options);
+        }
         const filtered = applyGlobalFilters(questions, options);
         return formatHotspots(hotspotFromQuestions(filtered), options);
     } else {

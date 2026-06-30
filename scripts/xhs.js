@@ -19,6 +19,9 @@ function printHelp() {
         '  query company <value>     Query by company',
         '  query domain --l1 <v>     Query by domain l1 or l2',
         '  query hotspot             Show repeated question_id hotspots',
+        '  canonical suggest         Generate canonical candidates',
+        '  canonical accept          Confirm a canonical candidate',
+        '  canonical stats           Show canonical coverage',
     ].join('\n'));
 }
 
@@ -34,6 +37,7 @@ function main(argv = process.argv) {
     if (command === 'validate') return require('./commands/validate').main(forwarded);
     if (command === 'index') return require('./commands/index').main(forwarded);
     if (command === 'query') return require('./commands/query').main(forwarded);
+    if (command === 'canonical') return require('./commands/canonical').main(forwarded);
 
     console.error(`Unknown command: ${command}`);
     printHelp();

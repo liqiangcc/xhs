@@ -1,13 +1,23 @@
 'use strict';
 
 const path = require('path');
-const { readJsonl } = require('./io');
+const { readJsonl, writeJsonl } = require('./io');
 
 const DEFAULT_QUESTIONS_PATH = path.resolve(__dirname, '..', '..', 'data', 'questions', 'questions.jsonl');
 
 function loadQuestions(options = {}) {
     const filePath = options.filePath || DEFAULT_QUESTIONS_PATH;
     return readJsonl(filePath, []);
+}
+
+function saveQuestions(questions, options = {}) {
+    const filePath = options.filePath || DEFAULT_QUESTIONS_PATH;
+    const sorted = [...questions].sort((a, b) =>
+        a.source_note_id.localeCompare(b.source_note_id, 'zh')
+        || (a.source_question_index ?? 0) - (b.source_question_index ?? 0)
+        || a.question_id.localeCompare(b.question_id)
+    );
+    writeJsonl(filePath, sorted);
 }
 
 function findById(questionId, options = {}) {
@@ -94,6 +104,7 @@ function refKey(ref) {
 module.exports = {
     DEFAULT_QUESTIONS_PATH,
     loadQuestions,
+    saveQuestions,
     findById,
     findAllById,
     filterQuestions,

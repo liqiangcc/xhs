@@ -27,6 +27,18 @@ test('normalizes historical taxonomy aliases without mutating source values', ()
     assert.equal(validateCognitiveDepth('L4_Systematic').normalized_value, 'L3_Diagnostic');
 });
 
+test('normalizes pair aliases and long-tail l2 values', () => {
+    const pair = validateDomain({ l1: '工程实践', l2: 'Java基础' });
+    assert.equal(pair.valid, true);
+    assert.equal(pair.reason, 'legacy_pair_alias');
+    assert.deepEqual(pair.normalized_domain, { l1: 'Java基础', l2: '语言特性' });
+
+    const fallback = validateDomain({ l1: '系统设计', l2: '未知长尾标签' });
+    assert.equal(fallback.valid, true);
+    assert.equal(fallback.reason, 'legacy_l2_other');
+    assert.deepEqual(fallback.normalized_domain, { l1: '系统设计', l2: '其他' });
+});
+
 test('reports unknown taxonomy values', () => {
     assert.equal(validateDomain({ l1: '不存在', l2: '也不存在' }).valid, false);
     assert.equal(validateQuestionType('Unknown_Type').valid, false);

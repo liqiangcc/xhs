@@ -3,6 +3,7 @@
 
 const path = require('path');
 const { loadQuestions } = require('./lib/question_store');
+const { loadCanonicalQuestions } = require('./lib/canonical_store');
 const { buildIndexes, writeIndexes, checkIndexes } = require('./lib/index_store');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..');
@@ -42,9 +43,11 @@ function main(argv = process.argv) {
 
     const root = options.root || DEFAULT_ROOT;
     const questionsPath = options.questionsPath || path.join(root, 'data', 'questions', 'questions.jsonl');
+    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
     const indexDir = options.indexDir || path.join(root, 'data', 'indexes');
     const questions = loadQuestions({ filePath: questionsPath });
-    const indexes = buildIndexes(questions);
+    const canonicalQuestions = loadCanonicalQuestions({ filePath: canonicalPath });
+    const indexes = buildIndexes(questions, { canonicalQuestions });
 
     if (options.check) {
         const check = checkIndexes(indexes, indexDir);

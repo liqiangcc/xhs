@@ -46,3 +46,30 @@ test('builds entity, company, domain, and hotspot indexes from questions', () =>
     assert.equal(indexes.hotspot.entries[0].frequency, 2);
     assert.deepEqual(indexes.hotspot.entries[0].companies, ['美团', '字节']);
 });
+
+test('aggregates canonical hotspots when canonical_id is assigned', () => {
+    const first = question('Redis 为什么快？', 'note-a', 0, '美团', ['Redis']);
+    const second = question('Redis 单线程为什么快？', 'note-b', 0, '字节', ['Redis']);
+    const questions = [
+        { ...first, canonical_id: 'cq_redis_fast_12345678' },
+        { ...second, canonical_id: 'cq_redis_fast_12345678' },
+    ];
+    const indexes = buildIndexes(questions, {
+        canonicalQuestions: [{
+            canonical_id: 'cq_redis_fast_12345678',
+            canonical_title: 'Redis 为什么快？',
+            aliases: [],
+            question_ids: questions.map((item) => item.question_id),
+            primary_domain: { l1: '缓存', l2: 'Redis' },
+            primary_entities: ['Redis'],
+            companies: ['美团', '字节'],
+            frequency: 2,
+            review_priority: 'P2',
+            answer_status: 'missing',
+            schema_version: 'canonical_question.v1',
+        }],
+    });
+    assert.equal(indexes.hotspot.total_hotspots, 1);
+    assert.equal(indexes.hotspot.entries[0].canonical_id, 'cq_redis_fast_12345678');
+    assert.equal(indexes.hotspot.entries[0].question_ids.length, 2);
+});

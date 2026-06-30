@@ -19,8 +19,10 @@ const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 function defaultPaths(root) {
     return {
         questions: path.join(root, 'data', 'questions', 'questions.jsonl'),
+        canonicalQuestions: path.join(root, 'data', 'questions', 'canonical_questions.jsonl'),
         qualityDir: path.join(root, 'data', 'manifests', 'quality'),
         questionSchema: path.join(root, 'schemas', 'question.schema.json'),
+        canonicalQuestionSchema: path.join(root, 'schemas', 'canonical_question.schema.json'),
     };
 }
 
@@ -46,15 +48,33 @@ function runSchemaValidation(options = {}) {
     const questionsPath = options.questionsPath || paths.questions;
     ensureQuestionsFile(questionsPath);
 
-    const schema = loadSchema(options.schemaPath || paths.questionSchema);
-    const result = validateJsonlFile(questionsPath, schema);
+    const questionSchema = loadSchema(options.schemaPath || paths.questionSchema);
+    const results = [validateJsonlFile(questionsPath, questionSchema)];
+    if (fs.existsSync(paths.canonicalQuestions)) {
+        const canonicalSchema = loadSchema(paths.canonicalQuestionSchema);
+        results.push(validateJsonlFile(paths.canonicalQuestions, canonicalSchema));
+    }
+    const errors = [];
+    for (const result of results) {
+        for (const error of result.errors) {
+            errors.push({
+                file: path.relative(root, result.file),
+                ...error,
+            });
+        }
+    }
     const report = {
         schema_version: 'validate_schema_report.v1',
-        ok: result.error_count === 0,
+        ok: errors.length === 0,
         checked_file: path.relative(root, questionsPath),
-        record_count: result.count,
-        error_count: result.error_count,
-        errors: result.errors,
+        checked_files: results.map((result) => ({
+            file: path.relative(root, result.file),
+            record_count: result.count,
+            error_count: result.error_count,
+        })),
+        record_count: results[0].count,
+        error_count: errors.length,
+        errors,
     };
     writeJson(path.join(paths.qualityDir, 'validate_schema_report.json'), report);
     return report;
@@ -105,6 +125,18 @@ function pushTaxonomyIssue(collection, question, index, field, result) {
         normalized_value: result.normalized_value,
         reason: result.reason,
     });
+}
+
+function countBy(items, keyFn, limit = 100) {
+    const counts = {};
+    for (const item of items) {
+        const key = keyFn(item);
+        counts[key] = (counts[key] || 0) + 1;
+    }
+    return Object.entries(counts)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh'))
+        .slice(0, limit)
+        .map(([value, count]) => ({ value, count }));
 }
 
 function runTaxonomyValidation(options = {}) {
@@ -162,6 +194,21 @@ function runTaxonomyValidation(options = {}) {
         unknown,
     };
     writeJson(path.join(paths.qualityDir, 'validate_taxonomy_report.json'), report);
+
+    const summary = {
+        schema_version: 'validate_taxonomy_summary_report.v1',
+        ok: true,
+        strict_ok: report.strict_ok,
+        checked_file: report.checked_file,
+        taxonomy_version: report.taxonomy_version,
+        record_count: report.record_count,
+        legacy_alias_count: report.legacy_alias_count,
+        unknown_count: report.unknown_count,
+        top_unknown: countBy(unknown, (item) => `${item.field}: ${JSON.stringify(item.value)}`, 100),
+        top_legacy_aliases: countBy(legacyAliases, (item) => `${item.field}: ${item.reason}: ${JSON.stringify(item.value)} -> ${JSON.stringify(item.normalized_value)}`, 100),
+        reason_counts: countBy([...legacyAliases, ...unknown], (item) => `${item.field}: ${item.reason}`, 50),
+    };
+    writeJson(path.join(paths.qualityDir, 'validate_taxonomy_summary_report.json'), summary);
     return report;
 }
 

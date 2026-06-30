@@ -5,6 +5,7 @@ const path = require('path');
 const { normalizeEntity } = require('./taxonomy');
 const { questionRef, refKey } = require('./question_store');
 const { readJson, writeJson, stablePrettyStringify } = require('./io');
+const { loadCanonicalQuestions } = require('./canonical_store');
 
 const DEFAULT_INDEX_DIR = path.resolve(__dirname, '..', '..', 'data', 'indexes');
 
@@ -88,12 +89,14 @@ function baseIndex(schemaVersion, questions) {
     };
 }
 
-function buildIndexes(questions) {
+function buildIndexes(questions, options = {}) {
+    const canonicalRecords = options.canonicalQuestions || loadCanonicalQuestions(options);
+    const canonicalById = new Map(canonicalRecords.map((record) => [record.canonical_id, record]));
     const entityEntries = {};
     const companyEntries = {};
     const domainL1Entries = {};
     const domainL2Entries = {};
-    const byQuestionId = {};
+    const byHotspotKey = {};
 
     for (const question of questions) {
         const entities = new Set((question.tech_entities || []).map((entity) => normalizeEntity(entity)).filter(Boolean));
@@ -106,24 +109,31 @@ function buildIndexes(questions) {
         addEntry(domainL1Entries, l1, question);
         addEntry(domainL2Entries, `${l1}/${l2}`, question);
 
-        if (!byQuestionId[question.question_id]) {
-            byQuestionId[question.question_id] = {
+        const canonical = question.canonical_id ? canonicalById.get(question.canonical_id) : null;
+        const hotspotKey = question.canonical_id ? `canonical:${question.canonical_id}` : `question:${question.question_id}`;
+        if (!byHotspotKey[hotspotKey]) {
+            byHotspotKey[hotspotKey] = {
+                canonical_id: question.canonical_id || null,
                 question_id: question.question_id,
-                original_question: question.original_question,
+                question_ids: new Set(),
+                original_question: canonical?.canonical_title || question.original_question,
                 domain: question.domain || { l1: '', l2: '' },
                 question_type: question.question_type || '',
                 cognitive_depth: question.cognitive_depth || '',
                 refs_bucket: createBucket(),
             };
         }
-        addToBucket(byQuestionId[question.question_id].refs_bucket, question);
+        byHotspotKey[hotspotKey].question_ids.add(question.question_id);
+        addToBucket(byHotspotKey[hotspotKey].refs_bucket, question);
     }
 
-    const hotspotEntries = Object.values(byQuestionId)
+    const hotspotEntries = Object.values(byHotspotKey)
         .map((item) => {
             const bucket = finalizeBucket(item.refs_bucket);
             return {
+                canonical_id: item.canonical_id,
                 question_id: item.question_id,
+                question_ids: [...item.question_ids].sort(),
                 original_question: item.original_question,
                 frequency: bucket.count,
                 valid_count: bucket.valid_count,

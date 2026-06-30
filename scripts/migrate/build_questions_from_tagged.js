@@ -13,6 +13,10 @@ const {
     writeJson,
     writeJsonl,
 } = require('../lib/io');
+const {
+    loadCanonicalQuestions,
+    buildQuestionToCanonicalMap,
+} = require('../lib/canonical_store');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_BUILD_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
@@ -38,10 +42,11 @@ function addCount(map, key) {
     map[value] = (map[value] || 0) + 1;
 }
 
-function buildQuestionRecord(note, question, sourceQuestionIndex) {
+function buildQuestionRecord(note, question, sourceQuestionIndex, canonicalByQuestionId = new Map()) {
     const originalQuestion = String(question.original_question);
+    const questionId = computeQuestionId(originalQuestion);
     return {
-        question_id: computeQuestionId(originalQuestion),
+        question_id: questionId,
         original_question: originalQuestion,
         source_note_id: stringValue(note.note_id),
         source_question_index: sourceQuestionIndex,
@@ -60,7 +65,7 @@ function buildQuestionRecord(note, question, sourceQuestionIndex) {
         tech_entities: normalizeArray(question.tech_entities),
         business_context: normalizeArray(question.business_context),
         is_valid_for_library: question.is_valid_for_library === true,
-        canonical_id: null,
+        canonical_id: canonicalByQuestionId.get(questionId) || null,
         schema_version: 'question.v1',
         taxonomy_version: 'taxonomy.v1',
     };
@@ -106,6 +111,8 @@ function buildQuestionsFromTagged(options = {}) {
     const root = options.root || DEFAULT_ROOT;
     const taggedDir = options.taggedDir || path.join(root, 'note_tagged');
     const buildDate = options.buildDate || DEFAULT_BUILD_DATE;
+    const canonicalPath = options.canonicalPath || path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
+    const canonicalByQuestionId = buildQuestionToCanonicalMap(loadCanonicalQuestions({ filePath: canonicalPath }));
 
     const questions = [];
     const questionSources = [];
@@ -176,7 +183,7 @@ function buildQuestionsFromTagged(options = {}) {
                 if (!(field in question)) addCount(missingFields, field);
             }
 
-            const record = buildQuestionRecord(note, question, sourceQuestionIndex);
+            const record = buildQuestionRecord(note, question, sourceQuestionIndex, canonicalByQuestionId);
             const legacyQuestionId = question.question_id || null;
             if (!legacyQuestionId) {
                 addCount(missingFields, 'question_id');
