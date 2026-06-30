@@ -35,9 +35,12 @@ node scripts/xhs.js <command> [subcommand] [options]
 ```text
 1. .github/workflows/ci.yml 已新增
 2. .github/workflows/xhs-manage.yml 已新增
-3. package.json 已新增 ci:* 只读检查脚本
-4. validate / migrate-check / index-check / canonical-check / answer-validate / review-today / review-weak 支持 --noWrite 只读运行
-5. xhs-manage 已支持 canonical-suggest-hotspot，生成候选 manifest 并上传 artifact，不提交文件
+3. .github/workflows/xhs-weekly-report.yml 已新增
+4. package.json 已新增 ci:* 只读检查脚本
+5. validate / migrate-check / index-check / canonical-check / answer-validate / review-today / review-weak 支持 --noWrite 只读运行
+6. xhs-manage 已支持 canonical-suggest-hotspot / canonical-suggest-entity，生成候选 manifest 并上传 artifact；create_pr=true 时走 PR
+7. xhs-manage 已支持 quality-report，生成 JSON + Markdown 报告并上传 artifact；create_pr=true 时走 PR
+8. xhs-manage 已支持 issue-sync-dry-run，默认不写 GitHub Issue
 ```
 
 ---
@@ -88,12 +91,15 @@ migrate-check
 index-check
 canonical-check
 canonical-suggest-hotspot
+canonical-suggest-entity
 answer-validate
+quality-report
 review-today
 review-weak
+issue-sync-dry-run
 ```
 
-第一阶段只开放只读任务。当前额外开放 `canonical-suggest-hotspot` 作为受控生成任务：它只生成 `canonical_candidates.json` artifact，不提交文件。`rebuild-index`、`canonical-suggest-entity`、`answer-sync`、`issue-sync-*`、`quality-report` 等仍保留到后续阶段。
+默认开放只读任务；生成型任务必须走受控路径。当前 `canonical-suggest-*` 和 `quality-report` 可以上传 artifact，且仅在 `create_pr=true` 时由单独写权限 job 创建 PR。`issue-sync-dry-run` 只做预览，不调用 GitHub 写接口。`rebuild-index`、`answer-sync`、`issue-sync-apply` 等仍保留到后续阶段。
 
 ---
 
@@ -228,15 +234,35 @@ on:
           - index-check
           - canonical-check
           - canonical-suggest-hotspot
+          - canonical-suggest-entity
           - answer-validate
+          - quality-report
           - review-today
           - review-weak
+          - issue-sync-dry-run
+      entity:
+        description: Entity for canonical-suggest-entity
+        required: false
+      canonical_id:
+        description: Canonical id for single-item issue sync
+        required: false
+      priority:
+        description: Priority filter for issue sync
+        required: false
+        default: "P0"
+      answer_status:
+        description: Answer status filter for issue sync
+        required: false
+      repo:
+        description: GitHub repository for issue sync
+        required: false
+        default: "liqiangcc/xhs"
       limit:
         description: Limit for review list or canonical suggestion tasks
         required: false
         default: "50"
       create_pr:
-        description: Create a pull request for generated canonical candidates
+        description: Create a pull request for generated reports or candidates
         required: false
         type: boolean
         default: false
@@ -251,9 +277,12 @@ on:
 | index-check | `npm run ci:index:check` | 否 | 直接执行 |
 | canonical-check | `npm run ci:canonical:check` | 否 | 直接执行 |
 | canonical-suggest-hotspot | `node scripts/xhs.js canonical suggest --hotspot --limit <limit> --noManifest` | 是 | 默认上传 artifact；`create_pr=true` 时创建 PR |
+| canonical-suggest-entity | `node scripts/xhs.js canonical suggest --entity <entity> --limit <limit> --noManifest` | 是 | 默认上传 artifact；`create_pr=true` 时创建 PR |
 | answer-validate | `npm run ci:answer:validate` | 否 | 直接执行 |
+| quality-report | `node scripts/xhs.js report quality --noManifest` | 是 | 默认上传 artifact；`create_pr=true` 时创建 PR |
 | review-today | `node scripts/xhs.js review today --limit <limit> --with-issues --noWrite` | 否 | 直接输出 |
 | review-weak | `node scripts/xhs.js review weak --limit <limit> --with-issues --noWrite` | 否 | 直接输出 |
+| issue-sync-dry-run | `node scripts/xhs.js issue sync --repo <repo> [filters] --noManifest` | 否 | 只预览 issue create/update，不调用 GitHub 写接口 |
 
 ### 6.4 只读契约
 
@@ -280,10 +309,11 @@ node scripts/xhs.js review weak --limit 20 --with-issues --noWrite
 
 ### 6.5 canonical 候选生成
 
-`canonical-suggest-hotspot` 是第一批开放的生成型任务：
+`canonical-suggest-hotspot` 和 `canonical-suggest-entity` 是第一批开放的生成型任务：
 
 ```bash
 node scripts/xhs.js canonical suggest --hotspot --limit 50 --noManifest
+node scripts/xhs.js canonical suggest --entity Redis --limit 50 --noManifest
 ```
 
 它会更新工作区里的 `data/manifests/canonical/canonical_candidates.json`。默认路径只上传 `canonical-candidates` artifact；当 `create_pr=true` 时，workflow 会使用单独的写权限 job 创建分支和 PR。
@@ -292,7 +322,7 @@ node scripts/xhs.js canonical suggest --hotspot --limit 50 --noManifest
 
 ```text
 1. 普通 xhs-manage 任务使用 contents: read
-2. canonical-suggest-hotspot + create_pr=true 才使用 contents: write / pull-requests: write
+2. canonical-suggest-* + create_pr=true 才使用 contents: write / pull-requests: write
 3. 生成 PR 只提交 data/manifests/canonical/canonical_candidates.json
 ```
 
@@ -323,14 +353,14 @@ node scripts/xhs.js canonical suggest --hotspot --limit 50 --noManifest
 
 ### 7.3 输出位置
 
-建议输出到：
+当前输出到：
 
 ```text
-data/manifests/reports/weekly_quality_report.json
-review/plans/weekly_quality_report.md
+data/manifests/reports/quality_report.json
+review/plans/quality_report.md
 ```
 
-也可以同步创建 GitHub Issue：
+后续也可以同步创建 GitHub Issue：
 
 ```text
 [Weekly XHS Report] 2026-xx-xx
@@ -404,13 +434,28 @@ gh workflow run xhs-manage.yml \
   -f create_pr=true
 ```
 
-#### 针对 Redis 生成 canonical 候选（后续阶段）
+#### 针对 Redis 生成 canonical 候选
 
 ```bash
 gh workflow run xhs-manage.yml \
   -f task=canonical-suggest-entity \
   -f entity=Redis \
   -f limit=50 \
+  -f create_pr=true
+```
+
+#### 生成质量报告
+
+```bash
+gh workflow run xhs-manage.yml \
+  -f task=quality-report
+```
+
+#### 生成质量报告 PR
+
+```bash
+gh workflow run xhs-manage.yml \
+  -f task=quality-report \
   -f create_pr=true
 ```
 
@@ -422,12 +467,13 @@ gh workflow run xhs-manage.yml \
   -f limit=20
 ```
 
-#### 同步答案状态（后续阶段）
+#### 预览 GitHub Issue 同步
 
 ```bash
 gh workflow run xhs-manage.yml \
-  -f task=answer-sync \
-  -f create_pr=true
+  -f task=issue-sync-dry-run \
+  -f priority=P0 \
+  -f answer_status=ready
 ```
 
 ---
@@ -447,7 +493,7 @@ AI 触发 canonical-suggest-hotspot
   ↓
 Action 生成 canonical_candidates manifest
   ↓
-Action 上传 artifact；后续阶段再创建 PR 或 Issue
+Action 上传 artifact；create_pr=true 时创建候选 PR
   ↓
 人工确认 accept / merge / split
   ↓
@@ -457,9 +503,9 @@ AI 触发 answer init / answer-sync
   ↓
 Action 同步 answer_status
   ↓
-AI 触发 issue-sync-dry-run / apply
+AI 触发 issue-sync-dry-run
   ↓
-GitHub Issues 成为移动端复习卡片
+人工确认后再本地或后续 issue-sync-apply 创建移动端复习卡片
   ↓
 AI 触发 review-today / review-weak
   ↓
@@ -593,8 +639,10 @@ master 分支始终处于可校验状态
 5. 支持 canonical-check
 6. 支持 answer-validate
 7. 支持 review-today / review-weak
-8. 支持 canonical-suggest-hotspot 生成候选 artifact
-9. 不支持任意 shell command
+8. 支持 canonical-suggest-hotspot / canonical-suggest-entity 生成候选 artifact
+9. 支持 quality-report artifact / PR
+10. 支持 issue-sync-dry-run
+11. 不支持任意 shell command
 ```
 
 ### 验收
@@ -604,6 +652,7 @@ master 分支始终处于可校验状态
 所有 task 都是白名单
 不支持任意 shell command
 默认不写 master；canonical-suggest-hotspot 只上传 artifact
+生成型任务默认只上传 artifact；create_pr=true 才创建 PR
 ```
 
 ---
@@ -614,14 +663,21 @@ master 分支始终处于可校验状态
 
 把 Action 输出变成可审查的 PR 或 Issue。
 
+状态：PARTIAL
+
+说明：`canonical-suggest-*` 和 `quality-report` 已支持 `create_pr=true` 的 PR 路径；`issue-sync-dry-run` 已支持预览。`rebuild-index`、`answer-sync`、`issue-sync-apply` 仍未开放为 Action 写入任务。
+
 ### 任务
 
 ```text
 1. 对 rebuild-index 支持 create_pr
-2. 对 canonical-suggest 支持 create_pr
-3. 对 answer-sync 支持 create_pr
-4. 对 weekly-report 支持创建 issue
-5. PR 自动跑 CI
+2. 对 canonical-suggest 支持 create_pr [DONE]
+3. 对 quality-report 支持 create_pr [DONE]
+4. 对 issue sync 支持 dry-run [DONE]
+5. 对 answer-sync 支持 create_pr
+6. 对 weekly-report 支持创建 issue
+7. 对 issue-sync-apply 增加人工触发和 issues: write 权限
+8. PR 自动跑 CI
 ```
 
 ### 验收
@@ -673,13 +729,20 @@ AI 不直接污染主数据
 [x] 让 xhs-manage 支持 validate / review-today / review-weak 等只读任务
 [x] 再支持 canonical-suggest-hotspot，并生成 manifest artifact
 [x] 为 canonical-suggest-hotspot 加入 create_pr=true 的写入路径
+[x] 支持 canonical-suggest-entity
+[x] 支持 quality-report artifact / PR
+[x] 支持 issue-sync-dry-run
+[ ] 用 canonical suggest 扩大覆盖到 200+ assigned rows
+[ ] 针对新 canonical 批量补答案并运行 answer validate / sync
+[ ] 将 issue-sync-apply 设计为单独人工触发 workflow
+[ ] 为 weekly-report 增加可选创建 GitHub Issue 的路径
 ```
 
 ---
 
 ## 15. Codex 执行提示词
 
-可以把下面提示词交给 Codex：
+以下是第一阶段的历史执行提示词，当前已完成；下一轮执行应参考第 20 节。
 
 ```text
 请基于当前 liqiangcc/xhs 仓库实现 GitHub Actions 管理层第一阶段。
@@ -743,19 +806,19 @@ GitHub Actions 应该成为 xhs 的自动化管理层，AI 只负责调度，不
 
 #### 现象
 
-仓库已经具备 `npm test`、`validate`、`index:check`、`migrate:check`、`canonical:check`、`answer:validate` 等脚本，但当前没有稳定的 GitHub Actions CI 守门流程。
+该问题已解决。仓库已经具备 `.github/workflows/ci.yml`，并在 push / PR 到 `master` 时运行 `npm run ci:check` 和 `git diff --exit-code`。
 
 #### 影响
 
 ```text
-1. AI 或人工提交后，不能自动发现 schema / hash / index / canonical / answer 元数据问题
-2. 数据变更、索引变更、文档变更缺少统一验收
-3. 后续让 AI 管理仓库时，风险会集中在 master 分支
+1. schema / hash / index / canonical / answer 元数据问题会在 CI 中暴露
+2. 数据变更、索引变更、文档变更有统一验收入口
+3. 后续重点是保持新增命令遵守 noWrite / noManifest 契约
 ```
 
 #### 建议
 
-优先新增：
+当前入口：
 
 ```text
 .github/workflows/ci.yml
@@ -782,7 +845,7 @@ push / pull_request 到 master 时自动运行
 
 #### 现象
 
-`docs/refactor/05_execution_checklist.md` 中大量 M1-M8 任务仍然标记为 `TODO`，但代码中已经存在对应实现和测试，例如：
+该问题已部分解决。`docs/refactor/05_execution_checklist.md` 已按当前代码状态同步 M1-M8，并区分 `DONE` / `PARTIAL` / `TODO`。后续仍需要持续维护，避免新能力落地后文档再次漂移。
 
 ```text
 scripts/lib/hash.js
@@ -899,28 +962,29 @@ xhs-manage task: canonical-suggest-entity
 
 #### 现象
 
-`answer.js` 已经支持答案初始化、校验、状态同步，但当前主要能力仍是“答案文件管理”，还没有形成 P0 答案生产闭环。
-
-当前 canonical 中大量 `answer_status` 仍是：
+该问题已在 2026-06-30 的内容建设迭代中处理：
 
 ```text
-missing
+1. 12 个 P0 canonical 已补齐 ready 答案
+2. answer validate 通过
+3. answer sync 后 canonical_questions.jsonl 中 P0 missing answer = 0
+4. 剩余 6 个 missing answers 均为 P1 canonical
 ```
 
 #### 影响
 
 ```text
-1. review today 能列题，但无法直接沉淀可背诵答案
-2. GitHub Issue review card 的价值有限
-3. 面试准备场景还没有真正跑通
+1. P0 复习卡片已经可以用于 GitHub Issue 和移动端查看
+2. 后续新增 canonical 时仍需要继续走 missing / init-batch / validate / sync
+3. P1 答案和新 canonical 答案仍会影响复习覆盖面
 ```
 
 #### 建议
 
-拆成两个阶段：
+后续拆成两个阶段：
 
 ```text
-Phase A：先补齐 P0 answer init + 人工/AI 填写答案
+Phase A：对新 canonical 和 P1 canonical 继续补答案
 Phase B：再实现 answer generate / answer improve
 ```
 
@@ -928,21 +992,21 @@ Action 任务：
 
 ```text
 xhs-manage task: answer-validate
-xhs-manage task: answer-sync
-xhs-manage task: answer-missing-p0-report
+本地命令：answer missing / answer init-batch / answer sync
+后续 Action：answer-sync create_pr
 ```
 
 后续再新增：
 
 ```text
-node scripts/xhs.js answer missing --priority P0
-node scripts/xhs.js answer init-batch --priority P0 --limit 20
+node scripts/xhs.js answer missing --priority P1
+node scripts/xhs.js answer init-batch --priority P1 --limit 20
 ```
 
 #### 验收标准
 
 ```text
-1. P0 canonical 至少 20 个 answer_status != missing
+1. P0 canonical answer_status 全部为 ready
 2. answer validate 通过
 3. answer sync 后 canonical_questions.jsonl 状态正确
 4. review issue card 能展示答案摘要
@@ -1022,10 +1086,11 @@ schema 校验通过，但 taxonomy summary 中 `strict_ok` 为 false，并存在
 
 短期不要强制修复全部历史数据。
 
-建议 Action 化报告：
+当前可以先通过 `quality-report` 跟踪，后续再拆独立 taxonomy task：
 
 ```text
-xhs-manage task: taxonomy-report
+xhs-manage task: quality-report
+后续：xhs-manage task: taxonomy-report
 ```
 
 并按频次逐步迁移：
@@ -1051,38 +1116,33 @@ xhs-manage task: taxonomy-report
 
 #### 现象
 
-当前质量信息分散在多个 manifest 中：
+该问题已通过 `report quality` 和 `xhs-weekly-report.yml` 初步解决。当前质量报告会汇总：
 
 ```text
-data/manifests/quality/*.json
-data/manifests/canonical/*.json
-review/progress.json
-review/answers/*.md
+questions / canonical / answers / review / taxonomy / indexes / issues
 ```
 
-需要人工分别查看。
-
-#### 影响
-
-```text
-1. AI 很难用一个入口判断下一步优先级
-2. 人也无法快速看到项目当前健康度
-3. weekly report 无法自然生成
-```
-
-#### 建议
-
-新增命令：
-
-```bash
-node scripts/xhs.js report quality
-```
-
-输出：
+输出位置：
 
 ```text
 data/manifests/reports/quality_report.json
 review/plans/quality_report.md
+```
+
+#### 影响
+
+```text
+1. AI 和人工现在可以用一个入口判断下一步优先级
+2. weekly report 已经可以上传 artifact
+3. 后续仍需要把报告结论转成 Issue 或 PR 审查任务
+```
+
+#### 建议
+
+当前命令：
+
+```bash
+node scripts/xhs.js report quality
 ```
 
 Action 任务：
@@ -1090,6 +1150,14 @@ Action 任务：
 ```text
 xhs-manage task: quality-report
 xhs-weekly-report.yml
+```
+
+后续增强：
+
+```text
+1. weekly-report 可选创建 GitHub Issue
+2. quality-report 可按 company / domain / priority 输出子报告
+3. AI 根据 next_actions 自动提出下一轮任务
 ```
 
 #### 验收标准
@@ -1117,7 +1185,7 @@ xhs-weekly-report.yml
 
 #### 建议
 
-Action 中先只开放：
+Action 中已开放：
 
 ```text
 issue-sync-dry-run
@@ -1149,39 +1217,39 @@ issue-sync-apply
 
 ## 18. Review 问题到 Action 任务的映射
 
-| Review 问题 | 优先级 | 对应 Action / 命令 | 验收信号 |
-|---|---:|---|---|
-| CI 缺失 | P0 | `ci.yml` | push/PR 自动校验 |
-| 文档状态过期 | P0 | `docs-status-check` / 人工修正 | checklist 与代码一致 |
-| canonical 覆盖不足 | P0 | `canonical-suggest-hotspot` / `canonical-suggest-entity` | canonical >= 100 |
-| P0 答案缺失 | P0 | `answer-missing-p0-report` / `answer-sync` | P0 missing 下降 |
-| Review 未真实使用 | P1 | `review-today` / `review-weak` | review_count 增长 |
-| taxonomy legacy alias 多 | P1 | `taxonomy-report` | legacy_alias_count 可跟踪 |
-| 质量报告分散 | P1 | `quality-report` | 单一报告生成 |
-| issue sync 需要权限控制 | P2 | `issue-sync-dry-run` / `issue-sync-apply` | dry-run 先行，apply 受控 |
+| Review 问题 | 优先级 | 当前状态 | 对应 Action / 命令 | 验收信号 |
+|---|---:|---|---|---|
+| CI 缺失 | P0 | DONE | `ci.yml` | push/PR 自动校验 |
+| 文档状态过期 | P0 | PARTIAL | 人工修正 | checklist 与代码一致 |
+| canonical 覆盖不足 | P0 | IN_PROGRESS | `canonical-suggest-hotspot` / `canonical-suggest-entity` | canonical >= 100 |
+| P0 答案缺失 | P0 | DONE | `answer missing` / `answer sync` | P0 missing = 0 |
+| Review 未真实使用 | P1 | TODO | `review-today` / `review-weak` / `review mark` | review_count 增长 |
+| taxonomy legacy alias 多 | P1 | IN_PROGRESS | `quality-report` | legacy_alias_count 可跟踪 |
+| 质量报告分散 | P1 | DONE | `quality-report` / `xhs-weekly-report.yml` | 单一报告生成 |
+| issue sync 需要权限控制 | P2 | PARTIAL | `issue-sync-dry-run` / 后续 `issue-sync-apply` | dry-run 先行，apply 受控 |
 
 ---
 
 ## 19. 下一轮执行顺序
 
-结合本次 review，下一轮不要先做复杂的全自动流程，而应该按下面顺序推进：
+结合当前状态，下一轮不要先做复杂的全自动流程，而应该按下面顺序推进：
 
 ```text
 1. 保持 ci.yml 和 xhs-manage.yml 的只读任务稳定
-2. 修正并持续维护 docs/refactor/05_execution_checklist.md 状态
-3. 新增 answer-missing-p0-report 或质量报告命令
-4. weekly-report 汇总 canonical / answer / review / taxonomy 指标
-5. 最后再考虑 issue-sync-apply
+2. 用 canonical-suggest-hotspot / canonical-suggest-entity 扩大覆盖到 200+ assigned rows
+3. 对新增 canonical 和剩余 P1 canonical 补答案，运行 answer validate / answer sync
+4. 对 P0 ready answers 先跑 issue-sync-dry-run，人工确认后再设计 issue-sync-apply
+5. 开始真实复习：review today / review mark / review next，让 reviewed_count 增长
+6. 每周查看 quality-report，处理 taxonomy legacy alias Top 项
 ```
 
 原因：
 
 ```text
-没有 CI，AI 管理风险太高
-没有状态同步，AI 会重复做错任务
 没有 canonical 覆盖，答案和复习价值不足
-没有答案，review 只是题目列表
-没有 report，AI 无法稳定判断下一轮重点
+没有 issue dry-run 审查，移动端复习卡片容易批量误改
+没有真实 review mark，系统无法根据掌握度调整下一轮
+没有 weekly report 复盘，taxonomy 和覆盖率问题会再次分散
 ```
 
 ---
@@ -1189,19 +1257,23 @@ issue-sync-apply
 ## 20. 更新后的 Codex 执行提示词
 
 ```text
-请基于当前 liqiangcc/xhs 仓库继续推进 GitHub Actions + AI 管理层第二阶段。
+请基于当前 liqiangcc/xhs 仓库继续推进内容覆盖和受控 GitHub Issue 复习卡片。
 
 目标：
 1. 保持第一阶段只读任务不回退，所有新增 task 继续走白名单。
-2. 新增 answer-missing-p0-report 或 quality-report 任务。
-3. 新增写入型任务时，默认只允许 artifact 预览或 create_pr=true 的分支/PR 路径。
-4. 不允许传入任意 shell command。
-5. 默认权限 contents: read；需要写权限时单独说明。
-6. 不修改 note_tagged，不引入外部存储。
-7. 提交前确认 node --test、npm run ci:check、git diff --check 通过。
+2. 使用 canonical-suggest-hotspot / canonical-suggest-entity 扩大 canonical 覆盖。
+3. 对新增 canonical 继续补答案，运行 answer validate / answer sync。
+4. issue sync 先使用 dry-run；如果要新增 apply，必须单独 workflow、手动触发、issues: write 权限。
+5. 新增写入型任务时，默认只允许 artifact 预览或 create_pr=true 的分支/PR 路径。
+6. 不允许传入任意 shell command。
+7. 默认权限 contents: read；需要写权限时单独说明。
+8. 不修改 note_tagged，不引入外部存储。
+9. 提交前确认 node --test、npm run ci:check、git diff --check 通过。
 
 验收：
 - 第一阶段 validate / review 只读任务仍不产生业务数据变更。
-- answer / canonical / review 的缺口能被单一报告稳定暴露。
+- canonical assigned rows 增长，且 canonical check 通过。
+- 新增答案 answer validate 通过，answer sync 状态正确。
+- issue dry-run 能清楚展示将创建/更新哪些复习卡片。
 - docs/refactor/06_github_actions_ai_management.md 同步更新任务状态。
 ```

@@ -12,30 +12,39 @@ node scripts/xhs.js <command> [subcommand] [options]
 
 ## Current Status
 
-As of 2026-06-30, the M1-M8 core loop is implemented and pushed to `origin/master`: migration, validation, indexing, canonical question management, answer metadata validation/sync, and review progress.
+As of 2026-06-30, the M1-M8 core loop is implemented and pushed to `origin/master`: migration, validation, indexing, canonical question management, answer metadata validation/sync, review progress, issue-card rendering, and quality reporting.
 
 Current data snapshot:
 
+- 9,620 question rows, 9,362 valid rows
 - 18 canonical questions
 - 83 assigned question rows
 - 18 review progress records
-- 12 P0 plan items still missing answers in `review/plans/p0.md`
+- 12 ready P0 answers; P0 missing answers is now 0
+- 6 remaining missing answers are P1 canonical questions
+- 0 GitHub issue links synced so far
 
-The project is now in the content-building phase. The next useful work is writing answers, validating and syncing them, then widening canonical coverage.
+The project is now in the content-coverage and real-review phase. The P0 answer pass is done; the next useful work is widening canonical coverage, syncing selected ready answers into GitHub Issues for mobile review, and recording real review results.
 
 ## Next Steps
 
-1. Fill the P0 answers listed in `review/plans/p0.md`.
-2. After each answer batch, run `answer validate` and `answer sync`.
-3. Continue expanding canonical coverage with `canonical suggest --hotspot --limit 50`; the first target is 200+ assigned question rows.
-4. Start the real review loop with `review today` and `review mark`.
+1. Continue expanding canonical coverage with hotspot/entity suggestions; the near-term target is 200+ assigned question rows.
+2. After accepting new canonical records, use `answer missing` / `answer init-batch` to prepare the next answer batch.
+3. After each answer batch, run `answer validate`, `answer sync`, and `report quality`.
+4. Use `issue sync` dry-run first, then `--apply` only for reviewed ready cards that should appear on GitHub.
+5. Start the real review loop with `review today`, `review next`, and `review mark`.
 
 ```bash
-node scripts/xhs.js answer init --canonical-id <cq_id>
+node scripts/xhs.js canonical suggest --hotspot --limit 50
+node scripts/xhs.js canonical suggest --entity Redis --limit 50
+node scripts/xhs.js answer missing --priority P1
+node scripts/xhs.js answer init-batch --priority P1 --limit 20
 node scripts/xhs.js answer validate
 node scripts/xhs.js answer sync
-node scripts/xhs.js canonical suggest --hotspot --limit 50
-node scripts/xhs.js review today
+node scripts/xhs.js report quality
+node scripts/xhs.js issue sync --priority P0 --answer-status ready --repo liqiangcc/xhs
+node scripts/xhs.js review today --with-issues
+node scripts/xhs.js review next --with-issues
 node scripts/xhs.js review mark --canonical-id <cq_id> --result good
 ```
 
@@ -88,6 +97,8 @@ Answers are Markdown files bound to `canonical_id`.
 
 ```bash
 node scripts/xhs.js answer init --canonical-id <cq_id>
+node scripts/xhs.js answer init-batch --priority P1 --limit 20
+node scripts/xhs.js answer missing --priority P1
 node scripts/xhs.js answer status --missing
 node scripts/xhs.js answer validate
 node scripts/xhs.js answer sync
@@ -104,10 +115,13 @@ Answer files live at `review/answers/{canonical_id}.md`. The first line is requi
 Review progress is also bound to `canonical_id`.
 
 ```bash
-node scripts/xhs.js review prepare --target redis --limit 20 --priority P0
+node scripts/xhs.js review prepare --target redis --limit 20 --priority P0 --topic Redis
+node scripts/xhs.js review prepare --target metro --limit 20 --days 7 --company 字节
 node scripts/xhs.js review today --limit 20
 node scripts/xhs.js review today --limit 20 --with-issues
 node scripts/xhs.js review mark --canonical-id <cq_id> --result good --notes "<text>"
+node scripts/xhs.js review mark --canonical-id <cq_id> --status good --notes "<text>"
+node scripts/xhs.js review next --limit 20 --days 7 --with-issues
 node scripts/xhs.js review weak --limit 20 --with-issues
 ```
 
@@ -152,6 +166,7 @@ node scripts/xhs.js validate all
 node scripts/xhs.js index build --check
 node scripts/xhs.js canonical check
 node scripts/xhs.js answer validate
+node scripts/xhs.js report quality --noWrite
 node scripts/xhs.js issue check
 ```
 
@@ -161,6 +176,7 @@ With npm:
 npm test
 npm run validate
 npm run index:check
+npm run report:quality
 ```
 
 ## Legacy

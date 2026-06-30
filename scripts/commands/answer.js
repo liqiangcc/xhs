@@ -45,10 +45,12 @@ function parseArgs(argv) {
 
 function printHelp() {
     console.log([
-        'Usage: node scripts/xhs.js answer <init|status|validate|sync> [options]',
+        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync> [options]',
         '',
         'Commands:',
-        '  init --canonical-id <id> [--overwrite]',
+        '  init --canonical-id <id> [--overwrite] [--status <draft|ready|needs_update>]',
+        '  init-batch [--priority <P0|P1|P2|P3>] [--limit <n>] [--status <draft|ready|needs_update>]',
+        '  missing [--priority <P0|P1|P2|P3>] [--limit <n>]',
         '  status [--missing|--draft|--ready]',
         '  validate',
         '  sync',
@@ -71,6 +73,7 @@ function runInit(options = {}) {
         answersDir: paths.answersDir,
         overwrite: options.overwrite,
         date: options.date || DEFAULT_BUILD_DATE,
+        status: options.status,
     });
     return {
         schema_version: 'answer_init_result.v1',
@@ -78,6 +81,81 @@ function runInit(options = {}) {
         canonical_id: canonicalId,
         created: result.created,
         answer_path: path.relative(root, result.filePath),
+    };
+}
+
+function answerStatusFor(record, statuses) {
+    return statuses.get(record.canonical_id) || record.answer_status || 'missing';
+}
+
+function missingRows(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = defaultPaths(root);
+    const limit = Number(options.limit || 100);
+    const statuses = statusByCanonicalId({ answersDir: paths.answersDir });
+    return loadCanonicalQuestions({ filePath: paths.canonicalQuestions })
+        .map((record) => ({
+            canonical_id: record.canonical_id,
+            canonical_title: record.canonical_title,
+            review_priority: record.review_priority,
+            answer_status: answerStatusFor(record, statuses),
+            frequency: record.frequency,
+            primary_domain: record.primary_domain,
+            primary_entities: record.primary_entities,
+            companies: record.companies,
+        }))
+        .filter((row) => row.answer_status === 'missing')
+        .filter((row) => !options.priority || row.review_priority === options.priority)
+        .sort((a, b) =>
+            ({ P0: 0, P1: 1, P2: 2, P3: 3 }[a.review_priority] ?? 9) - ({ P0: 0, P1: 1, P2: 2, P3: 3 }[b.review_priority] ?? 9)
+            || b.frequency - a.frequency
+            || a.canonical_id.localeCompare(b.canonical_id)
+        )
+        .slice(0, limit);
+}
+
+function runMissing(options = {}) {
+    const rows = missingRows(options);
+    return {
+        schema_version: 'answer_missing_report.v1',
+        ok: true,
+        priority: options.priority || null,
+        returned_count: rows.length,
+        rows,
+    };
+}
+
+function runInitBatch(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = defaultPaths(root);
+    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
+    const byId = new Map(records.map((record) => [record.canonical_id, record]));
+    const rows = missingRows(options);
+    const initialized = [];
+    for (const row of rows) {
+        const record = byId.get(row.canonical_id);
+        const filePath = answerPath(record.canonical_id, { answersDir: paths.answersDir });
+        const result = options.noWrite
+            ? { created: false, filePath }
+            : writeAnswerTemplate(record, {
+                answersDir: paths.answersDir,
+                overwrite: options.overwrite,
+                date: options.date || DEFAULT_BUILD_DATE,
+                status: options.status || 'draft',
+            });
+        initialized.push({
+            canonical_id: record.canonical_id,
+            created: result.created,
+            answer_path: path.relative(root, result.filePath),
+        });
+    }
+    return {
+        schema_version: 'answer_init_batch_result.v1',
+        ok: true,
+        priority: options.priority || null,
+        requested_count: rows.length,
+        created_count: initialized.filter((row) => row.created).length,
+        rows: initialized,
     };
 }
 
@@ -177,6 +255,8 @@ function main(argv = process.argv) {
     try {
         let result;
         if (command === 'init') result = runInit(options);
+        else if (command === 'init-batch') result = runInitBatch(options);
+        else if (command === 'missing') result = runMissing(options);
         else if (command === 'status') result = runStatus(options);
         else if (command === 'validate') result = runValidate(options);
         else if (command === 'sync') result = runSync(options);
@@ -196,6 +276,8 @@ if (require.main === module) {
 
 module.exports = {
     runInit,
+    runInitBatch,
+    runMissing,
     runStatus,
     runValidate,
     runSync,

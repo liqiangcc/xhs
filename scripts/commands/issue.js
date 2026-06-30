@@ -20,6 +20,7 @@ const {
 } = require('../lib/issue_store');
 const { loadProgress, progressMap } = require('../lib/review_store');
 const { writeRunManifest } = require('../lib/run_manifest');
+const { applyGlobalBooleanOption } = require('../lib/cli_options');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_REPO = 'liqiangcc/xhs';
@@ -43,6 +44,7 @@ function parseArgs(argv) {
         const arg = args[index];
         if (arg.startsWith('--')) {
             const key = arg.replace(/^--/, '');
+            if (applyGlobalBooleanOption(options, key)) continue;
             if (booleanFlags.has(key)) options[key] = true;
             else options[key] = args[++index];
         } else {
@@ -61,6 +63,10 @@ function printHelp() {
         '  sync --canonical-id <id> [--repo <owner/repo>] [--apply] [--allow-missing]',
         '  sync [--priority <P0|P1|P2|P3>] [--answer-status <status>] [--repo <owner/repo>] [--apply]',
         '  check',
+        '',
+        'Options:',
+        '  --noWrite     Print only; do not write the run manifest',
+        '  --noManifest  Do not write the run manifest',
     ].join('\n'));
 }
 

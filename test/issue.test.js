@@ -6,7 +6,7 @@ const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ensureDir, readJson, writeJson, writeJsonl } = require('../scripts/lib/io');
-const { runRender, runSync, runCheck } = require('../scripts/commands/issue');
+const { runRender, runSync, runCheck, main: issueMain } = require('../scripts/commands/issue');
 
 function canonical(canonicalId, status = 'ready') {
     return {
@@ -108,6 +108,40 @@ test('dry-run sync does not call GitHub or write issue links', () => {
     assert.equal(result.applied, false);
     assert.equal(result.rows[0].action, 'create');
     assert.equal(called, false);
+    assert.equal(fs.existsSync(path.join(root, 'review', 'issue_links.json')), false);
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('issue sync --noManifest does not write run manifests', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-issue-no-manifest-'));
+    writeJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'), [canonical('cq_redis_fast')]);
+    writeReadyAnswer(root, 'cq_redis_fast');
+
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = () => {};
+    try {
+        const code = issueMain([
+            'node',
+            'scripts/commands/issue.js',
+            'sync',
+            '--root',
+            root,
+            '--canonical-id',
+            'cq_redis_fast',
+            '--repo',
+            'liqiangcc/xhs',
+            '--noManifest',
+        ]);
+        assert.equal(code, 0);
+    } finally {
+        console.log = originalLog;
+        console.error = originalError;
+    }
+
+    assert.equal(fs.existsSync(path.join(root, 'data', 'manifests', 'runs')), false);
     assert.equal(fs.existsSync(path.join(root, 'review', 'issue_links.json')), false);
 
     fs.rmSync(root, { recursive: true, force: true });

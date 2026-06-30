@@ -6,7 +6,7 @@ const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ensureDir, writeJsonl, readJsonl } = require('../scripts/lib/io');
-const { runInit, runStatus, runValidate, runSync } = require('../scripts/commands/answer');
+const { runInit, runInitBatch, runMissing, runStatus, runValidate, runSync } = require('../scripts/commands/answer');
 
 function canonical(canonicalId, status = 'missing') {
     return {
@@ -78,6 +78,32 @@ test('validates malformed answer metadata and refuses sync on invalid files', ()
     assert.equal(synced.ok, false);
     assert.equal(synced.synced, false);
     assert.equal(readJsonl(canonicalPath)[0].answer_status, 'missing');
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('lists missing answers and initializes a priority batch with expanded template', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-batch-'));
+    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
+    writeJsonl(canonicalPath, [
+        canonical('cq_redis_fast'),
+        { ...canonical('cq_hashmap'), review_priority: 'P1' },
+    ]);
+
+    const missing = runMissing({ root, priority: 'P0', limit: 10 });
+    assert.equal(missing.returned_count, 1);
+    assert.equal(missing.rows[0].canonical_id, 'cq_redis_fast');
+
+    const initialized = runInitBatch({ root, priority: 'P0', limit: 10, date: '2026-06-30' });
+    assert.equal(initialized.created_count, 1);
+    assert.equal(runMissing({ root, priority: 'P0', limit: 10 }).returned_count, 0);
+
+    const answer = fs.readFileSync(path.join(root, 'review', 'answers', 'cq_redis_fast.md'), 'utf8');
+    assert.match(answer, /## 1 分钟版/);
+    assert.match(answer, /## 3 分钟版/);
+    assert.match(answer, /## 原理机制/);
+    assert.match(answer, /## 项目经验版/);
+    assert.match(answer, /## 易错点/);
 
     fs.rmSync(root, { recursive: true, force: true });
 });

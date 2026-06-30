@@ -13,15 +13,35 @@ on:
           - index-check
           - canonical-check
           - canonical-suggest-hotspot
+          - canonical-suggest-entity
           - answer-validate
+          - quality-report
           - review-today
           - review-weak
+          - issue-sync-dry-run
+      entity:
+        description: Entity for canonical-suggest-entity
+        required: false
+      canonical_id:
+        description: Canonical id for single-item issue sync
+        required: false
+      priority:
+        description: Priority filter for issue sync
+        required: false
+        default: "P0"
+      answer_status:
+        description: Answer status filter for issue sync
+        required: false
+      repo:
+        description: GitHub repository for issue sync
+        required: false
+        default: "liqiangcc/xhs"
       limit:
         description: Limit for review list or canonical suggestion tasks
         required: false
         default: "50"
       create_pr:
-        description: Create a pull request for generated canonical candidates
+        description: Create a pull request for generated reports or candidates
         required: false
         type: boolean
         default: false
@@ -31,7 +51,7 @@ permissions:
 
 jobs:
   run-task:
-    if: ${{ inputs.task != 'canonical-suggest-hotspot' || !inputs.create_pr }}
+    if: ${{ (inputs.task != 'canonical-suggest-hotspot' && inputs.task != 'canonical-suggest-entity' && inputs.task != 'quality-report') || !inputs.create_pr }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,6 +68,11 @@ jobs:
         env:
           TASK: ${{ inputs.task }}
           LIMIT: ${{ inputs.limit }}
+          ENTITY: ${{ inputs.entity }}
+          CANONICAL_ID: ${{ inputs.canonical_id }}
+          PRIORITY: ${{ inputs.priority }}
+          ANSWER_STATUS: ${{ inputs.answer_status }}
+          REPO: ${{ inputs.repo }}
         run: |
           set -euo pipefail
           case "$TASK" in
@@ -66,14 +91,31 @@ jobs:
             canonical-suggest-hotspot)
               node scripts/xhs.js canonical suggest --hotspot --limit "$LIMIT" --noManifest
               ;;
+            canonical-suggest-entity)
+              if [ -z "$ENTITY" ]; then
+                echo "canonical-suggest-entity requires entity input" >&2
+                exit 1
+              fi
+              node scripts/xhs.js canonical suggest --entity "$ENTITY" --limit "$LIMIT" --noManifest
+              ;;
             answer-validate)
               npm run ci:answer:validate
+              ;;
+            quality-report)
+              node scripts/xhs.js report quality --noManifest
               ;;
             review-today)
               node scripts/xhs.js review today --limit "$LIMIT" --with-issues --noWrite
               ;;
             review-weak)
               node scripts/xhs.js review weak --limit "$LIMIT" --with-issues --noWrite
+              ;;
+            issue-sync-dry-run)
+              args=(issue sync --repo "$REPO")
+              if [ -n "$CANONICAL_ID" ]; then args+=(--canonical-id "$CANONICAL_ID"); fi
+              if [ -n "$PRIORITY" ]; then args+=(--priority "$PRIORITY"); fi
+              if [ -n "$ANSWER_STATUS" ]; then args+=(--answer-status "$ANSWER_STATUS"); fi
+              node scripts/xhs.js "${args[@]}" --noManifest
               ;;
             *)
               echo "Unsupported task: $TASK" >&2
@@ -82,19 +124,29 @@ jobs:
           esac
 
       - name: Upload canonical candidates
-        if: ${{ inputs.task == 'canonical-suggest-hotspot' }}
+        if: ${{ inputs.task == 'canonical-suggest-hotspot' || inputs.task == 'canonical-suggest-entity' }}
         uses: actions/upload-artifact@v4
         with:
           name: canonical-candidates
           path: data/manifests/canonical/canonical_candidates.json
           if-no-files-found: error
 
+      - name: Upload quality report
+        if: ${{ inputs.task == 'quality-report' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: |
+            data/manifests/reports/quality_report.json
+            review/plans/quality_report.md
+          if-no-files-found: error
+
       - name: Verify no generated changes
-        if: ${{ inputs.task != 'canonical-suggest-hotspot' }}
+        if: ${{ inputs.task != 'canonical-suggest-hotspot' && inputs.task != 'canonical-suggest-entity' && inputs.task != 'quality-report' }}
         run: git diff --exit-code
 
   canonical-suggest-pr:
-    if: ${{ inputs.task == 'canonical-suggest-hotspot' && inputs.create_pr }}
+    if: ${{ (inputs.task == 'canonical-suggest-hotspot' || inputs.task == 'canonical-suggest-entity') && inputs.create_pr }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -110,8 +162,23 @@ jobs:
 
       - name: Generate canonical candidates
         env:
+          TASK: ${{ inputs.task }}
           LIMIT: ${{ inputs.limit }}
-        run: node scripts/xhs.js canonical suggest --hotspot --limit "$LIMIT" --noManifest
+          ENTITY: ${{ inputs.entity }}
+        run: |
+          set -euo pipefail
+          case "$TASK" in
+            canonical-suggest-hotspot)
+              node scripts/xhs.js canonical suggest --hotspot --limit "$LIMIT" --noManifest
+              ;;
+            canonical-suggest-entity)
+              if [ -z "$ENTITY" ]; then
+                echo "canonical-suggest-entity requires entity input" >&2
+                exit 1
+              fi
+              node scripts/xhs.js canonical suggest --entity "$ENTITY" --limit "$LIMIT" --noManifest
+              ;;
+          esac
 
       - name: Upload canonical candidates
         uses: actions/upload-artifact@v4
@@ -123,7 +190,10 @@ jobs:
       - name: Create pull request
         env:
           GH_TOKEN: ${{ github.token }}
-          BRANCH: automation/canonical-suggest-hotspot-${{ github.run_id }}
+          TASK: ${{ inputs.task }}
+          LIMIT: ${{ inputs.limit }}
+          ENTITY: ${{ inputs.entity }}
+          BRANCH: automation/canonical-suggest-${{ github.run_id }}
         run: |
           set -euo pipefail
           if git diff --quiet -- data/manifests/canonical/canonical_candidates.json; then
@@ -139,5 +209,54 @@ jobs:
           gh pr create \
             --base master \
             --head "$BRANCH" \
-            --title "chore: update canonical hotspot candidates" \
-            --body "Generated by xhs-manage canonical-suggest-hotspot with limit=${LIMIT}."
+            --title "chore: update canonical candidates" \
+            --body "Generated by xhs-manage ${TASK} with limit=${LIMIT}${ENTITY:+, entity=${ENTITY}}."
+
+  quality-report-pr:
+    if: ${{ inputs.task == 'quality-report' && inputs.create_pr }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate quality report
+        run: node scripts/xhs.js report quality --noManifest
+
+      - name: Upload quality report
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: |
+            data/manifests/reports/quality_report.json
+            review/plans/quality_report.md
+          if-no-files-found: error
+
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/quality-report-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/manifests/reports/quality_report.json review/plans/quality_report.md; then
+            echo "No quality report changes to propose."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add data/manifests/reports/quality_report.json review/plans/quality_report.md
+          git commit -m "chore: update quality report"
+          git push origin "$BRANCH"
+          gh pr create \
+            --base master \
+            --head "$BRANCH" \
+            --title "chore: update quality report" \
+            --body "Generated by xhs-manage quality-report."

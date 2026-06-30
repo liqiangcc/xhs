@@ -456,9 +456,9 @@ split 后 validate canonical 通过
 
 ## 7.1 定义答案模板
 
-状态：PARTIAL
+状态：DONE
 
-说明：已支持 `review/answers/{canonical_id}.md` 模板和内嵌 metadata；当前模板是“核心结论 / 关键细节 / 常见追问”，尚未覆盖原计划中的 1 分钟版、3 分钟版、项目经验版、易错点等完整结构。
+说明：已支持 `review/answers/{canonical_id}.md` 模板和内嵌 metadata；模板覆盖核心结论、1 分钟版、3 分钟版、关键细节、原理机制、项目经验版、常见追问、易错点。
 
 任务：
 
@@ -477,7 +477,7 @@ split 后 validate canonical 通过
 
 状态：PARTIAL
 
-说明：`scripts/commands/answer.js` 已支持 `init`、`status`、`validate`、`sync`；尚未实现 AI 生成型的 `generate` / `batch`。
+说明：`scripts/commands/answer.js` 已支持 `init`、`init-batch`、`missing`、`status`、`validate`、`sync`；尚未实现 AI 生成型的 `generate`。
 
 任务：
 
@@ -520,7 +520,9 @@ split 后 validate canonical 通过
 
 ## 8.1 review strategy
 
-状态：TODO
+状态：DONE
+
+说明：已新增 `config/review_strategy.json`，`review today`、`review next`、`review weak` 和 `review prepare` 会通过 `review_scheduler` 按优先级、到期时间、掌握状态、频次排序。
 
 任务：
 
@@ -555,9 +557,9 @@ prepare 和 review_scheduler 从配置读取策略
 
 ## 8.3 review scheduler
 
-状态：PARTIAL
+状态：DONE
 
-说明：复习间隔和 weak 优先逻辑已在 `scripts/lib/review_store.js` 与 `review weak` 中落地；尚未抽出独立的 `scripts/lib/review_scheduler.js` 或配置化 strategy。
+说明：已新增 `scripts/lib/review_scheduler.js`，并由 `config/review_strategy.json` 驱动排序；weak、到期、P0 高频题会优先进入下一轮。
 
 任务：
 
@@ -576,9 +578,9 @@ mastered 题权重下降
 
 ## 8.4 prepare 命令
 
-状态：PARTIAL
+状态：DONE
 
-说明：已实现 `node scripts/xhs.js review prepare --target ...`，可生成 `review/plans/*.md`；尚未按原计划单独提供 `scripts/commands/prepare.js`，也未覆盖 `--company / --topic / --level / --days` 全部参数。
+说明：已实现 `node scripts/xhs.js review prepare --target ...`，可生成 `review/plans/*.md`，并支持 `--company`、`--topic`、`--level`、`--days`、`--with-issues` 等筛选。实现收敛在 `scripts/commands/review.js`，未单独拆出 `prepare.js`。
 
 任务：
 
@@ -596,9 +598,9 @@ mastered 题权重下降
 
 ## 8.5 review 命令
 
-状态：PARTIAL
+状态：DONE
 
-说明：已支持 `review today`、`review mark --result`、`review weak`，并支持 issue 链接展示；尚未实现 `review next`，原计划中的 `--status` 实际实现为 `--result`。
+说明：已支持 `review today`、`review mark --result`、`review mark --status`、`review next`、`review weak`，并支持 issue 链接展示。
 
 任务：
 
@@ -706,6 +708,7 @@ migration 执行有 manifest
     "test": "node --test",
     "validate": "node scripts/xhs.js validate all",
     "index:check": "node scripts/xhs.js index build --check",
+    "report:quality": "node scripts/xhs.js report quality",
     "ci:check": "npm test && npm run ci:migrate:check && npm run ci:validate && npm run ci:index:check && npm run ci:canonical:check && npm run ci:answer:validate"
   }
 }
@@ -725,6 +728,7 @@ migration 执行有 manifest
 新增 test/review.test.js
 新增 test/canonical.test.js
 新增 test/answer.test.js
+新增 test/report.test.js
 新增 test/issue.test.js
 新增 test/no_write.test.js
 ```

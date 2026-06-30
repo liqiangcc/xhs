@@ -1,0 +1,33 @@
+name: XHS Weekly Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  quality-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate quality report
+        run: node scripts/xhs.js report quality --noManifest
+
+      - name: Upload quality report
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: |
+            data/manifests/reports/quality_report.json
+            review/plans/quality_report.md
+          if-no-files-found: error
