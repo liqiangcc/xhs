@@ -12,6 +12,7 @@ const {
     readAnswerFile,
     writeAnswerTemplate,
     statusByCanonicalId,
+    validateAnswerContent,
 } = require('../lib/answer_store');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
@@ -30,7 +31,7 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0];
     const options = {};
-    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite']);
+    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict']);
     for (let index = 1; index < args.length; index++) {
         const arg = args[index];
         if (arg.startsWith('--')) {
@@ -52,12 +53,13 @@ function printHelp() {
         '  init-batch [--priority <P0|P1|P2|P3>] [--limit <n>] [--status <draft|ready|needs_update>]',
         '  missing [--priority <P0|P1|P2|P3>] [--limit <n>]',
         '  status [--missing|--draft|--ready]',
-        '  validate',
+        '  validate [--strict]',
         '  sync',
         '',
         'Options:',
-        '  --noWrite     Do not write run manifests for read-only commands',
-        '  --noManifest  Do not write the run manifest',
+        '  --strict     Validate ready answer content sections and TODO placeholders',
+        '  --noWrite    Do not write run manifests for read-only commands',
+        '  --noManifest Do not write the run manifest',
     ].join('\n'));
 }
 
@@ -164,32 +166,59 @@ function runValidate(options = {}) {
     const paths = defaultPaths(root);
     const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
     const canonicalIds = new Set(records.map((record) => record.canonical_id));
+    const statuses = new Map();
     const errors = [];
     const files = [];
     for (const filePath of listAnswerFiles({ answersDir: paths.answersDir })) {
+        const relativeFile = path.relative(root, filePath);
         try {
             const answer = readAnswerFile(filePath);
             const expectedId = path.basename(filePath, '.md');
             if (answer.metadata.schema_version !== 'answer.v1') {
-                errors.push({ file: path.relative(root, filePath), error: 'invalid_schema_version' });
+                errors.push({ file: relativeFile, error: 'invalid_schema_version' });
             }
             if (answer.metadata.canonical_id !== expectedId) {
-                errors.push({ file: path.relative(root, filePath), error: 'filename_metadata_mismatch', canonical_id: answer.metadata.canonical_id, expected_id: expectedId });
+                errors.push({ file: relativeFile, error: 'filename_metadata_mismatch', canonical_id: answer.metadata.canonical_id, expected_id: expectedId });
             }
             if (!canonicalIds.has(answer.metadata.canonical_id)) {
-                errors.push({ file: path.relative(root, filePath), error: 'unknown_canonical_id', canonical_id: answer.metadata.canonical_id });
+                errors.push({ file: relativeFile, error: 'unknown_canonical_id', canonical_id: answer.metadata.canonical_id });
             }
             if (!['draft', 'ready', 'needs_update'].includes(answer.metadata.status)) {
-                errors.push({ file: path.relative(root, filePath), error: 'invalid_status', status: answer.metadata.status });
+                errors.push({ file: relativeFile, error: 'invalid_status', status: answer.metadata.status });
             }
-            files.push({ file: path.relative(root, filePath), canonical_id: answer.metadata.canonical_id, status: answer.metadata.status });
+            const status = answer.metadata.status || 'draft';
+            statuses.set(answer.metadata.canonical_id, status);
+            if (options.strict) {
+                for (const issue of validateAnswerContent(answer)) {
+                    errors.push({ file: relativeFile, ...issue });
+                }
+            }
+            files.push({ file: relativeFile, canonical_id: answer.metadata.canonical_id, status });
         } catch (error) {
-            errors.push({ file: path.relative(root, filePath), error: error.message });
+            errors.push({ file: relativeFile, error: error.message });
         }
     }
+
+    if (options.strict) {
+        for (const record of records) {
+            if (record.answer_status !== 'ready') continue;
+            const actualStatus = statuses.get(record.canonical_id) || 'missing';
+            if (actualStatus !== 'ready') {
+                errors.push({
+                    file: null,
+                    error: 'ready_status_without_ready_file',
+                    canonical_id: record.canonical_id,
+                    expected_status: 'ready',
+                    actual_status: actualStatus,
+                });
+            }
+        }
+    }
+
     return {
         schema_version: 'answer_validate_report.v1',
         ok: errors.length === 0,
+        strict: Boolean(options.strict),
         answer_count: files.length,
         error_count: errors.length,
         files,
