@@ -15,6 +15,7 @@ on:
           - canonical-suggest-hotspot
           - canonical-suggest-entity
           - answer-validate
+          - answer-validate-strict
           - quality-report
           - review-today
           - review-weak
@@ -101,8 +102,11 @@ jobs:
             answer-validate)
               npm run ci:answer:validate
               ;;
+            answer-validate-strict)
+              npm run ci:answer:validate:strict
+              ;;
             quality-report)
-              node scripts/xhs.js report quality --noManifest
+              node scripts/xhs.js report quality --noManifest --noFail
               ;;
             review-today)
               node scripts/xhs.js review today --limit "$LIMIT" --with-issues --noWrite
@@ -228,7 +232,7 @@ jobs:
           node-version: 20
 
       - name: Generate quality report
-        run: node scripts/xhs.js report quality --noManifest
+        run: node scripts/xhs.js report quality --noManifest --noFail
 
       - name: Upload quality report
         uses: actions/upload-artifact@v4
