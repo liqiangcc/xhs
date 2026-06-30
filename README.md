@@ -30,7 +30,7 @@ The project is now in the content-coverage and real-review phase. The P0 answer 
 
 1. Continue expanding canonical coverage with hotspot/entity suggestions; the near-term target is 200+ assigned question rows.
 2. After accepting new canonical records, use `answer missing` / `answer init-batch` to prepare the next answer batch.
-3. After each answer batch, run `answer validate`, `answer sync`, and `report quality`.
+3. After each answer batch, run `answer validate`, `answer validate --strict`, `answer sync`, and `report quality`.
 4. Use `issue sync` dry-run first, then `--apply` only for reviewed ready cards that should appear on GitHub.
 5. Start the real review loop with `review today`, `review next`, and `review mark`.
 
@@ -40,6 +40,7 @@ node scripts/xhs.js canonical suggest --entity Redis --limit 50
 node scripts/xhs.js answer missing --priority P1
 node scripts/xhs.js answer init-batch --priority P1 --limit 20
 node scripts/xhs.js answer validate
+node scripts/xhs.js answer validate --strict
 node scripts/xhs.js answer sync
 node scripts/xhs.js report quality
 node scripts/xhs.js issue sync --priority P0 --answer-status ready --repo liqiangcc/xhs
@@ -91,6 +92,8 @@ Important files:
 - `data/indexes/*.json`
 - `data/manifests/canonical/*.json`
 
+`canonical suggest` always writes its business output to `data/manifests/canonical/canonical_candidates.json`. `--noManifest` only suppresses `data/manifests/runs/latest_*.json`; it does not suppress canonical candidate output.
+
 ## Answers
 
 Answers are Markdown files bound to `canonical_id`.
@@ -101,6 +104,7 @@ node scripts/xhs.js answer init-batch --priority P1 --limit 20
 node scripts/xhs.js answer missing --priority P1
 node scripts/xhs.js answer status --missing
 node scripts/xhs.js answer validate
+node scripts/xhs.js answer validate --strict
 node scripts/xhs.js answer sync
 ```
 
@@ -109,6 +113,8 @@ Answer files live at `review/answers/{canonical_id}.md`. The first line is requi
 ```markdown
 <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_example","version":1,"status":"draft","updated_at":"2026-06-30"} -->
 ```
+
+`answer validate --strict` adds content-quality checks for ready answers: no TODO placeholders, required sections present, and non-empty ready sections.
 
 ## Review
 
@@ -130,6 +136,8 @@ Review data lives in:
 - `review/progress.json`
 - `review/sessions/{YYYY-MM-DD}.json`
 - `review/plans/{target}.md`
+
+`review prepare --noWrite` is a dry run: it returns rows without writing `review/plans/*.md`, `review/progress.json`, or run manifests.
 
 ## GitHub Issue Cards
 
@@ -155,6 +163,34 @@ gh issue list --label "answer:ready"
 
 `issue sync --apply` keeps `priority:*`, `answer:*`, `domain:*`, and `review:*` labels in sync while preserving unrelated manual labels.
 
+## GitHub Actions
+
+The repository has three management workflows:
+
+```text
+.github/workflows/ci.yml
+.github/workflows/xhs-manage.yml
+.github/workflows/xhs-weekly-report.yml
+```
+
+Common checks:
+
+```bash
+gh run list --workflow CI --limit 5
+gh run list --workflow "XHS Manage" --limit 5
+gh run list --workflow "XHS Weekly Report" --limit 5
+gh run view <run-id> --log-failed
+```
+
+Manual AI-friendly task trigger examples:
+
+```bash
+gh workflow run xhs-manage.yml -f task=validate
+gh workflow run xhs-manage.yml -f task=answer-validate-strict
+gh workflow run xhs-manage.yml -f task=quality-report
+gh workflow run xhs-manage.yml -f task=canonical-suggest-hotspot -f limit=50
+```
+
 ## Verification
 
 Use Node's built-in test runner; no package install is required for tests.
@@ -166,6 +202,7 @@ node scripts/xhs.js validate all
 node scripts/xhs.js index build --check
 node scripts/xhs.js canonical check
 node scripts/xhs.js answer validate
+node scripts/xhs.js answer validate --strict
 node scripts/xhs.js report quality --noWrite
 node scripts/xhs.js issue check
 ```
@@ -176,7 +213,9 @@ With npm:
 npm test
 npm run validate
 npm run index:check
+npm run answer:validate:strict
 npm run report:quality
+npm run ci:check
 ```
 
 ## Legacy
