@@ -11,11 +11,13 @@
 本目录是一套完整的长期重构规划文档，建议按顺序阅读：
 
 ```text
-01_requirements.md        业务目标与需求定义
-02_domain_model.md        领域模型与核心对象
-03_technical_design.md    技术方案与架构设计
-04_refactor_plan.md       分阶段重构路线图
-05_execution_checklist.md 执行清单与验收标准
+01_requirements.md                    业务目标与需求定义
+02_domain_model.md                    领域模型与核心对象
+03_technical_design.md                技术方案与架构设计
+04_refactor_plan.md                   分阶段重构路线图
+05_execution_checklist.md             执行清单与验收标准
+06_github_actions_ai_management.md    GitHub Actions + AI 管理层
+07_actions_review_todo.md             Actions 管理层 review 后的修复 TODO
 ```
 
 这些文档的关系是：
@@ -33,7 +35,19 @@
   ↓
 执行清单
   ↓
+GitHub Actions 管理层
+  ↓
+Actions Review TODO
+  ↓
 循环迭代
+```
+
+当前执行优先级：
+
+```text
+1. 05_execution_checklist.md：长期主路线和验收清单
+2. 06_github_actions_ai_management.md：AI 触发 Action 的管理层设计
+3. 07_actions_review_todo.md：当前 Action 管理层 review 后必须先修的边界问题
 ```
 
 ---
@@ -137,6 +151,7 @@ Index Loop       查询索引可重建
 Canonical Loop   同义题聚合和热点统计
 Answer Loop      高频题答案持续版本化
 Review Loop      复习计划、每日任务、掌握度反馈
+Actions Loop     AI 触发白名单任务，GitHub Actions 执行和审计
 ```
 
 ---
@@ -151,9 +166,10 @@ M4：建立 CanonicalQuestion 题簇层
 M5：建立答案资产层
 M6：建立复习闭环
 M7：建立迁移、测试、CI 和 ADR 机制
+M8：建立 GitHub Actions + AI 管理层
 ```
 
-详细里程碑见 `04_refactor_plan.md`。
+详细里程碑见 `04_refactor_plan.md`，当前 Action 管理层后续修复见 `07_actions_review_todo.md`。
 
 ---
 
@@ -187,5 +203,6 @@ canonical merge/split 可追溯
 答案绑定 canonical_id 并可版本化
 review progress 能持续滚动
 AI 输出不合格时不会污染主数据
+GitHub Actions 能守住质量边界
 旧脚本能逐步淘汰，而不是一次性推翻
 ```
