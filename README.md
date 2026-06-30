@@ -10,6 +10,35 @@ The supported entrypoint is:
 node scripts/xhs.js <command> [subcommand] [options]
 ```
 
+## Current Status
+
+As of 2026-06-30, the M1-M8 core loop is implemented and pushed to `origin/master`: migration, validation, indexing, canonical question management, answer metadata validation/sync, and review progress.
+
+Current data snapshot:
+
+- 18 canonical questions
+- 83 assigned question rows
+- 18 review progress records
+- 12 P0 plan items still missing answers in `review/plans/p0.md`
+
+The project is now in the content-building phase. The next useful work is writing answers, validating and syncing them, then widening canonical coverage.
+
+## Next Steps
+
+1. Fill the P0 answers listed in `review/plans/p0.md`.
+2. After each answer batch, run `answer validate` and `answer sync`.
+3. Continue expanding canonical coverage with `canonical suggest --hotspot --limit 50`; the first target is 200+ assigned question rows.
+4. Start the real review loop with `review today` and `review mark`.
+
+```bash
+node scripts/xhs.js answer init --canonical-id <cq_id>
+node scripts/xhs.js answer validate
+node scripts/xhs.js answer sync
+node scripts/xhs.js canonical suggest --hotspot --limit 50
+node scripts/xhs.js review today
+node scripts/xhs.js review mark --canonical-id <cq_id> --result good
+```
+
 ## Core Workflow
 
 ```bash
