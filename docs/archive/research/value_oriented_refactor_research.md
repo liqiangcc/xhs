@@ -1,5 +1,7 @@
 # XHS 价值导向重构与技术预研
 
+> Historical note: this document is archived for context. The current execution plan lives in `docs/refactor/`.
+
 > 日期：2026-06-30  
 > 仓库：`liqiangcc/xhs`  
 > 关键词：价值导向、Question-Centric、Canonical Question、索引层、复习闭环、技术预研

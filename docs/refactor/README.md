@@ -1,5 +1,7 @@
 # XHS 长期重构计划总览
 
+> This directory is the current source of truth for the XHS refactor.
+
 > 目标：把 `xhs` 从“面经采集与处理脚本集合”升级为“长期可迭代、可维护、可循环的面试知识资产系统”。
 
 ---

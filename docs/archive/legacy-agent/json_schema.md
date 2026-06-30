@@ -1,5 +1,7 @@
 # Phase 1: 极简流面经结构化提取 Schema (Data Structuring)
 
+> Historical note: this document is archived for context. The current execution plan lives in `docs/refactor/`.
+
 基于你的建议，我们采用极度扁平、极简的 JSON 结构作为**第一阶段（数据提纯）**的唯一输出标准。
 
 这种设计的优势：

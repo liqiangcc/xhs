@@ -1,5 +1,7 @@
 # 面试题库系统 — 数据流转架构 (Data Flow)
 
+> Historical note: this document is archived for context. The current execution plan lives in `docs/refactor/`.
+
 基于前面确定的 3 个核心用例，系统的底层数据就像水流一样，经过层层过滤和浓缩，最终变成你在聊天框里看到的高质量面试题。
 
 整体数据流分为 4 个主阶段：**[原始沉淀] ➔ [AI 提纯] ➔ [脚本浓缩] ➔ [Agent 交互]**

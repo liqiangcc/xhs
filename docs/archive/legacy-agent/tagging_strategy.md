@@ -1,5 +1,7 @@
 # 面试题库系统 — 数据打标策略设计
 
+> Historical note: this document is archived for context. The current execution plan lives in `docs/refactor/`.
+
 针对你提出的问题：“是否应该在这个阶段打标签？我最终要利用 AI 来完成。”
 
 这是一个非常关键的设计决策。核心原则是：**好钢（高级 AI 计算）要用在刀刃上。**

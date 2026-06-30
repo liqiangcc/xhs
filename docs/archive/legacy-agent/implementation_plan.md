@@ -1,5 +1,7 @@
 # 面试题库系统 — 基于 Agent Skill 的重构方案
 
+> Historical note: this document is archived for context. The current execution plan lives in `docs/refactor/`.
+
 ## 核心痛点与思路转换
 
 你的思路非常超前：“不要固化模型和脚本，使用 Agent Skill 技术”。

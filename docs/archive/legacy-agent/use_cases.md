@@ -1,5 +1,7 @@
 # 面试题库系统 — 核心用例 (Use Cases)
 
+> Historical note: this document is archived for context. The current execution plan lives in `docs/refactor/`.
+
 为了不被具体的技术实现（无论是脚本还是 Agent Skill）局限，我们先纯粹从 **使用者的视角**，明确你在备战面试时，究竟会怎么“用”这个系统。
 
 基于我们之前的沟通，核心聚焦于 **无缝刷题** 和 **深度解析**，主要划分为以下两个核心用例：
