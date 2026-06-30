@@ -64,7 +64,7 @@ for img in "${IMAGES[@]}"; do
 done
 
 # 执行OCR识别并将结果写入目标文件
-gemini --model gemini-2.5-flash -p "识别图片中的内容,识别成文字直接输出，不需要额外处理 $IMAGE_PARAMS" > "$TARGET_FILE"
+gemini --model gemini-3.1-flash-lite-preview -p "识别图片中的内容,识别成文字直接输出，不需要额外处理 $IMAGE_PARAMS" > "$TARGET_FILE"
 
 # 7. 最终验证：检查刚刚生成的文件是否有效
 if [ -s "$TARGET_FILE" ]; then
