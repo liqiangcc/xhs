@@ -9,6 +9,8 @@ function printHelp() {
         '',
         'Commands:',
         '  migrate build-questions   Build Question main data from note_tagged',
+        '  migrate status            Show migration output status',
+        '  migrate run all --check   Run registered migrations in check mode',
         '  validate all              Validate schema, taxonomy, and hash consistency',
         '  validate schema           Validate questions.jsonl schema',
         '  validate taxonomy         Report taxonomy canonical/legacy/unknown status',
@@ -21,7 +23,13 @@ function printHelp() {
         '  query hotspot             Show repeated question_id hotspots',
         '  canonical suggest         Generate canonical candidates',
         '  canonical accept          Confirm a canonical candidate',
+        '  canonical list|check      Inspect canonical coverage and quality',
+        '  canonical merge|split     Maintain canonical question groups',
         '  canonical stats           Show canonical coverage',
+        '  answer init|status        Manage canonical answer files',
+        '  answer validate|sync      Validate answer metadata and sync statuses',
+        '  review prepare|today      Prepare and list due review items',
+        '  review mark|weak          Mark review result and inspect weak items',
     ].join('\n'));
 }
 
@@ -38,6 +46,8 @@ function main(argv = process.argv) {
     if (command === 'index') return require('./commands/index').main(forwarded);
     if (command === 'query') return require('./commands/query').main(forwarded);
     if (command === 'canonical') return require('./commands/canonical').main(forwarded);
+    if (command === 'answer') return require('./commands/answer').main(forwarded);
+    if (command === 'review') return require('./commands/review').main(forwarded);
 
     console.error(`Unknown command: ${command}`);
     printHelp();

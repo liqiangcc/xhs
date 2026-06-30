@@ -5,6 +5,7 @@ const path = require('path');
 const { loadQuestions } = require('./lib/question_store');
 const { loadCanonicalQuestions } = require('./lib/canonical_store');
 const { buildIndexes, writeIndexes, checkIndexes } = require('./lib/index_store');
+const { writeRunManifest } = require('./lib/run_manifest');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..');
 
@@ -58,19 +59,21 @@ function main(argv = process.argv) {
             }, null, 2));
             return 1;
         }
-        console.log(JSON.stringify({
+        const result = {
             ok: true,
             question_count: questions.length,
             entity_keys: indexes.entity.total_keys,
             company_keys: indexes.company.total_keys,
             domain_l1_keys: indexes.domain.total_l1_keys,
             hotspots: indexes.hotspot.total_hotspots,
-        }, null, 2));
+        };
+        writeRunManifest(root, 'index_check', result, options);
+        console.log(JSON.stringify(result, null, 2));
         return 0;
     }
 
     writeIndexes(indexes, indexDir);
-    console.log(JSON.stringify({
+    const result = {
         ok: true,
         question_count: questions.length,
         entity_keys: indexes.entity.total_keys,
@@ -78,7 +81,9 @@ function main(argv = process.argv) {
         domain_l1_keys: indexes.domain.total_l1_keys,
         domain_l2_keys: indexes.domain.total_l2_keys,
         hotspots: indexes.hotspot.total_hotspots,
-    }, null, 2));
+    };
+    writeRunManifest(root, 'index_build', result, options);
+    console.log(JSON.stringify(result, null, 2));
     return 0;
 }
 

@@ -17,6 +17,7 @@ const {
     loadCanonicalQuestions,
     buildQuestionToCanonicalMap,
 } = require('../lib/canonical_store');
+const { writeRunManifest } = require('../lib/run_manifest');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_BUILD_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
@@ -365,17 +366,19 @@ function main(argv = process.argv) {
             console.error(JSON.stringify({ ok: false, changed_files: check.diffs }, null, 2));
             return 1;
         }
-        console.log(JSON.stringify({
+        const summary = {
             ok: true,
             question_count: result.questions.length,
             source_note_count: result.sourceNotes.length,
             quality_report: 'data/manifests/quality/build_questions_report.json',
-        }, null, 2));
+        };
+        writeRunManifest(root, 'migrate_build_questions_check', summary, options);
+        console.log(JSON.stringify(summary, null, 2));
         return 0;
     }
 
     writeOutputs(root, result);
-    console.log(JSON.stringify({
+    const summary = {
         ok: true,
         question_count: result.questions.length,
         question_source_count: result.questionSources.length,
@@ -383,7 +386,9 @@ function main(argv = process.argv) {
         skipped_questions: result.report.counts.skipped_questions,
         old_hash_mismatches: result.report.counts.old_hash_mismatches,
         quality_report: 'data/manifests/quality/build_questions_report.json',
-    }, null, 2));
+    };
+    writeRunManifest(root, 'migrate_build_questions', summary, options);
+    console.log(JSON.stringify(summary, null, 2));
     return 0;
 }
 

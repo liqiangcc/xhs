@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { computeQuestionId } = require('../lib/hash');
-const { loadSchema, validateJsonlFile } = require('../lib/schema');
+const { loadSchema, validateJsonlFile, validateRecord } = require('../lib/schema');
 const { loadQuestions } = require('../lib/question_store');
 const {
     loadTaxonomy,
@@ -13,6 +13,7 @@ const {
     validateCognitiveDepth,
 } = require('../lib/taxonomy');
 const { writeJson } = require('../lib/io');
+const { writeRunManifest } = require('../lib/run_manifest');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -20,9 +21,11 @@ function defaultPaths(root) {
     return {
         questions: path.join(root, 'data', 'questions', 'questions.jsonl'),
         canonicalQuestions: path.join(root, 'data', 'questions', 'canonical_questions.jsonl'),
+        reviewProgress: path.join(root, 'review', 'progress.json'),
         qualityDir: path.join(root, 'data', 'manifests', 'quality'),
         questionSchema: path.join(root, 'schemas', 'question.schema.json'),
         canonicalQuestionSchema: path.join(root, 'schemas', 'canonical_question.schema.json'),
+        reviewProgressSchema: path.join(root, 'schemas', 'review_progress.schema.json'),
     };
 }
 
@@ -53,6 +56,17 @@ function runSchemaValidation(options = {}) {
     if (fs.existsSync(paths.canonicalQuestions)) {
         const canonicalSchema = loadSchema(paths.canonicalQuestionSchema);
         results.push(validateJsonlFile(paths.canonicalQuestions, canonicalSchema));
+    }
+    if (fs.existsSync(paths.reviewProgress)) {
+        const progressSchema = loadSchema(paths.reviewProgressSchema);
+        const progress = JSON.parse(fs.readFileSync(paths.reviewProgress, 'utf8'));
+        const errors = validateRecord(progress, progressSchema);
+        results.push({
+            file: paths.reviewProgress,
+            count: Array.isArray(progress.items) ? progress.items.length : 0,
+            error_count: errors.length,
+            errors: errors.map((error) => ({ line: null, ...error })),
+        });
     }
     const errors = [];
     for (const result of results) {
@@ -281,6 +295,7 @@ function main(argv = process.argv) {
 
     try {
         const report = runTarget(target, options);
+        writeRunManifest(options.root || DEFAULT_ROOT, `validate_${target}`, report, options);
         console.log(JSON.stringify(report, null, 2));
         return report.ok ? 0 : 1;
     } catch (error) {

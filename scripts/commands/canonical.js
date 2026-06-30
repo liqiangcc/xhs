@@ -12,6 +12,7 @@ const {
 } = require('../lib/question_store');
 const { loadIndexes, buildIndexes, writeIndexes } = require('../lib/index_store');
 const { normalizeEntity, validateDomain } = require('../lib/taxonomy');
+const { writeRunManifest } = require('../lib/run_manifest');
 const {
     loadCanonicalQuestions,
     saveCanonicalQuestions,
@@ -30,6 +31,7 @@ function defaultPaths(root) {
         canonicalQuestions: path.join(root, 'data', 'questions', 'canonical_questions.jsonl'),
         indexDir: path.join(root, 'data', 'indexes'),
         candidateManifest: path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json'),
+        qualityReport: path.join(root, 'data', 'manifests', 'canonical', 'canonical_quality_report.json'),
     };
 }
 
@@ -60,8 +62,34 @@ function printHelp() {
         '  suggest --entity <value> [--limit <n>]',
         '  suggest --hotspot [--limit <n>]',
         '  accept --candidate-id <id> --canonical-id <cq_id>',
+        '  list [--priority <P0|P1|P2|P3>] [--answer-status <status>] [--limit <n>]',
+        '  check',
+        '  merge --target <canonical_id> --source <canonical_id> --reason <text>',
+        '  split --canonical-id <id> --question-id <qid> --new-canonical-id <id> --title <title>',
         '  stats',
     ].join('\n'));
+}
+
+function assertCanonicalId(canonicalId) {
+    if (!/^cq_[a-z0-9_]+$/.test(canonicalId || '')) {
+        throw new Error(`Invalid canonical_id: ${canonicalId}`);
+    }
+}
+
+function priorityRank(priority) {
+    return { P0: 0, P1: 1, P2: 2, P3: 3 }[priority] ?? 9;
+}
+
+function pickPriority(...priorities) {
+    return priorities
+        .filter(Boolean)
+        .sort((a, b) => priorityRank(a) - priorityRank(b))[0] || 'P2';
+}
+
+function computePriority(frequency, companiesLength) {
+    if (frequency >= 5 || companiesLength >= 4) return 'P0';
+    if (frequency >= 3) return 'P1';
+    return 'P2';
 }
 
 function buildQuestionMap(questions) {
@@ -182,6 +210,51 @@ function buildCandidate(mode, seed, questions) {
     };
 }
 
+function refreshCanonicalRecord(record, questions) {
+    const questionIds = new Set(record.question_ids || []);
+    const rows = questions.filter((question) => questionIds.has(question.question_id));
+    const companies = [...new Set(rows.map((question) => question.company || '未知'))]
+        .sort((a, b) => a.localeCompare(b, 'zh'));
+    const entities = [];
+    for (const question of rows) {
+        for (const entity of question.tech_entities || []) {
+            const normalized = normalizeEntity(entity);
+            if (normalized) entities.push(normalized);
+        }
+    }
+    const primaryEntities = entities.length
+        ? [...new Set(entities)].sort((a, b) =>
+            (countValues(entities).get(b) || 0) - (countValues(entities).get(a) || 0)
+            || a.localeCompare(b, 'zh')
+        ).slice(0, 8)
+        : (record.primary_entities || []);
+    const domains = rows.map(normalizedDomain);
+    const primaryDomain = domains.length
+        ? JSON.parse(pickTop(domains.map((domain) => JSON.stringify(domain)), JSON.stringify(record.primary_domain || { l1: '其他', l2: '其他' })))
+        : (record.primary_domain || { l1: '其他', l2: '其他' });
+    const frequency = rows.length || Number(record.frequency || 0);
+    return {
+        ...record,
+        aliases: [...new Set(record.aliases || [record.canonical_title].filter(Boolean))]
+            .sort((a, b) => a.length - b.length || a.localeCompare(b, 'zh')),
+        question_ids: [...questionIds].sort(),
+        primary_domain: primaryDomain,
+        primary_entities: primaryEntities,
+        companies,
+        frequency,
+        review_priority: pickPriority(record.review_priority, computePriority(frequency, companies.length)),
+        schema_version: 'canonical_question.v1',
+    };
+}
+
+function persistCanonicalState(paths, questions, records) {
+    const refreshed = records.map((record) => refreshCanonicalRecord(record, questions));
+    saveCanonicalQuestions(refreshed, { filePath: paths.canonicalQuestions });
+    saveQuestions(questions, { filePath: paths.questions });
+    writeIndexes(buildIndexes(questions, { canonicalQuestions: refreshed }), paths.indexDir);
+    return refreshed;
+}
+
 function groupEntityCandidates(questions, seed, limit) {
     const clusters = [];
     for (const question of sortedQuestions(questions.filter((item) => item.is_valid_for_library && !item.canonical_id))) {
@@ -286,9 +359,7 @@ function runAccept(options = {}) {
     if (!candidateId || !canonicalId) {
         throw new Error('Usage: canonical accept --candidate-id <id> --canonical-id <cq_id>');
     }
-    if (!/^cq_[a-z0-9_]+$/.test(canonicalId)) {
-        throw new Error(`Invalid canonical_id: ${canonicalId}`);
-    }
+    assertCanonicalId(canonicalId);
     const manifest = readJson(paths.candidateManifest);
     const candidate = (manifest.candidates || []).find((item) => item.candidate_id === candidateId);
     if (!candidate) throw new Error(`Candidate not found: ${candidateId}`);
@@ -321,9 +392,7 @@ function runAccept(options = {}) {
             ? { ...question, canonical_id: canonicalId }
             : question
     );
-    saveCanonicalQuestions(records, { filePath: paths.canonicalQuestions });
-    saveQuestions(updatedQuestions, { filePath: paths.questions });
-    writeIndexes(buildIndexes(updatedQuestions, { canonicalQuestions: records }), paths.indexDir);
+    const refreshed = persistCanonicalState(paths, updatedQuestions, records);
 
     return {
         ok: true,
@@ -331,7 +400,249 @@ function runAccept(options = {}) {
         accepted_candidate_id: candidateId,
         question_ids: [...questionIds].sort(),
         updated_question_rows: updatedQuestions.filter((question) => question.canonical_id === canonicalId && questionIds.has(question.question_id)).length,
-        canonical_count: records.length,
+        canonical_count: refreshed.length,
+    };
+}
+
+function runList(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = defaultPaths(root);
+    const limit = Number(options.limit || 50);
+    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions })
+        .filter((record) => !options.priority || record.review_priority === options.priority)
+        .filter((record) => !options['answer-status'] || record.answer_status === options['answer-status'])
+        .sort((a, b) =>
+            priorityRank(a.review_priority) - priorityRank(b.review_priority)
+            || b.frequency - a.frequency
+            || a.canonical_id.localeCompare(b.canonical_id)
+        );
+    return {
+        schema_version: 'canonical_list.v1',
+        total_count: records.length,
+        returned_count: Math.min(records.length, limit),
+        records: records.slice(0, limit).map((record) => ({
+            canonical_id: record.canonical_id,
+            canonical_title: record.canonical_title,
+            review_priority: record.review_priority,
+            answer_status: record.answer_status,
+            frequency: record.frequency,
+            question_ids: record.question_ids,
+            companies: record.companies,
+            primary_domain: record.primary_domain,
+            primary_entities: record.primary_entities,
+        })),
+    };
+}
+
+function normalizedTitle(record) {
+    return normalizeQuestion([
+        record.canonical_title,
+        ...(record.aliases || []),
+    ].join(' '));
+}
+
+function runCheck(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = defaultPaths(root);
+    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
+    const questions = loadQuestions({ filePath: paths.questions });
+    const rowsByQuestionId = new Map();
+    for (const question of questions) {
+        if (!rowsByQuestionId.has(question.question_id)) rowsByQuestionId.set(question.question_id, []);
+        rowsByQuestionId.get(question.question_id).push(question);
+    }
+    const recordsById = new Map(records.map((record) => [record.canonical_id, record]));
+    const canonicalByQuestionId = new Map();
+    const duplicateQuestionIds = [];
+    const missingQuestionIds = [];
+    const bindingMismatches = [];
+    const orphanBindings = [];
+    const unlistedBindings = [];
+
+    for (const record of records) {
+        for (const questionId of record.question_ids || []) {
+            if (!rowsByQuestionId.has(questionId)) {
+                missingQuestionIds.push({ canonical_id: record.canonical_id, question_id: questionId });
+            }
+            const owner = canonicalByQuestionId.get(questionId);
+            if (owner && owner !== record.canonical_id) {
+                duplicateQuestionIds.push({ question_id: questionId, canonical_ids: [owner, record.canonical_id].sort() });
+            } else {
+                canonicalByQuestionId.set(questionId, record.canonical_id);
+            }
+            for (const question of rowsByQuestionId.get(questionId) || []) {
+                if (question.canonical_id !== record.canonical_id) {
+                    bindingMismatches.push({
+                        question_id: question.question_id,
+                        source_note_id: question.source_note_id,
+                        source_question_index: question.source_question_index,
+                        expected_canonical_id: record.canonical_id,
+                        actual_canonical_id: question.canonical_id,
+                    });
+                }
+            }
+        }
+    }
+
+    for (const question of questions) {
+        if (!question.canonical_id) continue;
+        const record = recordsById.get(question.canonical_id);
+        if (!record) {
+            orphanBindings.push(questionRef(question));
+        } else if (!(record.question_ids || []).includes(question.question_id)) {
+            unlistedBindings.push({
+                ...questionRef(question),
+                canonical_id: question.canonical_id,
+            });
+        }
+    }
+
+    const suspectedDuplicates = [];
+    for (let left = 0; left < records.length; left++) {
+        for (let right = left + 1; right < records.length; right++) {
+            const a = records[left];
+            const b = records[right];
+            if (normalizedTitle(a) && normalizedTitle(a) === normalizedTitle(b)) {
+                suspectedDuplicates.push({
+                    canonical_ids: [a.canonical_id, b.canonical_id],
+                    reason: 'same_normalized_title_or_aliases',
+                    titles: [a.canonical_title, b.canonical_title],
+                });
+            }
+        }
+    }
+
+    const blockingCount = duplicateQuestionIds.length
+        + missingQuestionIds.length
+        + bindingMismatches.length
+        + orphanBindings.length
+        + unlistedBindings.length;
+    const report = {
+        schema_version: 'canonical_quality_report.v1',
+        ok: blockingCount === 0,
+        record_count: records.length,
+        assigned_question_rows: questions.filter((question) => question.canonical_id).length,
+        duplicate_question_id_count: duplicateQuestionIds.length,
+        missing_question_id_count: missingQuestionIds.length,
+        binding_mismatch_count: bindingMismatches.length,
+        orphan_binding_count: orphanBindings.length,
+        unlisted_binding_count: unlistedBindings.length,
+        suspected_duplicate_count: suspectedDuplicates.length,
+        duplicate_question_ids: duplicateQuestionIds,
+        missing_question_ids: missingQuestionIds,
+        binding_mismatches: bindingMismatches,
+        orphan_bindings: orphanBindings,
+        unlisted_bindings: unlistedBindings,
+        suspected_duplicates: suspectedDuplicates,
+    };
+    writeJson(paths.qualityReport, report);
+    return report;
+}
+
+function runMerge(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = defaultPaths(root);
+    const targetId = options.target;
+    const sourceId = options.source;
+    if (!targetId || !sourceId || !options.reason) {
+        throw new Error('Usage: canonical merge --target <canonical_id> --source <canonical_id> --reason <text>');
+    }
+    assertCanonicalId(targetId);
+    assertCanonicalId(sourceId);
+    if (targetId === sourceId) throw new Error('target and source must be different');
+
+    const questions = loadQuestions({ filePath: paths.questions });
+    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
+    const target = records.find((record) => record.canonical_id === targetId);
+    const source = records.find((record) => record.canonical_id === sourceId);
+    if (!target) throw new Error(`Target canonical not found: ${targetId}`);
+    if (!source) throw new Error(`Source canonical not found: ${sourceId}`);
+
+    const merged = mergeCanonicalRecord(target, {
+        ...source,
+        canonical_id: targetId,
+        aliases: [source.canonical_title, ...(source.aliases || [])].filter(Boolean),
+        answer_status: target.answer_status !== 'missing' ? target.answer_status : source.answer_status,
+    });
+    merged.review_priority = pickPriority(target.review_priority, source.review_priority);
+    const updatedQuestions = questions.map((question) =>
+        question.canonical_id === sourceId
+            ? { ...question, canonical_id: targetId }
+            : question
+    );
+    const nextRecords = records
+        .filter((record) => record.canonical_id !== sourceId)
+        .map((record) => (record.canonical_id === targetId ? merged : record));
+    const refreshed = persistCanonicalState(paths, updatedQuestions, nextRecords);
+    const report = runCheck({ root });
+    return {
+        ok: report.ok,
+        target: targetId,
+        source: sourceId,
+        reason: options.reason,
+        canonical_count: refreshed.length,
+        moved_question_ids: source.question_ids,
+        assigned_question_rows: updatedQuestions.filter((question) => question.canonical_id === targetId).length,
+    };
+}
+
+function runSplit(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = defaultPaths(root);
+    const canonicalId = options['canonical-id'];
+    const questionId = options['question-id'];
+    const newCanonicalId = options['new-canonical-id'];
+    const title = options.title;
+    if (!canonicalId || !questionId || !newCanonicalId || !title) {
+        throw new Error('Usage: canonical split --canonical-id <id> --question-id <qid> --new-canonical-id <id> --title <title>');
+    }
+    assertCanonicalId(canonicalId);
+    assertCanonicalId(newCanonicalId);
+    if (canonicalId === newCanonicalId) throw new Error('new-canonical-id must differ from canonical-id');
+
+    const questions = loadQuestions({ filePath: paths.questions });
+    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
+    if (records.some((record) => record.canonical_id === newCanonicalId)) {
+        throw new Error(`Canonical already exists: ${newCanonicalId}`);
+    }
+    const source = records.find((record) => record.canonical_id === canonicalId);
+    if (!source) throw new Error(`Canonical not found: ${canonicalId}`);
+    if (!(source.question_ids || []).includes(questionId)) {
+        throw new Error(`Question ${questionId} is not part of ${canonicalId}`);
+    }
+    const sourceRows = questions.filter((question) => question.question_id === questionId);
+    if (!sourceRows.length) throw new Error(`Question not found: ${questionId}`);
+    const updatedQuestions = questions.map((question) =>
+        question.question_id === questionId && question.canonical_id === canonicalId
+            ? { ...question, canonical_id: newCanonicalId }
+            : question
+    );
+    const remainingQuestionIds = (source.question_ids || []).filter((id) => id !== questionId);
+    const newRecord = {
+        canonical_id: newCanonicalId,
+        canonical_title: title,
+        aliases: [...new Set([title, ...sourceRows.map((question) => question.original_question)])],
+        question_ids: [questionId],
+        primary_domain: normalizedDomain(sourceRows[0]),
+        primary_entities: [...new Set(sourceRows.flatMap((question) => question.tech_entities || []).map((entity) => normalizeEntity(entity)).filter(Boolean))],
+        companies: [...new Set(sourceRows.map((question) => question.company || '未知'))].sort((a, b) => a.localeCompare(b, 'zh')),
+        frequency: sourceRows.length,
+        review_priority: computePriority(sourceRows.length, new Set(sourceRows.map((question) => question.company || '未知')).size),
+        answer_status: 'missing',
+        schema_version: 'canonical_question.v1',
+    };
+    const nextRecords = records
+        .filter((record) => record.canonical_id !== canonicalId)
+        .concat(remainingQuestionIds.length ? [{ ...source, question_ids: remainingQuestionIds }] : [])
+        .concat(newRecord);
+    const refreshed = persistCanonicalState(paths, updatedQuestions, nextRecords);
+    const report = runCheck({ root });
+    return {
+        ok: report.ok,
+        source: canonicalId,
+        new_canonical_id: newCanonicalId,
+        question_id: questionId,
+        canonical_count: refreshed.length,
     };
 }
 
@@ -369,8 +680,13 @@ function main(argv = process.argv) {
         let result;
         if (command === 'suggest') result = runSuggest(options);
         else if (command === 'accept') result = runAccept(options);
+        else if (command === 'list') result = runList(options);
+        else if (command === 'check') result = runCheck(options);
+        else if (command === 'merge') result = runMerge(options);
+        else if (command === 'split') result = runSplit(options);
         else if (command === 'stats') result = runStats(options);
         else throw new Error(`Unknown canonical command: ${command}`);
+        writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `canonical_${command}`, result, options);
         console.log(JSON.stringify(result, null, 2));
         return 0;
     } catch (error) {
@@ -386,6 +702,10 @@ if (require.main === module) {
 module.exports = {
     runSuggest,
     runAccept,
+    runList,
+    runCheck,
+    runMerge,
+    runSplit,
     runStats,
     groupEntityCandidates,
     buildCandidate,
