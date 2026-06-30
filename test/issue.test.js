@@ -53,6 +53,27 @@ function writeReadyAnswer(root, canonicalId) {
     );
 }
 
+function writeProgress(root, canonicalId, status = 'new') {
+    writeJson(path.join(root, 'review', 'progress.json'), {
+        schema_version: 'review_progress_store.v1',
+        updated_at: '2026-06-30',
+        items: [
+            {
+                canonical_id: canonicalId,
+                status,
+                level: status === 'weak' ? 0 : 1,
+                review_count: status === 'new' ? 0 : 1,
+                last_reviewed_at: status === 'new' ? null : '2026-06-30',
+                next_review_at: '2026-06-30',
+                confidence: status === 'weak' ? 0.3 : 0.5,
+                difficulty: status === 'weak' ? 4 : 3,
+                mistake_count: status === 'weak' ? 1 : 0,
+                updated_at: '2026-06-30',
+            },
+        ],
+    });
+}
+
 test('renders a mobile issue card from answer markdown', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-issue-render-'));
     writeJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'), [canonical('cq_redis_fast')]);
@@ -61,7 +82,7 @@ test('renders a mobile issue card from answer markdown', () => {
     const rendered = runRender({ root, 'canonical-id': 'cq_redis_fast', repo: 'liqiangcc/xhs' });
     assert.equal(rendered.ok, true);
     assert.equal(rendered.title, '[Review][P0] cq_redis_fast Redis为什么快');
-    assert.deepEqual(rendered.labels, ['review', 'priority:P0', 'answer:ready']);
+    assert.deepEqual(rendered.labels, ['review', 'priority:P0', 'answer:ready', 'domain:缓存', 'review:new']);
     assert.match(rendered.body, /1 分钟结论/);
     assert.match(rendered.body, /单线程事件循环/);
     assert.match(rendered.body, /https:\/\/github.com\/liqiangcc\/xhs\/blob\/master\/review\/answers\/cq_redis_fast.md/);
@@ -115,13 +136,140 @@ test('apply sync creates a GitHub issue through the runner and records the link'
 
     assert.equal(result.ok, true);
     assert.equal(result.synced_count, 1);
-    assert.equal(calls.filter((args) => args[0] === 'label' && args[1] === 'create').length, 3);
+    assert.equal(calls.filter((args) => args[0] === 'label' && args[1] === 'create').length, 5);
     assert.equal(calls.some((args) => args[0] === 'issue' && args[1] === 'create'), true);
     const links = readJson(path.join(root, 'review', 'issue_links.json'));
     assert.equal(links.items[0].canonical_id, 'cq_redis_fast');
     assert.equal(links.items[0].issue_number, 12);
     assert.equal(links.items[0].issue_url, 'https://github.com/liqiangcc/xhs/issues/12');
+    assert.equal(links.items[0].review_status, 'new');
+    assert.deepEqual(links.items[0].labels, ['review', 'priority:P0', 'answer:ready', 'domain:缓存', 'review:new']);
     assert.equal(runCheck({ root }).ok, true);
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('apply sync updates managed labels and keeps unrelated labels intact', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-issue-update-'));
+    writeJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'), [canonical('cq_redis_fast')]);
+    writeReadyAnswer(root, 'cq_redis_fast');
+    writeProgress(root, 'cq_redis_fast', 'weak');
+    writeJson(path.join(root, 'review', 'issue_links.json'), {
+        schema_version: 'review_issue_links.v1',
+        updated_at: '2026-06-30',
+        items: [
+            {
+                canonical_id: 'cq_redis_fast',
+                issue_number: 12,
+                issue_url: 'https://github.com/liqiangcc/xhs/issues/12',
+                answer_status: 'draft',
+                review_status: 'new',
+                labels: ['review', 'priority:P1', 'answer:draft', 'domain:数据库', 'review:new'],
+                body_hash: 'old-hash',
+            },
+        ],
+    });
+    const calls = [];
+    const runner = (args) => {
+        calls.push(args);
+        if (args[0] === 'issue' && args[1] === 'view') {
+            return JSON.stringify({
+                labels: [
+                    { name: 'review' },
+                    { name: 'priority:P1' },
+                    { name: 'answer:draft' },
+                    { name: 'domain:数据库' },
+                    { name: 'review:new' },
+                    { name: 'custom:keep' },
+                ],
+            });
+        }
+        return '';
+    };
+
+    const result = runSync({
+        root,
+        'canonical-id': 'cq_redis_fast',
+        repo: 'liqiangcc/xhs',
+        apply: true,
+        date: '2026-06-30',
+    }, { runner });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.rows[0].action, 'update');
+    const edit = calls.find((args) => args[0] === 'issue' && args[1] === 'edit');
+    assert.ok(edit);
+    assert.equal(edit.includes('custom:keep'), false);
+    assert.equal(edit.includes('priority:P1'), true);
+    assert.equal(edit.includes('answer:draft'), true);
+    assert.equal(edit.includes('domain:数据库'), true);
+    assert.equal(edit.includes('review:new'), true);
+    assert.equal(edit.includes('priority:P0'), true);
+    assert.equal(edit.includes('answer:ready'), true);
+    assert.equal(edit.includes('domain:缓存'), true);
+    assert.equal(edit.includes('review:weak'), true);
+    const links = readJson(path.join(root, 'review', 'issue_links.json'));
+    assert.equal(links.items[0].review_status, 'weak');
+    assert.deepEqual(links.items[0].labels, ['review', 'priority:P0', 'answer:ready', 'domain:缓存', 'review:weak']);
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('apply sync repairs label drift when body hash is unchanged', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-issue-label-drift-'));
+    writeJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'), [canonical('cq_redis_fast')]);
+    writeReadyAnswer(root, 'cq_redis_fast');
+    writeProgress(root, 'cq_redis_fast', 'weak');
+    const dryRun = runSync({ root, 'canonical-id': 'cq_redis_fast', repo: 'liqiangcc/xhs' });
+    writeJson(path.join(root, 'review', 'issue_links.json'), {
+        schema_version: 'review_issue_links.v1',
+        updated_at: '2026-06-30',
+        items: [
+            {
+                canonical_id: 'cq_redis_fast',
+                issue_number: 12,
+                issue_url: 'https://github.com/liqiangcc/xhs/issues/12',
+                answer_status: 'ready',
+                review_status: 'weak',
+                labels: dryRun.rows[0].labels,
+                body_hash: dryRun.rows[0].body_hash,
+            },
+        ],
+    });
+    const calls = [];
+    const runner = (args) => {
+        calls.push(args);
+        if (args[0] === 'issue' && args[1] === 'view') {
+            return JSON.stringify({
+                labels: [
+                    { name: 'review' },
+                    { name: 'priority:P0' },
+                    { name: 'answer:ready' },
+                    { name: 'domain:缓存' },
+                    { name: 'review:new' },
+                    { name: 'custom:keep' },
+                ],
+            });
+        }
+        return '';
+    };
+
+    const result = runSync({
+        root,
+        'canonical-id': 'cq_redis_fast',
+        repo: 'liqiangcc/xhs',
+        apply: true,
+        date: '2026-06-30',
+    }, { runner });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.rows[0].action, 'sync_labels');
+    assert.deepEqual(result.rows[0].labels_removed, ['review:new']);
+    assert.deepEqual(result.rows[0].labels_added, ['review:weak']);
+    const edit = calls.find((args) => args[0] === 'issue' && args[1] === 'edit');
+    assert.ok(edit);
+    assert.equal(edit.includes('--body-file'), false);
+    assert.equal(edit.includes('custom:keep'), false);
 
     fs.rmSync(root, { recursive: true, force: true });
 });

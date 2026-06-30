@@ -14,7 +14,11 @@ const {
     upsertIssueLink,
     buildIssueCard,
     validateIssueLinks,
+    isManagedLabel,
+    labelDefinition,
+    labelValue,
 } = require('../lib/issue_store');
+const { loadProgress, progressMap } = require('../lib/review_store');
 const { writeRunManifest } = require('../lib/run_manifest');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
@@ -26,6 +30,7 @@ function defaultPaths(root) {
         canonicalQuestions: path.join(root, 'data', 'questions', 'canonical_questions.jsonl'),
         answersDir: path.join(root, 'review', 'answers'),
         issueLinksPath: path.join(root, 'review', 'issue_links.json'),
+        progressPath: path.join(root, 'review', 'progress.json'),
     };
 }
 
@@ -108,14 +113,8 @@ function renderCard(record, paths, options = {}) {
         branch: options.branch || 'master',
         answerContent: answer?.content,
         answerRelativePath: answer?.relativePath,
+        progress: options.progress || null,
     });
-}
-
-function labelDefinition(label) {
-    if (label === 'review') return { color: '0e8a16', description: 'XHS review card' };
-    if (label.startsWith('priority:')) return { color: 'fbca04', description: 'Review priority' };
-    if (label.startsWith('answer:')) return { color: '1d76db', description: 'Answer status' };
-    return { color: 'ededed', description: 'XHS issue label' };
 }
 
 function ensureLabels(repo, labels, runner) {
@@ -134,6 +133,20 @@ function ensureLabels(repo, labels, runner) {
             '--force',
         ]);
     }
+}
+
+function currentIssueLabels(repo, issueNumber, runner) {
+    const output = runner([
+        'issue',
+        'view',
+        String(issueNumber),
+        '--repo',
+        repo,
+        '--json',
+        'labels',
+    ]);
+    const parsed = JSON.parse(output || '{}');
+    return (parsed.labels || []).map((label) => label.name).filter(Boolean);
 }
 
 function withBodyFile(body, callback) {
@@ -175,7 +188,19 @@ function createIssue(repo, card, runner) {
     });
 }
 
-function updateIssue(repo, issueNumber, card, runner) {
+function updateIssue(repo, issueNumber, card, runner, options = {}) {
+    const currentLabels = currentIssueLabels(repo, issueNumber, runner);
+    const desiredLabels = new Set(card.labels);
+    const labelsToRemove = currentLabels
+        .filter((label) => isManagedLabel(label) && !desiredLabels.has(label))
+        .sort();
+    const labelsToAdd = card.labels
+        .filter((label) => !currentLabels.includes(label))
+        .sort();
+    const bodyChanged = options.bodyChanged !== false;
+    if (!bodyChanged && labelsToRemove.length === 0 && labelsToAdd.length === 0) {
+        return { changed: false, labels_added: [], labels_removed: [] };
+    }
     return withBodyFile(card.body, (bodyFile) => {
         const args = [
             'issue',
@@ -183,19 +208,25 @@ function updateIssue(repo, issueNumber, card, runner) {
             String(issueNumber),
             '--repo',
             repo,
-            '--title',
-            card.title,
-            '--body-file',
-            bodyFile,
         ];
-        for (const label of card.labels) args.push('--add-label', label);
+        if (bodyChanged) args.push('--title', card.title, '--body-file', bodyFile);
+        for (const label of labelsToRemove) args.push('--remove-label', label);
+        for (const label of labelsToAdd) args.push('--add-label', label);
         runner(args);
+        return {
+            changed: true,
+            labels_added: labelsToAdd,
+            labels_removed: labelsToRemove,
+        };
     });
 }
 
 function answerStatusFromCard(card) {
-    const label = (card.labels || []).find((item) => item.startsWith('answer:'));
-    return label ? label.slice('answer:'.length) : 'missing';
+    return labelValue(card.labels, 'answer:', 'missing');
+}
+
+function reviewStatusFromCard(card) {
+    return labelValue(card.labels, 'review:', 'new');
 }
 
 function runRender(options = {}) {
@@ -206,10 +237,12 @@ function runRender(options = {}) {
     const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
     const record = records.find((item) => item.canonical_id === canonicalId);
     if (!record) throw new Error(`Canonical not found: ${canonicalId}`);
+    const byProgress = progressMap(loadProgress({ progressPath: paths.progressPath, date: options.date || DEFAULT_BUILD_DATE }));
     const card = renderCard(record, paths, {
         ...options,
         root,
         repo: options.repo || DEFAULT_REPO,
+        progress: byProgress.get(record.canonical_id),
     });
     return {
         schema_version: 'issue_render_result.v1',
@@ -226,6 +259,7 @@ function runSync(options = {}, dependencies = {}) {
     const runner = dependencies.runner || defaultGhRunner;
     const paths = defaultPaths(root);
     const records = selectRecords(loadCanonicalQuestions({ filePath: paths.canonicalQuestions }), options);
+    const byProgress = progressMap(loadProgress({ progressPath: paths.progressPath, date: options.date || DEFAULT_BUILD_DATE }));
     let store = loadIssueLinks({ filePath: paths.issueLinksPath, date: options.date || DEFAULT_BUILD_DATE });
     const links = issueLinkMap(store);
     const rows = [];
@@ -239,6 +273,7 @@ function runSync(options = {}, dependencies = {}) {
                 ...options,
                 root,
                 repo,
+                progress: byProgress.get(record.canonical_id),
             });
         } catch (error) {
             if (!options['allow-missing'] && /Answer missing/.test(error.message)) {
@@ -254,25 +289,24 @@ function runSync(options = {}, dependencies = {}) {
         }
 
         const existing = links.get(record.canonical_id);
-        const action = existing ? (existing.body_hash === card.body_hash ? 'noop' : 'update') : 'create';
+        let action = existing ? (existing.body_hash === card.body_hash ? 'noop' : 'update') : 'create';
         let issue = existing ? {
             issue_number: existing.issue_number,
             issue_url: existing.issue_url,
         } : null;
+        let labelUpdate = null;
 
         try {
-            if (apply && action !== 'noop') {
+            if (apply && action === 'create') {
                 ensureLabels(repo, card.labels, runner);
-                if (action === 'create') {
-                    issue = createIssue(repo, card, runner);
-                } else {
-                    updateIssue(repo, existing.issue_number, card, runner);
-                }
+                issue = createIssue(repo, card, runner);
                 store = upsertIssueLink(store, {
                     canonical_id: record.canonical_id,
                     issue_number: issue.issue_number,
                     issue_url: issue.issue_url,
                     answer_status: answerStatusFromCard(card),
+                    review_status: reviewStatusFromCard(card),
+                    labels: card.labels,
                     body_hash: card.body_hash,
                 }, { date: options.date || DEFAULT_BUILD_DATE });
                 storeChanged = true;
@@ -281,8 +315,35 @@ function runSync(options = {}, dependencies = {}) {
                     issue_number: issue.issue_number,
                     issue_url: issue.issue_url,
                     answer_status: answerStatusFromCard(card),
+                    review_status: reviewStatusFromCard(card),
+                    labels: card.labels,
                     body_hash: card.body_hash,
                 });
+            } else if (apply && existing) {
+                ensureLabels(repo, card.labels, runner);
+                labelUpdate = updateIssue(repo, existing.issue_number, card, runner, { bodyChanged: action === 'update' });
+                if (action === 'noop' && labelUpdate.changed) action = 'sync_labels';
+                if (action !== 'noop') {
+                    store = upsertIssueLink(store, {
+                        canonical_id: record.canonical_id,
+                        issue_number: issue.issue_number,
+                        issue_url: issue.issue_url,
+                        answer_status: answerStatusFromCard(card),
+                        review_status: reviewStatusFromCard(card),
+                        labels: card.labels,
+                        body_hash: card.body_hash,
+                    }, { date: options.date || DEFAULT_BUILD_DATE });
+                    storeChanged = true;
+                    links.set(record.canonical_id, {
+                        canonical_id: record.canonical_id,
+                        issue_number: issue.issue_number,
+                        issue_url: issue.issue_url,
+                        answer_status: answerStatusFromCard(card),
+                        review_status: reviewStatusFromCard(card),
+                        labels: card.labels,
+                        body_hash: card.body_hash,
+                    });
+                }
             }
             rows.push({
                 canonical_id: record.canonical_id,
@@ -290,6 +351,9 @@ function runSync(options = {}, dependencies = {}) {
                 applied: apply && action !== 'noop',
                 issue_number: issue?.issue_number || null,
                 issue_url: issue?.issue_url || null,
+                labels: card.labels,
+                labels_added: labelUpdate?.labels_added || [],
+                labels_removed: labelUpdate?.labels_removed || [],
                 body_hash: card.body_hash,
             });
         } catch (error) {

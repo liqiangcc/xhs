@@ -130,6 +130,17 @@ node scripts/xhs.js issue check
 
 `issue sync` is a dry run by default. Add `--apply` to create or update GitHub issues through `gh`. Local issue links live in `review/issue_links.json`.
 
+Review issue cards use managed labels for filtering:
+
+```bash
+gh issue list --label "priority:P0"
+gh issue list --label "domain:缓存"
+gh issue list --label "review:weak"
+gh issue list --label "answer:ready"
+```
+
+`issue sync --apply` keeps `priority:*`, `answer:*`, `domain:*`, and `review:*` labels in sync while preserving unrelated manual labels.
+
 ## Verification
 
 Use Node's built-in test runner; no package install is required for tests.

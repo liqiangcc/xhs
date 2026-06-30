@@ -8,6 +8,7 @@ const DEFAULT_ISSUE_LINKS_PATH = path.resolve(__dirname, '..', '..', 'review', '
 const DEFAULT_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
 const CARD_META_PREFIX = '<!-- xhs-review-card: ';
 const CARD_META_SUFFIX = ' -->';
+const MANAGED_LABEL_PREFIXES = ['priority:', 'answer:', 'domain:', 'review:'];
 
 function defaultIssueLinks(options = {}) {
     return {
@@ -121,12 +122,36 @@ function issueTitle(record) {
     return `[Review][${record.review_priority}] ${record.canonical_id} ${record.canonical_title}`;
 }
 
-function issueLabels(record) {
+function reviewStatus(progress) {
+    return progress?.status || 'new';
+}
+
+function issueLabels(record, progress = null) {
     return [
         'review',
         `priority:${record.review_priority}`,
         `answer:${record.answer_status || 'missing'}`,
-    ];
+        `domain:${record.primary_domain?.l1 || '未知'}`,
+        `review:${reviewStatus(progress)}`,
+    ].filter(Boolean);
+}
+
+function isManagedLabel(label) {
+    return MANAGED_LABEL_PREFIXES.some((prefix) => String(label || '').startsWith(prefix));
+}
+
+function labelDefinition(label) {
+    if (label === 'review') return { color: '0e8a16', description: 'XHS review card' };
+    if (label.startsWith('priority:')) return { color: 'fbca04', description: 'Review priority' };
+    if (label.startsWith('answer:')) return { color: '1d76db', description: 'Answer status' };
+    if (label.startsWith('domain:')) return { color: '5319e7', description: 'Review knowledge domain' };
+    if (label.startsWith('review:')) return { color: 'd93f0b', description: 'Review progress status' };
+    return { color: 'ededed', description: 'XHS issue label' };
+}
+
+function labelValue(labels, prefix, fallback = '') {
+    const label = (labels || []).find((item) => String(item).startsWith(prefix));
+    return label ? label.slice(prefix.length) : fallback;
 }
 
 function fullAnswerLink(relativePath, options = {}) {
@@ -186,7 +211,7 @@ function buildIssueBody(record, options = {}) {
 function buildIssueCard(record, options = {}) {
     const card = {
         title: issueTitle(record),
-        labels: issueLabels(record),
+        labels: issueLabels(record, options.progress),
         body: buildIssueBody(record, options),
     };
     return {
@@ -232,11 +257,16 @@ module.exports = {
     DEFAULT_ISSUE_LINKS_PATH,
     CARD_META_PREFIX,
     CARD_META_SUFFIX,
+    MANAGED_LABEL_PREFIXES,
     defaultIssueLinks,
     loadIssueLinks,
     saveIssueLinks,
     issueLinkMap,
     upsertIssueLink,
+    issueLabels,
+    isManagedLabel,
+    labelDefinition,
+    labelValue,
     extractAnswerCardSections,
     buildIssueBody,
     buildIssueCard,
