@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+'use strict';
+
+function printHelp() {
+    console.log([
+        'XHS CLI',
+        '',
+        'Usage: node scripts/xhs.js <command> [subcommand] [options]',
+        '',
+        'Commands:',
+        '  migrate build-questions   Build Question main data from note_tagged',
+        '  validate all              Validate schema, taxonomy, and hash consistency',
+        '  validate schema           Validate questions.jsonl schema',
+        '  validate taxonomy         Report taxonomy canonical/legacy/unknown status',
+        '  validate hash             Validate question_id hashes',
+        '  index build               Build query indexes from questions.jsonl',
+        '  index check               Verify indexes are up to date',
+        '  query entity <value>      Query by tech entity',
+        '  query company <value>     Query by company',
+        '  query domain --l1 <v>     Query by domain l1 or l2',
+        '  query hotspot             Show repeated question_id hotspots',
+    ].join('\n'));
+}
+
+function main(argv = process.argv) {
+    const command = argv[2];
+    if (!command || command === 'help' || command === '--help') {
+        printHelp();
+        return 0;
+    }
+
+    const forwarded = ['node', `scripts/commands/${command}.js`, ...argv.slice(3)];
+    if (command === 'migrate') return require('./commands/migrate').main(forwarded);
+    if (command === 'validate') return require('./commands/validate').main(forwarded);
+    if (command === 'index') return require('./commands/index').main(forwarded);
+    if (command === 'query') return require('./commands/query').main(forwarded);
+
+    console.error(`Unknown command: ${command}`);
+    printHelp();
+    return 1;
+}
+
+if (require.main === module) {
+    process.exitCode = main(process.argv);
+}
+
+module.exports = {
+    main,
+};

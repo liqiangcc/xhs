@@ -1,6 +1,6 @@
 const fs = require('fs');
-const crypto = require('crypto');
 const path = require('path');
+const { computeQuestionId } = require('./lib/hash');
 
 /**
  * Generates MD5 hashes for questions in a structured note file.
@@ -25,9 +25,7 @@ try {
     }
 
     data.questions.forEach((q, i) => {
-        // Normalize: lowercase and remove non-alphanumeric/unsupported characters
-        const normalized = q.toLowerCase().replace(/[^\w\u4e00-\u9fa5]/g, '');
-        const hash = crypto.createHash('md5').update(normalized).digest('hex');
+        const hash = computeQuestionId(q);
         console.log(`${i}|${hash}|${q}`);
     });
 } catch (error) {

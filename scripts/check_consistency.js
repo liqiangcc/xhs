@@ -20,7 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
+const { computeQuestionId } = require('./lib/hash');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIRS = {
@@ -45,11 +45,6 @@ function readJson(filePath) {
     } catch (e) {
         return null;
     }
-}
-
-function computeHash(question) {
-    const normalized = question.toLowerCase().replace(/[^\w\u4e00-\u9fa5]/g, '');
-    return crypto.createHash('md5').update(normalized).digest('hex');
 }
 
 // ── Required fields ──────────────────────────────────────────────────────
@@ -154,7 +149,7 @@ function main() {
         for (let i = 0; i < taggedQuestions.length; i++) {
             const tq = taggedQuestions[i];
             if (!tq.original_question || !tq.question_id) continue;
-            const expectedHash = computeHash(tq.original_question);
+            const expectedHash = computeQuestionId(tq.original_question);
             if (tq.question_id !== expectedHash) {
                 error('HASH_SELF_MISMATCH', id,
                     `tagged_questions[${i}] question_id 与 original_question 的 hash 不一致: "${tq.original_question.slice(0, 30)}…" 预期=${expectedHash.slice(0, 8)}…, 实际=${tq.question_id.slice(0, 8)}…`);

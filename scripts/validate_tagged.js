@@ -14,15 +14,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
+const { computeQuestionId } = require('./lib/hash');
 
 const STRUCTURED_DIR = path.join(__dirname, '..', 'note_structured');
 const TAGGED_DIR = path.join(__dirname, '..', 'note_tagged');
-
-function computeHash(question) {
-    const normalized = question.toLowerCase().replace(/[^\w\u4e00-\u9fa5]/g, '');
-    return crypto.createHash('md5').update(normalized).digest('hex');
-}
 
 function validateNote(uuid) {
     const structuredPath = path.join(STRUCTURED_DIR, uuid + '.json');
@@ -42,7 +37,7 @@ function validateNote(uuid) {
     const questions = structured.questions || [];
     const structuredHashes = questions.map((q, i) => ({
         index: i,
-        hash: computeHash(q),
+        hash: computeQuestionId(q),
         question: q
     }));
 

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
+const { computeQuestionId } = require('./lib/hash');
 
 /**
  * XHS Pipeline Orchestrator
@@ -28,18 +28,13 @@ const DIRS = {
 
 // ── Hash Generation (inline, no external command) ────────────────────────
 
-function computeHash(question) {
-    const normalized = question.toLowerCase().replace(/[^\w\u4e00-\u9fa5]/g, '');
-    return crypto.createHash('md5').update(normalized).digest('hex');
-}
-
 function generateHashes(structuredPath) {
     try {
         const data = JSON.parse(fs.readFileSync(structuredPath, 'utf-8'));
         const questions = data.questions || [];
         return questions.map((q, i) => ({
             index: String(i),
-            hash: computeHash(q),
+            hash: computeQuestionId(q),
             question: q
         }));
     } catch (e) {
