@@ -37,6 +37,7 @@ node scripts/xhs.js <command> [subcommand] [options]
 2. .github/workflows/xhs-manage.yml 已新增
 3. package.json 已新增 ci:* 只读检查脚本
 4. validate / migrate-check / index-check / canonical-check / answer-validate / review-today / review-weak 支持 --noWrite 只读运行
+5. xhs-manage 已支持 canonical-suggest-hotspot，生成候选 manifest 并上传 artifact，不提交文件
 ```
 
 ---
@@ -86,12 +87,13 @@ validate
 migrate-check
 index-check
 canonical-check
+canonical-suggest-hotspot
 answer-validate
 review-today
 review-weak
 ```
 
-第一阶段只开放这些只读任务。`rebuild-index`、`canonical-suggest-*`、`answer-sync`、`issue-sync-*`、`quality-report` 等会写文件或需要外部权限的任务保留到后续阶段。
+第一阶段只开放只读任务。当前额外开放 `canonical-suggest-hotspot` 作为受控生成任务：它只生成 `canonical_candidates.json` artifact，不提交文件。`rebuild-index`、`canonical-suggest-entity`、`answer-sync`、`issue-sync-*`、`quality-report` 等仍保留到后续阶段。
 
 ---
 
@@ -225,13 +227,14 @@ on:
           - migrate-check
           - index-check
           - canonical-check
+          - canonical-suggest-hotspot
           - answer-validate
           - review-today
           - review-weak
       limit:
-        description: Limit for review list tasks
+        description: Limit for review list or canonical suggestion tasks
         required: false
-        default: "20"
+        default: "50"
 ```
 
 ### 6.3 任务映射
@@ -242,6 +245,7 @@ on:
 | migrate-check | `npm run ci:migrate:check` | 否 | 直接执行 |
 | index-check | `npm run ci:index:check` | 否 | 直接执行 |
 | canonical-check | `npm run ci:canonical:check` | 否 | 直接执行 |
+| canonical-suggest-hotspot | `node scripts/xhs.js canonical suggest --hotspot --limit <limit> --noManifest` | 是 | 上传 `canonical_candidates.json` artifact，不提交 |
 | answer-validate | `npm run ci:answer:validate` | 否 | 直接执行 |
 | review-today | `node scripts/xhs.js review today --limit <limit> --with-issues --noWrite` | 否 | 直接输出 |
 | review-weak | `node scripts/xhs.js review weak --limit <limit> --with-issues --noWrite` | 否 | 直接输出 |
@@ -268,6 +272,16 @@ node scripts/xhs.js review weak --limit 20 --with-issues --noWrite
 3. review today / review weak 不初始化或保存 review/progress.json
 4. workflow 最后用 git diff --exit-code 验证没有生成变更
 ```
+
+### 6.5 canonical 候选生成
+
+`canonical-suggest-hotspot` 是第一批开放的生成型任务：
+
+```bash
+node scripts/xhs.js canonical suggest --hotspot --limit 50 --noManifest
+```
+
+它会更新工作区里的 `data/manifests/canonical/canonical_candidates.json`，workflow 随后把该文件上传为 `canonical-candidates` artifact。该任务当前不提交文件、不创建 PR；`create_pr=true` 仍属于后续阶段。
 
 ---
 
@@ -363,11 +377,12 @@ gh workflow run xhs-manage.yml -f task=validate
 ```bash
 gh workflow run xhs-manage.yml \
   -f task=canonical-suggest-hotspot \
-  -f limit=50 \
-  -f create_pr=true
+  -f limit=50
 ```
 
-#### 针对 Redis 生成 canonical 候选
+当前该任务上传 `canonical-candidates` artifact，不创建 PR。
+
+#### 针对 Redis 生成 canonical 候选（后续阶段）
 
 ```bash
 gh workflow run xhs-manage.yml \
@@ -385,7 +400,7 @@ gh workflow run xhs-manage.yml \
   -f limit=20
 ```
 
-#### 同步答案状态
+#### 同步答案状态（后续阶段）
 
 ```bash
 gh workflow run xhs-manage.yml \
@@ -410,7 +425,7 @@ AI 触发 canonical-suggest-hotspot
   ↓
 Action 生成 canonical_candidates manifest
   ↓
-Action 创建 PR 或 Issue
+Action 上传 artifact；后续阶段再创建 PR 或 Issue
   ↓
 人工确认 accept / merge / split
   ↓
@@ -538,7 +553,7 @@ master 分支始终处于可校验状态
 
 ---
 
-## Phase 2：建立 xhs-manage 只读手动入口
+## Phase 2：建立 xhs-manage 手动入口
 
 ### 目标
 
@@ -556,7 +571,8 @@ master 分支始终处于可校验状态
 5. 支持 canonical-check
 6. 支持 answer-validate
 7. 支持 review-today / review-weak
-8. 所有任务只读，不支持任意 shell command
+8. 支持 canonical-suggest-hotspot 生成候选 artifact
+9. 不支持任意 shell command
 ```
 
 ### 验收
@@ -565,7 +581,7 @@ master 分支始终处于可校验状态
 可以用 gh workflow run 触发任务
 所有 task 都是白名单
 不支持任意 shell command
-默认不写 master
+默认不写 master；canonical-suggest-hotspot 只上传 artifact
 ```
 
 ---
@@ -633,7 +649,7 @@ AI 不直接污染主数据
 [x] 新增 .github/workflows/xhs-manage.yml
 [x] 在 package.json 增加 ci:* 只读检查脚本
 [x] 让 xhs-manage 支持 validate / review-today / review-weak 等只读任务
-[ ] 再支持 canonical-suggest-hotspot，并生成 manifest
+[x] 再支持 canonical-suggest-hotspot，并生成 manifest artifact
 [ ] 最后加入 create_pr=true 的写入路径
 ```
 
@@ -1131,10 +1147,10 @@ issue-sync-apply
 ```text
 1. 保持 ci.yml 和 xhs-manage.yml 的只读任务稳定
 2. 修正并持续维护 docs/refactor/05_execution_checklist.md 状态
-3. 新增 canonical-suggest-hotspot Action 任务
+3. 新增 create_pr=true，让 canonical-suggest-hotspot 可生成候选 PR
 4. 新增 answer-missing-p0-report 或质量报告命令
 5. weekly-report 汇总 canonical / answer / review / taxonomy 指标
-6. 最后再考虑 create_pr=true 和 issue-sync-apply
+6. 最后再考虑 issue-sync-apply
 ```
 
 原因：
@@ -1156,8 +1172,8 @@ issue-sync-apply
 
 目标：
 1. 保持第一阶段只读任务不回退，所有新增 task 继续走白名单。
-2. 新增 canonical-suggest-hotspot 任务时，必须明确它会写 candidate manifest。
-3. 新增写入型任务时，默认只允许 create_pr=true 的分支/PR 路径。
+2. 为 canonical-suggest-hotspot 增加 create_pr=true 分支/PR 路径。
+3. 新增其他写入型任务时，默认只允许 create_pr=true 的分支/PR 路径。
 4. 不允许传入任意 shell command。
 5. 默认权限 contents: read；需要写权限时单独说明。
 6. 不修改 note_tagged，不引入外部存储。
@@ -1165,6 +1181,6 @@ issue-sync-apply
 
 验收：
 - 第一阶段 validate / review 只读任务仍不产生业务数据变更。
-- 新增写入任务有明确 PR 或人工审批路径。
+- canonical-suggest-hotspot 可选择 artifact 预览或 PR 审批路径。
 - docs/refactor/06_github_actions_ai_management.md 同步更新任务状态。
 ```
