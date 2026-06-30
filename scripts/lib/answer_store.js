@@ -7,6 +7,16 @@ const { ensureDir } = require('./io');
 const DEFAULT_ANSWERS_DIR = path.resolve(__dirname, '..', '..', 'review', 'answers');
 const META_PREFIX = '<!-- xhs-answer: ';
 const META_SUFFIX = ' -->';
+const REQUIRED_READY_SECTIONS = [
+    '核心结论',
+    '1 分钟版',
+    '3 分钟版',
+    '关键细节',
+    '原理机制',
+    '项目经验版',
+    '常见追问',
+    '易错点',
+];
 
 function answerPath(canonicalId, options = {}) {
     return path.join(options.answersDir || DEFAULT_ANSWERS_DIR, `${canonicalId}.md`);
@@ -105,8 +115,62 @@ function statusByCanonicalId(options = {}) {
     return statuses;
 }
 
+function sectionBody(content, sectionTitle) {
+    const lines = String(content || '').split(/\r?\n/);
+    const start = lines.findIndex((line) => {
+        const match = line.match(/^##\s+(.+?)\s*$/);
+        return match && match[1] === sectionTitle;
+    });
+    if (start < 0) return null;
+    const endOffset = lines.slice(start + 1).findIndex((line) => /^##\s+/.test(line));
+    const end = endOffset < 0 ? lines.length : start + 1 + endOffset;
+    return lines.slice(start + 1, end).join('\n');
+}
+
+function hasMeaningfulContent(body) {
+    const cleaned = String(body || '')
+        .replace(/<!--([\s\S]*?)-->/g, '')
+        .replace(/```([\s\S]*?)```/g, '')
+        .replace(/^\s*[-*]\s*/gm, '')
+        .trim();
+    return cleaned.length > 0 && !/^TODO$/i.test(cleaned);
+}
+
+function validateAnswerContent(answer) {
+    const metadata = answer.metadata || {};
+    if ((metadata.status || 'draft') !== 'ready') return [];
+
+    const errors = [];
+    const content = String(answer.content || '');
+    if (/\bTODO\b/i.test(content)) {
+        errors.push({
+            error: 'todo_placeholder',
+            canonical_id: metadata.canonical_id,
+        });
+    }
+
+    for (const section of REQUIRED_READY_SECTIONS) {
+        const body = sectionBody(content, section);
+        if (body === null) {
+            errors.push({
+                error: 'missing_section',
+                canonical_id: metadata.canonical_id,
+                section,
+            });
+        } else if (!hasMeaningfulContent(body)) {
+            errors.push({
+                error: 'empty_section',
+                canonical_id: metadata.canonical_id,
+                section,
+            });
+        }
+    }
+    return errors;
+}
+
 module.exports = {
     DEFAULT_ANSWERS_DIR,
+    REQUIRED_READY_SECTIONS,
     answerPath,
     parseAnswerMetadata,
     readAnswerFile,
@@ -114,4 +178,5 @@ module.exports = {
     buildAnswerTemplate,
     writeAnswerTemplate,
     statusByCanonicalId,
+    validateAnswerContent,
 };
