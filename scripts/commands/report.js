@@ -279,6 +279,7 @@ function parseArgs(argv) {
         const arg = args[index];
         if (arg === '--root') options.root = path.resolve(args[++index]);
         else if (arg === '--date') options.date = args[++index];
+        else if (arg === '--noFail') options.noFail = true;
         else if (arg.startsWith('--') && applyGlobalBooleanOption(options, arg.replace(/^--/, ''))) continue;
         else if (arg === '--help' || arg === 'help') options.help = true;
     }
@@ -297,6 +298,7 @@ function printHelp() {
         '  --date <date>  Override report date',
         '  --noWrite      Print only; do not write report files or run manifest',
         '  --noManifest   Do not write the run manifest',
+        '  --noFail       Return exit 0 even when report.ok=false, while preserving report.ok',
     ].join('\n'));
 }
 
@@ -316,7 +318,7 @@ function main(argv = process.argv) {
         };
         writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, 'report_quality', result, options);
         console.log(JSON.stringify(result, null, 2));
-        return result.ok ? 0 : 1;
+        return result.ok || options.noFail ? 0 : 1;
     } catch (error) {
         console.error(error.message);
         return 1;
