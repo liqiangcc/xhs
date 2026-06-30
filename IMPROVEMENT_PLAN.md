@@ -1,202 +1,372 @@
-# XHS 仓库优化改进计划
+# xhs 仓库优化改进计划
 
-> 分析日期：2026-06-30  
-> 适用仓库：`liqiangcc/xhs`  
-> 目标：在不改变当前业务目标的前提下，把“小红书面经题库”的采集、结构化、打标签、查询与复习分析链路升级为更安全、可维护、可验证、可扩展的数据工程项目。
+> 生成日期：2026-06-30  
+> 仓库：`liqiangcc/xhs`  
+> 分支：`master`  
+> 本文档基于对仓库 README、核心 Node.js 脚本、Shell/Python 采集脚本、Agent Skill 文档与部分数据治理脚本的静态阅读分析。本文档只提出优化计划，不直接改动现有业务代码或数据。
 
 ---
 
-## 1. 当前定位
+## 1. 仓库现状概览
 
-该仓库已经形成了一条比较完整的面经题库流水线：
+`xhs` 当前是一个围绕“小红书面经题库”的数据工程与智能查询项目，核心目标是从小红书搜索、抓取面试经验笔记，通过 AI 提取面试题、结构化元数据、打标签，最终形成可查询、可复习、可分析的题库。
+
+当前主链路可以概括为：
 
 ```text
-搜索/采集 → HTML/JSON/正文/图片 → OCR/题目抽取 → 结构化 JSON → 多维标签 JSON → 查询/统计/复习计划
+搜索/抓取笔记 → HTML → JSON → 正文/图片 → AI 提取题目 → note_structured
+                                            ↓
+                                      AI 打标签 → note_tagged
+                                            ↓
+                                      query_tagged.js 查询/统计/热点分析
 ```
 
-核心价值不是“抓取脚本”本身，而是：
+已具备的基础能力：
 
-1. 将面经原文转成稳定的题库结构；
-2. 给每道题生成稳定 `question_id`；
-3. 建立 `domain / question_type / cognitive_depth / tech_entities / is_valid_for_library` 等标签；
-4. 支持按公司、岗位、年份、轮次、知识点、高频题进行查询和复习分析。
+- 有清晰的四段式流水线：采集、结构化、打标签、查询。
+- `scripts/query_tagged.js` 已支持领域、公司、题型、认知深度、技术实体、笔记 ID、题目 ID、统计、热点等查询能力。
+- `xhs_pipeline` 已经在尝试收敛为统一入口，减少 Agent 直接调用多个零散脚本。
+- 已存在 `check_consistency.js` / `fix_consistency.js` / `fix_master_sweep.js` 等数据一致性和清洗脚本。
+- Skill 文档已经对提取、打标签、查询、批量分析、自动化管线建立了比较完整的操作契约。
 
-因此后续优化重点应从“能跑”转向“安全、可复现、可验证、可持续迭代”。
-
----
-
-## 2. 已观察到的优点
-
-### 2.1 数据产品方向清晰
-
-`README.md` 已经把系统定位为“采集 · 结构化 · 打标签 · 智能查询”的面经题库，并明确了当前数据规模、数据流、目录结构和查询方式。
-
-### 2.2 查询工具已经具备可组合能力
-
-`scripts/query_tagged.js` 支持：
-
-- `domain`、`company`、`type`、`depth`、`entity`、`note`、`question`、`stats`、`hotspot` 等查询；
-- `--filter-valid`、`--filter-company`、`--filter-level`、`--filter-year`、`--filter-round`、`--slim` 等组合过滤；
-- stdout 输出 JSON、stderr 输出摘要，便于 Agent 或脚本继续处理。
-
-### 2.3 已有基础数据治理脚本
-
-仓库中已经有：
-
-- `scripts/check_consistency.js`：检查 structured/tagged 文件是否一致；
-- `scripts/validate_tagged.js`：校验题目数量和 hash 是否一致；
-- `scripts/normalize_tags.js`：尝试规范化标签；
-- `scripts/find_ocr_needed.js`：定位需要重新 OCR 的笔记；
-- `scripts/xhs_pipeline.js`：统一生成待处理任务并生成 hash。
-
-这说明项目已经从“脚本集合”向“数据管线”演进，后续应继续沿着统一入口、统一 schema、统一校验的方向收敛。
+主要问题集中在：工程化基础薄弱、脚本鲁棒性不足、规则分散重复、缺少自动化测试与 CI、数据治理标准还不够强、安全/合规边界需要显式化。
 
 ---
 
-## 3. 主要问题与风险
+## 2. 总体优化目标
 
-| 优先级 | 问题 | 影响 | 建议方向 |
+### 2.1 短期目标
+
+在不大规模重构的前提下，让仓库“可重复运行、可验证、可安全提交”。
+
+重点是：
+
+- 补齐 `.gitignore`、依赖清单、运行脚本入口和基础文档。
+- 给现有脚本加最小化测试和一致性校验。
+- 修复 Shell 脚本中的高风险问题，例如 `eval`、输入未转义、错误统计、trap 清理。
+- 建立数据 Schema，防止 AI 生成的 JSON 漂移。
+
+### 2.2 中期目标
+
+把项目从“脚本集合”升级为“稳定的数据处理工具链”。
+
+重点是：
+
+- 抽出共享库：hash、taxonomy、schema、文件 IO、过滤规则、日志工具。
+- 将采集、OCR、结构化、打标签、查询拆成可组合命令。
+- 引入 CI：Node 检查、ShellCheck、JSON Schema 校验、数据一致性检查。
+- 建立增量索引，提升查询和批量分析性能。
+
+### 2.3 长期目标
+
+把题库建设成“可持续演进的面试知识库”。
+
+重点是：
+
+- 建立知识点规范化体系和实体词典。
+- 做语义去重与相似题聚类，而不仅依赖 MD5 exact hash。
+- 增加导出、复习、专题分析、Anki/Markdown/CSV 等产品化能力。
+- 建立数据来源、隐私、平台规则、保留策略与敏感信息治理机制。
+
+---
+
+## 3. 优先级总表
+
+| 优先级 | 方向 | 目标 | 推荐周期 |
 |---|---|---|---|
-| P0 | 采集脚本依赖 `raw_curl*.txt` 模板和 `eval` 执行 | 有命令注入、Cookie/请求头泄露、不可审计风险 | 替换为显式参数化客户端；禁止提交敏感请求模板；增加合规采集边界 |
-| P0 | 缺少根目录 `.gitignore` | 日志、临时任务、原始请求、下载图片、HTML 等容易误提交 | 增加 `.gitignore` 和 secret scanning 清单 |
-| P0 | 标签枚举存在漂移 | `xhs_tagger` 定义的强枚举与 `normalize_tags.js` 的标准化目标不完全一致，查询统计可能前后不统一 | 抽取统一 schema/constants，所有脚本共用 |
-| P0 | hash/评分/关键词逻辑重复 | `generate_hashes.js`、`xhs_pipeline.js`、`validate_tagged.js`、`check_consistency.js`、`filter_notes.js`、`find_ocr_needed.js` 有重复逻辑 | 建立 `scripts/lib/` 公共模块 |
-| P1 | 采集、解析、OCR、AI、查询混用 Bash/JS/Python | 维护成本高，错误处理风格不一致 | 统一成 Node CLI 或 Python CLI，保留少量兼容入口 |
-| P1 | 大体量原始数据进入仓库 | 仓库体积变大，clone 慢，隐私和版权边界不清晰 | 原始数据外置，仓库只保留脱敏后的结构化数据和索引 |
-| P1 | 缺少自动化测试和 CI | 每次新增脚本或修改 schema 都可能破坏历史数据 | 增加 package.json、测试、lint、GitHub Actions |
-| P1 | AI 输出缺少强校验和重试机制 | 单次 LLM 输出格式错误会污染题库 | JSON Schema 校验 + 自动修复/重试 + 审核队列 |
-| P2 | 查询每次全量读取 JSON | 数据量继续增长后性能和可交互性变差 | 生成离线索引、实体倒排索引、统计缓存 |
-| P2 | 缺少质量闭环 | 标签质量、无效题比例、重复题比例难量化 | 建立数据质量仪表盘和人工抽样审核流程 |
+| P0 | 安全与仓库卫生 | 避免误提交 Cookie、原始请求、临时文件、大文件；补齐 `.gitignore` | 0.5 天 |
+| P0 | 脚本鲁棒性 | 移除 `eval`，修复输入转义、错误处理、计数统计、trap 清理 | 1-2 天 |
+| P0 | 数据契约 | 增加 JSON Schema，保证 `note_structured` / `note_tagged` 字段稳定 | 1-2 天 |
+| P1 | 测试与 CI | 增加 `npm test`、`npm run check`、GitHub Actions | 2-4 天 |
+| P1 | 共享模块化 | 抽出 hash、taxonomy、filters、schema、logger | 3-5 天 |
+| P1 | 查询增强 | 增量索引、多维排序、导出、分页、JSON/stderr/stdout 统一 | 3-5 天 |
+| P2 | 数据质量 | 语义去重、实体标准化、题目质量评分、人工复核队列 | 1-2 周 |
+| P2 | 产品化 | 专题复习包、Anki/CSV/Markdown 导出、可视化统计 | 1-2 周 |
 
 ---
 
-## 4. P0：一周内应优先完成的改进
+## 4. P0：安全与仓库卫生
 
-### 4.1 建立仓库安全边界
+### 4.1 新增 `.gitignore`
 
-新增 `.gitignore`，至少覆盖：
+当前采集脚本依赖 `raw_curl.txt` 作为浏览器请求模板，且会产生日志、临时任务文件、HTML、图片、OCR 中间结果等大量易变文件。建议立即新增 `.gitignore`，避免误提交敏感内容和大文件。
+
+建议忽略：
 
 ```gitignore
-# request templates / credentials
-raw_curl*.txt
+# local request templates / secrets
+raw_curl.txt
 *.cookie
-*.har
+*.cookies
 .env
 .env.*
+!.env.example
 
 # logs / temp files
 *.log
+*.tmp
+failed_list.txt
 fetch.log
 extract.log
-failed_list.txt
-unique_tasks.tmp
-*.tmp
 
-# large raw artifacts, decide by policy before committing
-note_detail/
-note_json/
+# generated bulky raw artifacts, unless explicitly curated
 downloaded_images/
+note_detail/
 
-# local outputs
-hashmap_slim.json
+# local runtime
+node_modules/
+.DS_Store
 ```
 
-同时增加 `docs/DATA_POLICY.md`，明确：
+是否忽略 `note_json/`、`note_desc/`、`note_images/`、`note_img_txt/`、`note_structured/`、`note_tagged/` 需要单独决策：
 
-1. 只处理授权、公开、合规来源的数据；
-2. 不把绕过平台风控、规避访问限制、批量账号/IP 切换作为项目目标；
-3. 触发频控或异常访问提示时，采集流程必须停止并记录原因；
-4. 不提交 Cookie、Token、个人账号信息、原始请求头；
-5. 原文、图片、HTML 进入仓库前必须评估隐私和版权边界。
+- 如果仓库本身就是私有数据集仓库，可以继续跟踪结构化和标签数据。
+- 如果目标是开源或长期协作，建议将原始采集数据、图片、HTML 移出 Git，改用对象存储或 Git LFS。
 
-### 4.2 移除 `eval` 执行模式
+### 4.2 增加 `.env.example`
 
-当前 `search.sh` 和 `detail` 通过读取 `raw_curl*.txt`、`sed` 替换、`eval` 执行请求。这种方式的问题是：
+把本地依赖和敏感配置统一放到环境变量，示例：
 
-- 关键字、token、模板内容都可能影响最终命令；
-- 很难在代码审查中判断最终执行了什么；
-- 原始 curl 模板往往包含敏感 Cookie 和请求头；
-- 对失败原因、重试策略、限速策略缺乏结构化记录。
+```bash
+GEMINI_MODEL_TEXT=gemini-2.5-flash
+GEMINI_MODEL_IMAGE=gemini-2.5-flash
+XHS_REQUEST_TEMPLATE=raw_curl.txt
+XHS_MAX_PAGE=20
+XHS_FETCH_SLEEP_MIN=10
+XHS_FETCH_SLEEP_MAX=20
+```
+
+注意：不要把真实 Cookie、Token、请求签名、浏览器完整 cURL 提交到仓库。
+
+### 4.3 增加敏感信息扫描
+
+建议在 CI 中加入：
+
+- `gitleaks` 或同类 secret scanner。
+- 检查 `raw_curl.txt`、`cookie`、`authorization`、`x-s`、`x-t`、`xsec_token` 等关键词是否被提交。
+- PR 或 commit 前阻断高风险文件。
+
+### 4.4 合规边界
+
+采集相关逻辑应显式写入 `docs/COMPLIANCE.md`：
+
+- 仅处理自己有权访问和使用的数据。
+- 尊重平台规则、频率限制、版权和隐私要求。
+- 不提供绕过风控、规避访问控制、批量盗取数据的功能。
+- 对个人信息、头像、昵称、URL、Cookie、Token 做最小化保留。
+- 建立数据删除/复核机制。
+
+---
+
+## 5. P0：脚本鲁棒性修复
+
+### 5.1 替换 `search.sh` 中的 `eval`
+
+当前 `search.sh` 通过读取 `raw_curl.txt`，再用 `sed` 替换 keyword/page，最后 `eval` 执行拼接命令。风险包括：
+
+- keyword 中包含特殊字符时可能破坏 sed 表达式。
+- 请求模板中如果有 shell 特殊字符，`eval` 会扩大执行风险。
+- 错误难以定位，也不利于测试。
+
+建议方案：
+
+1. 短期：对 keyword 做严格转义，至少限制危险字符。
+2. 中期：改为 Node.js/Python 请求脚本，读取 JSON 配置而不是执行整段 cURL。
+3. 长期：抽象为 `scripts/fetch/search.js`，参数化 headers/body，并输出稳定 JSON。
+
+目标命令：
+
+```bash
+node scripts/fetch/search.js --keyword "java社招面试" --page 1 --template raw_curl.json
+```
+
+验收标准：
+
+- keyword 包含空格、`/`、`&`、中文、引号时不报错。
+- 不再使用 `eval`。
+- 失败时返回结构化错误：`{ success:false, error_code, message }`。
+
+### 5.2 修复 `fetch.sh` 参数与文件名处理
+
+当前脚本使用 `$1` 作为关键词和输出文件名，建议：
+
+- 增加参数校验：keyword 不能为空。
+- 输出文件名做 slug 化，避免空格、斜杠、特殊字符造成路径问题。
+- `MAX_PAGE` 改为参数或环境变量。
+- 所有变量引用加双引号。
+- 输出结构化统计，包括成功页数、失败页、笔记数、输出路径。
+
+目标命令：
+
+```bash
+bash fetch.sh --keyword "java 社招 面试" --max-page 20 --out notes/java-she-zhao.txt
+```
+
+### 5.3 修复 `html_to_json.sh` 计数统计
+
+当前脚本使用 `find ... | while read` 管道形式，Bash 中 while 子进程导致 `SUCCESS_COUNT` / `FAILED_COUNT` 在循环外可能无法正确保留。
+
+建议改为：
+
+```bash
+while IFS= read -r html_file; do
+  ...
+done < <(find "$SOURCE_DIR" -name "*.html")
+```
+
+并增加：
+
+- 失败原因分类。
+- 失败列表 JSONL 输出。
+- 支持 `--limit`、`--retry-failed`。
+
+验收标准：
+
+- 最终成功/失败数量与实际处理数量一致。
+- 空目录、损坏 HTML、无 JSON HTML 都有明确返回码。
+
+### 5.4 强化 `fetch_detail.sh`
+
+建议改进：
+
+- 使用 `trap 'rm -f "$TASK_LIST"' EXIT` 确保临时文件清理。
+- 将 `DETAIL_EXEC` 参数化，避免硬编码 `./detail`。
+- 增加重试策略，但不要用于规避平台限制；只处理临时网络错误。
+- 日志改成 JSON Lines，方便后续统计。
+- 记录 HTTP 状态、失败原因、耗时、note_id。
+- 已存在 HTML 时记录为 `skipped_existing`，而不是只写普通日志。
+
+### 5.5 加强图片下载脚本
+
+当前 `url_2_img.sh` 只检查 curl 退出码，不检查 HTTP 状态、Content-Type 和文件真实格式。建议：
+
+- 使用 `curl --fail --location --retry 3 --connect-timeout 5`。
+- 下载到临时文件，校验大小和类型后再原子 rename。
+- 保存 manifest：URL、文件名、sha256、下载时间、状态码。
+- 不强制所有图片保存为 `.webp`，应根据 Content-Type 或 URL 判断扩展名。
+
+### 5.6 统一 AI 调用入口
+
+当前文本提取和图片 OCR 脚本直接调用 `gemini`，模型名、Prompt、输出路径、重试策略都散落在脚本中。
+
+建议新增：
+
+```bash
+node scripts/ai/run_model.js \
+  --mode extract-text \
+  --input note_desc/<id>.txt \
+  --output question/<id>_desc_questions.txt
+```
+
+并支持：
+
+- 统一模型配置。
+- 统一超时与重试。
+- 统一空输出处理。
+- 记录 token/成本/耗时。
+- dry-run 模式。
+- prompt 模板版本号。
+
+---
+
+## 6. P0：数据契约与 Schema
+
+### 6.1 新增 JSON Schema
 
 建议新增：
 
 ```text
-scripts/collect/search_client.js
-scripts/collect/detail_client.js
-scripts/lib/http.js
-scripts/lib/config.js
+schemas/note_structured.schema.json
+schemas/note_tagged.schema.json
+schemas/query_result.schema.json
 ```
 
-要求：
+`note_structured` 必填：
 
-- 所有参数显式传入，不拼接 shell 命令；
-- 请求头从本地 `.env` 或系统环境变量读取，不入库；
-- 对每次请求输出 JSONL 日志：`note_id / page / status / duration / error_code`；
-- 遇到频控、登录失效、权限异常时直接停止，不提供规避策略；
-- 默认 dry-run，需要显式 `--apply` 才执行网络请求。
+- `note_id`
+- `source`
+- `company`
+- `position`
+- `round`
+- `level`
+- `year`
+- `date`
+- `questions`
 
-### 4.3 统一 schema 与枚举
+`note_tagged` 必填：
 
-新增：
+- `note_id`
+- `source`
+- `company`
+- `position`
+- `round`
+- `level`
+- `year`
+- `date`
+- `tagged_questions`
 
-```text
-scripts/lib/schema.js
-scripts/lib/taxonomy.js
-scripts/lib/hash.js
+`tagged_questions[]` 必填：
+
+- `question_id`
+- `original_question`
+- `domain.l1`
+- `domain.l2`
+- `question_type`
+- `cognitive_depth`
+- `tech_entities`
+- `business_context`
+- `is_valid_for_library`
+
+注意：当前一致性检查里没有把 `business_context` 放入 tagged question 的必填字段，建议补上，以保持和 Skill 契约一致。
+
+### 6.2 增加校验命令
+
+建议新增：
+
+```bash
+npm run validate:data
+npm run validate:schemas
+npm run check:consistency
 ```
 
-其中 `taxonomy.js` 作为唯一标签来源：
+内部调用：
 
-```js
-const DOMAIN_L1 = [
-  'Java基础', 'Spring生态', '数据库', '缓存', '中间件', '操作系统',
-  '计算机网络', '系统设计', '算法与数据结构', '云原生与工程化', '其他'
-];
-
-const QUESTION_TYPES = [
-  '八股文_Concept', '原理深度_UnderTheHood', '场景设计_Scenario',
-  '算法手撕_Coding', '项目深挖_Project', '行为软技_Behavioral'
-];
+```bash
+node scripts/check_consistency.js --json
+node scripts/validate_json_schema.js
 ```
 
-然后让以下文件全部引用同一份定义：
+验收标准：
 
-- `skills/xhs_tagger/SKILL.md`；
-- `skills/xhs_query/SKILL.md`；
-- `scripts/query_tagged.js`；
-- `scripts/normalize_tags.js`；
-- `scripts/check_consistency.js`；
-- `scripts/validate_tagged.js`；
-- `README.md`。
+- 所有 `note_structured/*.json` 和 `note_tagged/*.json` 能通过 schema。
+- hash 不一致、题目数量不一致、原题漂移都能在 CI 中失败。
+- 输出机器可读 JSON 到 stdout，人类报告到 stderr 或文件。
 
-这样可以避免“打标时一套枚举、标准化时另一套枚举、查询文档又是一套表达”的问题。
+### 6.3 统一年份字段类型
 
-### 4.4 抽取公共 hash 与数据读取模块
+Skill 示例里 `year` 有时是数字，有时是字符串 `"未知"`。建议统一为：
 
-当前多个脚本都实现了类似的 hash 逻辑：
-
-```js
-question.toLowerCase().replace(/[^\w\u4e00-\u9fa5]/g, '')
+```json
+"year": "2025"
 ```
 
-建议统一为：
+或：
 
-```text
-scripts/lib/hash.js
-scripts/lib/io.js
-scripts/lib/note.js
+```json
+"year": null
 ```
 
-迁移顺序：
+推荐使用字符串或 null，避免查询时同时处理 number/string。
 
-1. `generate_hashes.js` 改为调用 `lib/hash.js`；
-2. `xhs_pipeline.js` 改为调用 `lib/hash.js`；
-3. `validate_tagged.js` / `check_consistency.js` 改为调用同一实现；
-4. 增加 hash 快照测试，确保历史 question_id 不漂移。
+---
 
-### 4.5 增加最小测试与 CI
+## 7. P1：工程化基础
 
-新增 `package.json`：
+### 7.1 增加 `package.json`
+
+当前 Node.js 脚本使用内置模块为主，但仍然应该有统一入口和脚本命令。
+
+建议：
 
 ```json
 {
@@ -204,345 +374,629 @@ scripts/lib/note.js
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test": "node --test",
+    "query": "node scripts/query_tagged.js",
+    "pipeline": "node scripts/xhs_pipeline.js",
     "check": "node scripts/check_consistency.js",
-    "validate": "node scripts/validate_tagged.js",
-    "query:stats": "node scripts/query_tagged.js stats --filter-valid"
+    "fix:consistency": "node scripts/fix_consistency.js",
+    "test": "node --test",
+    "lint:shell": "shellcheck *.sh scripts/**/*.sh",
+    "validate:data": "node scripts/validate_json_schema.js"
+  },
+  "devDependencies": {
+    "ajv": "^8.0.0"
   }
 }
 ```
 
-新增测试：
+### 7.2 增加 Makefile 或 Taskfile
 
-```text
-test/hash.test.js
-test/query_args.test.js
-test/schema.test.js
-test/consistency_sample.test.js
+建议提供稳定入口：
+
+```makefile
+check:
+	npm run validate:data
+	npm run check
+
+query-stats:
+	node scripts/query_tagged.js stats --filter-valid
+
+pipeline:
+	node scripts/xhs_pipeline.js
 ```
 
-新增 GitHub Actions：
+这样 Agent、人工和 CI 都使用同一套命令。
 
-```text
-.github/workflows/ci.yml
-```
+### 7.3 增加 README 的“快速开始”
 
-CI 先只跑：
+建议 README 增加：
 
-1. `node --test`；
-2. `node scripts/validate_tagged.js`；
-3. `node scripts/check_consistency.js`；
-4. 检查是否存在误提交的 `raw_curl*.txt`、`.env`、Cookie、Token 字样。
+- 环境依赖安装。
+- 最小化查询命令。
+- 数据校验命令。
+- 新增数据的标准流程。
+- 常见错误排查。
+- 哪些目录可以提交，哪些目录不能提交。
 
 ---
 
-## 5. P1：两到三周内完成的数据工程化改造
+## 8. P1：模块化重构
 
-### 5.1 收敛为统一 CLI
-
-目标入口：
-
-```bash
-node scripts/xhs.js <command> [options]
-```
-
-建议命令：
-
-```bash
-node scripts/xhs.js collect search --keyword "java社招面试" --pages 5 --dry-run
-node scripts/xhs.js collect detail --input notes/java社招面试.txt
-node scripts/xhs.js parse html --input note_detail --output note_json
-node scripts/xhs.js parse desc
-node scripts/xhs.js parse images
-node scripts/xhs.js ocr --ids-only
-node scripts/xhs.js pipeline --limit 10
-node scripts/xhs.js validate
-node scripts/xhs.js query entity --value Redis --filter-valid --slim
-```
-
-保留旧脚本作为兼容 wrapper，但 README 只推荐新 CLI。
-
-### 5.2 将数据层分区
-
-建议目录：
+当前多个脚本重复实现 hash、技术关键词、实体同义词、文件读取、schema 字段判断。建议拆成共享模块：
 
 ```text
-data/
-  raw/              # 本地原始 HTML/图片，不默认提交
-  intermediate/     # note_json / note_desc / note_img_txt
-  curated/          # note_structured / note_tagged
-  indexes/          # 生成的查询索引和统计缓存
-  manifests/        # 每次处理批次的 manifest
-review/
-  ans/
-  mysql/
+scripts/lib/
+├── hash.js             # computeQuestionHash
+├── taxonomy.js         # domain/question_type/cognitive_depth 枚举
+├── entity_normalizer.js# tech_entities 标准化
+├── filters.js          # company/level/year/round/entity 过滤
+├── io.js               # safeReadJson/listJsonIds/writeJson
+├── logger.js           # human/jsonl logger
+└── schemas.js          # schema loading and validation
 ```
 
-迁移策略：
+### 8.1 Hash 统一
 
-1. 短期先不移动历史目录，避免破坏脚本；
-2. 新增路径配置层，允许旧路径和新路径共存；
-3. 新增迁移脚本 `scripts/migrate_data_layout.js --dry-run`；
-4. 确认查询和校验通过后，再逐步调整 README 和脚本默认路径。
+目前 hash 规则出现在：
 
-### 5.3 引入 manifest 和可恢复执行
+- `generate_hashes.js`
+- `xhs_pipeline.js`
+- `check_consistency.js`
+- `fix_consistency.js`
+- Skill 文档中的 Python 命令
 
-每次流水线执行生成：
+建议以 `scripts/lib/hash.js` 为唯一实现，并在所有 Node 脚本中引用。
+
+验收标准：
+
+- `node --test test/hash.test.js` 覆盖中文、英文、标点、大小写、空格。
+- 所有脚本生成的 question_id 完全一致。
+
+### 8.2 Taxonomy 统一
+
+目前 domain/question_type/cognitive_depth 强枚举主要写在 Skill 文档里，代码端只是被动接收。
+
+建议新增：
 
 ```text
-data/manifests/2026-06-30Txx-xx-xx.jsonl
+data/taxonomy/domain.json
+data/taxonomy/question_type.json
+data/taxonomy/entity_synonyms.json
 ```
 
-每条记录包含：
+并让：
+
+- `xhs_tagger` Skill 引用该文件。
+- `check_consistency.js` 校验枚举合法性。
+- `fix_master_sweep.js` 使用同一份 `entity_synonyms.json`。
+- `query_tagged.js stats` 可以按标准 taxonomy 输出。
+
+### 8.3 合并清洗脚本
+
+当前 `fix_synonyms.js` 和 `fix_master_sweep.js` 存在明显职责重叠。建议合并为：
+
+```bash
+node scripts/normalize_entities.js --dry-run
+node scripts/normalize_entities.js --apply
+node scripts/normalize_entities.js --rebuild-index
+```
+
+验收标准：
+
+- 所有实体标准化逻辑来源于 `data/taxonomy/entity_synonyms.json`。
+- 支持 dry-run 展示变更 diff。
+- 支持只处理指定 note_id。
+
+---
+
+## 9. P1：查询能力增强
+
+### 9.1 增量索引
+
+`query_tagged.js` 每次运行都会同步读取 `note_tagged/*.json` 并 flatten 全量题目。当前数据量不大时可接受，但随着题库增长，建议生成索引：
+
+```text
+data/index/questions.json
+数据字段：question_id、original_question、company、level、year、round、domain、question_type、cognitive_depth、tech_entities、note_id
+```
+
+新增命令：
+
+```bash
+node scripts/build_index.js
+node scripts/query_index.js entity --value Redis --filter-valid --limit 20
+```
+
+验收标准：
+
+- build_index 可重复执行。
+- index 中记录来源文件和 mtime/hash，支持增量更新。
+- 查询结果与原 `query_tagged.js` 在同条件下数量一致。
+
+### 9.2 输出协议统一
+
+建议所有查询类脚本遵循：
+
+- stdout：机器可读 JSON。
+- stderr：人类摘要、日志、进度。
+- `--format json|table|markdown`：控制展示格式。
+- `--limit` / `--offset`：分页。
+- `--sort`：支持按公司、年份、题型、热度排序。
+
+当前 `check_consistency.js` 把人类报告写 stdout、JSON 写 stderr，不利于程序化集成，建议调整或增加 `--json` 模式。
+
+### 9.3 README 与代码命令保持一致
+
+`query_tagged.js` 已支持 `question --id <id>`，但 README 的命令表主要列出 domain/company/type/depth/entity/note/stats/hotspot。建议补齐 README 和 `xhs_query` Skill，让用户可以直接查单题。
+
+### 9.4 高级查询
+
+建议新增：
+
+- `similar --id <question_id>`：查相似题。
+- `cluster --entity Redis`：按技术实体聚类。
+- `company-profile --name 字节 --filter-valid`：输出公司考点画像。
+- `study-plan --company 美团 --level 社招`：生成复习优先级。
+- `export --format csv|anki|markdown`：导出复习资料。
+
+---
+
+## 10. P1：测试与 CI
+
+### 10.1 单元测试
+
+建议使用 Node 内置 test runner：
+
+```text
+test/
+├── hash.test.js
+├── query_args.test.js
+├── query_filters.test.js
+├── pipeline_score.test.js
+├── entity_normalizer.test.js
+└── schema_validation.test.js
+```
+
+关键测试点：
+
+- hash 稳定性。
+- `--slim` 输出只包含必要字段。
+- company/entity 模糊匹配。
+- `--filter-valid`、`--filter-year`、`--filter-round` 组合过滤。
+- 空目录、坏 JSON、缺字段时的行为。
+- pipeline scoring 对 JD、offer、纯分享、技术面经的分类。
+
+### 10.2 Fixture 数据
+
+新增小规模测试数据：
+
+```text
+test/fixtures/
+├── note_structured/demo_valid.json
+├── note_structured/demo_empty.json
+├── note_tagged/demo_valid.json
+├── note_tagged/demo_hash_mismatch.json
+└── note_tagged/demo_schema_missing.json
+```
+
+测试不要依赖真实私有数据，避免 CI 泄露。
+
+### 10.3 GitHub Actions
+
+建议新增：
+
+```yaml
+name: check
+on:
+  pull_request:
+  push:
+    branches: [master]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+      - run: npm run validate:data
+      - run: npm run check
+      - run: shellcheck *.sh || true
+```
+
+初期可以把 ShellCheck 设为 warning，待脚本修复后改为强制失败。
+
+---
+
+## 11. P2：数据质量提升
+
+### 11.1 从 exact hash 到语义去重
+
+当前 `question_id` 基于问题文本归一化后的 MD5，适合 exact dedupe，但无法处理：
+
+- “Redis 持久化有哪些？” vs “Redis 的 RDB 和 AOF 区别？”
+- “讲讲 HashMap 底层” vs “HashMap 原理是什么？”
+- “手写快排” vs “算法：快速排序”
+
+建议新增：
+
+- `canonical_question`：标准题干。
+- `semantic_group_id`：语义聚类 ID。
+- `duplicate_of`：可选，指向主问题 ID。
+- `similarity_score`：相似度。
+
+### 11.2 题目质量评分
+
+新增字段或派生索引：
 
 ```json
 {
-  "run_id": "2026-06-30Txx-xx-xx",
-  "note_id": "...",
-  "stage": "extract|hash|tag|validate|commit",
-  "status": "success|failed|skipped",
-  "input_sha256": "...",
-  "output_path": "...",
-  "error": null
+  "quality_score": 0.92,
+  "quality_reasons": ["技术实体明确", "题型明确", "非项目私有追问"]
 }
+```
+
+用途：
+
+- 过滤无效题。
+- 优先生成复习材料。
+- 发现需要人工复核的题。
+
+### 11.3 人工复核队列
+
+新增：
+
+```text
+review/queue/
+├── needs_tag_review.json
+├── needs_dedupe_review.json
+└── needs_metadata_review.json
+```
+
+触发条件：
+
+- company/year/round 无法推断。
+- domain.l1/l2 不合法。
+- tech_entities 为空但题目有效。
+- 同一 note 中题目数量异常。
+- OCR 文本太短或图片数量较多但没有题目。
+
+### 11.4 数据版本化
+
+建议给每批数据处理增加批次号：
+
+```json
+{
+  "pipeline_version": "2026.06.30",
+  "prompt_version": "xhs_extractor_v2",
+  "taxonomy_version": "domain_v1",
+  "processed_at": "2026-06-30T00:00:00Z"
+}
+```
+
+这样后续可以追踪：某次 prompt 或 taxonomy 变化导致的数据漂移。
+
+---
+
+## 12. P2：采集与处理链路改造
+
+### 12.1 把采集与数据处理解耦
+
+建议分层：
+
+```text
+collect/       # 搜索、详情抓取、图片下载，仅负责原始数据
+extract/       # HTML/JSON/正文/图片 OCR 解析
+structure/     # AI 结构化
+label/         # AI 打标签
+data/          # 索引、taxonomy、schema
+review/        # 复习答案、人工复核
+```
+
+### 12.2 增加任务状态机
+
+当前依靠目录是否存在判断进度。建议建立 `data/tasks.jsonl` 或 SQLite：
+
+```json
+{
+  "note_id": "...",
+  "status": "tagged",
+  "has_desc": true,
+  "has_images": true,
+  "has_ocr": true,
+  "structured": true,
+  "tagged": true,
+  "last_error": null,
+  "updated_at": "2026-06-30T00:00:00Z"
+}
+```
+
+状态：
+
+```text
+discovered → fetched → parsed → ocr_done → structured → tagged → indexed → reviewed
 ```
 
 好处：
 
-- 任意阶段失败后可从失败点恢复；
-- 可以审计每个文件由哪次运行生成；
-- 后续可统计 AI 失败率、OCR 失败率、无效笔记比例。
+- 更容易断点续跑。
+- 更容易查询失败任务。
+- 不需要在每个脚本中重复扫描多个目录。
 
-### 5.4 强化 AI 输出质量控制
+### 12.3 明确重试与限流策略
 
-建议增加：
+建议只对临时网络错误做有限重试，且遵守平台规则与本地配置。
 
-```text
-scripts/lib/ai_schema.js
-scripts/repair_structured.js
-scripts/repair_tagged.js
+配置示例：
+
+```json
+{
+  "retry": {
+    "max_attempts": 3,
+    "initial_delay_ms": 1000,
+    "max_delay_ms": 30000
+  },
+  "rate_limit": {
+    "min_interval_ms": 10000,
+    "batch_pause_ms": 300000,
+    "batch_size": 20
+  }
+}
 ```
 
-流程：
+---
 
-1. LLM 输出后先 JSON parse；
-2. 用 schema 校验字段、枚举、数组类型；
-3. 对无效输出进行一次自动修复提示；
-4. 仍失败则进入 `review/needs_human_review/`；
-5. 所有修复动作写入 manifest。
+## 13. P2：产品化能力
 
-### 5.5 构建查询索引
+### 13.1 复习包导出
 
-当前 `query_tagged.js` 每次读取 `note_tagged/*.json` 并展开全部题目。短期可接受，但数据继续增长后应生成索引。
-
-新增：
+新增命令：
 
 ```bash
-node scripts/build_index.js
+node scripts/export_study_pack.js --company 美团 --level 社招 --format markdown
+node scripts/export_study_pack.js --entity Redis --format anki
+node scripts/export_study_pack.js --domain JVM --format csv
 ```
 
 输出：
 
 ```text
-data/indexes/questions.jsonl
-data/indexes/entity_index.json
-data/indexes/company_index.json
-data/indexes/stats.json
+exports/
+├── 美团_社招_复习包.md
+├── Redis_Anki.csv
+└── JVM_questions.csv
 ```
 
-`query_tagged.js` 优先读取索引，索引不存在或过期时提示运行 `build_index`。
+### 13.2 公司画像
+
+新增：
+
+```bash
+node scripts/company_profile.js --name 字节 --filter-valid
+```
+
+输出：
+
+- 高频技术实体 Top 20。
+- domain 分布。
+- question_type 分布。
+- 年份/轮次/层级分布。
+- 高频重复题。
+- 推荐复习路径。
+
+### 13.3 专题分析
+
+结合 `xhs_batch_analyzer`：
+
+- 对某个实体自动生成答案。
+- 跳过已存在分析文件。
+- 输出统一模板。
+- 记录引用题目来源。
+
+建议增加：
+
+```bash
+node scripts/analyze_topic.js --entity Redis --limit 10 --skip-existing
+```
 
 ---
 
-## 6. P2：中长期产品化方向
+## 14. 建议实施路线图
 
-### 6.1 题库质量仪表盘
+### 阶段 0：半天内完成
 
-新增 `review/quality_report.md`，定期输出：
+目标：降低误提交和脚本风险。
 
-- 总笔记数、总题数、有效题数；
-- 公司分布、年份分布、轮次分布；
-- domain/question_type/cognitive_depth 分布；
-- 无效题比例；
-- 重复题比例；
-- schema 警告数量；
-- OCR 待处理数量；
-- 高频实体 Top N。
+任务：
 
-### 6.2 建立“题目去重 + 相似题聚类”
+- 新增 `.gitignore`。
+- 新增 `.env.example`。
+- README 增加“敏感文件不要提交”说明。
+- `search.sh` 标注弃用或增加安全警告。
+- 新增 `docs/COMPLIANCE.md`。
 
-`question_id` 当前基于归一化文本 hash，只能识别完全或近似文本一致的题。建议增加语义去重：
+验收：
 
-1. 保留 `question_id` 作为稳定主键；
-2. 新增 `canonical_question_id` 表示归并后的题簇；
-3. 使用 embedding 或关键词规则聚类；
-4. 高频题统计改用题簇，而不是单个文本 hash。
+- `git status` 不再显示日志、临时文件、raw_curl、下载图片等易变文件。
+- 新用户能通过 README 知道哪些文件不能提交。
 
-### 6.3 复习系统升级
+### 阶段 1：1-2 天
 
-基于已存在的 `review/` 目录，可以扩展为：
+目标：让现有脚本更稳。
 
-- `review/plans/`：按岗位/公司/时间生成复习计划；
-- `review/ans/`：标准答案和追问；
-- `review/sessions/`：模拟面试记录；
-- `review/mistakes/`：错题和薄弱点；
-- `scripts/generate_review_session.js`：按知识点抽题。
+任务：
 
----
+- 修复 `html_to_json.sh` 的计数问题。
+- `fetch.sh` 参数化与文件名安全化。
+- `fetch_detail.sh` 增加 trap、结构化日志、错误分类。
+- `url_2_img.sh` 增加 HTTP/Content-Type 校验。
+- AI 调用脚本统一模型配置和重试。
 
-## 7. 建议实施顺序
+验收：
 
-### 第 1 阶段：安全与一致性
+- 空目录、错误文件、重复运行均不会异常污染状态。
+- 所有脚本都有明确返回码。
+- 失败任务可复查、可重跑。
 
-1. 增加 `.gitignore`；
-2. 增加 `docs/DATA_POLICY.md`；
-3. 抽取 `scripts/lib/hash.js`；
-4. 抽取 `scripts/lib/taxonomy.js`；
-5. 修正 `normalize_tags.js` 与 `xhs_tagger` 的枚举冲突；
-6. 增加最小 `package.json` 和 `node --test`；
-7. 增加 CI，防止误提交敏感文件。
+### 阶段 2：3-5 天
 
-验收标准：
+目标：建立工程化底座。
 
-- `node --test` 通过；
-- `node scripts/check_consistency.js` 通过或输出已知可解释问题；
-- 所有标签枚举来源一致；
-- 仓库中不存在 `raw_curl*.txt`、`.env`、Cookie、Token 等敏感文件。
+任务：
 
-### 第 2 阶段：统一入口
+- 新增 `package.json`。
+- 抽出 `scripts/lib/hash.js`、`io.js`、`filters.js`。
+- 新增 JSON Schema。
+- 新增基础单元测试。
+- 改造 `check_consistency.js --json`。
+- GitHub Actions 初版。
 
-1. 新增 `scripts/xhs.js`；
-2. 将 `query_tagged.js` 接入公共读取模块；
-3. 将 `xhs_pipeline.js` 接入公共 hash/schema 模块；
-4. 将旧 Bash 脚本逐步包装或废弃；
-5. 更新 README，只推荐统一 CLI。
+验收：
 
-验收标准：
+- `npm test` 通过。
+- `npm run validate:data` 通过。
+- PR 自动检查基础数据一致性。
 
-- 新 CLI 覆盖 README 中的主流程；
-- 旧命令仍可用或有清晰迁移说明；
-- pipeline 失败后可根据 manifest 恢复。
+### 阶段 3：1-2 周
 
-### 第 3 阶段：数据质量与产品化
+目标：提升数据质量与查询能力。
 
-1. 生成离线索引；
-2. 增加质量报告；
-3. 加入语义去重；
-4. 完善复习计划与模拟面试流程；
-5. 评估是否需要把原始大文件迁出 Git。
+任务：
 
-验收标准：
+- 建立 entity/taxonomy 配置文件。
+- 合并实体清洗脚本。
+- 新增 `build_index.js`。
+- `query_tagged.js` 支持 `--limit`、`--offset`、`--format`。
+- 新增公司画像和复习包导出。
 
-- 查询响应不依赖全量扫描；
-- 高频题统计按语义题簇输出；
-- 每次新增数据后自动生成质量报告；
-- 原始数据、结构化数据、复习内容边界清晰。
+验收：
 
----
+- 查询命令对大数据量仍稳定。
+- 查询结果可导出为 Markdown/CSV/Anki。
+- 实体规范化有可追踪配置。
 
-## 8. 具体 backlog
+### 阶段 4：1 个月+
 
-### P0 Backlog
+目标：从题库升级为知识库。
 
-- [ ] 新增 `.gitignore`，屏蔽请求模板、日志、临时文件、原始大文件。
-- [ ] 新增 `docs/DATA_POLICY.md`，明确合规采集、隐私和敏感信息边界。
-- [ ] 新增 `scripts/lib/hash.js`，统一 question_id 生成。
-- [ ] 新增 `scripts/lib/taxonomy.js`，统一 domain/question_type/depth 枚举。
-- [ ] 改造 `generate_hashes.js`、`xhs_pipeline.js`、`validate_tagged.js`、`check_consistency.js` 使用公共 hash。
-- [ ] 改造 `normalize_tags.js`，不再引入与打标 schema 冲突的新枚举。
-- [ ] 新增 `package.json` 和基础 `node --test`。
-- [ ] 新增 `.github/workflows/ci.yml`。
-- [ ] 替换或废弃 `eval` 执行链路。
+任务：
 
-### P1 Backlog
+- 语义去重与相似题聚类。
+- 自动生成专题答案并建立引用关系。
+- 人工复核队列。
+- 数据版本化与 prompt/taxonomy 版本追踪。
+- 可视化报表或轻量 Web UI。
 
-- [ ] 新增统一 CLI：`scripts/xhs.js`。
-- [ ] 新增 manifest 机制。
-- [ ] 将数据目录改造为 raw/intermediate/curated/indexes/manifests 分层。
-- [ ] 为 AI 结构化和打标输出增加 JSON Schema 校验。
-- [ ] 增加索引构建脚本 `scripts/build_index.js`。
-- [ ] 优化 `query_tagged.js`，优先读取索引。
-- [ ] 更新 README 的命令和目录说明。
+验收：
 
-### P2 Backlog
-
-- [ ] 生成 `review/quality_report.md`。
-- [ ] 增加语义去重和 `canonical_question_id`。
-- [ ] 增加公司别名、岗位别名、年份规范化。
-- [ ] 增加复习 session 生成器。
-- [ ] 评估 Git LFS 或外部对象存储，降低仓库体积。
+- 能按公司/技术实体自动生成复习计划。
+- 相似题聚类可解释。
+- 数据质量问题可追踪、可修复、可回滚。
 
 ---
 
-## 9. 推荐的目标架构
+## 15. 具体待办清单
+
+### P0 待办
+
+- [ ] 添加 `.gitignore`，至少忽略 `raw_curl.txt`、`.env`、日志、临时文件、下载图片。
+- [ ] 添加 `.env.example`。
+- [ ] 添加 `docs/COMPLIANCE.md`。
+- [ ] 移除或替换 `search.sh` 的 `eval`。
+- [ ] 修复 `html_to_json.sh` 的计数统计。
+- [ ] 为 `fetch.sh` 增加 keyword 参数校验和输出文件名安全化。
+- [ ] 为 `fetch_detail.sh` 增加 `trap` 清理和 JSONL 日志。
+- [ ] 为 `url_2_img.sh` 增加 HTTP 状态和文件类型校验。
+- [ ] 新增 `schemas/note_structured.schema.json` 和 `schemas/note_tagged.schema.json`。
+
+### P1 待办
+
+- [ ] 添加 `package.json` 和标准 npm scripts。
+- [ ] 添加 `test/hash.test.js`。
+- [ ] 添加 `test/query_filters.test.js`。
+- [ ] 添加 `test/pipeline_score.test.js`。
+- [ ] 抽出 `scripts/lib/hash.js`。
+- [ ] 抽出 `scripts/lib/io.js`。
+- [ ] 抽出 `scripts/lib/taxonomy.js`。
+- [ ] 改造 `check_consistency.js` 支持 `--json`。
+- [ ] 合并 `fix_synonyms.js` 与 `fix_master_sweep.js`。
+- [ ] 建立 GitHub Actions 检查。
+
+### P2 待办
+
+- [ ] 建立 `data/taxonomy/entity_synonyms.json`。
+- [ ] 建立 `data/index/questions.json`。
+- [ ] 新增 `scripts/build_index.js`。
+- [ ] 新增 `scripts/export_study_pack.js`。
+- [ ] 新增 `scripts/company_profile.js`。
+- [ ] 新增语义去重字段：`canonical_question`、`semantic_group_id`。
+- [ ] 新增人工复核队列。
+- [ ] 新增数据版本字段：`pipeline_version`、`prompt_version`、`taxonomy_version`、`processed_at`。
+
+---
+
+## 16. 建议的第一个 PR 范围
+
+第一个 PR 不建议做大重构，只做低风险基础建设：
+
+标题：`chore: add repo hygiene, schemas and basic checks`
+
+包含：
+
+1. `.gitignore`
+2. `.env.example`
+3. `docs/COMPLIANCE.md`
+4. `schemas/note_structured.schema.json`
+5. `schemas/note_tagged.schema.json`
+6. `package.json`
+7. `scripts/lib/hash.js`
+8. `test/hash.test.js`
+9. `README.md` 增加“运行检查”和“敏感文件”章节
+
+不包含：
+
+- 不改现有 `note_*` 数据。
+- 不改采集策略。
+- 不新增复杂业务功能。
+
+验收命令：
+
+```bash
+npm test
+npm run validate:data
+node scripts/check_consistency.js
+```
+
+---
+
+## 17. 风险与注意事项
+
+1. **采集合规风险**  
+   优化方向应聚焦稳定性、可维护性、错误处理和数据最小化，不应增加绕过平台访问控制或规避风控的能力。
+
+2. **数据隐私风险**  
+   原始 HTML、图片、链接、请求模板可能包含个人信息或敏感访问凭证。建议最小化保存，必要时脱敏。
+
+3. **AI 输出漂移风险**  
+   prompt、模型版本、taxonomy 改动会导致标签不一致。必须记录版本，并用 schema/consistency check 把漂移显性化。
+
+4. **脚本重构风险**  
+   现有脚本虽然分散，但已能完成任务。建议先加测试和校验，再逐步抽模块，避免一次性大改破坏流程。
+
+5. **大文件风险**  
+   如果继续把图片、HTML 和中间数据放在 Git 中，仓库体积会持续增加。建议尽早决策哪些数据进入 Git，哪些进入外部存储。
+
+---
+
+## 18. 结论
+
+`xhs` 已经具备一个有价值的面经题库闭环：采集、结构化、打标签、查询、分析都已经有雏形。下一步最值得做的不是马上堆功能，而是补齐工程化底座：安全边界、依赖入口、schema、测试、CI、共享模块和结构化日志。
+
+建议按以下顺序推进：
 
 ```text
-xhs/
-├── scripts/
-│   ├── xhs.js                  # 统一 CLI
-│   ├── lib/
-│   │   ├── hash.js             # 稳定 question_id
-│   │   ├── taxonomy.js         # 统一标签枚举
-│   │   ├── schema.js           # JSON Schema 校验
-│   │   ├── io.js               # 安全读写 JSON/JSONL
-│   │   ├── note.js             # note 领域模型
-│   │   └── manifest.js         # 执行记录
-│   ├── build_index.js
-│   ├── check_consistency.js
-│   └── query_tagged.js
-├── skills/
-│   ├── xhs_extractor/
-│   ├── xhs_tagger/
-│   ├── xhs_query/
-│   └── xhs_pipeline/
-├── data/
-│   ├── raw/                    # 不默认提交
-│   ├── intermediate/           # 可重建中间产物
-│   ├── curated/                # 结构化和打标结果
-│   ├── indexes/                # 查询索引
-│   └── manifests/              # pipeline 执行记录
-├── review/
-│   ├── ans/
-│   ├── plans/
-│   └── quality_report.md
-├── docs/
-│   ├── DATA_POLICY.md
-│   └── SCHEMA.md
-├── test/
-├── package.json
-└── README.md
+仓库卫生与安全 → 脚本鲁棒性 → Schema/测试/CI → 模块化 → 索引与高级查询 → 知识库产品化
 ```
 
----
-
-## 10. 成功指标
-
-| 指标 | 当前问题 | 目标 |
-|---|---|---|
-| Schema 一致性 | 多处枚举和 hash 逻辑重复 | 所有脚本共用一份 schema/hash/taxonomy |
-| 数据质量 | 有校验脚本但未进入 CI | 每次提交自动校验 |
-| 安全性 | 请求模板和 `eval` 风险 | 无敏感模板入库，无 shell 拼接执行 |
-| 可维护性 | Bash/JS/Python 分散 | 统一 CLI + 公共模块 |
-| 可恢复性 | 失败后主要靠人工判断 | manifest 记录每步状态 |
-| 查询性能 | 每次全量读取 JSON | 索引化查询 |
-| 仓库体积 | 原始数据和图片可能持续膨胀 | 原始大文件外置或受控提交 |
-
----
-
-## 11. 总结
-
-这个仓库已经具备“面经知识库”的雏形，最值得保留的是：
-
-1. 已沉淀的结构化/打标数据；
-2. `query_tagged.js` 的组合查询能力；
-3. `xhs_pipeline.js` 的任务编排思路；
-4. `check_consistency.js` / `validate_tagged.js` 的数据治理意识；
-5. `skills/` 中对 Agent 工作流的明确约束。
-
-下一步不建议继续堆更多临时脚本，而应优先完成：
-
-```text
-安全边界 → 统一 schema → 公共模块 → 测试/CI → 统一 CLI → 索引与质量报告
-```
-
-完成 P0 后，项目会从“能自动跑的个人脚本仓库”提升为“可以长期维护和迭代的数据工程仓库”。
+这样可以在不破坏现有数据资产的前提下，让后续每一次采集、提取、打标、查询和分析都更加稳定、可复现、可维护。
