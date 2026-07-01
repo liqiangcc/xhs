@@ -3,9 +3,9 @@
 const crypto = require('crypto');
 const path = require('path');
 const { readJson, writeJson } = require('./io');
+const { defaultDate } = require('./date');
 
 const DEFAULT_ISSUE_LINKS_PATH = path.resolve(__dirname, '..', '..', 'review', 'issue_links.json');
-const DEFAULT_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
 const CARD_META_PREFIX = '<!-- xhs-review-card: ';
 const CARD_META_SUFFIX = ' -->';
 const MANAGED_LABEL_PREFIXES = ['priority:', 'answer:', 'domain:', 'review:'];
@@ -13,7 +13,7 @@ const MANAGED_LABEL_PREFIXES = ['priority:', 'answer:', 'domain:', 'review:'];
 function defaultIssueLinks(options = {}) {
     return {
         schema_version: 'review_issue_links.v1',
-        updated_at: options.date || DEFAULT_DATE,
+        updated_at: defaultDate(options),
         items: [],
     };
 }
@@ -30,7 +30,7 @@ function loadIssueLinks(options = {}) {
 function saveIssueLinks(store, options = {}) {
     const sorted = {
         schema_version: 'review_issue_links.v1',
-        updated_at: options.date || DEFAULT_DATE,
+        updated_at: defaultDate(options),
         items: [...(store.items || [])].sort((a, b) => a.canonical_id.localeCompare(b.canonical_id)),
     };
     writeJson(options.filePath || DEFAULT_ISSUE_LINKS_PATH, sorted);
@@ -46,11 +46,11 @@ function upsertIssueLink(store, link, options = {}) {
     byId.set(link.canonical_id, {
         ...byId.get(link.canonical_id),
         ...link,
-        synced_at: options.date || DEFAULT_DATE,
+        synced_at: defaultDate(options),
     });
     return {
         ...store,
-        updated_at: options.date || DEFAULT_DATE,
+        updated_at: defaultDate(options),
         items: [...byId.values()],
     };
 }

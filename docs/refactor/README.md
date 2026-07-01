@@ -45,9 +45,10 @@ Actions Review TODO
 当前执行优先级：
 
 ```text
-1. 05_execution_checklist.md：长期主路线和验收清单
-2. 06_github_actions_ai_management.md：AI 触发 Action 的管理层设计
-3. 07_actions_review_todo.md：当前 Action 管理层 review 后必须先修的边界问题
+1. README.md：当前内容建设状态和下一步命令入口
+2. 05_execution_checklist.md：长期主路线和验收清单
+3. 06_github_actions_ai_management.md：AI 触发 Action 的管理层设计
+4. 07_actions_review_todo.md：已完成的 Action 管理层 review 修复记录
 ```
 
 ---

@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { ensureDir } = require('./io');
+const { defaultDate } = require('./date');
 
 const DEFAULT_ANSWERS_DIR = path.resolve(__dirname, '..', '..', 'review', 'answers');
 const META_PREFIX = '<!-- xhs-answer: ';
@@ -55,7 +56,7 @@ function buildAnswerTemplate(record, options = {}) {
         canonical_id: record.canonical_id,
         version: Number(options.version || 1),
         status: options.status || 'draft',
-        updated_at: options.date || '2026-06-30',
+        updated_at: defaultDate(options),
     };
     return [
         `${META_PREFIX}${JSON.stringify(metadata)}${META_SUFFIX}`,

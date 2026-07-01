@@ -14,6 +14,7 @@ const { loadIndexes, buildIndexes, writeIndexes } = require('../lib/index_store'
 const { normalizeEntity, validateDomain } = require('../lib/taxonomy');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption, shouldWriteReports } = require('../lib/cli_options');
+const { defaultDate } = require('../lib/date');
 const {
     loadCanonicalQuestions,
     saveCanonicalQuestions,
@@ -24,7 +25,6 @@ const {
 } = require('../lib/canonical_store');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_BUILD_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
 
 function defaultPaths(root) {
     return {
@@ -334,7 +334,7 @@ function suggestFromHotspot(options, paths) {
 function writeCandidateManifest(candidates, options, paths) {
     const manifest = {
         schema_version: 'canonical_candidates.v1',
-        generated_at: options.buildDate || DEFAULT_BUILD_DATE,
+        generated_at: defaultDate(options),
         mode: options.hotspot ? 'hotspot' : 'entity',
         seed: options.hotspot ? 'hotspot' : (options.entity || options._[0] || ''),
         source: {

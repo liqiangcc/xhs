@@ -12,25 +12,25 @@ node scripts/xhs.js <command> [subcommand] [options]
 
 ## Current Status
 
-As of 2026-06-30, the M1-M8 core loop is implemented and pushed to `origin/master`: migration, validation, indexing, canonical question management, answer metadata validation/sync, review progress, issue-card rendering, and quality reporting.
+As of 2026-07-01, the M1-M8 core loop is implemented and the repository is in the content-coverage and real-review phase: migration, validation, indexing, canonical question management, answer metadata validation/sync, review progress, issue-card rendering, and quality reporting are all available.
 
 Current data snapshot:
 
 - 9,620 question rows, 9,362 valid rows
-- 18 canonical questions
-- 83 assigned question rows
-- 18 review progress records
-- 12 ready P0 answers; P0 missing answers is now 0
-- 6 remaining missing answers are P1 canonical questions
+- 34 canonical questions
+- 134 assigned question rows
+- 34 review progress records
+- 34 ready answers; missing answers is now 0
+- P0 count: 12; P1 count: 22
 - 0 GitHub issue links synced so far
 
-The project is now in the content-coverage and real-review phase. The P0 answer pass is done; the next useful work is widening canonical coverage, syncing selected ready answers into GitHub Issues for mobile review, and recording real review results.
+The current high-value batch is answer-complete. The next useful work is widening canonical coverage to at least 200 assigned rows, syncing selected ready answers into GitHub Issues for mobile review after authentication is fixed, and recording real review results.
 
 ## Next Steps
 
 1. Continue expanding canonical coverage with hotspot/entity suggestions; the near-term target is 200+ assigned question rows.
-2. After accepting new canonical records, use `answer missing` / `answer init-batch` to prepare the next answer batch.
-3. After each answer batch, run `answer validate`, `answer validate --strict`, `answer sync`, and `report quality`.
+2. Merge obvious duplicate canonical records before writing answers.
+3. After accepting new canonical records, fill the next missing answer batch, then run `answer validate --strict`, `answer sync`, and `report quality`.
 4. Use `issue sync` dry-run first, then `--apply` only for reviewed ready cards that should appear on GitHub.
 5. Start the real review loop with `review today`, `review next`, and `review mark`.
 
@@ -38,7 +38,6 @@ The project is now in the content-coverage and real-review phase. The P0 answer 
 node scripts/xhs.js canonical suggest --hotspot --limit 50
 node scripts/xhs.js canonical suggest --entity Redis --limit 50
 node scripts/xhs.js answer missing --priority P1
-node scripts/xhs.js answer init-batch --priority P1 --limit 20
 node scripts/xhs.js answer validate
 node scripts/xhs.js answer validate --strict
 node scripts/xhs.js answer sync
@@ -111,7 +110,7 @@ node scripts/xhs.js answer sync
 Answer files live at `review/answers/{canonical_id}.md`. The first line is required metadata:
 
 ```markdown
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_example","version":1,"status":"draft","updated_at":"2026-06-30"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_example","version":1,"status":"draft","updated_at":"2026-07-01"} -->
 ```
 
 `answer validate --strict` adds content-quality checks for ready answers: no TODO placeholders, required sections present, and non-empty ready sections.

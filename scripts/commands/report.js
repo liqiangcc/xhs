@@ -5,7 +5,7 @@ const path = require('path');
 const { loadQuestions } = require('../lib/question_store');
 const { loadCanonicalQuestions } = require('../lib/canonical_store');
 const { listAnswerFiles, readAnswerFile } = require('../lib/answer_store');
-const { loadProgress, isDue, todayString } = require('../lib/review_store');
+const { loadProgress, isDue } = require('../lib/review_store');
 const { loadIssueLinks } = require('../lib/issue_store');
 const { buildIndexes, checkIndexes } = require('../lib/index_store');
 const { writeJson, ensureDir } = require('../lib/io');
@@ -14,9 +14,9 @@ const { runTaxonomyValidation } = require('./validate');
 const { runCheck: runCanonicalCheck } = require('./canonical');
 const { runValidate: runAnswerValidate } = require('./answer');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
+const { defaultDate } = require('../lib/date');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
 
 function defaultPaths(root) {
     return {
@@ -72,7 +72,7 @@ function readAnswers(root, paths) {
 function buildQualityReport(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const paths = defaultPaths(root);
-    const date = options.date || DEFAULT_DATE;
+    const date = defaultDate(options);
     const questions = loadQuestions({ filePath: paths.questions });
     const canonicalRecords = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
     const progress = loadProgress({ progressPath: paths.progressPath, date });
@@ -256,7 +256,7 @@ function renderMarkdown(report) {
         ...report.taxonomy.top_legacy_aliases.slice(0, 20).map((item) => `| ${item.value.replace(/\|/g, '\\|')} | ${item.count} |`),
         '',
     ];
-    return `${lines.join('\n')}\n`;
+    return `${lines.join('\n').trimEnd()}\n`;
 }
 
 function writeReports(report, options = {}) {

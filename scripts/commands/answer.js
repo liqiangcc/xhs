@@ -16,9 +16,9 @@ const {
 } = require('../lib/answer_store');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
+const { defaultDate } = require('../lib/date');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_BUILD_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
 
 function defaultPaths(root) {
     return {
@@ -74,7 +74,7 @@ function runInit(options = {}) {
     const result = writeAnswerTemplate(record, {
         answersDir: paths.answersDir,
         overwrite: options.overwrite,
-        date: options.date || DEFAULT_BUILD_DATE,
+        date: defaultDate(options),
         status: options.status,
     });
     return {
@@ -142,7 +142,7 @@ function runInitBatch(options = {}) {
             : writeAnswerTemplate(record, {
                 answersDir: paths.answersDir,
                 overwrite: options.overwrite,
-                date: options.date || DEFAULT_BUILD_DATE,
+                date: defaultDate(options),
                 status: options.status || 'draft',
             });
         initialized.push({

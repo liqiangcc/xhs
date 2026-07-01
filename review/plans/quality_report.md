@@ -1,6 +1,6 @@
 # Quality Report
 
-Generated: 2026-06-30
+Generated: 2026-07-01
 
 Overall: OK
 
@@ -10,11 +10,11 @@ Overall: OK
 |---|---:|---:|
 | Questions | total | 9620 |
 | Questions | valid | 9362 |
-| Canonical | records | 18 |
-| Canonical | assigned rows | 83 |
-| Answers | files | 12 |
+| Canonical | records | 34 |
+| Canonical | assigned rows | 134 |
+| Answers | files | 34 |
 | Answers | P0 missing | 0 |
-| Review | progress records | 18 |
+| Review | progress records | 34 |
 | Review | reviewed | 0 |
 | Taxonomy | legacy aliases | 6862 |
 | Indexes | changed files | 0 |
@@ -28,7 +28,7 @@ Overall: OK
 
 | priority | action | reason |
 |---|---|---|
-| P0 | canonical suggest --hotspot --limit 50 | assigned question rows are 83, below the 200 row near-term target |
+| P0 | canonical suggest --hotspot --limit 50 | assigned question rows are 134, below the 200 row near-term target |
 | P1 | review top taxonomy legacy aliases | 6862 taxonomy legacy aliases remain |
 | P1 | review today / review mark | review progress has not recorded real usage yet |
 

@@ -19,9 +19,9 @@ const {
 } = require('../lib/canonical_store');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
+const { defaultDate } = require('../lib/date');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_BUILD_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
 
 function stringValue(value, fallback = '未知') {
     if (value === undefined || value === null || value === '') return fallback;
@@ -112,7 +112,7 @@ function buildSourceNoteRecord(note, sourceNoteId, taggedQuestions, migratedCoun
 function buildQuestionsFromTagged(options = {}) {
     const root = options.root || DEFAULT_ROOT;
     const taggedDir = options.taggedDir || path.join(root, 'note_tagged');
-    const buildDate = options.buildDate || DEFAULT_BUILD_DATE;
+    const buildDate = defaultDate(options);
     const canonicalPath = options.canonicalPath || path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
     const canonicalByQuestionId = buildQuestionToCanonicalMap(loadCanonicalQuestions({ filePath: canonicalPath }));
 
@@ -325,6 +325,18 @@ function checkOutputs(root, result) {
     };
 }
 
+function applyCheckBuildDateDefault(options = {}) {
+    if (!options.check || options.buildDate) return options;
+    const root = options.root || DEFAULT_ROOT;
+    const reportPath = outputPaths(root).report;
+    const existingReport = readJson(reportPath, null);
+    if (!existingReport?.build_date) return options;
+    return {
+        ...options,
+        buildDate: existingReport.build_date,
+    };
+}
+
 function parseArgs(argv) {
     const args = argv.slice(2);
     const options = { check: false };
@@ -362,7 +374,8 @@ function main(argv = process.argv) {
     }
 
     const root = options.root || DEFAULT_ROOT;
-    const result = buildQuestionsFromTagged(options);
+    const effectiveOptions = applyCheckBuildDateDefault(options);
+    const result = buildQuestionsFromTagged(effectiveOptions);
 
     if (options.check) {
         const check = checkOutputs(root, result);
@@ -405,5 +418,6 @@ module.exports = {
     writeOutputs,
     checkOutputs,
     outputPaths,
+    applyCheckBuildDateDefault,
     main,
 };

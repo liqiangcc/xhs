@@ -35,6 +35,15 @@ AI / Skill 只生成候选，脚本负责校验、入库和状态推进
 GitHub Actions 是自动化管理层，AI 只触发白名单任务
 ```
 
+当前执行焦点：
+
+```text
+1. 继续把 canonical 覆盖扩到 200+ assigned rows
+2. 对新增 canonical 保持 answer validate --strict / answer sync
+3. 使用 review today / review mark 产生真实复习数据
+4. GitHub Issue 同步先 dry-run，认证修复后再 apply
+```
+
 ## 历史归档
 
 `docs/archive/` 只保留历史讨论和技术预研，不作为当前执行依据。

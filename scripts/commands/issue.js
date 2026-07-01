@@ -21,10 +21,10 @@ const {
 const { loadProgress, progressMap } = require('../lib/review_store');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
+const { defaultDate } = require('../lib/date');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_REPO = 'liqiangcc/xhs';
-const DEFAULT_BUILD_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
 
 function defaultPaths(root) {
     return {
@@ -243,7 +243,8 @@ function runRender(options = {}) {
     const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
     const record = records.find((item) => item.canonical_id === canonicalId);
     if (!record) throw new Error(`Canonical not found: ${canonicalId}`);
-    const byProgress = progressMap(loadProgress({ progressPath: paths.progressPath, date: options.date || DEFAULT_BUILD_DATE }));
+    const date = defaultDate(options);
+    const byProgress = progressMap(loadProgress({ progressPath: paths.progressPath, date }));
     const card = renderCard(record, paths, {
         ...options,
         root,
@@ -265,8 +266,9 @@ function runSync(options = {}, dependencies = {}) {
     const runner = dependencies.runner || defaultGhRunner;
     const paths = defaultPaths(root);
     const records = selectRecords(loadCanonicalQuestions({ filePath: paths.canonicalQuestions }), options);
-    const byProgress = progressMap(loadProgress({ progressPath: paths.progressPath, date: options.date || DEFAULT_BUILD_DATE }));
-    let store = loadIssueLinks({ filePath: paths.issueLinksPath, date: options.date || DEFAULT_BUILD_DATE });
+    const date = defaultDate(options);
+    const byProgress = progressMap(loadProgress({ progressPath: paths.progressPath, date }));
+    let store = loadIssueLinks({ filePath: paths.issueLinksPath, date });
     const links = issueLinkMap(store);
     const rows = [];
     const errors = [];
@@ -314,7 +316,7 @@ function runSync(options = {}, dependencies = {}) {
                     review_status: reviewStatusFromCard(card),
                     labels: card.labels,
                     body_hash: card.body_hash,
-                }, { date: options.date || DEFAULT_BUILD_DATE });
+                }, { date });
                 storeChanged = true;
                 links.set(record.canonical_id, {
                     canonical_id: record.canonical_id,
@@ -338,7 +340,7 @@ function runSync(options = {}, dependencies = {}) {
                         review_status: reviewStatusFromCard(card),
                         labels: card.labels,
                         body_hash: card.body_hash,
-                    }, { date: options.date || DEFAULT_BUILD_DATE });
+                    }, { date });
                     storeChanged = true;
                     links.set(record.canonical_id, {
                         canonical_id: record.canonical_id,
@@ -368,7 +370,7 @@ function runSync(options = {}, dependencies = {}) {
     }
 
     if (apply && storeChanged) {
-        store = saveIssueLinks(store, { filePath: paths.issueLinksPath, date: options.date || DEFAULT_BUILD_DATE });
+        store = saveIssueLinks(store, { filePath: paths.issueLinksPath, date });
     }
 
     return {
@@ -388,7 +390,7 @@ function runCheck(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const paths = defaultPaths(root);
     const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
-    const store = loadIssueLinks({ filePath: paths.issueLinksPath, date: options.date || DEFAULT_BUILD_DATE });
+    const store = loadIssueLinks({ filePath: paths.issueLinksPath, date: defaultDate(options) });
     const errors = validateIssueLinks(store, records);
     return {
         schema_version: 'issue_check_result.v1',

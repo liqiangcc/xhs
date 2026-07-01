@@ -3,12 +3,13 @@
 const fs = require('fs');
 const path = require('path');
 const { readJson, writeJson, ensureDir } = require('./io');
+const { defaultDate } = require('./date');
 
 const DEFAULT_REVIEW_DIR = path.resolve(__dirname, '..', '..', 'review');
 const DEFAULT_PROGRESS_PATH = path.join(DEFAULT_REVIEW_DIR, 'progress.json');
 
 function todayString(options = {}) {
-    return options.date || process.env.XHS_REVIEW_DATE || process.env.XHS_BUILD_DATE || '2026-06-30';
+    return defaultDate(options);
 }
 
 function addDays(dateString, days) {

@@ -6,6 +6,8 @@
 
 ## 1. 当前状态
 
+2026-07-01 更新：本文件中的 T1-T6 安全边界已经实现并通过本地 CI；它现在作为历史验收记录保留。当前内容建设状态已经推进到 34 个 canonical、134 个绑定题目行、34 个 ready 答案，missing answer 为 0。下一阶段仍是继续扩大 canonical 覆盖和开始真实 review mark。
+
 当前 `xhs` 已经完成了 GitHub Actions 管理层第一版：
 
 ```text
@@ -31,17 +33,18 @@ config/review_strategy.json
 ```text
 questions: 9620 rows
 valid questions: 9362 rows
-canonical records: 18
-assigned question rows: 83
+canonical records: 34
+assigned question rows: 134
 P0 canonical: 12
-ready answers: 12
-P0 missing answers: 0
+P1 canonical: 22
+ready answers: 34
+missing answers: 0
 reviewed count: 0
 issue links: 0
 taxonomy legacy aliases: 6862
 ```
 
-这说明 Action 管理层已经可用，但还需要补齐几个安全边界。
+这说明 Action 管理层已经可用，当前主要缺口已经从工具安全边界转为内容覆盖和真实复习使用。
 
 ---
 
@@ -49,12 +52,12 @@ taxonomy legacy aliases: 6862
 
 | ID | 优先级 | 任务 | 目标 |
 |---|---:|---|---|
-| T1 | P0 | `report quality` 支持失败也产出报告 | weekly report 不因 `report.ok=false` 中断上传 |
-| T2 | P0 | `answer validate --strict` | 防止 `ready` 答案仍是 TODO 空模板 |
-| T3 | P0 | `review prepare --noWrite` 不写 plan | 统一只读任务语义 |
-| T4 | P1 | 明确 `--noManifest` 语义 | 避免误解 candidate manifest 和 run manifest |
-| T5 | P1 | 把 TODO 加入 docs/refactor 索引 | 后续 Codex 能按顺序执行 |
-| T6 | P1 | 增加 Action 运行状态检查方式 | 能确认 CI / manage workflow 是否真实运行 |
+| T1 | P0 | `report quality` 支持失败也产出报告 | DONE |
+| T2 | P0 | `answer validate --strict` | DONE |
+| T3 | P0 | `review prepare --noWrite` 不写 plan | DONE |
+| T4 | P1 | 明确 `--noManifest` 语义 | DONE |
+| T5 | P1 | 把 TODO 加入 docs/refactor 索引 | DONE |
+| T6 | P1 | 增加 Action 运行状态检查方式 | DONE |
 
 ---
 
@@ -400,7 +403,7 @@ action-status
 
 ## 9. 建议执行顺序
 
-推荐按这个顺序给 Codex 执行：
+原推荐执行顺序已经完成：
 
 ```text
 1. T1：report quality --noFail
@@ -475,4 +478,4 @@ T4-T6 主要是文档和维护体验。
 6. 人可以快速检查 GitHub Actions 是否真实运行。
 ```
 
-这时再继续扩大 AI 触发范围会更安全。
+这时再继续扩大 AI 触发范围会更安全。当前实际下一步是继续内容覆盖到 200+ assigned rows，并开始 `review mark` 形成真实复习数据。

@@ -908,8 +908,8 @@ TODO
 
 ```text
 questions.jsonl: 9620 rows
-canonical_questions.jsonl: 18 records
-assigned question rows: 83 rows
+canonical_questions.jsonl: 34 records
+assigned question rows: 134 rows
 ```
 
 #### 影响
@@ -968,7 +968,8 @@ xhs-manage task: canonical-suggest-entity
 1. 12 个 P0 canonical 已补齐 ready 答案
 2. answer validate 通过
 3. answer sync 后 canonical_questions.jsonl 中 P0 missing answer = 0
-4. 剩余 6 个 missing answers 均为 P1 canonical
+4. 2026-07-01 已继续补齐当前 22 个 P1 canonical 答案
+5. 当前 34 个 canonical 均为 ready，missing answer = 0
 ```
 
 #### 影响
@@ -976,7 +977,7 @@ xhs-manage task: canonical-suggest-entity
 ```text
 1. P0 复习卡片已经可以用于 GitHub Issue 和移动端查看
 2. 后续新增 canonical 时仍需要继续走 missing / init-batch / validate / sync
-3. P1 答案和新 canonical 答案仍会影响复习覆盖面
+3. 当前答案缺口已清零，后续缺口主要来自继续扩大 canonical 覆盖
 ```
 
 #### 建议
@@ -984,7 +985,7 @@ xhs-manage task: canonical-suggest-entity
 后续拆成两个阶段：
 
 ```text
-Phase A：对新 canonical 和 P1 canonical 继续补答案
+Phase A：对新 canonical 继续补答案
 Phase B：再实现 answer generate / answer improve
 ```
 
@@ -1222,7 +1223,7 @@ issue-sync-apply
 | CI 缺失 | P0 | DONE | `ci.yml` | push/PR 自动校验 |
 | 文档状态过期 | P0 | PARTIAL | 人工修正 | checklist 与代码一致 |
 | canonical 覆盖不足 | P0 | IN_PROGRESS | `canonical-suggest-hotspot` / `canonical-suggest-entity` | canonical >= 100 |
-| P0 答案缺失 | P0 | DONE | `answer missing` / `answer sync` | P0 missing = 0 |
+| P0/P1 答案缺失 | P0 | DONE | `answer missing` / `answer sync` | missing = 0 |
 | Review 未真实使用 | P1 | TODO | `review-today` / `review-weak` / `review mark` | review_count 增长 |
 | taxonomy legacy alias 多 | P1 | IN_PROGRESS | `quality-report` | legacy_alias_count 可跟踪 |
 | 质量报告分散 | P1 | DONE | `quality-report` / `xhs-weekly-report.yml` | 单一报告生成 |
@@ -1237,7 +1238,7 @@ issue-sync-apply
 ```text
 1. 保持 ci.yml 和 xhs-manage.yml 的只读任务稳定
 2. 用 canonical-suggest-hotspot / canonical-suggest-entity 扩大覆盖到 200+ assigned rows
-3. 对新增 canonical 和剩余 P1 canonical 补答案，运行 answer validate / answer sync
+3. 对新增 canonical 补答案，运行 answer validate --strict / answer sync
 4. 对 P0 ready answers 先跑 issue-sync-dry-run，人工确认后再设计 issue-sync-apply
 5. 开始真实复习：review today / review mark / review next，让 reviewed_count 增长
 6. 每周查看 quality-report，处理 taxonomy legacy alias Top 项

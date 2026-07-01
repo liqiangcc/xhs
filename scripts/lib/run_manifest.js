@@ -2,9 +2,9 @@
 
 const path = require('path');
 const { writeJson } = require('./io');
+const { defaultDate } = require('./date');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_DATE = process.env.XHS_BUILD_DATE || '2026-06-30';
 
 function safeName(value) {
     return String(value || 'command')
@@ -19,7 +19,7 @@ function writeRunManifest(root, command, result, options = {}) {
     const filePath = path.join(repoRoot, 'data', 'manifests', 'runs', `latest_${safeName(command)}.json`);
     const manifest = {
         schema_version: 'pipeline_run_manifest.v1',
-        generated_at: options.date || DEFAULT_DATE,
+        generated_at: defaultDate(options),
         command,
         ok: result?.ok !== false,
         result,
