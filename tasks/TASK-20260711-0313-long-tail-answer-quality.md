@@ -163,13 +163,14 @@
   - 定义重复内容、通用追问、跨主题污染和虚构经历的判定标准。
 - Expected files: `config/answer_quality.json`, `docs/refactor/09_answer_content_standard.md`
 - Validation: `node scripts/xhs.js validate all --noWrite && node --test test/answer_quality_config.test.js` -> passed
-- Commit: `pending`
+- Commit: `d31198a9`
 - Changed files: `config/answer_quality.json`, `docs/refactor/09_answer_content_standard.md`, `test/answer_quality_config.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: 固化 100 分七维评分、90 分晋级线、13 项硬失败、第一手证据优先级、隔离审查输入、六题型专项要求与 10 题批次规则；无法核验统一保持 needs_update。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S02` 全量复核 100 份精选答案
 
 - Status: `pending`
+- Depends on: `TASK-20260711-0313-long-tail-answer-quality-T03-S04`
 - Goal: 让精选集合成为经过当前标准校准的正样本，而不是历史上自称精选的样本。
 - Steps:
   - 按六类题型重新分类并审查全部 100 份答案。
@@ -184,6 +185,7 @@
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S03` 建立正负评测集
 
 - Status: `pending`
+- Depends on: `TASK-20260711-0313-long-tail-answer-quality-T02-S02`, `TASK-20260711-0313-long-tail-answer-quality-T03-S04`
 - Goal: 用精选正样本和已知长尾缺陷负样本校准质量闸门，防止“所有答案都高分”的失效评审。
 - Steps:
   - 正样本使用经复核的 100 份精选答案。
@@ -196,8 +198,8 @@
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T03` S2：建立仓库级 Skill 与质量流水线
 
-- Status: `pending`
-- Depends on: `TASK-20260711-0313-long-tail-answer-quality-T02`
+- Status: `in_progress`
+- Depends on: `TASK-20260711-0313-long-tail-answer-quality-T02-S01`
 - Goal: 提供可重复的单题/批次编写流程，候选答案只有通过所有闸门后才原子晋级正式答案。
 - Files likely touched: `.agents/skills/xhs-answer-curator/`, `AGENTS.md`, `scripts/commands/answer.js`, `scripts/lib/answer_quality.js`, `test/answer_quality.test.js`
 - Validation: `python3 /root/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/xhs-answer-curator && npm test`
@@ -206,7 +208,7 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S01` 创建 xhs-answer-curator Skill
 
-- Status: `pending`
+- Status: `done`
 - Goal: 用仓库 Skill 固化“准备上下文、研究、编写、独立审查、修订、晋级”的低自由度流程。
 - Steps:
   - 使用 skill-creator 初始化 `.agents/skills/xhs-answer-curator/`，名称固定为 `xhs-answer-curator`。
@@ -215,9 +217,10 @@
   - Skill 要求独立审查轮次；审查失败最多修订两次，仍失败则保持 `needs_update`。
   - 生成并校验 `agents/openai.yaml`，默认提示显式包含 `$xhs-answer-curator`。
 - Expected files: `.agents/skills/xhs-answer-curator/SKILL.md`, `.agents/skills/xhs-answer-curator/agents/openai.yaml`
-- Validation: `python3 /root/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/xhs-answer-curator`
+- Validation: `python3 /root/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/xhs-answer-curator` -> passed (`Skill is valid!`)
 - Commit: `pending`
-- Notes:
+- Changed files: `.agents/skills/xhs-answer-curator/SKILL.md`, `.agents/skills/xhs-answer-curator/references/repo-map.md`, `.agents/skills/xhs-answer-curator/agents/openai.yaml`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: Skill 明确旧长尾不可作为事实来源、候选区隔离、第一手证据、独立 reviewer/subagent、最多两轮修订、90 分和零硬失败晋级；命令缺失时要求先实现而非手工模拟写状态。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S02` 增加仓库持久规则
 
