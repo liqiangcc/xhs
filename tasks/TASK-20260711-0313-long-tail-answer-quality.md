@@ -78,7 +78,7 @@
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T01` S0：建立真实质量基线
 
-- Status: `done`
+- Status: `in_progress`
 - Depends on: `none`
 - Goal: 让状态、报告和文档真实区分“可访问底稿”与“语义合格答案”，停止把 9,160 份长尾底稿计为精选质量 ready。
 - Files likely touched: `scripts/lib/answer_store.js`, `scripts/content/check_answer_coverage.js`, `data/manifests/quality/answer_coverage_report.json`, `docs/refactor/08_content_building_goals.md`
@@ -335,7 +335,7 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S04` 生成稳定重写队列和批次 ID
 
-- Status: `pending`
+- Status: `in_progress`
 - Goal: 每个非 curated Canonical 恰好出现在一个最多 10 题的批次中，支持按 ID 恢复。
 - Steps:
   - 排序优先级依次为硬失败、明确占位、公司/主题价值、领域覆盖缺口、稳定 canonical_id。
@@ -344,9 +344,10 @@
   - 为每个最多 10 题的批次生成 `tasks/answer-batches/` 子任务文件；根 ID 固定为 `TASK-20260711-0313-answer-batch-NNNN`，每份文件包含题簇复核、研究编写、独立审查、晋级和批次验证子任务。
   - 队列记录 `task_file`，后续使用 `task-md-workflow:execute-task-md` 按批次任务 ID 执行和恢复；每个批次独立提交，阶段任务只在全部对应批次任务 done 后完成。
 - Expected files: `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/*.md`
-- Validation: `node scripts/xhs.js answer queue check --noWrite`
+- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,260 rows, 926 batches, each ≤10); queue remains provisional until T04-S02 resolves the 307 boundary candidates
 - Commit: `pending`
-- Notes:
+- Changed files: `scripts/content/build_answer_rewrite_queue.js`, `scripts/commands/answer.js`, `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/TASK-20260711-0313-answer-batch-*.md`, `test/answer_rewrite_queue.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 生成 provisional 队列：全部非 curated Canonical 被稳定排序并分配唯一可恢复任务；优先级为历史精选审计失败、代码占位、review priority、题型、频次和 canonical_id。队列仅冻结执行顺序，不等价于答案晋级；必须在 T04-S02 的 merge/split 决策后重新生成并才能关闭。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T05` S4：完成六类型 60 题试点
 
