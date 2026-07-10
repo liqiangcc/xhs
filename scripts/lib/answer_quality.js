@@ -444,7 +444,7 @@ function auditOneCandidate(filePath, options = {}) {
     const errors = [];
     const hardFailures = [];
     if (candidate.metadata.quality_tier !== 'candidate'
-        && !(options.allowFormal && candidate.metadata.quality_tier === 'curated')) {
+        && !(options.allowFormal && ['curated', 'curated_audit_failed'].includes(candidate.metadata.quality_tier))) {
         errors.push({ error: 'invalid_candidate_tier' });
     }
     const readyView = { ...candidate, metadata: { ...candidate.metadata, status: 'ready' } };
@@ -678,6 +678,53 @@ function atomicDemote(options = {}) {
     return { schema_version: 'answer_demote.v1', ok: true, demoted: true, canonical_id: canonicalId, answer_path: path.relative(root, formalPath), version: nextMetadata.version };
 }
 
+function atomicDemoteMissingEvidence(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = pathsFor(root);
+    const canonicalId = options['canonical-id'] || options.canonicalId;
+    if (!canonicalId) throw new Error('canonical_id is required');
+    const formalPath = answerPath(canonicalId, { answersDir: paths.answersDir });
+    if (!fs.existsSync(formalPath)) throw new Error(`Formal answer not found: ${canonicalId}`);
+    const formal = readAnswerFile(formalPath);
+    if (formal.metadata.quality_tier !== 'curated' || formal.metadata.status !== 'ready') {
+        throw new Error('only ready curated answers may be demoted for missing evidence');
+    }
+    const evidencePath = path.join(paths.evidenceDir, `${canonicalId}.json`);
+    if (fs.existsSync(evidencePath)) throw new Error('evidence exists; use audited answer demote instead');
+    const canonicals = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
+    const index = canonicals.findIndex((item) => item.canonical_id === canonicalId);
+    if (index < 0) throw new Error(`Canonical not found: ${canonicalId}`);
+    const nextMetadata = {
+        ...formal.metadata,
+        version: Number(formal.metadata.version || 0) + 1,
+        status: 'needs_update',
+        quality_tier: 'curated_audit_failed',
+        updated_at: options.date || defaultDate(options),
+        audit_failure: 'missing_evidence',
+    };
+    const nextFormal = replaceAnswerMetadata(formal.content, nextMetadata);
+    const nextCanonicals = canonicals.map((item, itemIndex) => itemIndex === index ? { ...item, answer_status: 'needs_update' } : item);
+    const nextCanonicalText = `${nextCanonicals.sort((a, b) => a.canonical_id.localeCompare(b.canonical_id)).map(stableStringify).join('\n')}\n`;
+    if (options.noWrite) return { schema_version: 'answer_demote_missing_evidence.v1', ok: true, demoted: false, dry_run: true, canonical_id: canonicalId };
+    const oldFormal = fs.readFileSync(formalPath, 'utf8');
+    const oldCanonicals = fs.readFileSync(paths.canonicalQuestions, 'utf8');
+    const formalTemp = `${formalPath}.missing-evidence-${process.pid}.tmp`;
+    const canonicalTemp = `${paths.canonicalQuestions}.missing-evidence-${process.pid}.tmp`;
+    fs.writeFileSync(formalTemp, nextFormal, 'utf8');
+    fs.writeFileSync(canonicalTemp, nextCanonicalText, 'utf8');
+    try {
+        fs.renameSync(formalTemp, formalPath);
+        fs.renameSync(canonicalTemp, paths.canonicalQuestions);
+    } catch (error) {
+        fs.writeFileSync(formalPath, oldFormal, 'utf8');
+        fs.writeFileSync(paths.canonicalQuestions, oldCanonicals, 'utf8');
+        fs.rmSync(formalTemp, { force: true });
+        fs.rmSync(canonicalTemp, { force: true });
+        throw error;
+    }
+    return { schema_version: 'answer_demote_missing_evidence.v1', ok: true, demoted: true, canonical_id: canonicalId, answer_path: path.relative(root, formalPath), version: nextMetadata.version };
+}
+
 module.exports = {
     pathsFor,
     sha256,
@@ -693,6 +740,7 @@ module.exports = {
     runAnswerAudit,
     atomicPromote,
     atomicDemote,
+    atomicDemoteMissingEvidence,
     recordHumanReview,
     humanReviewError,
     countHumanReviewApprovals,

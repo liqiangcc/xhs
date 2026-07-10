@@ -24,6 +24,7 @@ const {
     runAnswerAudit,
     atomicPromote,
     atomicDemote,
+    atomicDemoteMissingEvidence,
     recordHumanReview,
 } = require('../lib/answer_quality');
 
@@ -62,7 +63,7 @@ function parseArgs(argv) {
 
 function printHelp() {
     console.log([
-        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote|demote|human-review> [options]',
+        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote|demote|demote-missing-evidence|human-review> [options]',
         '',
         'Commands:',
         '  init --canonical-id <id> [--overwrite] [--status <draft|ready|needs_update>]',
@@ -77,6 +78,7 @@ function printHelp() {
         '  audit [--candidate <path>] [--tier <candidate|curated>] [--type <type> ...] [--set <json>] [--require-evidence] [--require-code] [--noWrite]',
         '  promote --canonical-id <id> --candidate <path> --evidence <path> [--noWrite]',
         '  demote --canonical-id <id> --evidence <path> [--noWrite]',
+        '  demote-missing-evidence --canonical-id <id> [--noWrite]',
         '  human-review --canonical-id <id> --evidence <path> --review <json> [--noWrite]',
         '',
         'Options:',
@@ -421,6 +423,7 @@ function main(argv = process.argv) {
         else if (command === 'audit') result = runAnswerAudit(options);
         else if (command === 'promote') result = atomicPromote(options);
         else if (command === 'demote') result = atomicDemote(options);
+        else if (command === 'demote-missing-evidence') result = atomicDemoteMissingEvidence(options);
         else if (command === 'human-review') result = recordHumanReview(options);
         else throw new Error(`Unknown answer command: ${command}`);
         writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `answer_${command}`, result, options);
@@ -450,6 +453,7 @@ module.exports = {
     runAnswerAudit,
     atomicPromote,
     atomicDemote,
+    atomicDemoteMissingEvidence,
     recordHumanReview,
     main,
 };

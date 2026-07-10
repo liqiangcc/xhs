@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ensureDir, readJsonl, writeJson, writeJsonl } = require('../scripts/lib/io');
 const { parseAnswerMetadata } = require('../scripts/lib/answer_store');
-const { sha256, atomicPromote, atomicDemote, recordHumanReview } = require('../scripts/lib/answer_quality');
+const { sha256, atomicPromote, atomicDemote, atomicDemoteMissingEvidence, recordHumanReview } = require('../scripts/lib/answer_quality');
 
 const QUALITY = require('../config/answer_quality.json');
 
@@ -127,5 +127,17 @@ test('human review recorder rejects hash mismatch and writes a valid reviewer at
     const result = recordHumanReview({ root: fixtureData.root, canonicalId: 'cq_redis', evidence: fixtureData.evidencePath, review: reviewPath });
     assert.equal(result.decision, 'approved');
     assert.equal(require('../scripts/lib/io').readJson(fixtureData.evidencePath).human_review.reviewer_type, 'human');
+    fs.rmSync(fixtureData.root, { recursive: true, force: true });
+});
+
+test('missing evidence deterministically demotes a historical ready curated answer', () => {
+    const fixtureData = fixture();
+    fs.writeFileSync(fixtureData.formalPath, answer({ schema_version: 'answer.v1', canonical_id: 'cq_redis', version: 2, status: 'ready', quality_tier: 'curated', updated_at: '2026-07-10' }, '历史精选'), 'utf8');
+    const result = atomicDemoteMissingEvidence({ root: fixtureData.root, canonicalId: 'cq_redis', date: '2026-07-11' });
+    assert.equal(result.demoted, true);
+    const metadata = parseAnswerMetadata(fs.readFileSync(fixtureData.formalPath, 'utf8'));
+    assert.equal(metadata.status, 'needs_update');
+    assert.equal(metadata.audit_failure, 'missing_evidence');
+    assert.equal(readJsonl(fixtureData.canonicalPath)[0].answer_status, 'needs_update');
     fs.rmSync(fixtureData.root, { recursive: true, force: true });
 });
