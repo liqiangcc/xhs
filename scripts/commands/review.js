@@ -59,7 +59,7 @@ function printHelp() {
         'Usage: node scripts/xhs.js review <prepare|today|mark|weak> [options]',
         '',
         'Commands:',
-        '  prepare --target <name> [--limit <n>] [--priority <P0|P1>] [--domain <l1>] [--company <name>] [--topic <text>] [--level <text>] [--days <n>] [--with-issues]',
+        '  prepare --target <name> [--limit <n>] [--priority <P0|P1>] [--status <new|weak|learning|mastered>] [--domain <l1>] [--company <name>] [--topic <text>] [--level <text>] [--days <n>] [--with-issues]',
         '  today [--limit <n>] [--with-issues]',
         '  mark --canonical-id <id> --result <again|hard|good|easy> [--status <again|hard|good|easy>] [--notes <text>]',
         '  next [--limit <n>] [--days <n>] [--with-issues]',
@@ -204,6 +204,7 @@ function runPrepare(options = {}) {
     const rowOptions = { ...options, issueLinks, questions, strategy };
     let rows = options.days ? upcomingRows(records, progress, rowOptions) : dueRows(records, progress, rowOptions);
     if (options.priority) rows = rows.filter((row) => row.review_priority === options.priority);
+    if (options.status) rows = rows.filter((row) => row.progress.status === options.status);
     if (options.domain) rows = rows.filter((row) => row.primary_domain?.l1 === options.domain);
     if (options.company) rows = rows.filter((row) => (row.companies || []).some((company) => company.includes(options.company)));
     if (options.level) rows = rows.filter((row) => (row.levels || []).some((level) => level.includes(options.level)));

@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { readJson, writeJson, writeJsonl } = require('../scripts/lib/io');
 const { runToday, runMark, runNext, runWeak, runPrepare } = require('../scripts/commands/review');
+const { applyReviewResult } = require('../scripts/lib/review_store');
 
 function canonical(canonicalId, title) {
     return {
@@ -46,6 +47,10 @@ test('prepares due review items and updates progress from marks', () => {
     assert.equal(prepared.ok, true);
     assert.equal(fs.existsSync(path.join(root, prepared.plan_path)), true);
 
+    const weakPlan = runPrepare({ root, date: '2026-06-30', target: 'weak-redis', limit: 10, status: 'weak' });
+    assert.equal(weakPlan.item_count, 1);
+    assert.equal(weakPlan.rows[0].canonical_id, 'cq_redis_persistence');
+
     fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -72,6 +77,30 @@ test('applies hard good and easy review intervals deterministically', () => {
     assert.equal(session.events[0].result, 'easy');
 
     fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('recovers a weak card through learning to mastered', () => {
+    const weak = {
+        canonical_id: 'cq_recovery_path',
+        status: 'weak',
+        level: 1,
+        review_count: 2,
+        last_reviewed_at: '2026-07-10',
+        next_review_at: '2026-07-11',
+        confidence: 0.55,
+        difficulty: 4,
+        mistake_count: 1,
+        updated_at: '2026-07-10',
+    };
+    const learning = applyReviewResult(weak, 'easy', { date: '2026-07-11' });
+    assert.equal(learning.status, 'learning');
+    assert.equal(learning.level, 3);
+    assert.equal(learning.mistake_count, 0);
+
+    const mastered = applyReviewResult(learning, 'easy', { date: '2026-07-18' });
+    assert.equal(mastered.status, 'mastered');
+    assert.equal(mastered.level, 5);
+    assert.equal(mastered.mistake_count, 0);
 });
 
 test('adds issue urls to review rows when requested', () => {

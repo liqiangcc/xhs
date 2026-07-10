@@ -167,3 +167,18 @@ Completed on 2026-07-10.
 | P0 / P1 / P2 | 30 / 16 / 54 |
 
 Forty new assets and twelve existing-asset attachments formed the first ten-path topic network. See `review/plans/c5_topic_network_delivery.md` and `review/plans/c5_topic_map.md`.
+
+## C6 Scale Snapshot
+
+Completed on 2026-07-10.
+
+| Metric | Value |
+|---|---:|
+| Canonical records | 258 |
+| Assigned rows | 600 |
+| Ready answers | 100 |
+| P0/P1 missing answers | 0 |
+| Review progress records | 258 |
+| Topic / company / P0 / weak saved plans | 4 |
+
+C6 added 158 P2 long-tail identities without force-merging distinct questions and verified multi-entry review plus weak-to-mastered scheduling. Their answer completion remains explicitly in C8. See `review/plans/c6_scale_and_entry_delivery.md`.

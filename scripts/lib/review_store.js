@@ -107,11 +107,13 @@ function applyReviewResult(item, result, options = {}) {
         level = clamp(beforeLevel + 1, 0, 5);
         nextReviewAt = addDays(date, goodIntervals[Math.min(beforeLevel, goodIntervals.length - 1)]);
         confidence = clamp(confidence + 0.15, 0, 1);
+        mistakeCount = Math.max(0, mistakeCount - 1);
     } else if (result === 'easy') {
         level = clamp(beforeLevel + 2, 0, 5);
         nextReviewAt = addDays(date, easyIntervals[Math.min(beforeLevel, easyIntervals.length - 1)]);
         confidence = clamp(confidence + 0.25, 0, 1);
         difficulty = clamp(difficulty - 1, 1, 5);
+        mistakeCount = Math.max(0, mistakeCount - 1);
     } else {
         throw new Error(`Invalid review result: ${result}`);
     }
