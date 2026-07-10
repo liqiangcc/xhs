@@ -381,7 +381,7 @@
   - 对 60 题进行 100% 人工审查和盲对比。
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
-- Commit: `pending`
+- Commit: `5f91877c`
 - Notes: `cq_lru_cache_0ef78597` 已完成候选、JDK 文档/可复现实验取证、独立审查和机器审计（100/100、零硬失败）；台账现由候选、证据、审计与人工签核工件派生，当前为 1/60 `awaiting_human_review`、59/60 待处理。试点仍要求 100% 人工签核，任何未签核候选不得替换正式答案。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
