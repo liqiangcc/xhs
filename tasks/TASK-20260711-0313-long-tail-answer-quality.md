@@ -277,13 +277,13 @@
   - curated-ready 数只能增加或在显式修复迁移中保持不变，不能静默下降。
 - Expected files: `package.json`, `.github/workflows/ci.yml`, `scripts/content/check_answer_coverage.js`
 - Validation: `npm run ci:check && npm run ci:answer:semantic && npm run ci:answer:evidence && npm run ci:answer:code` -> passed; `npm test` -> passed (74/74)
-- Commit: `pending`
+- Commit: `b4bae26c`
 - Changed files: `package.json`, `.github/workflows/ci.yml`, `scripts/content/check_answer_evidence.js`, `scripts/content/check_answer_code.js`, `scripts/content/check_curated_ready_regression.js`, `data/manifests/quality/curated_ready_floor.json`, `scripts/lib/answer_quality.js`
 - Notes: 新增长尾语义回归、精选 ready 证据校验、curated Coding 专项检查和 curated-ready 单调回归 floor；CI 对无 active curated 的当前过渡态通过，但任何后续 ready/curated 答案都会进入证据和代码门禁。历史 spec 渲染器现在保留现有审计状态，不能静默恢复 ready/curated。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T04` S3：全量复核 Canonical 边界与答案题型
 
-- Status: `pending`
+- Status: `in_progress`
 - Depends on: `TASK-20260711-0313-long-tail-answer-quality-T03`
 - Goal: 在重答前建立无重复、无错类、可稳定恢复的全量升级队列。
 - Files likely touched: `data/questions/canonical_questions.jsonl`, `data/questions/questions.jsonl`, `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/canonical/*`
@@ -293,16 +293,17 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S01` 生成全量相似题簇候选
 
-- Status: `pending`
+- Status: `done`
 - Goal: 对 9,043 个 singleton 和已有多题簇做全库相似度检查，找出重复、包含和边界冲突。
 - Steps:
   - 组合标准化标题、实体、领域、原题向量/语义判断生成候选对。
   - 优先检查与 100 个精选 Canonical 重合的长尾题，复用而不是复制答案。
   - 每个候选保留算法分数、理由和人工决策字段。
 - Expected files: `data/manifests/canonical/long_tail_duplicate_candidates.jsonl`, `scripts/content/audit_canonical_boundaries.js`
-- Validation: `node scripts/content/audit_canonical_boundaries.js --check`
+- Validation: `node scripts/content/audit_canonical_boundaries.js --check` -> passed (307 deterministic candidates)
 - Commit: `pending`
-- Notes:
+- Changed files: `scripts/content/audit_canonical_boundaries.js`, `data/manifests/canonical/long_tail_duplicate_candidates.jsonl`, `test/canonical_boundary_audit.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 候选由规范化标题、中文/英文 token、实体和领域组合生成；每条保留分数、证据、建议动作和人工决策字段。该结果仅进入 merge/boundary review，绝不自动合并。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S02` 审核并执行 merge/split
 
