@@ -29,7 +29,7 @@ function printHelp() {
         '  answer init|status        Manage canonical answer files',
         '  answer validate|sync      Validate answer metadata and sync statuses',
         '  review prepare|today      Prepare and list due review items',
-        '  review mark|weak          Mark review result and inspect weak items',
+        '  review mark|weak|integrity Mark results, inspect weak items, or check review references',
         '  issue render|sync|check   Render and sync GitHub review issue cards',
         '  report quality           Summarize repository quality and next actions',
     ].join('\n'));

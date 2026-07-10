@@ -6,7 +6,7 @@ const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { readJson, writeJson, writeJsonl } = require('../scripts/lib/io');
-const { runToday, runMark, runNext, runWeak, runPrepare } = require('../scripts/commands/review');
+const { runToday, runMark, runNext, runWeak, runPrepare, runIntegrity } = require('../scripts/commands/review');
 const { applyReviewResult } = require('../scripts/lib/review_store');
 
 function canonical(canonicalId, title) {
@@ -219,6 +219,37 @@ test('supports review next status alias and prepare filters', () => {
     });
     assert.equal(prepared.item_count, 1);
     assert.equal(prepared.rows[0].canonical_id, 'cq_redis_fast');
+
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('reports duplicate and stale review progress and session references without writing', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-review-integrity-'));
+    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
+    writeJsonl(canonicalPath, [canonical('cq_redis_fast', 'Redis 为什么快？')]);
+    writeJson(path.join(root, 'review', 'progress.json'), {
+        schema_version: 'review_progress_store.v1',
+        updated_at: '2026-06-30',
+        items: [
+            { canonical_id: 'cq_redis_fast' },
+            { canonical_id: 'cq_redis_fast' },
+            { canonical_id: 'cq_removed' },
+            {},
+        ],
+    });
+    writeJson(path.join(root, 'review', 'sessions', '2026-06-30.json'), {
+        schema_version: 'review_session.v1',
+        date: '2026-06-30',
+        events: [{ canonical_id: 'cq_removed' }, {}],
+    });
+
+    const result = runIntegrity({ root, noWrite: true });
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.duplicate_progress_canonical_ids, [{ canonical_id: 'cq_redis_fast', count: 2 }]);
+    assert.deepEqual(result.stale_progress_canonical_ids, ['cq_removed']);
+    assert.equal(result.malformed_progress_items.length, 1);
+    assert.equal(result.stale_session_events.length, 2);
+    assert.equal(fs.existsSync(path.join(root, 'data', 'manifests', 'runs')), false);
 
     fs.rmSync(root, { recursive: true, force: true });
 });
