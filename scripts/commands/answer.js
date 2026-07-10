@@ -72,7 +72,7 @@ function printHelp() {
         '  quality-migrate [--check] [--expected-curated <n>] [--expected-long-tail <n>]',
         '  context --canonical-id <id>',
         '  candidate render --spec <json> [--noWrite]',
-        '  audit [--candidate <path>] [--tier <tier>] [--type <type> ...] [--set <json>] [--require-evidence] [--require-code] [--noWrite]',
+        '  audit [--candidate <path>] [--tier <candidate|curated>] [--type <type> ...] [--set <json>] [--require-evidence] [--require-code] [--noWrite]',
         '  promote --canonical-id <id> --candidate <path> --evidence <path> [--noWrite]',
         '',
         'Options:',

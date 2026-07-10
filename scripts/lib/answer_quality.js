@@ -403,7 +403,10 @@ function auditOneCandidate(filePath, options = {}) {
     const canonicalId = candidate.metadata.canonical_id;
     const errors = [];
     const hardFailures = [];
-    if (candidate.metadata.quality_tier !== 'candidate') errors.push({ error: 'invalid_candidate_tier' });
+    if (candidate.metadata.quality_tier !== 'candidate'
+        && !(options.allowFormal && candidate.metadata.quality_tier === 'curated')) {
+        errors.push({ error: 'invalid_candidate_tier' });
+    }
     const readyView = { ...candidate, metadata: { ...candidate.metadata, status: 'ready' } };
     for (const issue of validateAnswerContent(readyView)) errors.push(issue);
     const evidencePath = evidencePathFor(candidate, paths, options.evidence);
@@ -465,6 +468,10 @@ function runAnswerAudit(options = {}) {
     let candidatePaths;
     if (options.candidate) {
         candidatePaths = [assertPathWithin(path.resolve(options.candidate), paths.candidateAnswersDir, 'candidate')];
+    } else if (options.tier === 'curated') {
+        candidatePaths = fs.existsSync(paths.answersDir)
+            ? fs.readdirSync(paths.answersDir).filter((name) => name.endsWith('.md')).sort().map((name) => path.join(paths.answersDir, name))
+            : [];
     } else {
         candidatePaths = fs.existsSync(paths.candidateAnswersDir)
             ? fs.readdirSync(paths.candidateAnswersDir).filter((name) => name.endsWith('.md')).sort().map((name) => path.join(paths.candidateAnswersDir, name))
@@ -472,7 +479,7 @@ function runAnswerAudit(options = {}) {
     }
     const types = new Set([].concat(options.type || []).filter(Boolean));
     const setIds = readSetIds(options.set);
-    const rows = candidatePaths.map((filePath) => auditOneCandidate(filePath, options)).filter((row) => {
+    const rows = candidatePaths.map((filePath) => auditOneCandidate(filePath, { ...options, allowFormal: options.tier === 'curated' })).filter((row) => {
         if (options.tier && row.quality_tier !== options.tier) return false;
         if (types.size && !types.has(row.answer_type)) return false;
         if (setIds && !setIds.has(row.canonical_id)) return false;

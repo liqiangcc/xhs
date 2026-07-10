@@ -74,3 +74,15 @@ test('context includes source variants and candidate rendering stays isolated', 
     assert.equal(fs.existsSync(path.join(root, 'review', 'candidates', 'audits', 'cq_redis.json')), false);
     fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('curated tier audit reads formal answers without treating them as candidates', () => {
+    const root = fixtureRoot();
+    const answersDir = path.join(root, 'review', 'answers');
+    ensureDir(answersDir);
+    fs.writeFileSync(path.join(answersDir, 'cq_redis.md'), candidateContent().replace('"status":"draft"', '"status":"ready"').replace('"updated_at":"2026-07-11"', '"quality_tier":"curated","updated_at":"2026-07-11"'), 'utf8');
+    const report = runAnswerAudit({ root, tier: 'curated', noWrite: true });
+    assert.equal(report.candidate_count, 1);
+    assert.equal(report.rows[0].quality_tier, 'curated');
+    assert.equal(report.rows[0].errors.some((row) => row.error === 'invalid_candidate_tier'), false);
+    fs.rmSync(root, { recursive: true, force: true });
+});

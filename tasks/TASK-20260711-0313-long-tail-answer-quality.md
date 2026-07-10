@@ -1,7 +1,7 @@
 # 长尾答案全量升级到精选质量
 
 - Root ID: `TASK-20260711-0313-long-tail-answer-quality`
-- Status: `done`
+- Status: `in_progress`
 - Created: `2026-07-11 03:13 Asia/Shanghai`
 - Source request: 制定长尾答案重做的每个阶段目标，最终所有长尾答案都要和精选答案质量保持一致。
 - Task file: `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
@@ -145,7 +145,7 @@
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T02` S1：校准精选答案与统一质量合同
 
-- Status: `done`
+- Status: `in_progress`
 - Depends on: `TASK-20260711-0313-long-tail-answer-quality-T01`
 - Goal: 把“和精选答案一致”转换为可评分、可拒绝、可复现的质量合同，并先证明 100 份精选答案自身达到该合同。
 - Files likely touched: `config/answer_quality.json`, `docs/refactor/09_answer_content_standard.md`, `review/evidence/*.json`, `test/fixtures/answer_quality/*`
@@ -169,7 +169,7 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S02` 全量复核 100 份精选答案
 
-- Status: `pending`
+- Status: `in_progress`
 - Depends on: `TASK-20260711-0313-long-tail-answer-quality-T03-S04`
 - Goal: 让精选集合成为经过当前标准校准的正样本，而不是历史上自称精选的样本。
 - Steps:
@@ -179,7 +179,7 @@
   - 只有 100/100 通过合同后才进入后续试点。
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/curated_answer_audit.json`
 - Validation: `manual check: 100/100 curated rows have completed rubric, evidence, reviewer decision, and zero hard failures`
-- Commit: `8060a81e`
+- Commit: `pending`
 - Notes:
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S03` 建立正负评测集
@@ -193,7 +193,7 @@
   - 评审器必须接受全部正样本，并拒绝至少 95% 负样本；所有硬失败负样本必须 100% 拒绝。
 - Expected files: `test/fixtures/answer_quality/positive.jsonl`, `test/fixtures/answer_quality/negative.jsonl`, `test/answer_semantic_audit.test.js`
 - Validation: `node --test test/answer_quality_config.test.js`
-- Commit: `9c678a00`
+- Commit: `pending`
 - Notes:
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T03` S2：建立仓库级 Skill 与质量流水线
@@ -218,7 +218,7 @@
   - 生成并校验 `agents/openai.yaml`，默认提示显式包含 `$xhs-answer-curator`。
 - Expected files: `.agents/skills/xhs-answer-curator/SKILL.md`, `.agents/skills/xhs-answer-curator/agents/openai.yaml`
 - Validation: `python3 /root/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/xhs-answer-curator` -> passed (`Skill is valid!`)
-- Commit: `80cfbdfc`
+- Commit: `8060a81e`
 - Changed files: `.agents/skills/xhs-answer-curator/SKILL.md`, `.agents/skills/xhs-answer-curator/references/repo-map.md`, `.agents/skills/xhs-answer-curator/agents/openai.yaml`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: Skill 明确旧长尾不可作为事实来源、候选区隔离、第一手证据、独立 reviewer/subagent、最多两轮修订、90 分和零硬失败晋级；命令缺失时要求先实现而非手工模拟写状态。
 
@@ -232,13 +232,13 @@
   - 保持 AGENTS 简短，详细内容由 Skill 和质量标准承载。
 - Expected files: `AGENTS.md`
 - Validation: `manual check: repository root contains AGENTS.md; .agents/skills/xhs-answer-curator passes quick_validate and is in the documented repo discovery path` -> passed
-- Commit: `pending`
+- Commit: `9c678a00`
 - Changed files: `AGENTS.md`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: 根规则要求所有答案改动使用 curator Skill、候选与正式答案隔离、最多 10 题、禁止手工 ready/curated、失败保持 needs_update，并强制结构/Canonical/测试验证。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S03` 实现上下文、候选、审查和晋级接口
 
-- Status: `in_progress`
+- Status: `done`
 - Goal: 让 Skill 通过确定性命令完成数据准备和状态变更，不手工拼接仓库数据。
 - Steps:
   - 新增 `answer context --canonical-id <id>`，输出 Canonical、全部原题变体、实体、领域、公司、相邻 Canonical 和精选风格样本。
@@ -248,13 +248,13 @@
   - 晋级失败不改正式答案、不改 Canonical 状态。
 - Expected files: `scripts/commands/answer.js`, `scripts/lib/answer_quality.js`, `scripts/content/render_answer_specs.js`, `review/candidates/answers/.gitkeep`
 - Validation: `node --test test/answer_candidate.test.js test/answer_promote.test.js` -> passed (3/3); `npm test` -> passed (60/60)
-- Commit: `pending`
+- Commit: `80cfbdfc`
 - Changed files: `scripts/commands/answer.js`, `scripts/lib/answer_quality.js`, `scripts/content/render_answer_specs.js`, `review/candidates/answers/.gitkeep`, `test/answer_candidate.test.js`, `test/answer_promote.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: 新增完整上下文、隔离候选渲染、可过滤审查和带候选哈希/独立审查/分数门禁的原子晋级；失败测试验证正式答案与 Canonical 均逐字节不变。同步修正精选 spec 渲染器保留 `quality_tier=curated`，避免质量迁移后的生成漂移。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S04` 建立证据与专项校验器
 
-- Status: `in_progress`
+- Status: `done`
 - Goal: 自动阻断可确定发现的低质量答案。
 - Steps:
   - 定义 `review/evidence/{canonical_id}.json` schema，记录来源、claim 映射、核对日期、编写/审查版本和评分。
@@ -263,7 +263,7 @@
   - Project/Behavior 增加第一人称虚构与未填占位检查。
 - Expected files: `scripts/lib/answer_quality.js`, `scripts/content/check_answer_evidence.js`, `test/answer_evidence.test.js`, `test/answer_code_validation.test.js`
 - Validation: `npm test` -> passed (66/66); `node scripts/xhs.js answer audit --fixtures --noWrite` -> passed (5/5 expected outcomes)
-- Commit: `pending`
+- Commit: `322581ab`
 - Changed files: `config/answer_evidence.schema.json`, `scripts/commands/answer.js`, `scripts/lib/answer_quality.js`, `scripts/content/check_answer_evidence.js`, `test/answer_candidate.test.js`, `test/answer_promote.test.js`, `test/answer_evidence.test.js`, `test/answer_code_validation.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: 证据 schema 要求来源、claim 映射、核对日期、编写/审查版本、原题覆盖和两轮内独立审查；专项门禁覆盖旧模板/通用追问/跨题核心、Java `javac` 编译、SQL 结构与占位符、至少三个边界用例，以及 Project/Behavior 的虚构经历和未填占位。
 
