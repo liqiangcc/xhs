@@ -179,7 +179,7 @@
   - 只有 100/100 通过合同后才进入后续试点。
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/curated_answer_audit.json`
 - Validation: `manual check: 100/100 curated rows have completed rubric, evidence, reviewer decision, and zero hard failures`
-- Commit: `pending`
+- Commit: `8060a81e`
 - Notes:
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S03` 建立正负评测集
@@ -224,16 +224,17 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S02` 增加仓库持久规则
 
-- Status: `pending`
+- Status: `done`
 - Goal: 确保任何会修改 `review/answers/` 的 Agent 都执行同一质量流程。
 - Steps:
   - 在根 `AGENTS.md` 中要求答案变更使用 `xhs-answer-curator`、禁止直接标 ready、必须运行语义校验。
   - 记录每批 10 题限制、候选区路径和提交规则。
   - 保持 AGENTS 简短，详细内容由 Skill 和质量标准承载。
 - Expected files: `AGENTS.md`
-- Validation: `manual check: new session discovers xhs-answer-curator and reads AGENTS.md`
+- Validation: `manual check: repository root contains AGENTS.md; .agents/skills/xhs-answer-curator passes quick_validate and is in the documented repo discovery path` -> passed
 - Commit: `pending`
-- Notes:
+- Changed files: `AGENTS.md`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 根规则要求所有答案改动使用 curator Skill、候选与正式答案隔离、最多 10 题、禁止手工 ready/curated、失败保持 needs_update，并强制结构/Canonical/测试验证。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S03` 实现上下文、候选、审查和晋级接口
 
