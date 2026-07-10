@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_rocketmq_arch_22d7b629","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_rocketmq_arch_22d7b629","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # RocketMQ 的核心架构和消息流转过程
 
 ## 核心结论

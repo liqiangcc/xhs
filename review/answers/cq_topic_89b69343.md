@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_89b69343","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_89b69343","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 场景：如何避免超预期的高并发压力压垮系统？
 
 ## 核心结论

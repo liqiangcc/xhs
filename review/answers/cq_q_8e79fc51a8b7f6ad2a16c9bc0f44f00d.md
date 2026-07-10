@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_8e79fc51a8b7f6ad2a16c9bc0f44f00d","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_8e79fc51a8b7f6ad2a16c9bc0f44f00d","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 协议深度：TCP 三次握手与四次握手的状态机流转？这种“确认机制”如何启发了分布式系统中的确认应答逻辑？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

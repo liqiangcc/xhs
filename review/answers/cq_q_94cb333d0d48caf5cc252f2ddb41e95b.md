@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_94cb333d0d48caf5cc252f2ddb41e95b","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_94cb333d0d48caf5cc252f2ddb41e95b","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 并行计算架构：详细辨析 MapReduce 与 Spark 在运行流程（Task vs Thread）、中间数据存储（Disk vs Memory）及任务调度上的差异？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

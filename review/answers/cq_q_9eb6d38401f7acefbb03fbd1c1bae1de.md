@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_9eb6d38401f7acefbb03fbd1c1bae1de","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_9eb6d38401f7acefbb03fbd1c1bae1de","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 故障排查：场景题——某接口在低并发（QPS 10-15）时正常，但在并发量攀升到一定量级后错误率接近 100%，你会从哪些维度（如线程池枯竭、数据库连接池、死锁、带宽瓶颈）定位问题？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

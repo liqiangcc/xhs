@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_79627cbefabff2a2c2cecdbef48532b6","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_79627cbefabff2a2c2cecdbef48532b6","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 数据结构：点赞排行榜为什么要选择 Redis SortedSet (ZSet)？其底层的跳表（SkipList）+ 哈希表（Hash Table）结构如何保证 O(logN) 的操作效率？当点赞数据量级达到百万/千万时，ZSet 可能会面临哪些性能瓶颈（如内存碎片、大 Key 问题）？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

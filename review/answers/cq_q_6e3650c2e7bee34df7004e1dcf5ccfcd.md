@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6e3650c2e7bee34df7004e1dcf5ccfcd","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6e3650c2e7bee34df7004e1dcf5ccfcd","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 分布式存储哲学：Redis ZSet为什么在数据规模增大时从压缩列表（ZipList）切换为跳表（SkipList）？分析跳表在范围内查询（Range Query）时的复杂度优势
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

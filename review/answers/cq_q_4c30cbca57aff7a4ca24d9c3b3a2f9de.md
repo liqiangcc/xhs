@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_4c30cbca57aff7a4ca24d9c3b3a2f9de","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"behavior","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_4c30cbca57aff7a4ca24d9c3b3a2f9de","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"behavior","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 数仓架构：请详细描述你项目中数据仓库的分层设计（如 ODS, DWD, DWS, ADS），数据是如何从业务源头抽取的？核心业务表的数据规模及增量同步机制是怎样的？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

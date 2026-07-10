@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_f375a96772a0a0cedfc0f0ec2c60cecc","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_f375a96772a0a0cedfc0f0ec2c60cecc","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # MySQL 中的聚簇索引、覆盖索引、二级索引分别是什么？二级索引一定要回表吗？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

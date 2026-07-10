@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_lru_cache_0ef78597","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_lru_cache_0ef78597","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 算法：实现 LRU Cache
 
 ## 核心结论

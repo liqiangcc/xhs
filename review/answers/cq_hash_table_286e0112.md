@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_hash_table_286e0112","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_hash_table_286e0112","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 哈希表如何处理 Hash 冲突？
 
 ## 核心结论

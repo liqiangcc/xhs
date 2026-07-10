@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7cfa49babbd65c6f7ccde1ced8225efe","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7cfa49babbd65c6f7ccde1ced8225efe","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 存储性能哲学：Redis的高性能由哪些维度共同支撑？重点分析IO多路复用模型与底层数据结构（如跳表、压缩列表）的优化逻辑
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

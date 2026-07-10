@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7b5ace947d2fd98aac9428a38fef1f1d","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7b5ace947d2fd98aac9428a38fef1f1d","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # Volatile 关键字的语义：如何保证可见性与禁止指令重排（Memory Barrier）？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

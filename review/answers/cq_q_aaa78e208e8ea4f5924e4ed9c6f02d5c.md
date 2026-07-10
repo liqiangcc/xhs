@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_aaa78e208e8ea4f5924e4ed9c6f02d5c","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_aaa78e208e8ea4f5924e4ed9c6f02d5c","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 如果有100个线程，从1-10里面取数据，往容量100的Map中添加数据会发生什么？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

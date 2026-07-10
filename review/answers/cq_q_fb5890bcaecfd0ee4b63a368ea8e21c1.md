@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_fb5890bcaecfd0ee4b63a368ea8e21c1","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_fb5890bcaecfd0ee4b63a368ea8e21c1","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 系统设计：在双 11 秒杀页面中，如果某些热点模块的缓存突然失效（缓存击穿），你该如何设计缓存策略，以平衡海量并发流量与数据的实时更新？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

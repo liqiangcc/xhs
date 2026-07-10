@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_equals_hashcode_e7fe32f7","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_equals_hashcode_e7fe32f7","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 为什么重写 equals 必须重写 hashCode？
 
 ## 核心结论

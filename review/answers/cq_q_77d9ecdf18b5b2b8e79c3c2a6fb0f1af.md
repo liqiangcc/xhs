@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_77d9ecdf18b5b2b8e79c3c2a6fb0f1af","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_77d9ecdf18b5b2b8e79c3c2a6fb0f1af","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 常见的查找算法有哪些？其时间复杂度分别是多少？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_8666ff11933ef026cea4aff2dbfad877","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_8666ff11933ef026cea4aff2dbfad877","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 系统架构设计：针对大视频上传（GB级别）并涉及异步编解码的业务，如何设计一个高性能、高可用的方案？探讨利用分片上传（Multipart Upload）、消息队列解耦转码任务及对象存储（OSS）直传的协作模型
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

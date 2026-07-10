@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_cache_consistency_a83eeb36","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_cache_consistency_a83eeb36","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 如何保证 MySQL 与 Redis 的缓存一致性？
 
 ## 核心结论

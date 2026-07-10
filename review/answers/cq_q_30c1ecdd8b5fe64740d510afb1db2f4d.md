@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_30c1ecdd8b5fe64740d510afb1db2f4d","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_30c1ecdd8b5fe64740d510afb1db2f4d","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 业务设计：介绍你对领域驱动设计（DDD）的理解及其在实际项目中的落地？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

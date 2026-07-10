@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6ae96feaa0e3c49daad3242f62e1cc8e","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6ae96feaa0e3c49daad3242f62e1cc8e","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 算法：买卖股票的最佳时机系列（使用动态规划解决：基础买卖、无限次交易、N 次交易限制）
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

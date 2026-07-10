@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b4d7dd86ede4f8fda6a9b027026545be","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b4d7dd86ede4f8fda6a9b027026545be","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # SQL：给定 table1，要求：当字段 a 在所有元组中都等于 '1' 时，返回字段 b='2' 的前 2 条数据，按字段 c 排序。请编写对应的 SQL 语句。
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

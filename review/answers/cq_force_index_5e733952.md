@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_force_index_5e733952","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_force_index_5e733952","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 如果查询优化器选错了索引怎么办？
 
 ## 核心结论

@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_956bc5ce","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_956bc5ce","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 如果你的系统的QPS突然提升10倍你会怎么设计？
 
 ## 核心结论

@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_ad4c943cfa4eca5455e7b9c038aea387","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_ad4c943cfa4eca5455e7b9c038aea387","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"concept","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # MySQL 事务隔离：详细辨析不可重复读（Non-repeatable Read）与幻读（Phantom Read）在并发事务中产生的根本原因？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

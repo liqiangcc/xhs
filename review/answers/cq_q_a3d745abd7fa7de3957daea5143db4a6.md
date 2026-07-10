@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a3d745abd7fa7de3957daea5143db4a6","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a3d745abd7fa7de3957daea5143db4a6","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 架构选型方法论：在构建企业级微服务时，如何基于业务场景（如电商大促的高并发vs金融交易的强一致）选择合适的编程语言（Java, C++, Go）及序列化协议（Hessian, ProtoBuf, JSON）？析其时空复杂度权衡
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

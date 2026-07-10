@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_short_url_c0218e46","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_short_url_c0218e46","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 百亿级短 URL 如何生成无冲突短码？
 
 ## 核心结论

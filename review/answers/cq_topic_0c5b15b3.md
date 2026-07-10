@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_0c5b15b3","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_0c5b15b3","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 搜索引擎如何避免全量扫描并高效检索？
 
 ## 核心结论

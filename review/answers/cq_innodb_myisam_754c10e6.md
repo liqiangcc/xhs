@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_innodb_myisam_754c10e6","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_innodb_myisam_754c10e6","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # InnoDB 和 MyISAM 的区别
 
 ## 核心结论

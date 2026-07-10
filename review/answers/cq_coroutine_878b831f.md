@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_coroutine_878b831f","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_coroutine_878b831f","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 协程与线程的区别及适用场景
 
 ## 核心结论

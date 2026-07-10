@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_jvm_oom_5adc3ce1","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_jvm_oom_5adc3ce1","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # JVM OOM 如何定位和处理？
 
 ## 核心结论

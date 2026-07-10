@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_spring_transaction_a3b170d7","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_spring_transaction_a3b170d7","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # Spring 声明式事务的原理与常见失效场景
 
 ## 核心结论

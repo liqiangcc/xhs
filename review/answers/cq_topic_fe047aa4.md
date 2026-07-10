@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_fe047aa4","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_fe047aa4","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 场景：如何设计一个高并发的秒杀系统？
 
 ## 核心结论

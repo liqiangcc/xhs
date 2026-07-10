@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_fcc849e5","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_fcc849e5","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 微服务架构如何进行系统拆分？
 
 ## 核心结论

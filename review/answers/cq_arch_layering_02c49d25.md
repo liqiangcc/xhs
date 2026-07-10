@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_arch_layering_02c49d25","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_arch_layering_02c49d25","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 复杂系统为什么需要分层设计？
 
 ## 核心结论

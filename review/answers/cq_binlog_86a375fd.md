@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_binlog_86a375fd","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_binlog_86a375fd","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # MySQL binlog 模式与主从复制流程
 
 ## 核心结论

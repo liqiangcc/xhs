@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_20fba961","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_20fba961","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 如何解决高并发库存扣减中的超卖和少卖？
 
 ## 核心结论

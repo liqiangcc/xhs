@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_aof_e522aa87","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_aof_e522aa87","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # Redis AOF 重写的过程
 
 ## 核心结论

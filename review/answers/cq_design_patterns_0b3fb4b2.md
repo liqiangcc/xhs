@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_design_patterns_0b3fb4b2","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_design_patterns_0b3fb4b2","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 如何选择并实践常用设计模式？
 
 ## 核心结论

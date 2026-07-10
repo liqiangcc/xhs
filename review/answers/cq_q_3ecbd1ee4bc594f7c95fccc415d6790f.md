@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_3ecbd1ee4bc594f7c95fccc415d6790f","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_3ecbd1ee4bc594f7c95fccc415d6790f","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 缓存韧性治理：针对Redis提前缓存的同步链路（Pre-caching Pipeline），如何解决在高并发场景下的数据热点偏移与缓存雪崩防控？详述利用分布式锁（Redlock）保证一致性的性能损耗
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

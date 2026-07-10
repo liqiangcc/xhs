@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_daemon_thread_a38b0a9b","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_daemon_thread_a38b0a9b","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # Java 守护线程的特点与应用边界
 
 ## 核心结论

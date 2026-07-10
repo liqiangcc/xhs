@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_deep_copy_5cfb8eb4","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_deep_copy_5cfb8eb4","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # Java 浅拷贝与深拷贝的区别
 
 ## 核心结论

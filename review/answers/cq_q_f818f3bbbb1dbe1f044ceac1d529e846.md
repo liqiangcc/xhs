@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_f818f3bbbb1dbe1f044ceac1d529e846","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_f818f3bbbb1dbe1f044ceac1d529e846","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 限流算法闭环：详述令牌桶（Token Bucket）限流算法的实现思路。与漏桶（Leaky Bucket）算法相比，令牌桶在处理突发流量（Burst Traffic）时的流量均匀化物理优势在哪里？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

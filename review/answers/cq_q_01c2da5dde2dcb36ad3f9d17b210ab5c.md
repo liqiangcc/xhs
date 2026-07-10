@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_01c2da5dde2dcb36ad3f9d17b210ab5c","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_01c2da5dde2dcb36ad3f9d17b210ab5c","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 如果 binlog 消费线程卡住或 MQ 消费耗时过长导致缓存数据库不一致，有哪些补救方案？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

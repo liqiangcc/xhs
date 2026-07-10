@@ -111,22 +111,23 @@
   - 增加 `--check` / `--noWrite`，先证明迁移范围恰好是 100 + 9,160，不能误改后续新增答案。
 - Expected files: `scripts/commands/answer.js`, `scripts/lib/answer_store.js`, `scripts/content/check_answer_coverage.js`, `test/answer_quality_migration.test.js`
 - Validation: `node --test test/answer_quality_migration.test.js test/long_tail_answers.test.js && node scripts/xhs.js answer quality-migrate --check --noWrite && npm test` -> passed (54 tests)
-- Commit: `pending`
+- Commit: `e1e7f62a`
 - Changed files: `scripts/commands/answer.js`, `scripts/lib/answer_store.js`, `scripts/content/check_answer_coverage.js`, `scripts/content/generate_long_tail_answers.js`, `test/answer_quality_migration.test.js`, `test/long_tail_answers.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: 新增 fail-closed、幂等的 `answer quality-migrate` dry-run/执行接口；精确识别 100 份 curated 与 9,160 份 baseline。Coverage 现在独立报告 curated-ready、baseline、needs_update 和 semantic_complete，长尾生成器不再产出 ready。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T01-S03` 执行质量状态迁移
 
-- Status: `pending`
+- Status: `done`
 - Goal: 原子执行经过 dry-run 验证的状态迁移，并同步 Canonical 与质量报告。
 - Steps:
   - 执行 `answer quality-migrate`，为 100 份精选补齐 curated tier，将 9,160 份长尾迁移为 needs_update。
   - 执行 `answer sync` 同步 Canonical 状态并记录迁移 manifest。
   - 重建 coverage/quality report，确认答案文件没有丢失且 curated-ready 恰好为 100。
 - Expected files: `review/answers/*.md`, `data/questions/canonical_questions.jsonl`, `data/manifests/runs/latest_answer_sync.json`, `data/manifests/quality/answer_coverage_report.json`
-- Validation: `node scripts/xhs.js answer validate --strict --noWrite && node scripts/content/check_answer_coverage.js --check && node scripts/xhs.js canonical check --noWrite`
+- Validation: `node scripts/xhs.js answer validate --strict --noWrite && node scripts/content/check_answer_coverage.js --check && node scripts/xhs.js canonical check --noWrite && node scripts/content/generate_long_tail_answers.js --check` -> passed
 - Commit: `pending`
-- Notes:
+- Changed files: `review/answers/*.md` (9,260 metadata-only changes), `data/questions/canonical_questions.jsonl`, `data/manifests/quality/answer_coverage_report.json`, `data/manifests/runs/latest_answer_quality-migrate.json`, `data/manifests/runs/latest_answer_sync.json`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 100 份精选答案现为 ready/curated；9,160 份长尾现为 needs_update/long_tail_baseline。正文未改，Canonical 状态已同步；coverage 显式报告 curated_ready=100、baseline=9160、semantic_complete=false。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T01-S04` 重开内容阶段状态
 

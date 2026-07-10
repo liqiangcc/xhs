@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_4bf1435a7d1a0d3fc7f64f471cfcd1d2","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"project","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_4bf1435a7d1a0d3fc7f64f471cfcd1d2","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"project","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 你们项目中为什么使用feign不用dubbo?他们之间的效率差异？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

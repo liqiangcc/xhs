@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_linux_commands_76aadb5b","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_linux_commands_76aadb5b","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # Linux 线上排查常用命令有哪些？
 
 ## 核心结论

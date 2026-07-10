@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_g1_collector_828f806c","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_g1_collector_828f806c","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # G1 垃圾收集器的核心机制
 
 ## 核心结论

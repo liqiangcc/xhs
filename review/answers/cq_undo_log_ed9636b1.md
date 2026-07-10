@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_undo_log_ed9636b1","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_undo_log_ed9636b1","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # Undo Log 如何保证原子性和崩溃恢复？
 
 ## 核心结论

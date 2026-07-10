@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_tcp_wait_states_c808f88e","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_tcp_wait_states_c808f88e","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # TIME_WAIT 与 CLOSE_WAIT 的区别及 2MSL 原因
 
 ## 核心结论

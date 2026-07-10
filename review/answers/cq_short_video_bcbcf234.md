@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_short_video_bcbcf234","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_short_video_bcbcf234","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 如何设计三千万用户同时在线的短视频系统？
 
 ## 核心结论

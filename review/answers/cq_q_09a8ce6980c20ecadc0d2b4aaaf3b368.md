@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_09a8ce6980c20ecadc0d2b4aaaf3b368","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"project","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_09a8ce6980c20ecadc0d2b4aaaf3b368","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"project","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 在你的项目背景下，为什么要使用 Docker 容器？前端在 Docker 部署流程中扮演什么角色？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

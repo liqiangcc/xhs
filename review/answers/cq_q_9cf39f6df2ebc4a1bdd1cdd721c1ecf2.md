@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_9cf39f6df2ebc4a1bdd1cdd721c1ecf2","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_9cf39f6df2ebc4a1bdd1cdd721c1ecf2","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 高并发点赞系统：针对百度健康等流量巅峰场景，如何设计千万级文章的点赞统计与点赞用户关系存储？详述利用Redis Bitmap/Set进行内存去重与计数，并保证写入DB时的异步刷盘与幂等性
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

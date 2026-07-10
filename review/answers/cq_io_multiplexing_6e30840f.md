@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_io_multiplexing_6e30840f","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_io_multiplexing_6e30840f","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # IO 多路复用及 select、poll、epoll 的区别
 
 ## 核心结论

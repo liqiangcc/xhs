@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_ae14c6ec119ff1e3c3b1a1ffa6b73b5c","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_ae14c6ec119ff1e3c3b1a1ffa6b73b5c","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 算法手撕：数组中和为 M 的数对。要求通过一次遍历找到所有满足条件（下标不同）的组合数，并应用排列组合原理进行可能性估算
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_jvm_safepoint_f7c9b757","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_jvm_safepoint_f7c9b757","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # JVM 安全点的作用及线程无法进入时如何处理？
 
 ## 核心结论

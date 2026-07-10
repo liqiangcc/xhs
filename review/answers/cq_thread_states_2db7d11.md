@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_thread_states_2db7d11","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_thread_states_2db7d11","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # Java 线程有哪些状态，如何转换？
 
 ## 核心结论

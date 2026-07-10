@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_spi_3342eb14","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_spi_3342eb14","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # Java SPI 的原理和用途是什么？
 
 ## 核心结论

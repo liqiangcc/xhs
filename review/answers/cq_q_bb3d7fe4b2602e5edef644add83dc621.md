@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_bb3d7fe4b2602e5edef644add83dc621","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"behavior","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_bb3d7fe4b2602e5edef644add83dc621","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"behavior","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 性能优化：假如一个接口响应过慢且数据库层面已无优化空间，你该通过哪些工具（如 Arthas, JProfiler）排查瓶颈？如果确定瓶颈在 CPU 密集计算或第三方接口调用，你会采取什么优化策略？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

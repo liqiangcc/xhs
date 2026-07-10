@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_lbs_00924ec8","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_lbs_00924ec8","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # LBS 系统如何实现附近的人查询？
 
 ## 核心结论

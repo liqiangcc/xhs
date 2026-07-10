@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_rag_2ff8f969","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_rag_2ff8f969","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # RAG（检索增强生成）的原理与应用场景
 
 ## 核心结论

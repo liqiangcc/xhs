@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_ipc_84b09f40","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_ipc_84b09f40","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 进程间通信（IPC）有哪些方式？
 
 ## 核心结论

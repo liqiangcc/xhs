@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_cf8c33b8eee10e5fa52c4135d7d92b5e","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_cf8c33b8eee10e5fa52c4135d7d92b5e","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"mechanism","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # ThreadLocal：请深入探讨 ThreadLocal 的底层原理。它是如何实现线程级别隔离的？一个线程可以拥有几个 ThreadLocal 变量？使用时需要注意什么（内存泄漏、脏数据）？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

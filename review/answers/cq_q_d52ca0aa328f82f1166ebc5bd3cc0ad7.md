@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_d52ca0aa328f82f1166ebc5bd3cc0ad7","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_d52ca0aa328f82f1166ebc5bd3cc0ad7","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 线程同步：有 3 个线程 t1, t2, t3。要求 t1 和 t2 同时运行，待两者结束后再运行 t3。请提供核心实现代码（如使用 CountDownLatch 或 Join）？
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

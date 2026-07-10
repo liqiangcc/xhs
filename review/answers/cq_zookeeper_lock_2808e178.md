@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_zookeeper_lock_2808e178","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_zookeeper_lock_2808e178","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # ZooKeeper 如何实现分布式锁？
 
 ## 核心结论

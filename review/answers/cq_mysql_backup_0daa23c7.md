@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_mysql_backup_0daa23c7","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_mysql_backup_0daa23c7","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # MySQL 备份与基于 binlog 的恢复流程
 
 ## 核心结论

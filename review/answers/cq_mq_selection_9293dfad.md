@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_mq_selection_9293dfad","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_mq_selection_9293dfad","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 如何选择 Kafka、RocketMQ 和 RabbitMQ？
 
 ## 核心结论

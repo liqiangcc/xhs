@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_d569ffdbd91428e4fbdfb3b1f074e608","version":1,"status":"ready","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_d569ffdbd91428e4fbdfb3b1f074e608","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"scenario","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
 # 算法建模：设计一个软件资源调度系统。给定有限的开发、测试、设计资源，以及多个包含不同人员需求和天数的项目。问题 1：完成所有项目最少需要多少天？问题 2：如果资源不足，如何分配以完成最多的项目数？（要求自定义数据结构并口述调度逻辑，如贪心或动态规划思路）
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。

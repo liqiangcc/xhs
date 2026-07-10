@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_zero_copy_e7b6486b","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_zero_copy_e7b6486b","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 零拷贝的原理与应用场景
 
 ## 核心结论

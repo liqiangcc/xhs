@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_9e860ba7","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_9e860ba7","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
 # 数据库成为性能瓶颈时，如何优化动态查询？
 
 ## 核心结论
