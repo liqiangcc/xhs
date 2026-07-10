@@ -71,3 +71,7 @@ Baseline: 2026-07-10. Batch size: 10. The queue is ordered for high-value-first 
 - Duplicate candidates inside this queue are merged into one decision.
 - Each accepted row gets a strict-valid answer in the same batch.
 - Batch completion is recorded only after canonical, answer, index and review checks pass.
+
+## C2 Execution Note
+
+C2 completed 26 create decisions and reached 60 Canonical records / 208 assigned rows. Queue rows 6–10, 12–16, 18, 21–23, 27–28 and 38 are complete. The batch also completed SPI, Spring Boot auto-configuration, dependency injection, JVM OOM, CMS, GC algorithms, Redis distributed lock, MQ selection and IO multiplexing from the same hotspot review. Remaining rows stay queued for later stages; their presence does not mean the completed assets should be recreated.

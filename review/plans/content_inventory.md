@@ -110,3 +110,18 @@ Completed on 2026-07-10. The frozen baseline above remains unchanged for compari
 | P0 / P1 | 18 / 16 |
 
 Eight obvious synonym groups were attached to existing assets, all 34 records received an answer-type classification, and the original 12 P0 answers completed semantic review. See `review/plans/c1_asset_calibration.md` for the audit trail.
+
+## C2 Backbone Snapshot
+
+Completed on 2026-07-10.
+
+| Metric | Value |
+|---|---:|
+| Canonical records | 60 |
+| Assigned rows | 208 |
+| Distinct assigned question IDs | 74 |
+| Ready answers | 60 |
+| Review progress records | 60 |
+| P0 / P1 / P2 | 20 / 16 / 24 |
+
+Twenty-six Java backend backbone assets were added with topic-specific answers. Duplicate CMS and TCP candidates were consolidated before creation. See `review/plans/c2_backbone_delivery.md`.
