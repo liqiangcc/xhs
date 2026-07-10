@@ -478,4 +478,4 @@ T4-T6 主要是文档和维护体验。
 6. 人可以快速检查 GitHub Actions 是否真实运行。
 ```
 
-这时再继续扩大 AI 触发范围会更安全。当前实际下一步是继续内容覆盖到 200+ assigned rows，并开始 `review mark` 形成真实复习数据。
+这时再继续扩大 AI 触发范围会更安全。当前近期任务是继续内容覆盖到 200+ assigned rows，并开始 `review mark` 形成真实复习数据；200+ 只是中间门槛，最终范围以 `08_content_building_goals.md` 的全量题目、全量答案和全量可复习性验证为准。

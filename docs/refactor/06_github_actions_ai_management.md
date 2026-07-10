@@ -938,6 +938,8 @@ xhs-manage task: canonical-suggest-entity
 第三阶段：100 -> 200 canonical
 ```
 
+以上仅为工程化内容扩展的中间目标，不代表最终覆盖范围。最终内容目标以 `08_content_building_goals.md` 为准：全部真实面试题必须绑定 Canonical、拥有 ready 答案和 ReviewProgress，并通过全量可复习性验证。
+
 优先策略：
 
 ```text
@@ -1243,6 +1245,8 @@ issue-sync-apply
 5. 开始真实复习：review today / review mark / review next，让 reviewed_count 增长
 6. 每周查看 quality-report，处理 taxonomy legacy alias Top 项
 ```
+
+这里的 200+ assigned rows 是近期门槛；达到后继续按 `08_content_building_goals.md` 推进到全量题目和全量答案覆盖。
 
 原因：
 

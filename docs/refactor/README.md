@@ -18,6 +18,8 @@
 05_execution_checklist.md             执行清单与验收标准
 06_github_actions_ai_management.md    GitHub Actions + AI 管理层
 07_actions_review_todo.md             Actions 管理层 review 后的修复 TODO
+08_content_building_goals.md          当前内容建设阶段目标与验收门槛
+09_answer_content_standard.md         分题型答案模板与 ready 审查标准
 ```
 
 这些文档的关系是：
@@ -39,17 +41,21 @@ GitHub Actions 管理层
   ↓
 Actions Review TODO
   ↓
+内容建设阶段目标
+  ↓
 循环迭代
 ```
 
 当前执行优先级：
 
 ```text
-1. README.md：当前内容建设状态和下一步命令入口
-2. 05_execution_checklist.md：长期主路线和验收清单
-3. 06_github_actions_ai_management.md：AI 触发 Action 的管理层设计
-4. 07_actions_review_todo.md：已完成的 Action 管理层 review 修复记录
+1. 08_content_building_goals.md：当前内容建设 C0-C10 路线与退出条件
+2. README.md：当前数据状态和日常命令入口
+3. 05_execution_checklist.md：工程底座长期验收清单
+4. 06/07：Actions 管理层设计与历史修复记录
 ```
+
+内容建设中的 60/200、100/300、200/600 都是中间门槛；最终目标以 `08_content_building_goals.md` 为准：所有真实面试题绑定 Canonical、拥有 ready 答案和 ReviewProgress，并能从查询或复习入口实际访问。
 
 ---
 
@@ -170,7 +176,7 @@ M7：建立迁移、测试、CI 和 ADR 机制
 M8：建立 GitHub Actions + AI 管理层
 ```
 
-详细里程碑见 `04_refactor_plan.md`，当前 Action 管理层后续修复见 `07_actions_review_todo.md`。
+工程重构里程碑见 `04_refactor_plan.md`，当前内容建设阶段见 `08_content_building_goals.md`，Action 管理层历史修复见 `07_actions_review_todo.md`。
 
 ---
 

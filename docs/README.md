@@ -21,6 +21,8 @@ refactor/04_refactor_plan.md        分阶段路线图
 refactor/05_execution_checklist.md  执行清单与验收标准
 refactor/06_github_actions_ai_management.md  GitHub Actions + AI 管理层
 refactor/07_actions_review_todo.md  Actions 管理层 review 后的修复 TODO
+refactor/08_content_building_goals.md  当前内容建设阶段目标与验收门槛
+refactor/09_answer_content_standard.md  分题型答案模板与 ready 审查标准
 ```
 
 当前有效方向：
@@ -38,10 +40,11 @@ GitHub Actions 是自动化管理层，AI 只触发白名单任务
 当前执行焦点：
 
 ```text
-1. 继续把 canonical 覆盖扩到 200+ assigned rows
-2. 对新增 canonical 保持 answer validate --strict / answer sync
-3. 使用 review today / review mark 产生真实复习数据
-4. GitHub Issue 同步先 dry-run，认证修复后再 apply
+1. 以 08_content_building_goals.md 作为当前内容建设执行依据
+2. 先校准现有 34 个 Canonical，再按 60/200、100/300、200/600 逐级扩展
+3. 对新增 canonical 保持 answer validate --strict / answer sync
+4. 用至少 5 个 Canonical / 10 次 review mark 完成真实复习试跑
+5. 最终让全部真实面试题绑定 Canonical、拥有 ready 答案和 ReviewProgress，并通过全量可复习性检查
 ```
 
 ## 历史归档

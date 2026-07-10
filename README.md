@@ -24,15 +24,16 @@ Current data snapshot:
 - P0 count: 12; P1 count: 22
 - 0 GitHub issue links synced so far
 
-The current high-value batch is answer-complete. The next useful work is widening canonical coverage to at least 200 assigned rows, syncing selected ready answers into GitHub Issues for mobile review after authentication is fixed, and recording real review results.
+The current high-value batch is answer-complete. The active roadmap is content-first: calibrate the existing assets, widen canonical coverage, upgrade answers for experienced-hire oral delivery and follow-ups, then use real review results to drive the next batch. The intermediate milestones lead to full reviewability: every genuine interview question—including recoverable rows currently marked invalid—must bind to one CanonicalQuestion, have a ready answer and ReviewProgress, and be reachable from a query or review entrypoint. See `docs/refactor/08_content_building_goals.md`.
 
 ## Next Steps
 
-1. Continue expanding canonical coverage with hotspot/entity suggestions; the near-term target is 200+ assigned question rows.
-2. Merge obvious duplicate canonical records before writing answers.
-3. After accepting new canonical records, fill the next missing answer batch, then run `answer validate --strict`, `answer sync`, and `report quality`.
-4. Use `issue sync` dry-run first, then `--apply` only for reviewed ready cards that should appear on GitHub.
-5. Start the real review loop with `review today`, `review next`, and `review mark`.
+1. Follow the C0-C10 goals in `docs/refactor/08_content_building_goals.md`.
+2. Calibrate the existing 34 canonical assets and attach synonymous questions before creating new records.
+3. Expand in closed batches of at most 10 assets; the first target is 60 canonical questions and 200+ assigned rows.
+4. Keep every new P0/P1 answer strict-valid and optimize it for experienced-hire oral delivery plus answered follow-ups.
+5. Before scaling to 100 canonical questions, complete a pilot covering at least 5 canonical questions and 10 real review marks.
+6. Continue through the long tail until every genuine interview question is assigned, answer-ready, and reachable from review; 60/200 and 100/300 are milestones, not the final scope.
 
 ```bash
 node scripts/xhs.js canonical suggest --hotspot --limit 50
