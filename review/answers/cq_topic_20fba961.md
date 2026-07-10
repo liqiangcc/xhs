@@ -1,5 +1,5 @@
 <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_20fba961","version":1,"status":"ready","updated_at":"2026-07-01"} -->
-# 如何解决高并发下的库存抢购超卖少买问题?
+# 如何解决高并发库存扣减中的超卖和少卖？
 
 ## 核心结论
 

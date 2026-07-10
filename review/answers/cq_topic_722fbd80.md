@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_722fbd80","version":1,"status":"ready","updated_at":"2026-06-30"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_722fbd80","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # 算法：三数之和
 
 ## 核心结论
@@ -26,16 +26,42 @@
 - 双指针利用单调性，把两数和查找从 O(n^2) 降到 O(n)。
 - 外层枚举 n 次，因此整体 O(n^2)。
 
+```java
+List<List<Integer>> threeSum(int[] nums) {
+    Arrays.sort(nums);
+    List<List<Integer>> ans = new ArrayList<>();
+    for (int i = 0; i < nums.length - 2; i++) {
+        if (i > 0 && nums[i] == nums[i - 1]) continue;
+        if (nums[i] > 0) break;
+        int left = i + 1, right = nums.length - 1;
+        while (left < right) {
+            long sum = (long) nums[i] + nums[left] + nums[right];
+            if (sum < 0) {
+                left++;
+            } else if (sum > 0) {
+                right--;
+            } else {
+                ans.add(List.of(nums[i], nums[left], nums[right]));
+                int lv = nums[left], rv = nums[right];
+                while (left < right && nums[left] == lv) left++;
+                while (left < right && nums[right] == rv) right--;
+            }
+        }
+    }
+    return ans;
+}
+```
+
 ## 项目经验版
 
-这类题考察的是“排序 + 双指针 + 去重模板”。在业务中类似的问题是从有序数据中找满足约束的组合，例如区间匹配、价格组合、候选召回过滤等。面试写代码时应先讲清楚去重策略，再编码。
+算法训练映射：这类题考察“排序 + 双指针 + 去重”。复习时应先口述不变量和三层去重，再手写代码并用空数组、全零、重复值和整型边界验证；不要虚构业务项目类比来替代算法证明。
 
 ## 常见追问
 
-- 如果目标不是 0，而是 target 怎么改？
-- 四数之和怎么做？
-- 为什么不能用 HashSet 简单去重？
-- 输入有大量重复元素时如何优化？
+- 问：目标不是 0 怎么改？答：双指针比较值改为 `(long) target - nums[i]` 或直接比较三数 long 和与 target，排序和去重逻辑不变。
+- 问：四数之和怎么做？答：再增加一层固定下标，内层仍用双指针，并对两层固定值及左右指针分别去重；复杂度通常 O(n^3)。
+- 问：为什么不只用 HashSet 去重？答：集合能事后去重，但对象构造和哈希开销更大，也容易掩盖重复来源；排序后在指针层去重更直接且输出稳定。
+- 问：代码为什么用 long 计算 sum？答：三个 int 相加可能溢出，使用 long 避免比较结果因溢出而错误。
 
 ## 易错点
 

@@ -1,5 +1,5 @@
 <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_99ffa229","version":1,"status":"ready","updated_at":"2026-07-01"} -->
-# MySQL索引失效的常见场景
+# MySQL 索引失效的常见场景
 
 ## 核心结论
 

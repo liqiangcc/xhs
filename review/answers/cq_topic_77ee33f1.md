@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_77ee33f1","version":1,"status":"ready","updated_at":"2026-06-30"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_77ee33f1","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # 算法：反转链表
 
 ## 核心结论
@@ -26,16 +26,30 @@
 - curr 表示当前待处理节点。
 - next 保存剩余未处理链表入口。
 
+```java
+ListNode reverseList(ListNode head) {
+    ListNode prev = null;
+    ListNode curr = head;
+    while (curr != null) {
+        ListNode next = curr.next;
+        curr.next = prev;
+        prev = curr;
+        curr = next;
+    }
+    return prev;
+}
+```
+
 ## 项目经验版
 
-这类题考察链表指针基本功。写代码时我会先画三个指针，再按“保存 next、反转指针、整体后移”三步写，最后补空链表测试。
+算法训练映射：复习时先画 prev、curr、next 三个指针，口述“保存后继、反转当前、整体前进”不变量，再手写代码并验证空链表、单节点和多节点。该章节是训练提示，不应包装成项目经历。
 
 ## 常见追问
 
-- 如何递归反转链表？
-- 如何反转链表的一段？
-- 如何 K 个一组反转链表？
-- 如何判断反转后是否成环？
+- 问：如何递归反转？答：递归反转 `head.next` 后令 `head.next.next = head`，再把 `head.next` 置空；时间 O(n)，递归栈 O(n)。
+- 问：如何反转一段链表？答：先找到区间前驱和后继，仅反转 `[left,right]`，再把前驱接新头、旧头接后继；dummy 节点能统一处理从头开始的区间。
+- 问：如何 K 个一组反转？答：每轮先确认剩余节点不少于 K 个，再反转闭开区间并连接前后组；不足 K 个保持原顺序。
+- 问：反转为什么不会成环？答：每次只把当前节点指向已经反转且最终以 null 结尾的前缀，同时保存原后继；遗漏旧头置向或错误重连才可能成环。
 
 ## 易错点
 

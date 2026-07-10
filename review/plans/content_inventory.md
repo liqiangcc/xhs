@@ -96,3 +96,17 @@ Generated baseline: 2026-07-10. Source of truth: `data/questions/canonical_quest
 - Current `ready` means structurally complete; semantic readiness is re-audited in C1/C3.
 - The 258 currently invalid rows are not accepted as final exclusions; each is re-audited in C7.
 - Every subsequent batch must close Canonical, Answer and ReviewProgress together.
+
+## C1 Calibrated Snapshot
+
+Completed on 2026-07-10. The frozen baseline above remains unchanged for comparison.
+
+| Metric | Value |
+|---|---:|
+| Canonical records | 34 |
+| Assigned rows | 150 |
+| Distinct assigned question IDs | 45 |
+| Ready answers | 34 |
+| P0 / P1 | 18 / 16 |
+
+Eight obvious synonym groups were attached to existing assets, all 34 records received an answer-type classification, and the original 12 P0 answers completed semantic review. See `review/plans/c1_asset_calibration.md` for the audit trail.

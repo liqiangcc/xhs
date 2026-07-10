@@ -1,5 +1,5 @@
 <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_tcp_e9932fa7","version":1,"status":"ready","updated_at":"2026-07-01"} -->
-# tcp和udp的区别
+# TCP 和 UDP 的区别
 
 ## 核心结论
 

@@ -1,5 +1,5 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_arraylist_9d3444a1","version":1,"status":"ready","updated_at":"2026-06-30"} -->
-# ArrayList和linkedList的区别
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_arraylist_9d3444a1","version":2,"status":"ready","updated_at":"2026-07-10"} -->
+# ArrayList 和 LinkedList 的区别
 
 ## 核心结论
 
@@ -28,14 +28,14 @@ ArrayList 支持 O(1) 下标访问，扩容时会申请新数组并复制旧元�
 
 ## 项目经验版
 
-业务列表、分页结果、批处理集合通常用 ArrayList。需要队列语义时优先 ArrayDeque。很少直接选择 LinkedList，除非明确需要频繁在链表两端操作且不关心随机访问。
+项目映射时优先说明真实访问模式：业务列表、分页结果、批处理集合通常选 ArrayList；队列语义优先 ArrayDeque。只有确认需要频繁在两端操作、无需随机访问，并通过压测证明合适时才考虑 LinkedList，不要虚构实际使用经历。
 
 ## 常见追问
 
-- ArrayList 扩容机制是什么？
-- 为什么 LinkedList 插入删除不一定快？
-- ArrayList 和 Vector 区别是什么？
-- 队列场景为什么推荐 ArrayDeque？
+- 问：ArrayList 扩容机制是什么？答：首次真正添加元素时分配数组；容量不足时创建更大的数组并复制元素。常见 JDK 实现按约 1.5 倍增长，具体细节要结合版本说明。
+- 问：为什么 LinkedList 插入删除不一定快？答：只有已经定位到节点时改指针才是 O(1)；按下标查找节点仍需 O(n)，再加上对象分配和缓存局部性差，实际可能更慢。
+- 问：ArrayList 和 Vector 的区别是什么？答：Vector 的多数方法带同步，单次调用线程安全但组合操作仍需额外同步；现代代码通常按场景选 ArrayList、并发集合或外部同步。
+- 问：队列场景为什么推荐 ArrayDeque？答：它用循环数组实现双端操作，通常比 LinkedList 更省内存、缓存更友好，也不允许 null，能减少语义歧义。
 
 ## 易错点
 

@@ -564,8 +564,8 @@ C10 没有一次性完成点。连续四周保持每周闭环、全量可复习�
 | 阶段 | 状态 | 当前判断 |
 |---|---|---|
 | C0 | DONE | 路线、机器可读策略、内容盘点、候选队列和分题型标准均已落盘 |
-| C1 | IN_PROGRESS | 已有 34 个 Canonical/答案，尚未完成 P0 人工内容审查 |
-| C2 | IN_PROGRESS | 当前 34/60 Canonical、134/200 assigned rows |
+| C1 | DONE | 34 个资产边界与类型已校准，吸收 8 组同义题，原始 12 个 P0 答案已完成人工内容审查 |
+| C2 | IN_PROGRESS | 当前 34/60 Canonical、150/200 assigned rows |
 | C3 | PARTIAL | 现有答案结构完整，但尚未完成分题型社招升级 |
 | C4 | TODO | reviewed_count 仍为 0 |
 | C5 | TODO | 尚无统一专题内容地图与覆盖验收 |

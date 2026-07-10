@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_bean_319a398d","version":1,"status":"ready","updated_at":"2026-06-30"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_bean_319a398d","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # Spring Bean的生命周期是怎样的？
 
 ## 核心结论
@@ -29,14 +29,14 @@ Spring Bean 生命周期可以概括为：实例化、属性填充、Aware 回�
 
 ## 项目经验版
 
-项目中常用 BeanPostProcessor 做统一增强，例如自动注册策略类、包装客户端、注入监控埋点。排查 Bean 初始化问题时，重点看依赖注入是否完成、初始化方法是否抛异常、最终注入的是代理对象还是原始对象。
+项目映射时可以从真实扩展点切入：是否使用 BeanPostProcessor 注册策略、包装客户端或注入监控；排查初始化问题时是否确认依赖注入、初始化异常以及最终对象是否被代理。没有实际案例时只保留排查清单，不声称做过统一增强。
 
 ## 常见追问
 
-- BeanFactoryPostProcessor 和 BeanPostProcessor 区别是什么？
-- AOP 代理在生命周期哪个阶段生成？
-- Spring 如何解决单例循环依赖？
-- @PostConstruct 和 InitializingBean 顺序如何？
+- 问：BeanFactoryPostProcessor 和 BeanPostProcessor 有什么区别？答：前者修改 BeanDefinition，发生在普通 Bean 实例化前；后者处理 Bean 实例，可在初始化前后包装或替换对象。
+- 问：AOP 代理在生命周期哪个阶段生成？答：典型的自动代理创建器在初始化后置处理阶段返回代理；循环依赖时还可能通过早期引用提前暴露一致的代理对象。
+- 问：Spring 如何解决单例循环依赖？答：通过单例创建中的早期引用与三级缓存处理 setter/字段注入的部分循环依赖；构造器循环依赖通常无法解决，prototype 也不适用该机制。
+- 问：@PostConstruct 和 InitializingBean 顺序如何？答：通常先执行 @PostConstruct，再执行 afterPropertiesSet，最后执行配置的 init-method；它们位于 BeanPostProcessor 前后置回调之间。
 
 ## 易错点
 

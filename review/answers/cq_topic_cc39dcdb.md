@@ -1,5 +1,5 @@
 <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_cc39dcdb","version":1,"status":"ready","updated_at":"2026-07-01"} -->
-# 算法手撕：两字符串数字相加（String Addition）。
+# 算法：字符串大数加法
 
 ## 核心结论
 

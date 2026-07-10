@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_ac84034f","version":1,"status":"ready","updated_at":"2026-06-30"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_ac84034f","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # 算法：最长递增子序列 (LIS)
 
 ## 核心结论
@@ -26,16 +26,34 @@ O(n^2) 做法是：dp[i]=1，遍历 j<i，如果 nums[j]<nums[i]，则 dp[i]=max
 - 贪心利用“同长度小尾部更优”的支配关系。
 - 二分来自 tails 的单调性。
 
+```java
+int lengthOfLIS(int[] nums) {
+    int[] tails = new int[nums.length];
+    int size = 0;
+    for (int num : nums) {
+        int left = 0, right = size;
+        while (left < right) {
+            int mid = left + (right - left) / 2;
+            if (tails[mid] < num) left = mid + 1;
+            else right = mid;
+        }
+        tails[left] = num;
+        if (left == size) size++;
+    }
+    return size;
+}
+```
+
 ## 项目经验版
 
-类似思想可用于版本链、增长序列、排序后找嵌套关系等问题。例如俄罗斯套娃信封问题，先排序一个维度，再对另一个维度做 LIS。
+算法训练映射：复习时要能解释 tails 的语义并手写 lower_bound。迁移到俄罗斯套娃信封时，先按宽度升序、同宽高度降序，再对高度做严格 LIS；这是算法变体，不应虚构为项目经历。
 
 ## 常见追问
 
-- 如何输出 LIS 序列而不只是长度？
-- 严格递增和非递减有什么区别？
-- 俄罗斯套娃信封怎么转成 LIS？
-- O(n log n) 的 tails 是不是答案序列？
+- 问：如何输出 LIS 序列？答：除 tails 值外记录每个长度对应的下标和每个元素的前驱，最后从最长序列末尾沿前驱回溯。
+- 问：严格递增和非递减有什么区别？答：严格递增替换第一个 `>= num` 的位置；非递减替换第一个 `> num` 的位置，二分边界不同。
+- 问：俄罗斯套娃信封怎么转成 LIS？答：宽度升序、同宽高度降序后，对高度求严格 LIS；同宽降序防止同宽信封被错误嵌套。
+- 问：tails 是不是最终 LIS？答：不一定。替换操作只保证每个长度的最小尾值和正确长度，若要恢复真实序列必须记录下标与前驱。
 
 ## 易错点
 

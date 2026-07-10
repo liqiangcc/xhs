@@ -235,9 +235,15 @@ function refreshCanonicalRecord(record, questions) {
         ).slice(0, 8)
         : (record.primary_entities || []);
     const domains = rows.map(normalizedDomain);
-    const primaryDomain = domains.length
+    const derivedPrimaryDomain = domains.length
         ? JSON.parse(pickTop(domains.map((domain) => JSON.stringify(domain)), JSON.stringify(record.primary_domain || { l1: '其他', l2: '其他' })))
         : (record.primary_domain || { l1: '其他', l2: '其他' });
+    const domainOverride = record.primary_domain_override
+        ? validateDomain(record.primary_domain_override)
+        : null;
+    const primaryDomain = domainOverride?.valid
+        ? domainOverride.normalized_domain
+        : derivedPrimaryDomain;
     const frequency = rows.length || Number(record.frequency || 0);
     return {
         ...record,
