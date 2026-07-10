@@ -1,6 +1,6 @@
 # C8 Full Answer Coverage Delivery
 
-Completed: 2026-07-10.
+Baseline delivery completed: 2026-07-10. Semantic quality stage reopened: 2026-07-11.
 
 ## Result
 
@@ -8,18 +8,20 @@ Completed: 2026-07-10.
 |---|---:|
 | Canonical records | 9,260 |
 | Answer files | 9,260 |
-| Ready answers | 9,260 |
-| Ready rate | 100% |
+| Structurally covered answers (historical C8 result) | 9,260 |
 | Curated core answers | 100 |
-| Long-tail baseline answers | 9,160 |
-| Missing / draft / needs_update | 0 / 0 / 0 |
+| Current curated-ready answers | 100 |
+| Current curated-ready rate | 1.08% |
+| Long-tail baseline answers awaiting semantic upgrade | 9,160 |
+| Current missing / draft / needs_update | 0 / 0 / 9,160 |
+| Semantic complete | No |
 | Strict validation errors | 0 |
 | Coding cards without Java/SQL implementation section | 0 |
 | Project/behavior cards without truth boundary | 0 |
 
 ## Content Strategy
 
-The existing 100 core answers remain hand-curated assets. The 9,160 C7 additions receive a deterministic long-tail review baseline generated from the exact question, answer type, domain, entities and reusable knowledge packs.
+The existing 100 core answers remain hand-curated assets. The 9,160 C7 additions received a deterministic long-tail review baseline generated from the exact question, answer type, domain, entities and reusable knowledge packs. A 2026-07-11 semantic audit proved that these baselines are useful retrieval prompts but are not equivalent to curated answers: they contain fallback conclusions, generic scenario text, repeated follow-ups, type errors and placeholder implementations.
 
 Each baseline contains:
 
@@ -30,7 +32,7 @@ Each baseline contains:
 - a Java or SQL implementation/invariant section for coding questions;
 - source wording, domain and entity traceability.
 
-The long-tail metadata explicitly records quality_tier=long_tail_baseline and generator_version=long_tail.v1. This distinguishes a complete active-recall baseline from the smaller manually curated core and allows future review feedback to promote individual cards without hiding their origin.
+The long-tail metadata explicitly records `quality_tier=long_tail_baseline`, `generator_version=long_tail.v1` and `status=needs_update`. This preserves active-recall coverage without presenting unverified baselines as curated-ready. The authoritative semantic baseline is `data/manifests/quality/answer_semantic_baseline.json`; the resumable upgrade plan is `tasks/TASK-20260711-0313-long-tail-answer-quality.md`.
 
 ## Reproducibility
 
@@ -42,4 +44,4 @@ node scripts/content/check_answer_coverage.js --check
 node scripts/xhs.js answer validate --strict --noWrite
 ~~~
 
-The answer coverage quality report proves one ready file per Canonical, synchronized status, no orphan answer and all type-specific machine-checkable boundaries. C9 now verifies the user-facing chain through ReviewProgress and discovery.
+The answer coverage report currently proves file presence, synchronized status and zero orphan answers. It explicitly reports `semantic_complete=false`; it must not be used as evidence that all answers meet the curated content standard. C9 remains pending until every final Canonical has a curated-ready answer.

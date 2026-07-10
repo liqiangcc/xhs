@@ -57,6 +57,7 @@ function readAnswers(root, paths) {
                 file: path.relative(root, filePath),
                 canonical_id: answer.metadata.canonical_id,
                 status: answer.metadata.status || 'draft',
+                quality_tier: answer.metadata.quality_tier || 'curated',
                 updated_at: answer.metadata.updated_at || null,
             });
         } catch (error) {
@@ -78,6 +79,18 @@ function buildQualityReport(options = {}) {
     const progress = loadProgress({ progressPath: paths.progressPath, date });
     const issueLinks = loadIssueLinks({ filePath: paths.issueLinksPath, date });
     const answers = readAnswers(root, paths);
+    const curatedReadyAnswers = answers.rows.filter((answer) =>
+        answer.status === 'ready' && answer.quality_tier === 'curated'
+    );
+    const baselineAnswers = answers.rows.filter((answer) => answer.quality_tier === 'long_tail_baseline');
+    const needsUpdateAnswers = answers.rows.filter((answer) => answer.status === 'needs_update');
+    const semanticHardFails = answers.rows.filter((answer) =>
+        answer.status !== 'ready' || answer.quality_tier !== 'curated'
+    );
+    const semanticComplete = answers.rows.length === canonicalRecords.length
+        && curatedReadyAnswers.length === canonicalRecords.length
+        && baselineAnswers.length === 0
+        && needsUpdateAnswers.length === 0;
 
     const validQuestions = questions.filter((question) => question.is_valid_for_library);
     const assignedQuestions = questions.filter((question) => question.canonical_id);
@@ -93,7 +106,11 @@ function buildQualityReport(options = {}) {
 
     return {
         schema_version: 'quality_report.v1',
-        ok: indexCheck.ok && taxonomy.unknown_count === 0 && canonical.ok && answerValidation.ok,
+        ok: indexCheck.ok
+            && taxonomy.unknown_count === 0
+            && canonical.ok
+            && answerValidation.ok
+            && semanticComplete,
         generated_at: date,
         questions: {
             total_count: questions.length,
@@ -128,6 +145,13 @@ function buildQualityReport(options = {}) {
         answers: {
             answer_count: answers.rows.length,
             status_counts: countBy(answers.rows, (answer) => answer.status),
+            quality_tier_counts: countBy(answers.rows, (answer) => answer.quality_tier),
+            curated_ready_count: curatedReadyAnswers.length,
+            curated_ready_rate: canonicalRecords.length ? curatedReadyAnswers.length / canonicalRecords.length : 1,
+            baseline_count: baselineAnswers.length,
+            needs_update_count: needsUpdateAnswers.length,
+            semantic_hard_fail_count: semanticHardFails.length,
+            semantic_complete: semanticComplete,
             validation_ok: answerValidation.ok,
             validation_error_count: answerValidation.error_count,
             read_error_count: answers.errors.length,
@@ -175,6 +199,7 @@ function buildQualityReport(options = {}) {
             assignedQuestions,
             taxonomy,
             reviewItems,
+            semanticHardFails,
         }),
     };
 }
@@ -186,6 +211,13 @@ function recommendNextActions(context) {
             priority: 'P0',
             action: 'answer missing --priority P0',
             reason: `${context.p0MissingAnswers.length} P0 canonical answers are still missing`,
+        });
+    }
+    if (context.semanticHardFails.length) {
+        actions.push({
+            priority: 'P0',
+            action: 'answer queue build --quality-tier long_tail_baseline',
+            reason: `${context.semanticHardFails.length} answers are not curated-ready`,
         });
     }
     if (context.assignedQuestions.length < 200) {
@@ -229,6 +261,12 @@ function renderMarkdown(report) {
         `| Canonical | records | ${report.canonical.record_count} |`,
         `| Canonical | assigned rows | ${report.canonical.assigned_question_rows} |`,
         `| Answers | files | ${report.answers.answer_count} |`,
+        `| Answers | curated ready | ${report.answers.curated_ready_count} |`,
+        `| Answers | curated ready rate | ${(report.answers.curated_ready_rate * 100).toFixed(2)}% |`,
+        `| Answers | long-tail baseline | ${report.answers.baseline_count} |`,
+        `| Answers | needs update | ${report.answers.needs_update_count} |`,
+        `| Answers | semantic hard fails | ${report.answers.semantic_hard_fail_count} |`,
+        `| Answers | semantic complete | ${report.answers.semantic_complete ? 'yes' : 'no'} |`,
         `| Answers | P0 missing | ${report.canonical.p0_missing_answer_count} |`,
         `| Review | progress records | ${report.review.progress_count} |`,
         `| Review | reviewed | ${report.review.reviewed_count} |`,

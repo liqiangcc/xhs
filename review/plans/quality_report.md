@@ -1,21 +1,27 @@
 # Quality Report
 
-Generated: 2026-07-01
+Generated: 2026-07-11
 
-Overall: OK
+Overall: NEEDS ATTENTION
 
 ## Summary
 
 | Area | Metric | Value |
 |---|---:|---:|
 | Questions | total | 9620 |
-| Questions | valid | 9362 |
-| Canonical | records | 34 |
-| Canonical | assigned rows | 134 |
-| Answers | files | 34 |
+| Questions | valid | 9609 |
+| Canonical | records | 9260 |
+| Canonical | assigned rows | 9609 |
+| Answers | files | 9260 |
+| Answers | curated ready | 100 |
+| Answers | curated ready rate | 1.08% |
+| Answers | long-tail baseline | 9160 |
+| Answers | needs update | 9160 |
+| Answers | semantic hard fails | 9160 |
+| Answers | semantic complete | no |
 | Answers | P0 missing | 0 |
-| Review | progress records | 34 |
-| Review | reviewed | 0 |
+| Review | progress records | 258 |
+| Review | reviewed | 5 |
 | Taxonomy | legacy aliases | 6862 |
 | Indexes | changed files | 0 |
 
@@ -28,9 +34,8 @@ Overall: OK
 
 | priority | action | reason |
 |---|---|---|
-| P0 | canonical suggest --hotspot --limit 50 | assigned question rows are 134, below the 200 row near-term target |
+| P0 | answer queue build --quality-tier long_tail_baseline | 9160 answers are not curated-ready |
 | P1 | review top taxonomy legacy aliases | 6862 taxonomy legacy aliases remain |
-| P1 | review today / review mark | review progress has not recorded real usage yet |
 
 ## Taxonomy Legacy Aliases
 

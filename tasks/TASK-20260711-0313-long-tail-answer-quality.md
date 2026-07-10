@@ -78,7 +78,7 @@
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T01` S0：建立真实质量基线
 
-- Status: `in_progress`
+- Status: `done`
 - Depends on: `none`
 - Goal: 让状态、报告和文档真实区分“可访问底稿”与“语义合格答案”，停止把 9,160 份长尾底稿计为精选质量 ready。
 - Files likely touched: `scripts/lib/answer_store.js`, `scripts/content/check_answer_coverage.js`, `data/manifests/quality/answer_coverage_report.json`, `docs/refactor/08_content_building_goals.md`
@@ -125,22 +125,23 @@
   - 重建 coverage/quality report，确认答案文件没有丢失且 curated-ready 恰好为 100。
 - Expected files: `review/answers/*.md`, `data/questions/canonical_questions.jsonl`, `data/manifests/runs/latest_answer_sync.json`, `data/manifests/quality/answer_coverage_report.json`
 - Validation: `node scripts/xhs.js answer validate --strict --noWrite && node scripts/content/check_answer_coverage.js --check && node scripts/xhs.js canonical check --noWrite && node scripts/content/generate_long_tail_answers.js --check` -> passed
-- Commit: `pending`
+- Commit: `f2b29a8c`
 - Changed files: `review/answers/*.md` (9,260 metadata-only changes), `data/questions/canonical_questions.jsonl`, `data/manifests/quality/answer_coverage_report.json`, `data/manifests/runs/latest_answer_quality-migrate.json`, `data/manifests/runs/latest_answer_sync.json`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: 100 份精选答案现为 ready/curated；9,160 份长尾现为 needs_update/long_tail_baseline。正文未改，Canonical 状态已同步；coverage 显式报告 curated_ready=100、baseline=9160、semantic_complete=false。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T01-S04` 重开内容阶段状态
 
-- Status: `pending`
+- Status: `done`
 - Goal: 让项目文档不再把结构覆盖当作全量答案质量完成。
 - Steps:
   - 将原 C8 的“全量答案覆盖完成”改为 baseline coverage 已完成、semantic curated coverage 待完成。
   - 在质量报告中新增 `curated_ready_rate`、`baseline_count`、`needs_update_count` 和 `semantic_hard_fail_count`。
   - 保留历史交付记录，但显式注明旧口径不能证明语义完成。
 - Expected files: `docs/refactor/08_content_building_goals.md`, `review/plans/c8_full_answer_coverage.md`, `scripts/commands/report.js`
-- Validation: `node scripts/xhs.js report quality --noWrite --noFail`
+- Validation: `node --test test/report.test.js test/report_no_fail.test.js && node scripts/xhs.js report quality --noWrite --noFail` -> passed; report correctly returns `ok=false`, `semantic_complete=false`
 - Commit: `pending`
-- Notes:
+- Changed files: `scripts/commands/report.js`, `test/report.test.js`, `docs/refactor/08_content_building_goals.md`, `review/plans/c8_full_answer_coverage.md`, `review/plans/content_inventory.md`, `data/manifests/reports/quality_report.json`, `review/plans/quality_report.md`, `data/manifests/runs/latest_report_quality.json`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: C8 已按真实语义重新打开，C9 等待 curated-ready 100% 后再执行。总质量报告现在显示 curated-ready=100、baseline/needs_update/semantic_hard_fail=9160，并把整体状态标为 NEEDS ATTENTION。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T02` S1：校准精选答案与统一质量合同
 

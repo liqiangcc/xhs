@@ -543,6 +543,9 @@ canonical check: 通过
 reviewable_assigned_rate: 100%
 invalid_reason_rate: 100%
 all canonical missing answer: 0
+curated_ready_rate: 100%
+long_tail_baseline: 0
+semantic_hard_fail_count: 0
 reviewability_rate: 100%
 unreachable_question_count: 0
 新增批次未闭环数量: 0
@@ -571,8 +574,8 @@ C10 没有一次性完成点。连续四周保持每周闭环、全量可复习�
 | C5 | DONE | 已达到 100 个 Canonical、328 条 assigned rows、100 份 ready 答案，并形成 10 条专题学习路径 |
 | C6 | DONE | 已达到 258 个 Canonical、600 条 assigned rows；专题、公司、P0 综合、weak 题单和 weak→learning→mastered 均已验证 |
 | C7 | DONE | 258 条 invalid 已逐条审计：恢复 247 条真实题，仅保留 11 条有原因排除；9,609 条真实题全部绑定至 9,260 个 Canonical |
-| C8 | DONE | 9,260 个 Canonical 均有 ready 答案：保留 100 份人工核心答案，新增 9,160 份可确定性重建的长尾复习底稿；missing/draft/needs_update 均为 0 |
-| C9 | IN_PROGRESS | 开始逐题验证 Question→Canonical→ready Answer→ReviewProgress→发现入口的完整链路 |
+| C8 | IN_PROGRESS | 2026-07-10 完成了 9,260 份文件的 baseline 覆盖，但语义复核发现长尾底稿不能等同精选答案；当前仅 100 份 curated-ready，9,160 份 `long_tail_baseline` 已迁移为 `needs_update`，正按 `TASK-20260711-0313-long-tail-answer-quality` 全量升级 |
+| C9 | TODO | 等 C8 的 curated-ready 覆盖达到 100% 后，再全量验证 Question→Canonical→curated Answer→ReviewProgress→发现入口 |
 | C10 | TODO | 尚未形成连续四周且全量可复习率不回退的稳定节奏 |
 
 推进规则：

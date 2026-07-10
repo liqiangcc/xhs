@@ -72,9 +72,11 @@ test('quality report summarizes repository health and writes reports', () => {
     writeIndexes(buildIndexes([q], { canonicalQuestions: [c] }), path.join(root, 'data', 'indexes'));
 
     const report = buildQualityReport({ root, date: '2026-06-30' });
-    assert.equal(report.ok, true);
+    assert.equal(report.ok, false);
     assert.equal(report.questions.total_count, 1);
     assert.equal(report.canonical.p0_missing_answer_count, 1);
+    assert.equal(report.answers.curated_ready_count, 0);
+    assert.equal(report.answers.semantic_complete, false);
     assert.equal(report.next_actions[0].action, 'answer missing --priority P0');
 
     const markdown = renderMarkdown(report);
@@ -103,6 +105,7 @@ test('report quality --noWrite does not create report files or run manifests', (
         '--root',
         root,
         '--noWrite',
+        '--noFail',
     ]));
 
     assert.equal(code, 0);

@@ -113,7 +113,7 @@ Eight obvious synonym groups were attached to existing assets, all 34 records re
 
 ## C2 Backbone Snapshot
 
-Completed on 2026-07-10.
+Baseline coverage completed on 2026-07-10; semantic quality stage reopened on 2026-07-11.
 
 | Metric | Value |
 |---|---:|
@@ -208,11 +208,12 @@ Completed on 2026-07-10.
 | Metric | Value |
 |---|---:|
 | Canonical records | 9,260 |
-| Ready answers | 9,260 |
-| Ready rate | 100% |
+| Structurally covered answer files | 9,260 |
+| Curated-ready answers | 100 |
+| Curated-ready rate | 1.08% |
 | Curated core answers | 100 |
-| Deterministic long-tail baselines | 9,160 |
-| Missing / draft / needs_update | 0 / 0 / 0 |
+| Deterministic long-tail baselines awaiting upgrade | 9,160 |
+| Missing / draft / needs_update | 0 / 0 / 9,160 |
 | Strict validation errors | 0 |
 
-All Canonical records now have a review-ready answer. Generated long-tail files retain explicit provenance and deterministic drift checks; project and behavioral material requires real user evidence rather than fabricated experience. See review/plans/c8_full_answer_coverage.md.
+All Canonical records have an answer file, but only the 100 audited core answers are currently curated-ready. Generated long-tail files retain explicit provenance and deterministic drift checks while remaining `needs_update`; they are upgraded through the semantic quality task before being counted as ready. See `review/plans/c8_full_answer_coverage.md`.
