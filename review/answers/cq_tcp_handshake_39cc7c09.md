@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_tcp_handshake_39cc7c09","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_tcp_handshake_39cc7c09","version":3,"status":"needs_update","updated_at":"2026-07-11","quality_tier":"curated_audit_failed","audit_failure":"missing_evidence"} -->
 # TCP 三次握手和四次挥手的过程与原因
 
 ## 核心结论
