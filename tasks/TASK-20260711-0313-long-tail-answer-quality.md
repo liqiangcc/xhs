@@ -317,7 +317,7 @@
 - Expected files: `data/questions/canonical_questions.jsonl`, `data/questions/questions.jsonl`, `review/progress.jsonl`, `data/manifests/runs/latest_canonical_merge.json`
 - Validation: `node scripts/xhs.js canonical check --noWrite && node scripts/xhs.js review integrity --noWrite`
 - Commit: `3c64f8ac`
-- Notes: 已新增只读 `review integrity`：阻断失效/重复/畸形 ReviewProgress 与失效 session 引用；当前 258 条已初始化进度均有效，剩余 9,002 条为按需初始化，不是完整性失败。接下来逐批处理 307 条候选的 merge/split 决策。
+- Notes: 已新增只读 `review integrity`：阻断失效/重复/畸形 ReviewProgress 与失效 session 引用。Batch 0001 已审查并合并 10 组完全同义/纯拼写差异题簇；每次 merge 均归档冗余答案、迁移 Question 与 ReviewProgress/历史事件并写入 `canonical_merge_history.json`。重建后保留 9,250 个 Canonical、283 条待审边界候选；当前 258 条已初始化进度均有效，剩余 8,992 条为按需初始化，不是完整性失败。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S03` 全量重新判定 answer_type
 
@@ -344,10 +344,10 @@
   - 为每个最多 10 题的批次生成 `tasks/answer-batches/` 子任务文件；根 ID 固定为 `TASK-20260711-0313-answer-batch-NNNN`，每份文件包含题簇复核、研究编写、独立审查、晋级和批次验证子任务。
   - 队列记录 `task_file`，后续使用 `task-md-workflow:execute-task-md` 按批次任务 ID 执行和恢复；每个批次独立提交，阶段任务只在全部对应批次任务 done 后完成。
 - Expected files: `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/*.md`
-- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,260 rows, 926 batches, each ≤10); queue remains provisional until T04-S02 resolves the 307 boundary candidates
+- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,250 rows, 925 batches, each ≤10); queue remains provisional until T04-S02 resolves the remaining 283 boundary candidates
 - Commit: `pending`
 - Changed files: `scripts/content/build_answer_rewrite_queue.js`, `scripts/commands/answer.js`, `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/TASK-20260711-0313-answer-batch-*.md`, `test/answer_rewrite_queue.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
-- Notes: 生成 provisional 队列：全部非 curated Canonical 被稳定排序并分配唯一可恢复任务；优先级为历史精选审计失败、代码占位、review priority、题型、频次和 canonical_id。队列仅冻结执行顺序，不等价于答案晋级；必须在 T04-S02 的 merge/split 决策后重新生成并才能关闭。
+- Notes: 生成 provisional 队列：全部非 curated Canonical 被稳定排序并分配唯一可恢复任务；优先级为历史精选审计失败、代码占位、review priority、题型、频次和 canonical_id。Batch 0001 合并后已重新生成至 9,250 行/925 批；队列仅冻结执行顺序，不等价于答案晋级，仍须在 T04-S02 的剩余 merge/split 决策后重建并关闭。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T05` S4：完成六类型 60 题试点
 
