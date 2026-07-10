@@ -8,6 +8,7 @@ const {
     pathsFor,
     sha256,
     auditOneCandidate,
+    runAnswerAudit,
     validateAnswerEvidence,
     validateSpecializedCandidate,
 } = require('../lib/answer_quality');
@@ -96,12 +97,8 @@ function runEvidenceFixtures(options = {}) {
 
 function runEvidenceCheck(options = {}) {
     const root = options.root ? path.resolve(options.root) : ROOT;
-    const paths = pathsFor(root);
-    const files = fs.existsSync(paths.candidateAnswersDir)
-        ? fs.readdirSync(paths.candidateAnswersDir).filter((name) => name.endsWith('.md')).sort().map((name) => path.join(paths.candidateAnswersDir, name))
-        : [];
-    const rows = files.map((filePath) => auditOneCandidate(filePath, { ...options, root }));
-    return { schema_version: 'answer_evidence_check.v1', ok: rows.every((row) => row.ok), candidate_count: rows.length, rows };
+    const report = runAnswerAudit({ root, tier: 'curated', noWrite: true });
+    return { schema_version: 'answer_evidence_check.v1', ok: report.rows.every((row) => row.ok), curated_ready_count: report.candidate_count, rows: report.rows };
 }
 
 function parseArgs(argv) {

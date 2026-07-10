@@ -198,7 +198,7 @@
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T03` S2：建立仓库级 Skill 与质量流水线
 
-- Status: `in_progress`
+- Status: `done`
 - Depends on: `TASK-20260711-0313-long-tail-answer-quality-T02-S01`
 - Goal: 提供可重复的单题/批次编写流程，候选答案只有通过所有闸门后才原子晋级正式答案。
 - Files likely touched: `.agents/skills/xhs-answer-curator/`, `AGENTS.md`, `scripts/commands/answer.js`, `scripts/lib/answer_quality.js`, `test/answer_quality.test.js`
@@ -269,16 +269,17 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S05` 接入 CI
 
-- Status: `pending`
+- Status: `done`
 - Goal: 任何 PR 都不能降低精选覆盖率或引入新的语义硬失败。
 - Steps:
   - 新增 `ci:answer:semantic`、`ci:answer:evidence` 和 `ci:answer:code`。
   - CI 对变更答案做全量专项校验，对全库做覆盖率和状态回归校验。
   - curated-ready 数只能增加或在显式修复迁移中保持不变，不能静默下降。
 - Expected files: `package.json`, `.github/workflows/ci.yml`, `scripts/content/check_answer_coverage.js`
-- Validation: `npm run ci:check && npm run ci:answer:semantic && npm run ci:answer:evidence && npm run ci:answer:code`
+- Validation: `npm run ci:check && npm run ci:answer:semantic && npm run ci:answer:evidence && npm run ci:answer:code` -> passed; `npm test` -> passed (74/74)
 - Commit: `pending`
-- Notes:
+- Changed files: `package.json`, `.github/workflows/ci.yml`, `scripts/content/check_answer_evidence.js`, `scripts/content/check_answer_code.js`, `scripts/content/check_curated_ready_regression.js`, `data/manifests/quality/curated_ready_floor.json`, `scripts/lib/answer_quality.js`
+- Notes: 新增长尾语义回归、精选 ready 证据校验、curated Coding 专项检查和 curated-ready 单调回归 floor；CI 对无 active curated 的当前过渡态通过，但任何后续 ready/curated 答案都会进入证据和代码门禁。历史 spec 渲染器现在保留现有审计状态，不能静默恢复 ready/curated。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T04` S3：全量复核 Canonical 边界与答案题型
 
