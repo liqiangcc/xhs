@@ -317,7 +317,7 @@
 - Expected files: `data/questions/canonical_questions.jsonl`, `data/questions/questions.jsonl`, `review/progress.jsonl`, `data/manifests/runs/latest_canonical_merge.json`
 - Validation: `node scripts/xhs.js canonical check --noWrite && node scripts/xhs.js review integrity --noWrite`
 - Commit: `3c64f8ac`
-- Notes: 已新增只读 `review integrity`：阻断失效/重复/畸形 ReviewProgress 与失效 session 引用。Batch 0001–0004 已审查 39 组：38 组完全同义/纯拼写差异题簇已合并，1 组（通用股票买卖 vs 最多两笔交易）因状态不变量不同而明确保留独立。候选审查决策保存在 `boundary_review_decisions.json`，重建时不会丢失。每次 merge 均归档冗余答案、迁移 Question 与 ReviewProgress/历史事件并写入 `canonical_merge_history.json`。当前保留 9,222 个 Canonical、235 条待审边界候选；258 条已初始化进度均有效，剩余 8,964 条为按需初始化，不是完整性失败。
+- Notes: Batch 0001–0005 已审查 50 组：48 组同义题簇已合并，2 组因算法状态/语言契约不同而明确保留独立。当前保留 9,212 个 Canonical、223 条待审边界候选；所有 Canonical、ReviewProgress 与答案结构校验通过。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S03` 全量重新判定 answer_type
 
