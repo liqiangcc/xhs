@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_spring_boot_026e4b46","version":1,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_spring_boot_026e4b46","version":2,"status":"needs_update","updated_at":"2026-07-11","quality_tier":"curated_audit_failed","audit_failure":"missing_evidence"} -->
 # Spring Boot 自动配置的原理是什么？
 
 ## 核心结论
