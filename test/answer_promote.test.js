@@ -12,10 +12,13 @@ const { sha256, atomicPromote } = require('../scripts/lib/answer_quality');
 const QUALITY = require('../config/answer_quality.json');
 
 function answer(metadata, marker) {
+    const sectionContent = (title) => title === '常见追问'
+        ? '- 问：Redis 事件循环如何处理连接？答：按就绪事件推进连接状态。\n- 问：大 Key 有什么影响？答：会延长单次命令执行时间。\n- 问：持久化会阻塞吗？答：需按命令、配置和版本具体分析。'
+        : `${marker}：${title}的完整 Redis 内容。`;
     return [
         `<!-- xhs-answer: ${JSON.stringify(metadata)} -->`,
         '# Redis 为什么快？',
-        ...['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '项目经验版', '常见追问', '易错点'].flatMap((title) => ['', `## ${title}`, '', `${marker}：${title}的完整内容。`]),
+        ...['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '项目经验版', '常见追问', '易错点'].flatMap((title) => ['', `## ${title}`, '', sectionContent(title)]),
         '',
     ].join('\n');
 }
@@ -46,7 +49,11 @@ function passingEvidence(candidatePath) {
         schema_version: 'answer_evidence.v1',
         canonical_id: 'cq_redis',
         candidate_sha256: sha256(fs.readFileSync(candidatePath, 'utf8')),
+        checked_at: '2026-07-11',
         writer: { writer_id: 'writer-a', writer_version: 'v1' },
+        sources: [{ source_id: 'redis-doc', title: 'Redis docs', locator: 'https://redis.io/docs/', source_type: 'official_documentation', checked_at: '2026-07-11' }],
+        claims: [{ claim_id: 'claim-1', text: 'Redis uses an event loop.', source_ids: ['redis-doc'], answer_locations: ['原理机制'] }],
+        source_question_coverage: [],
         review: {
             reviewer_id: 'reviewer-b', independent: true, decision: 'pass', review_version: 'v1', revision_round: 1,
             hard_failures: [],
@@ -89,4 +96,3 @@ test('passing promotion upgrades metadata and synchronizes canonical status', ()
     assert.equal(readJsonl(fixtureData.canonicalPath)[0].answer_status, 'ready');
     fs.rmSync(fixtureData.root, { recursive: true, force: true });
 });
-

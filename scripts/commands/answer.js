@@ -38,7 +38,7 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0];
     const options = { _: [] };
-    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict', 'check', 'require-evidence', 'require-code']);
+    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict', 'check', 'fixtures', 'require-evidence', 'require-code']);
     for (let index = 1; index < args.length; index++) {
         const arg = args[index];
         if (arg.startsWith('--')) {

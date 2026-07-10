@@ -145,7 +145,7 @@
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T02` S1：校准精选答案与统一质量合同
 
-- Status: `in_progress`
+- Status: `done`
 - Depends on: `TASK-20260711-0313-long-tail-answer-quality-T01`
 - Goal: 把“和精选答案一致”转换为可评分、可拒绝、可复现的质量合同，并先证明 100 份精选答案自身达到该合同。
 - Files likely touched: `config/answer_quality.json`, `docs/refactor/09_answer_content_standard.md`, `review/evidence/*.json`, `test/fixtures/answer_quality/*`
@@ -218,7 +218,7 @@
   - 生成并校验 `agents/openai.yaml`，默认提示显式包含 `$xhs-answer-curator`。
 - Expected files: `.agents/skills/xhs-answer-curator/SKILL.md`, `.agents/skills/xhs-answer-curator/agents/openai.yaml`
 - Validation: `python3 /root/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/xhs-answer-curator` -> passed (`Skill is valid!`)
-- Commit: `pending`
+- Commit: `80cfbdfc`
 - Changed files: `.agents/skills/xhs-answer-curator/SKILL.md`, `.agents/skills/xhs-answer-curator/references/repo-map.md`, `.agents/skills/xhs-answer-curator/agents/openai.yaml`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: Skill 明确旧长尾不可作为事实来源、候选区隔离、第一手证据、独立 reviewer/subagent、最多两轮修订、90 分和零硬失败晋级；命令缺失时要求先实现而非手工模拟写状态。
 
@@ -254,7 +254,7 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S04` 建立证据与专项校验器
 
-- Status: `pending`
+- Status: `in_progress`
 - Goal: 自动阻断可确定发现的低质量答案。
 - Steps:
   - 定义 `review/evidence/{canonical_id}.json` schema，记录来源、claim 映射、核对日期、编写/审查版本和评分。
@@ -262,9 +262,10 @@
   - Coding/SQL 增加编译/解析、边界用例和禁止占位符校验。
   - Project/Behavior 增加第一人称虚构与未填占位检查。
 - Expected files: `scripts/lib/answer_quality.js`, `scripts/content/check_answer_evidence.js`, `test/answer_evidence.test.js`, `test/answer_code_validation.test.js`
-- Validation: `npm test && node scripts/xhs.js answer audit --fixtures --noWrite`
+- Validation: `npm test` -> passed (66/66); `node scripts/xhs.js answer audit --fixtures --noWrite` -> passed (5/5 expected outcomes)
 - Commit: `pending`
-- Notes:
+- Changed files: `config/answer_evidence.schema.json`, `scripts/commands/answer.js`, `scripts/lib/answer_quality.js`, `scripts/content/check_answer_evidence.js`, `test/answer_candidate.test.js`, `test/answer_promote.test.js`, `test/answer_evidence.test.js`, `test/answer_code_validation.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 证据 schema 要求来源、claim 映射、核对日期、编写/审查版本、原题覆盖和两轮内独立审查；专项门禁覆盖旧模板/通用追问/跨题核心、Java `javac` 编译、SQL 结构与占位符、至少三个边界用例，以及 Project/Behavior 的虚构经历和未填占位。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S05` 接入 CI
 

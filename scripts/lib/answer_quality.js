@@ -1,7 +1,9 @@
 'use strict';
 
 const crypto = require('crypto');
+const childProcess = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { loadCanonicalQuestions } = require('./canonical_store');
 const { readJson, readJsonl, stablePrettyStringify, stableStringify, ensureDir } = require('./io');
@@ -192,6 +194,202 @@ function scoreReview(review, config) {
     return { scores: dimensionScores, total_score: total, errors };
 }
 
+const GENERIC_FOLLOWUP_PATTERNS = [
+    /这道题最先要澄清什么/,
+    /如何验证回答不是背诵/,
+    /方案的主要代价是什么/,
+    /题目继续追问源码或底层时怎么答/,
+    /核心判断是什么/,
+];
+
+const TEMPLATE_PATTERNS = [
+    /先界定题目中的概念、版本和约束/,
+    /先确认题目范围、运行版本、输入输出、数据规模/,
+    /结论必须能由样例、日志、指标、源码或最小实验/,
+    /static\s+final\s+class\s+ProblemSpec/,
+    /WITH\s+base\s+AS\s*\(/i,
+    /static\s+long\s+solveDp\s*\(/,
+];
+
+const STRONG_TOPIC_ANCHORS = [
+    'Redis', 'MySQL', 'PostgreSQL', 'MongoDB', 'Kafka', 'RocketMQ', 'RabbitMQ', 'ZooKeeper',
+    'Elasticsearch', 'Spring', 'Netty', 'Dubbo', 'JVM', 'AQS', 'HashMap', 'B+ 树', 'B+树',
+];
+
+function addHardFailure(target, id) {
+    if (!target.includes(id)) target.push(id);
+}
+
+function extractSection(content, title) {
+    const match = String(content).match(new RegExp(`(?:^|\\n)##\\s+${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`));
+    return match ? match[1].trim() : '';
+}
+
+function validateAnswerEvidence(evidence, candidate, context, config) {
+    const errors = [];
+    const hardFailures = [];
+    if (!evidence || typeof evidence !== 'object') return { errors: [{ error: 'missing_evidence' }], hard_failures: ['missing_evidence'] };
+    if (evidence.schema_version !== 'answer_evidence.v1') errors.push({ error: 'invalid_evidence_schema_version' });
+    if (evidence.canonical_id !== candidate.metadata.canonical_id) errors.push({ error: 'evidence_canonical_mismatch' });
+    if (evidence.candidate_sha256 !== sha256(candidate.content)) errors.push({ error: 'candidate_hash_mismatch' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(evidence.checked_at || '')) errors.push({ error: 'invalid_checked_at' });
+    if (!evidence.writer?.writer_id || !evidence.writer?.writer_version) errors.push({ error: 'missing_writer_version' });
+    if (!evidence.review?.reviewer_id || !evidence.review?.review_version) errors.push({ error: 'missing_reviewer_version' });
+    if (!Number.isInteger(evidence.review?.revision_round) || evidence.review.revision_round < 0
+        || evidence.review.revision_round > config.promotion.maximum_revision_rounds) {
+        errors.push({ error: 'invalid_revision_round', maximum: config.promotion.maximum_revision_rounds });
+    }
+
+    const allowedSourceTypes = new Set(config.evidence_policy.source_priority);
+    const sourceIds = new Set();
+    if (!Array.isArray(evidence.sources) || evidence.sources.length === 0) {
+        addHardFailure(hardFailures, 'missing_evidence');
+        errors.push({ error: 'sources_required' });
+    } else {
+        for (const [index, source] of evidence.sources.entries()) {
+            if (!source?.source_id || sourceIds.has(source.source_id)) errors.push({ error: 'invalid_or_duplicate_source_id', index });
+            else sourceIds.add(source.source_id);
+            if (!source?.title || !source?.locator) errors.push({ error: 'source_title_and_locator_required', source_id: source?.source_id || null });
+            if (!allowedSourceTypes.has(source?.source_type)) errors.push({ error: 'invalid_source_type', source_id: source?.source_id || null });
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(source?.checked_at || '')) errors.push({ error: 'invalid_source_checked_at', source_id: source?.source_id || null });
+        }
+    }
+    if (!Array.isArray(evidence.claims) || evidence.claims.length === 0) {
+        addHardFailure(hardFailures, 'missing_evidence');
+        errors.push({ error: 'claims_required' });
+    } else {
+        const claimIds = new Set();
+        for (const [index, claim] of evidence.claims.entries()) {
+            if (!claim?.claim_id || claimIds.has(claim.claim_id)) errors.push({ error: 'invalid_or_duplicate_claim_id', index });
+            else claimIds.add(claim.claim_id);
+            if (!claim?.text || !Array.isArray(claim.answer_locations) || claim.answer_locations.length === 0) {
+                errors.push({ error: 'claim_text_and_locations_required', claim_id: claim?.claim_id || null });
+            }
+            if (!Array.isArray(claim.source_ids) || claim.source_ids.length === 0
+                || claim.source_ids.some((sourceId) => !sourceIds.has(sourceId))) {
+                addHardFailure(hardFailures, 'unsupported_factual_claim');
+                errors.push({ error: 'claim_source_mapping_invalid', claim_id: claim?.claim_id || null });
+            }
+        }
+    }
+
+    const coverageByQuestionId = new Map((evidence.source_question_coverage || []).map((row) => [row.question_id, row]));
+    for (const question of context.source_questions || []) {
+        const coverage = coverageByQuestionId.get(question.question_id);
+        if (!coverage?.covered || !Array.isArray(coverage.answer_locations) || coverage.answer_locations.length === 0) {
+            addHardFailure(hardFailures, 'uncovered_source_variant');
+            errors.push({ error: 'source_question_not_covered', question_id: question.question_id });
+        }
+    }
+    return { errors, hard_failures: hardFailures };
+}
+
+function extractCodeBlocks(content) {
+    const blocks = [];
+    const regex = /(?:```|~~~)(java|sql)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
+    let match;
+    while ((match = regex.exec(content))) blocks.push({ language: match[1].toLowerCase(), code: match[2].trim() });
+    return blocks;
+}
+
+function compileJava(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-javac-'));
+    try {
+        const className = (code.match(/public\s+(?:final\s+)?class\s+([A-Za-z_$][\w$]*)/) || code.match(/class\s+([A-Za-z_$][\w$]*)/) || [])[1];
+        if (!className) return { ok: false, error: 'java_class_required' };
+        const filePath = path.join(tempDir, `${className}.java`);
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('javac', ['-encoding', 'UTF-8', '-d', tempDir, filePath], { encoding: 'utf8', timeout: 15000 });
+        return { ok: result.status === 0, error: result.status === 0 ? null : (result.stderr || result.stdout || 'javac_failed').slice(0, 2000) };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+function parseSql(code) {
+    const stripped = code.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+    if (!/^(?:WITH\b[\s\S]+?\b(?:SELECT|INSERT|UPDATE|DELETE)\b|SELECT\b|INSERT\b|UPDATE\b|DELETE\b)/i.test(stripped)) {
+        return { ok: false, error: 'sql_statement_required' };
+    }
+    let depth = 0;
+    let quote = null;
+    for (let index = 0; index < stripped.length; index++) {
+        const char = stripped[index];
+        if (quote) {
+            if (char === quote && stripped[index - 1] !== '\\') quote = null;
+        } else if (char === '\'' || char === '"' || char === '`') quote = char;
+        else if (char === '(') depth += 1;
+        else if (char === ')') {
+            depth -= 1;
+            if (depth < 0) return { ok: false, error: 'sql_unbalanced_parentheses' };
+        }
+    }
+    if (quote || depth !== 0) return { ok: false, error: quote ? 'sql_unclosed_quote' : 'sql_unbalanced_parentheses' };
+    if (/\b(?:source_table|your_table|table_name|column_name)\b|<[^>]+>|\bTODO\b/i.test(stripped)) return { ok: false, error: 'sql_placeholder' };
+    return { ok: true, error: null };
+}
+
+function validateSpecializedCandidate(candidate, evidence, context) {
+    const errors = [];
+    const hardFailures = [];
+    const content = candidate.content;
+    const core = extractSection(content, '核心结论');
+    const followups = extractSection(content, '常见追问').split(/\r?\n/).filter((line) => /^-\s*问[：:]/.test(line));
+    const genericFollowups = followups.filter((line) => GENERIC_FOLLOWUP_PATTERNS.some((pattern) => pattern.test(line)));
+    if (followups.length < 3 || genericFollowups.length > 0) {
+        addHardFailure(hardFailures, 'generic_followups');
+        errors.push({ error: 'followups_not_question_specific', followup_count: followups.length, generic_count: genericFollowups.length });
+    }
+    const matchedTemplates = TEMPLATE_PATTERNS.filter((pattern) => pattern.test(content)).map(String);
+    if (matchedTemplates.length > 0 || /^复习「/.test(core)) {
+        addHardFailure(hardFailures, 'template_only_answer');
+        errors.push({ error: 'legacy_template_detected', patterns: matchedTemplates });
+    }
+    const allowedText = [context.canonical.canonical_title, ...(context.primary_entities || []), ...(context.source_variants || [])].join(' ').toLowerCase();
+    const coreLower = core.toLowerCase();
+    const relevantTokens = [...(context.primary_entities || []), ...String(context.canonical.canonical_title || '').split(/[\s：:，,？?、与和的]+/)]
+        .filter((value) => String(value).length >= 2);
+    const hasRelevantCoreToken = relevantTokens.some((token) => coreLower.includes(String(token).toLowerCase()));
+    const foreignAnchors = STRONG_TOPIC_ANCHORS.filter((anchor) => coreLower.includes(anchor.toLowerCase()) && !allowedText.includes(anchor.toLowerCase()));
+    if (!hasRelevantCoreToken && foreignAnchors.length > 0) {
+        addHardFailure(hardFailures, 'cross_topic_contamination');
+        errors.push({ error: 'foreign_core_topic', entities: foreignAnchors });
+    }
+
+    const answerType = candidate.metadata.answer_type;
+    if (answerType === 'coding') {
+        const blocks = extractCodeBlocks(content);
+        if (blocks.length === 0) {
+            addHardFailure(hardFailures, 'placeholder_implementation');
+            errors.push({ error: 'coding_block_required' });
+        }
+        for (const block of blocks) {
+            const validation = block.language === 'java' ? compileJava(block.code) : parseSql(block.code);
+            if (!validation.ok) {
+                addHardFailure(hardFailures, /placeholder|required/.test(validation.error || '') ? 'placeholder_implementation' : 'unrunnable_implementation');
+                errors.push({ error: `${block.language}_validation_failed`, detail: validation.error });
+            }
+        }
+        const boundaryTests = evidence?.validation?.boundary_tests;
+        if (!Array.isArray(boundaryTests) || boundaryTests.length < 3 || boundaryTests.some((item) => item.passed !== true || !item.case || item.expected === undefined)) {
+            addHardFailure(hardFailures, 'unrunnable_implementation');
+            errors.push({ error: 'three_passing_boundary_tests_required' });
+        }
+    }
+    if (answerType === 'project' || answerType === 'behavior') {
+        if (/\bTODO\b|\bTBD\b|\bXX+\b|\[[^\]]*(?:公司|项目|指标|数据|补充)[^\]]*\]|<[^>]*(?:公司|项目|指标|数据|补充)[^>]*>/i.test(content)) {
+            addHardFailure(hardFailures, 'placeholder_implementation');
+            errors.push({ error: 'unfilled_experience_placeholder' });
+        }
+        const firstPersonFact = /(?:我|我们)(?:负责|主导|推动|上线|排查|优化|将|使|曾经)|(?:提升|降低|节省|达到)\s*\d+(?:\.\d+)?%/.test(content);
+        if (firstPersonFact && (!Array.isArray(evidence?.experience_facts) || evidence.experience_facts.length === 0)) {
+            addHardFailure(hardFailures, 'fabricated_experience');
+            errors.push({ error: 'first_person_claim_without_experience_evidence' });
+        }
+    }
+    return { errors, hard_failures: hardFailures };
+}
+
 function evidencePathFor(candidate, paths, explicitPath) {
     if (explicitPath) return path.resolve(explicitPath);
     return path.join(paths.evidenceDir, `${candidate.metadata.canonical_id}.json`);
@@ -210,9 +408,13 @@ function auditOneCandidate(filePath, options = {}) {
     for (const issue of validateAnswerContent(readyView)) errors.push(issue);
     const evidencePath = evidencePathFor(candidate, paths, options.evidence);
     const evidence = fs.existsSync(evidencePath) ? readJson(evidencePath) : null;
-    if (!evidence) hardFailures.push('missing_evidence');
-    if (evidence && evidence.canonical_id !== canonicalId) errors.push({ error: 'evidence_canonical_mismatch' });
-    if (evidence && evidence.candidate_sha256 !== sha256(candidate.content)) errors.push({ error: 'candidate_hash_mismatch' });
+    const context = buildAnswerContext({ root, canonicalId });
+    const evidenceValidation = validateAnswerEvidence(evidence, candidate, context, config);
+    errors.push(...evidenceValidation.errors);
+    for (const id of evidenceValidation.hard_failures) addHardFailure(hardFailures, id);
+    const specializedValidation = validateSpecializedCandidate(candidate, evidence, context);
+    errors.push(...specializedValidation.errors);
+    for (const id of specializedValidation.hard_failures) addHardFailure(hardFailures, id);
     const review = evidence?.review || null;
     const scored = scoreReview(review, config);
     errors.push(...scored.errors);
@@ -255,6 +457,9 @@ function readSetIds(setPath) {
 }
 
 function runAnswerAudit(options = {}) {
+    if (options.fixtures) {
+        return require('../content/check_answer_evidence').runEvidenceFixtures(options);
+    }
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const paths = pathsFor(root);
     let candidatePaths;
@@ -365,6 +570,11 @@ module.exports = {
     inferAnswerType,
     buildAnswerContext,
     renderCandidate,
+    extractCodeBlocks,
+    compileJava,
+    parseSql,
+    validateAnswerEvidence,
+    validateSpecializedCandidate,
     auditOneCandidate,
     runAnswerAudit,
     atomicPromote,

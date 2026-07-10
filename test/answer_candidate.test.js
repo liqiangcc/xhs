@@ -69,8 +69,8 @@ test('context includes source variants and candidate rendering stays isolated', 
 
     const audit = runAnswerAudit({ root, candidate: path.join(root, rendered.candidate_path), noWrite: true, type: ['concept'] });
     assert.equal(audit.ok, false);
-    assert.deepEqual(audit.rows[0].hard_failures.sort(), ['missing_evidence', 'missing_independent_review']);
+    assert.ok(audit.rows[0].hard_failures.includes('missing_evidence'));
+    assert.ok(audit.rows[0].hard_failures.includes('missing_independent_review'));
     assert.equal(fs.existsSync(path.join(root, 'review', 'candidates', 'audits', 'cq_redis.json')), false);
     fs.rmSync(root, { recursive: true, force: true });
 });
-

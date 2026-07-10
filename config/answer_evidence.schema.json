@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xhs.local/schema/answer_evidence.v1.json",
+  "title": "XHS answer evidence",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "canonical_id", "candidate_sha256", "checked_at", "writer", "sources", "claims", "source_question_coverage", "review"],
+  "properties": {
+    "schema_version": { "const": "answer_evidence.v1" },
+    "canonical_id": { "type": "string", "minLength": 1 },
+    "candidate_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "checked_at": { "type": "string", "format": "date" },
+    "writer": {
+      "type": "object",
+      "required": ["writer_id", "writer_version"],
+      "properties": { "writer_id": { "type": "string" }, "writer_version": { "type": "string" } }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["source_id", "title", "locator", "source_type", "checked_at"]
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "text", "source_ids", "answer_locations"]
+      }
+    },
+    "source_question_coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question_id", "covered", "answer_locations"]
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": ["reviewer_id", "review_version", "independent", "decision", "revision_round", "hard_failures", "scores"],
+      "properties": {
+        "independent": { "const": true },
+        "decision": { "enum": ["pass", "revise", "reject"] },
+        "revision_round": { "type": "integer", "minimum": 0, "maximum": 2 }
+      }
+    }
+  }
+}
