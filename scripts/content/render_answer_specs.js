@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { loadCanonicalQuestions } = require('../lib/canonical_store');
+const { parseAnswerMetadata, replaceAnswerMetadata } = require('../lib/answer_store');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -116,9 +117,12 @@ function main() {
     for (const entry of spec.answers || []) {
         const canonical = canonicals.get(entry.canonical_id);
         if (!canonical) throw new Error(`Unknown canonical_id: ${entry.canonical_id}`);
-        const output = render(entry, canonical, date);
+        let output = render(entry, canonical, date);
         const filePath = path.join(ROOT, 'review', 'answers', `${entry.canonical_id}.md`);
         const current = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
+        // Historical spec rendering is content-only. It must never silently restore
+        // a demoted answer to ready/curated or erase audit metadata.
+        if (current) output = replaceAnswerMetadata(output, parseAnswerMetadata(current, filePath));
         if (current !== output) {
             changed.push(path.relative(ROOT, filePath));
             if (!options.check) fs.writeFileSync(filePath, output, 'utf8');

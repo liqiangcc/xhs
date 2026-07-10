@@ -180,7 +180,7 @@
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/curated_answer_audit.json`
 - Validation: `manual check: 100/100 curated rows have completed rubric, evidence, reviewer decision, and zero hard failures`
 - Commit: `pending`
-- Notes: 历史精选全量审计已启动（batch `curated-audit-001`）。AOF 在两轮审查后仍因 Redis 7 manifest 发布/恢复证据不足失败；AQS 为 82/100，Bean 为 68/100，binlog 为 77/100，均因版本/配置边界和材料性事实 claim 映射不足而 `revise`，四题均已原子降级。CMS、equals/hashCode、G1、两个 HashMap 与 I/O 多路复用没有任何 evidence sidecar，已由确定性 `missing_evidence` 门禁原子降级；未伪造 AI 评分。第一审计批 10 题均为 `needs_update/curated_audit_failed`。新增受 hash 绑定的 `answer human-review` 记录命令；前 60 个晋级会强制 require human approval，避免将 AI 复核冒充为人工抽检。新增 100 题/10 批的机制优先审计队列。
+- Notes: 100 篇历史精选已全部完成审计状态校准。AOF、AQS、Bean、binlog 由独立审查发现可追溯的事实/版本/证据硬失败；其余 96 篇没有 evidence sidecar，均以确定性 `missing_evidence` 门禁在不改正文的前提下分批原子降级。当前 `curated_answer_audit.json` 为 0/100 通过、100/100 `needs_update/curated_audit_failed`；严格 Answer 与 Canonical 结构校验仍通过。历史精选不再被错误用作正样本，后续必须从候选、来源、独立审查和人工签核重新建立合格集合。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S03` 建立正负评测集
 
