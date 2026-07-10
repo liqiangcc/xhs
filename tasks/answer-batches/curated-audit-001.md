@@ -9,16 +9,16 @@
 
 ## Canonicals
 
-- `cq_ai_055f19f9`
 - `cq_aof_e522aa87`
 - `cq_aqs_f718305c`
-- `cq_arch_layering_02c49d25`
-- `cq_arraylist_9d3444a1`
-- `cq_async_tradeoff_bef9a76a`
 - `cq_bean_319a398d`
 - `cq_binlog_86a375fd`
-- `cq_cache_consistency_a83eeb36`
-- `cq_cas_64fa0b00`
+- `cq_cms_collector_c069b541`
+- `cq_equals_hashcode_e7fe32f7`
+- `cq_g1_collector_828f806c`
+- `cq_hashmap_4d9f15d2`
+- `cq_hashmap_d74d2fd7`
+- `cq_io_multiplexing_6e30840f`
 
 ## Recorded result
 
