@@ -18,6 +18,7 @@ const {
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
 const { defaultDate } = require('../lib/date');
+const { run: runAnswerTypeAudit } = require('../content/audit_answer_types');
 const {
     buildAnswerContext,
     renderCandidate,
@@ -63,7 +64,7 @@ function parseArgs(argv) {
 
 function printHelp() {
     console.log([
-        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote|demote|demote-missing-evidence|human-review> [options]',
+        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote|demote|demote-missing-evidence|human-review|type-audit> [options]',
         '',
         'Commands:',
         '  init --canonical-id <id> [--overwrite] [--status <draft|ready|needs_update>]',
@@ -80,6 +81,7 @@ function printHelp() {
         '  demote --canonical-id <id> --evidence <path> [--noWrite]',
         '  demote-missing-evidence --canonical-id <id> [--noWrite]',
         '  human-review --canonical-id <id> --evidence <path> --review <json> [--noWrite]',
+        '  type-audit [--check] [--noWrite]',
         '',
         'Options:',
         '  --strict     Validate ready answer content sections and TODO placeholders',
@@ -425,6 +427,7 @@ function main(argv = process.argv) {
         else if (command === 'demote') result = atomicDemote(options);
         else if (command === 'demote-missing-evidence') result = atomicDemoteMissingEvidence(options);
         else if (command === 'human-review') result = recordHumanReview(options);
+        else if (command === 'type-audit') result = runAnswerTypeAudit(options);
         else throw new Error(`Unknown answer command: ${command}`);
         writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `answer_${command}`, result, options);
         console.log(JSON.stringify(result, null, 2));

@@ -321,16 +321,17 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S03` 全量重新判定 answer_type
 
-- Status: `pending`
+- Status: `done`
 - Goal: 不再直接信任来源 `question_type`，为每个最终 Canonical 选择唯一正确答案类型。
 - Steps:
   - 依据面试官实际期待的回答产物判定 Concept、Mechanism、Scenario、Coding、Project、Behavior。
   - 对混合题选择主类型并在 Canonical 中记录次要覆盖要求；不可兼容的混合题执行 split。
   - 对技术题误标 Behavior、算法题误标 Concept 等硬错误全部清零。
 - Expected files: `data/questions/canonical_questions.jsonl`, `data/manifests/quality/answer_type_audit.jsonl`
-- Validation: `node scripts/xhs.js answer type-audit --check --noWrite`
+- Validation: `node scripts/xhs.js answer type-audit --check --noWrite` -> passed (9,260 Canonical)
 - Commit: `pending`
-- Notes:
+- Changed files: `scripts/content/audit_answer_types.js`, `scripts/commands/answer.js`, `data/manifests/quality/answer_type_audit.jsonl`, `test/answer_type_audit.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 基于面试输出预期判定主类型，并独立记录来源类型信号、次要覆盖要求和风险标记；结果为 Concept 2122、Mechanism 2354、Scenario 2369、Coding 1724、Project 383、Behavior 308，2,752 条带混合/覆盖风险供后续 split review。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S04` 生成稳定重写队列和批次 ID
 
