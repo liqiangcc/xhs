@@ -494,7 +494,8 @@ function auditOneCandidate(filePath, options = {}) {
 
 function readSetIds(setPath) {
     if (!setPath) return null;
-    const value = readJson(path.resolve(setPath));
+    const resolved = path.resolve(setPath);
+    const value = resolved.endsWith('.jsonl') ? readJsonl(resolved) : readJson(resolved);
     const rows = Array.isArray(value) ? value : value.canonical_ids || value.rows || value.answers || [];
     return new Set(rows.map((item) => typeof item === 'string' ? item : item.canonical_id).filter(Boolean));
 }

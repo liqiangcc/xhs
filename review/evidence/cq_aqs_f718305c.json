@@ -1,0 +1,81 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_aqs_f718305c",
+  "candidate_sha256": "02953bcc2d50d1d8e59656c064a87fc4b7b78b367af6145b2f986bb88b7a572d",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "historical-curated-audit",
+    "writer_version": "v1"
+  },
+  "sources": [
+    {
+      "source_id": "openjdk-aqs-source",
+      "title": "OpenJDK AbstractQueuedSynchronizer source",
+      "locator": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/locks/AbstractQueuedSynchronizer.java",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "java-21-aqs-api",
+      "title": "Java SE 21 AbstractQueuedSynchronizer API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/AbstractQueuedSynchronizer.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "aqs-framework-state-queue",
+      "text": "AQS is a framework for blocking locks and synchronizers that uses a FIFO wait queue and a single atomically updated int synchronization state; subclasses define the protected state-changing methods.",
+      "source_ids": ["openjdk-aqs-source"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "aqs-acquire-release-template",
+      "text": "Exclusive acquire repeatedly invokes tryAcquire, queues and possibly blocks on failure; release invokes tryRelease and may unblock the first queued thread. Shared mode may cascade signals.",
+      "source_ids": ["openjdk-aqs-source", "java-21-aqs-api"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "aqs-fairness-boundary",
+      "text": "AQS has an internal FIFO queue but does not automatically enforce FIFO acquisition; subclass acquisition policy determines whether barging/fairness checks are used.",
+      "source_ids": ["openjdk-aqs-source"],
+      "answer_locations": ["关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "aqs-condition-transfer",
+      "text": "ConditionObject condition waiting releases the saved state, blocks, and then reacquires; signal moves a waiting node from the condition wait queue to the owning lock queue rather than granting the lock immediately.",
+      "source_ids": ["java-21-aqs-api"],
+      "answer_locations": ["1 分钟版", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "019eb1e87747d4170c30018cbbf1ad6c",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "review_aqs_isolated",
+    "review_version": "v1",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 19,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 14,
+      "mechanism_and_causality": 13,
+      "boundaries_and_tradeoffs": 7,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": ["unsupported_factual_claim", "missing_version_boundary"],
+    "revision_suggestions": [
+      "明确 Java 21 API 适用边界，并区分稳定的 AQS 抽象与可能随 JDK 版本变化的实现细节。",
+      "为 park/unpark、取消/超时节点、前驱资格、队列形态和释放-唤醒顺序补齐 claim 映射，固定引用的 OpenJDK revision。",
+      "补全失败获取的资源成本，以及公平/非公平获取在排序、吞吐与插队上的取舍。"
+    ]
+  }
+}
