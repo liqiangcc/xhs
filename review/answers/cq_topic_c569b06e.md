@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_c569b06e","version":1,"status":"ready","updated_at":"2026-07-01"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_c569b06e","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # ==和equals的区别
 
 ## 核心结论
@@ -28,14 +28,14 @@ equals 的语义取决于类的实现，但应该满足自反、对称、传递�
 
 ## 项目经验版
 
-项目里比较字符串、枚举外的业务对象、ID 包装类时，我会明确使用 equals 或 Objects.equals，避免空指针。自定义值对象会用不可变字段实现 equals 和 hashCode，保证放入集合后行为稳定。
+项目映射提示：真实代码中比较字符串、包装 ID 和值对象时应展示 `Objects.equals`、空值策略以及不可变的 `equals/hashCode` 字段。若对象放入 HashSet/HashMap 后会修改参与 hash 的字段，应先修正模型而不是依赖偶然行为。
 
 ## 常见追问
 
-- String 为什么不能用 `==` 比较内容？
-- equals 和 hashCode 有什么关系？
-- Integer 用 `==` 为什么有时返回 true？
-- Objects.equals 有什么好处？
+- 问：String 为什么不能用 `==` 比内容？答：`==` 比较引用是否同一对象，字符串池只会让部分引用偶然相同；内容应使用 equals。
+- 问：equals 和 hashCode 什么关系？答：equals 为 true 的对象必须 hashCode 相同，否则基于哈希的集合无法正确定位；反过来 hash 相同不代表相等。
+- 问：Integer 用 `==` 为什么有时 true？答：自动装箱可能复用缓存对象，超出缓存或显式 new 后引用不同；业务值比较用 equals 或拆箱。
+- 问：Objects.equals 有什么好处？答：它对两个 null 返回 true、单边 null 返回 false，可避免直接调用实例 equals 的空指针。
 
 ## 易错点
 

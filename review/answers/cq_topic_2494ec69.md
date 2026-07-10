@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_2494ec69","version":1,"status":"ready","updated_at":"2026-07-01"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_2494ec69","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # Redis持久化机制
 
 ## 核心结论
@@ -29,14 +29,14 @@ RDB 通常通过 fork 子进程生成快照，父进程继续处理请求，依�
 
 ## 项目经验版
 
-缓存场景如果允许丢数据，可以弱化持久化；会话、计数、限流配置等需要恢复的数据，至少开启 AOF everysec。线上要监控 fork 耗时、AOF rewrite、磁盘空间和 fsync 延迟，避免持久化把 Redis 主线程拖慢。
+项目映射提示：先定义 Redis 数据是否可从数据库重建及允许的 RPO/RTO，再选择 RDB、AOF 或混合持久化。真实运行数据应包含 fork 耗时、AOF rewrite、COW 内存、磁盘余量和 fsync 延迟；没有数据时不承诺最多只丢固定秒数。
 
 ## 常见追问
 
-- RDB 和 AOF 如何选择？
-- AOF rewrite 会不会阻塞 Redis？
-- appendfsync 三种策略区别是什么？
-- Redis 宕机最多会丢多少数据？
+- 问：RDB 和 AOF 如何选择？答：RDB 恢复快且适合备份，AOF 通常提供更小数据丢失窗口；可组合使用，但都需验证恢复。
+- 问：AOF rewrite 会阻塞吗？答：大部分后台完成，但 fork、COW、磁盘竞争和最终切换仍可能造成延迟。
+- 问：三种 appendfsync 策略区别？答：always 每次写后刷盘、everysec 由后台约每秒刷、no 交给 OS，可靠性与吞吐依次取舍。
+- 问：宕机最多丢多少数据？答：取决于策略、OS 和故障类型；everysec 常说约一秒窗口，但不能作为所有故障下绝对保证。
 
 ## 易错点
 

@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_3f61dd36","version":1,"status":"ready","updated_at":"2026-07-01"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_3f61dd36","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # 算法：反转链表 II（LeetCode 92）
 
 ## 核心结论
@@ -13,12 +13,33 @@
 
 头插法的关键是不移动 pre，pre 始终指向反转区间前驱；cur 始终指向反转后区间的尾部。每轮把 cur 后面的节点拿出来，插到 pre 后面，相当于不断把后续节点提前。例如 1->2->3->4->5，反转 2 到 4，pre 是 1，cur 是 2；先把 3 插到 1 后面，再把 4 插到 1 后面，得到 1->4->3->2->5。dummy 可以统一处理 left 为 1 的情况。
 
+```java
+class Solution {
+    public ListNode reverseBetween(ListNode head, int left, int right) {
+        if (head == null || left == right) return head;
+        ListNode dummy = new ListNode(0, head);
+        ListNode pre = dummy;
+        for (int i = 1; i < left; i++) pre = pre.next;
+        ListNode cur = pre.next;
+        for (int i = 0; i < right - left; i++) {
+            ListNode move = cur.next;
+            cur.next = move.next;
+            move.next = pre.next;
+            pre.next = move;
+        }
+        return dummy.next;
+    }
+}
+```
+
 ## 关键细节
 
 - dummy 节点用于处理反转从头节点开始的情况。
 - pre 固定在反转区间前一个节点。
 - 循环次数是 right-left。
 - 每次操作都要先保存 cur.next，避免断链。
+- 题目通常保证 `1 <= left <= right <= length`；若作为库函数，应先校验越界。
+- 每个节点最多访问常数次，时间 O(n)，额外空间 O(1)。
 
 ## 原理机制
 
@@ -28,14 +49,14 @@
 
 ## 项目经验版
 
-链表题面试时我会先画 3 到 4 个节点的小例子，再写指针更新顺序。写完后用 left=1、left=right、right=链表长度三个边界手动过一遍，能快速发现断链问题。
+算法训练映射：先画 3–4 个节点并口述“不动 pre、cur 始终是已反转段尾部”的不变量，再用 `left=1`、`left=right`、`right=length` 验证。该章节是训练方法，不虚构业务项目。
 
 ## 常见追问
 
-- 为什么需要 dummy 节点？
-- 能不能用递归反转？
-- 头插法中 cur 为什么不往后移动？
-- left 等于 right 怎么处理？
+- 问：为什么需要 dummy？答：让 left=1 时仍有统一的区间前驱，避免单独替换 head 的分支。
+- 问：cur 为什么不往后移动？答：每轮把 cur.next 提到区间头，cur 会自然成为逐步扩展的反转段尾部。
+- 问：left=right 怎么处理？答：无需修改，直接返回原链表。
+- 问：有什么变体？答：反转前 N 个节点可用递归并记录后继；若反转多个区间，要先定义区间是否重叠并维护每段前驱。
 
 ## 易错点
 

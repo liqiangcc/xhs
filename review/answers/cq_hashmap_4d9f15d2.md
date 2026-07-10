@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_hashmap_4d9f15d2","version":1,"status":"ready","updated_at":"2026-07-01"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_hashmap_4d9f15d2","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # HashMap原理
 
 ## 核心结论
@@ -29,14 +29,14 @@ HashMap 的数组长度保持为 2 的幂，这样可以用 `(n - 1) & hash` 快
 
 ## 项目经验版
 
-项目里如果能预估元素数量，会在创建 HashMap 时指定合适容量，减少扩容成本。自定义对象作为 key 时一定要同时重写 hashCode 和 equals，并保证参与计算的字段尽量不可变。多线程写入场景不要用 HashMap，优先使用 ConcurrentHashMap 或在外层做同步控制。
+项目映射提示：若真实场景可预估元素数量，记录初始容量、峰值元素数和扩容影响；自定义 key 要展示 `equals/hashCode` 契约及字段不可变性。并发写入应选择 ConcurrentHashMap 或更高层同步，不能把 HashMap 包装成线程安全实践。
 
 ## 常见追问
 
-- 为什么 HashMap 容量要是 2 的幂？
-- JDK 7 和 JDK 8 的 HashMap 有什么差异？
-- 为什么重写 equals 必须重写 hashCode？
-- HashMap 为什么线程不安全？
+- 问：容量为什么是 2 的幂？答：可用 `(n-1)&hash` 快速定位，并让扩容时节点只需判断旧容量对应位，留在原桶或移动 `oldCap`。
+- 问：JDK 7 和 JDK 8 有什么差异？答：JDK 8 引入链表树化，迁移方式也变化；旧版并发扩容成环的结论不能直接套到 JDK 8。
+- 问：为什么重写 equals 必须重写 hashCode？答：相等对象必须产生相同 hash，否则可能落入不同桶，集合无法按 equals 找到同一 key。
+- 问：为什么线程不安全？答：put、resize 和结构修改没有同步，复合更新会丢失或观察到不一致结构。
 
 ## 易错点
 

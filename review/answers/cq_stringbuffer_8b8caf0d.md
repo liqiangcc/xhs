@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_stringbuffer_8b8caf0d","version":1,"status":"ready","updated_at":"2026-07-01"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_stringbuffer_8b8caf0d","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # StringBuilder和StringBuffer的区别
 
 ## 核心结论
@@ -28,14 +28,14 @@ String 是不可变对象，频繁拼接会产生新对象。StringBuilder 和 S
 
 ## 项目经验版
 
-在日志拼接、SQL 片段构造、导出文本生成等方法内部，我会直接使用 StringBuilder。如果确实存在多个线程共享同一个拼接对象，优先重新设计为线程隔离；只有明确需要共享且操作简单时才考虑 StringBuffer。
+项目映射提示：方法内日志、SQL 片段或导出文本通常使用 StringBuilder；若真实存在共享拼接，先说明为什么不能线程隔离，再评估外层锁或 StringBuffer。不能把单个方法同步等同于一整段业务拼接原子。
 
 ## 常见追问
 
-- String 为什么不可变？
-- 字符串加号和 StringBuilder 有什么关系？
-- StringBuffer 的线程安全是否足够保证业务安全？
-- StringBuilder 扩容机制是什么？
+- 问：String 为什么不可变？答：字符内容创建后不能修改，便于常量池复用、hash 缓存、安全传递和并发共享；拼接会创建新对象或由编译器优化。
+- 问：字符串加号和 StringBuilder 什么关系？答：编译器可能把同一表达式拼接优化为 StringBuilder 或 `invokedynamic`，循环中跨迭代拼接仍需检查对象分配。
+- 问：StringBuffer 线程安全就保证业务安全吗？答：只保证单次方法同步，多个调用组合仍可能被其他线程插入。
+- 问：StringBuilder 如何扩容？答：AbstractStringBuilder 会按增长策略申请更大数组并复制，具体实现需绑定 JDK 版本；预估容量可减少复制。
 
 ## 易错点
 

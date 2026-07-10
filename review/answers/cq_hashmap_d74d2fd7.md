@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_hashmap_d74d2fd7","version":1,"status":"ready","updated_at":"2026-07-01"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_hashmap_d74d2fd7","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # ConcurrentHashMap原理
 
 ## 核心结论
@@ -29,14 +29,14 @@ JDK 7 的 ConcurrentHashMap 使用 Segment 分段锁，JDK 8 取消固定 Segmen
 
 ## 项目经验版
 
-项目里 ConcurrentHashMap 适合本地缓存、并发状态表、幂等处理记录等场景。但它只保证单次 Map 操作线程安全，如果是“先查再改”的复合逻辑，要用 compute、putIfAbsent、merge 等原子方法，或者在业务层额外加锁。
+项目映射提示：并发缓存或状态表要说明 key 数量、热点分布、更新模式和一致性要求。单次 Map 操作线程安全不等于“先查再改”整体原子；应优先使用 `compute`、`putIfAbsent`、`merge` 等原子组合，并避免在计算函数中执行阻塞远程调用。
 
 ## 常见追问
 
-- ConcurrentHashMap 和 Hashtable 有什么区别？
-- JDK 7 和 JDK 8 的实现差异是什么？
-- 为什么 ConcurrentHashMap 不允许 null？
-- size 为什么不是强一致的简单计数？
+- 问：ConcurrentHashMap 和 Hashtable 有什么区别？答：Hashtable 主要以整表同步保护操作；CHM 采用更细粒度的 CAS、桶锁和协作扩容，提高并发度。
+- 问：JDK 7 和 JDK 8 实现差异？答：JDK 7 以 Segment 分段，JDK 8 改为数组、CAS、桶头 synchronized 和红黑树，不再以 Segment 为核心。
+- 问：为什么不允许 null？答：并发场景下 `get` 返回 null 无法区分不存在与值为 null，后续检查又可能发生竞态。
+- 问：size 为什么复杂？答：并发更新分散计数，统计需要汇总 baseCount/CounterCell，读取期间仍可能变化，不是业务强一致快照。
 
 ## 易错点
 

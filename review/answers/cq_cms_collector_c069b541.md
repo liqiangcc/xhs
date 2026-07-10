@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_cms_collector_c069b541","version":1,"status":"ready","updated_at":"2026-07-10"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_cms_collector_c069b541","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # CMS 垃圾收集器的执行流程及 STW 阶段
 
 ## 核心结论

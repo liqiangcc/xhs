@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_force_index_5e733952","version":1,"status":"ready","updated_at":"2026-07-01"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_force_index_5e733952","version":2,"status":"ready","updated_at":"2026-07-10"} -->
 # 如果查询优化器选错了索引怎么办？
 
 ## 核心结论
@@ -29,14 +29,14 @@ MySQL 优化器会基于成本估算选择执行计划，成本依赖统计信�
 
 ## 项目经验版
 
-线上遇到优化器选错索引时，我会先通过慢日志和 traceId 确认真实 SQL，再在只读环境对比 EXPLAIN 和执行耗时。紧急情况下可以灰度加 FORCE INDEX 止血；事后补充合适联合索引、刷新统计信息，并把该 SQL 加入慢 SQL 巡检。
+项目映射提示：用真实慢 SQL 补齐参数分布、执行计划、扫描行数和耗时分位数。处置顺序是先确认统计信息与实际基数，再比较候选索引；`FORCE INDEX` 只作为经过灰度和回滚验证的临时止血，长期方案可能是改写 SQL、调整联合索引或修复数据分布。
 
 ## 常见追问
 
-- FORCE INDEX 和 USE INDEX 有什么区别？
-- 为什么统计信息会不准？
-- 如何设计联合索引避免选错？
-- EXPLAIN 里 rows 和 filtered 怎么看？
+- 问：`FORCE INDEX` 和 `USE INDEX` 有什么区别？答：USE 是候选提示，优化器仍可选择其他路径；FORCE 更强地提高全表扫描代价，但仍不是跨版本绝对命令。
+- 问：统计信息为什么会不准？答：采样、数据快速变化、列相关性和参数分布倾斜都会让基数估算偏离真实值。
+- 问：如何减少选错联合索引？答：让索引匹配高频过滤、连接和排序，控制冗余索引，并以真实参数的执行计划和运行指标验证。
+- 问：`rows` 和 `filtered` 怎么看？答：rows 是估算扫描行数，filtered 是预计通过本表条件的比例；两者都是估算，要结合 actual 执行与慢日志。
 
 ## 易错点
 

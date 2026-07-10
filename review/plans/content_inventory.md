@@ -125,3 +125,17 @@ Completed on 2026-07-10.
 | P0 / P1 / P2 | 20 / 16 / 24 |
 
 Twenty-six Java backend backbone assets were added with topic-specific answers. Duplicate CMS and TCP candidates were consolidated before creation. See `review/plans/c2_backbone_delivery.md`.
+
+## C3 Semantic Answer Snapshot
+
+Completed on 2026-07-10.
+
+| Metric | Value |
+|---|---:|
+| P0 semantic-ready | 20 / 20 |
+| P1 semantic-ready | 16 / 16 |
+| P0/P1 with answered follow-ups | 36 / 36 |
+| P0/P1 coding answers with Java | 7 / 7 |
+| Unverified first-person project claims | 0 |
+
+Twenty-two existing files were upgraded and fourteen C1/C2 semantic-ready files were re-audited. See `review/plans/c3_semantic_answer_audit.md`.
