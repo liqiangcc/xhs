@@ -317,7 +317,7 @@
 - Expected files: `data/questions/canonical_questions.jsonl`, `data/questions/questions.jsonl`, `review/progress.jsonl`, `data/manifests/runs/latest_canonical_merge.json`
 - Validation: `node scripts/xhs.js canonical check --noWrite && node scripts/xhs.js review integrity --noWrite`
 - Commit: `3c64f8ac`
-- Notes: Batch 0001–0009 已审查 89 组：86 组同义题簇已合并，3 组因算法状态、语言契约或专项深度不同而明确保留独立。当前保留 9,173 个 Canonical、166 条待审边界候选；所有 Canonical、ReviewProgress 与答案结构校验通过。
+- Notes: Batch 0001–0010 已审查 99 组：96 组同义题簇已合并，3 组因算法状态、语言契约或专项深度不同而明确保留独立。当前保留 9,163 个 Canonical、154 条待审边界候选；所有 Canonical、ReviewProgress 与答案结构校验通过。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S03` 全量重新判定 answer_type
 
