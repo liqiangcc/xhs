@@ -18,6 +18,12 @@ const {
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
 const { defaultDate } = require('../lib/date');
+const {
+    buildAnswerContext,
+    renderCandidate,
+    runAnswerAudit,
+    atomicPromote,
+} = require('../lib/answer_quality');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -31,8 +37,8 @@ function defaultPaths(root) {
 function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0];
-    const options = {};
-    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict', 'check']);
+    const options = { _: [] };
+    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict', 'check', 'require-evidence', 'require-code']);
     for (let index = 1; index < args.length; index++) {
         const arg = args[index];
         if (arg.startsWith('--')) {
@@ -42,15 +48,19 @@ function parseArgs(argv) {
                 options[key] = true;
                 if (key === 'check') options.noWrite = true;
             }
-            else options[key] = args[++index];
+            else if (key === 'type') {
+                const value = args[++index];
+                options.type = [...(options.type || []), value];
+            } else options[key] = args[++index];
         }
+        else options._.push(arg);
     }
     return { command, options };
 }
 
 function printHelp() {
     console.log([
-        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate> [options]',
+        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote> [options]',
         '',
         'Commands:',
         '  init --canonical-id <id> [--overwrite] [--status <draft|ready|needs_update>]',
@@ -60,6 +70,10 @@ function printHelp() {
         '  validate [--strict]',
         '  sync',
         '  quality-migrate [--check] [--expected-curated <n>] [--expected-long-tail <n>]',
+        '  context --canonical-id <id>',
+        '  candidate render --spec <json> [--noWrite]',
+        '  audit [--candidate <path>] [--tier <tier>] [--type <type> ...] [--set <json>] [--require-evidence] [--require-code] [--noWrite]',
+        '  promote --canonical-id <id> --candidate <path> --evidence <path> [--noWrite]',
         '',
         'Options:',
         '  --strict     Validate ready answer content sections and TODO placeholders',
@@ -398,6 +412,10 @@ function main(argv = process.argv) {
         else if (command === 'validate') result = runValidate(options);
         else if (command === 'sync') result = runSync(options);
         else if (command === 'quality-migrate') result = runQualityMigrate(options);
+        else if (command === 'context') result = buildAnswerContext(options);
+        else if (command === 'candidate' && options._[0] === 'render') result = renderCandidate(options);
+        else if (command === 'audit') result = runAnswerAudit(options);
+        else if (command === 'promote') result = atomicPromote(options);
         else throw new Error(`Unknown answer command: ${command}`);
         writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `answer_${command}`, result, options);
         console.log(JSON.stringify(result, null, 2));
@@ -421,5 +439,9 @@ module.exports = {
     runSync,
     planQualityMigration,
     runQualityMigrate,
+    buildAnswerContext,
+    renderCandidate,
+    runAnswerAudit,
+    atomicPromote,
     main,
 };

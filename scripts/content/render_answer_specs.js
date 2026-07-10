@@ -67,7 +67,7 @@ function render(entry, canonical, date) {
     const complexity = entry.complexity ? `\n- 复杂度：${entry.complexity}` : '';
     const mistakes = [...profile.mistakes, ...(entry.mistakes || [])].map((item) => `- ${item}`);
     return [
-        `<!-- xhs-answer: ${JSON.stringify({ schema_version: 'answer.v1', canonical_id: entry.canonical_id, version: 1, status: 'ready', updated_at: date })} -->`,
+        `<!-- xhs-answer: ${JSON.stringify({ schema_version: 'answer.v1', canonical_id: entry.canonical_id, version: 1, status: 'ready', updated_at: date, quality_tier: 'curated' })} -->`,
         `# ${canonical.canonical_title}`,
         '',
         '## 核心结论',
@@ -129,4 +129,9 @@ function main() {
     if (options.check && changed.length) process.exitCode = 1;
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = {
+    TYPE_TEXT,
+    render,
+};

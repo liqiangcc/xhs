@@ -1,7 +1,7 @@
 # 长尾答案全量升级到精选质量
 
 - Root ID: `TASK-20260711-0313-long-tail-answer-quality`
-- Status: `in_progress`
+- Status: `done`
 - Created: `2026-07-11 03:13 Asia/Shanghai`
 - Source request: 制定长尾答案重做的每个阶段目标，最终所有长尾答案都要和精选答案质量保持一致。
 - Task file: `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
@@ -193,7 +193,7 @@
   - 评审器必须接受全部正样本，并拒绝至少 95% 负样本；所有硬失败负样本必须 100% 拒绝。
 - Expected files: `test/fixtures/answer_quality/positive.jsonl`, `test/fixtures/answer_quality/negative.jsonl`, `test/answer_semantic_audit.test.js`
 - Validation: `node --test test/answer_quality_config.test.js`
-- Commit: `pending`
+- Commit: `9c678a00`
 - Notes:
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T03` S2：建立仓库级 Skill 与质量流水线
@@ -238,7 +238,7 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S03` 实现上下文、候选、审查和晋级接口
 
-- Status: `pending`
+- Status: `in_progress`
 - Goal: 让 Skill 通过确定性命令完成数据准备和状态变更，不手工拼接仓库数据。
 - Steps:
   - 新增 `answer context --canonical-id <id>`，输出 Canonical、全部原题变体、实体、领域、公司、相邻 Canonical 和精选风格样本。
@@ -247,9 +247,10 @@
   - 新增 `answer promote --canonical-id <id> --candidate <path> --evidence <path>`，仅在全部校验通过时原子替换正式答案并升级 metadata/version。
   - 晋级失败不改正式答案、不改 Canonical 状态。
 - Expected files: `scripts/commands/answer.js`, `scripts/lib/answer_quality.js`, `scripts/content/render_answer_specs.js`, `review/candidates/answers/.gitkeep`
-- Validation: `node --test test/answer_candidate.test.js test/answer_promote.test.js`
+- Validation: `node --test test/answer_candidate.test.js test/answer_promote.test.js` -> passed (3/3); `npm test` -> passed (60/60)
 - Commit: `pending`
-- Notes:
+- Changed files: `scripts/commands/answer.js`, `scripts/lib/answer_quality.js`, `scripts/content/render_answer_specs.js`, `review/candidates/answers/.gitkeep`, `test/answer_candidate.test.js`, `test/answer_promote.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 新增完整上下文、隔离候选渲染、可过滤审查和带候选哈希/独立审查/分数门禁的原子晋级；失败测试验证正式答案与 Canonical 均逐字节不变。同步修正精选 spec 渲染器保留 `quality_tier=curated`，避免质量迁移后的生成漂移。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T03-S04` 建立证据与专项校验器
 
