@@ -1,0 +1,237 @@
+{
+  "schema_version": "answer_quality.v1",
+  "audience": "mid_to_senior_java_backend",
+  "batch_size": 10,
+  "promotion": {
+    "required_status": "ready",
+    "required_quality_tier": "curated",
+    "minimum_total_score": 90,
+    "maximum_revision_rounds": 2,
+    "require_zero_hard_failures": true,
+    "require_independent_review": true,
+    "require_evidence": true,
+    "pilot_human_review_rate": 1,
+    "steady_human_review_rate": 0.2,
+    "batch_failure_review_rate": 1
+  },
+  "dimensions": {
+    "facts_and_evidence": {
+      "weight": 25,
+      "minimum_score": 23,
+      "requirements": [
+        "core_claims_correct",
+        "claims_mapped_to_evidence",
+        "version_and_thresholds_bounded",
+        "no_common_practice_presented_as_only_solution"
+      ]
+    },
+    "directness_and_relevance": {
+      "weight": 20,
+      "minimum_score": 18,
+      "requirements": [
+        "directly_answers_canonical_title",
+        "covers_all_source_variants",
+        "no_cross_topic_content",
+        "core_conclusion_stands_without_repeating_title"
+      ]
+    },
+    "type_specific_completeness": {
+      "weight": 20,
+      "minimum_score": 16,
+      "requirements": [
+        "correct_answer_type",
+        "all_type_requirements_present"
+      ]
+    },
+    "mechanism_and_causality": {
+      "weight": 15,
+      "minimum_score": 12,
+      "requirements": [
+        "explains_why",
+        "connects_input_state_transition_output",
+        "states_resource_or_complexity_cost"
+      ]
+    },
+    "boundaries_and_tradeoffs": {
+      "weight": 10,
+      "minimum_score": 8,
+      "requirements": [
+        "failure_or_edge_boundary",
+        "alternative_and_cost",
+        "applicability_conditions"
+      ]
+    },
+    "followup_quality": {
+      "weight": 5,
+      "minimum_score": 4,
+      "requirements": [
+        "at_least_three_answered_followups",
+        "followups_are_question_specific",
+        "at_least_one_boundary_or_failure_followup"
+      ]
+    },
+    "oral_quality": {
+      "weight": 5,
+      "minimum_score": 4,
+      "requirements": [
+        "core_conclusion_speakable_in_30_seconds",
+        "one_minute_has_three_to_five_points",
+        "three_minute_adds_depth_without_repetition"
+      ]
+    }
+  },
+  "hard_failures": [
+    {
+      "id": "wrong_answer_type",
+      "description": "The selected answer type does not match the response the interviewer asks for."
+    },
+    {
+      "id": "off_topic",
+      "description": "The core conclusion or main flow does not answer the canonical question."
+    },
+    {
+      "id": "cross_topic_contamination",
+      "description": "The answer contains facts, mechanisms or code from an unrelated topic."
+    },
+    {
+      "id": "unsupported_factual_claim",
+      "description": "A material factual claim lacks acceptable evidence or contradicts its evidence."
+    },
+    {
+      "id": "missing_version_boundary",
+      "description": "A version-sensitive or configuration-sensitive conclusion is stated as universal."
+    },
+    {
+      "id": "fabricated_experience",
+      "description": "The answer invents personal responsibilities, production incidents, metrics or company facts."
+    },
+    {
+      "id": "generic_followups",
+      "description": "Follow-ups are reusable interview advice rather than questions grounded in this canonical topic."
+    },
+    {
+      "id": "placeholder_implementation",
+      "description": "Code or SQL contains TODOs, undefined transitions, generic table names or non-solution scaffolding."
+    },
+    {
+      "id": "unrunnable_implementation",
+      "description": "Required code or SQL cannot compile, parse or pass the declared boundary tests."
+    },
+    {
+      "id": "uncovered_source_variant",
+      "description": "At least one source question assigned to the canonical is not answered by the candidate."
+    },
+    {
+      "id": "template_only_answer",
+      "description": "The response explains how to answer the category but does not provide the answer itself."
+    },
+    {
+      "id": "missing_independent_review",
+      "description": "The candidate has no isolated reviewer decision or the writer reviewed its own rationale."
+    },
+    {
+      "id": "missing_evidence",
+      "description": "The evidence sidecar is absent, invalid or does not cover material claims."
+    }
+  ],
+  "evidence_policy": {
+    "source_priority": [
+      "official_specification_or_standard",
+      "official_documentation",
+      "upstream_source_code_or_release_note",
+      "primary_research_paper",
+      "executable_test_or_reproducible_experiment",
+      "reputable_secondary_reference"
+    ],
+    "discovery_only_sources": [
+      "search_result_snippet",
+      "unsourced_blog",
+      "forum_or_social_post",
+      "old_long_tail_answer"
+    ],
+    "primary_source_required_for": [
+      "version_sensitive_behavior",
+      "default_configuration",
+      "numeric_threshold",
+      "protocol_semantics",
+      "api_contract",
+      "deprecation_or_removal"
+    ],
+    "unverified_disposition": "needs_update",
+    "claim_mapping_required": true,
+    "checked_at_required": true
+  },
+  "review_isolation": {
+    "reviewer_inputs": [
+      "canonical_record",
+      "source_question_variants",
+      "candidate_answer",
+      "evidence_sidecar",
+      "quality_contract"
+    ],
+    "forbidden_reviewer_inputs": [
+      "writer_self_score",
+      "writer_rationale",
+      "writer_expected_decision"
+    ],
+    "failure_disposition": "needs_update"
+  },
+  "type_requirements": {
+    "concept": [
+      "one_sentence_definition",
+      "shared_comparison_dimensions",
+      "selection_conditions",
+      "inapplicable_boundary",
+      "counterexample_or_confusion"
+    ],
+    "mechanism": [
+      "participants_or_core_data_structure",
+      "entry_to_result_flow",
+      "state_changes_and_guarantees",
+      "resource_cost",
+      "version_boundary",
+      "failure_or_performance_boundary"
+    ],
+    "scenario": [
+      "explicit_requirements_and_assumptions",
+      "capacity_estimate",
+      "core_data_flow",
+      "data_model_idempotency_consistency",
+      "timeout_retry_degradation_compensation_disaster_recovery",
+      "observability_load_test_rollout",
+      "alternative_and_cost"
+    ],
+    "coding": [
+      "input_output_constraints",
+      "invariant_or_state_definition",
+      "speakable_steps",
+      "runnable_java_or_sql",
+      "time_and_space_complexity",
+      "boundary_tests",
+      "variant_and_difference"
+    ],
+    "project": [
+      "real_context_placeholders",
+      "personal_responsibility_boundary",
+      "constraints_and_goal",
+      "alternatives_and_decision",
+      "implementation_and_evidence",
+      "result_and_retrospective",
+      "no_fabricated_experience"
+    ],
+    "behavior": [
+      "real_star_evidence_placeholders",
+      "personal_actions",
+      "measurable_result_placeholder",
+      "reflection_and_next_improvement",
+      "role_relevance",
+      "no_fabricated_experience"
+    ]
+  },
+  "duplication_policy": {
+    "forbid_global_followup_templates": true,
+    "forbid_unrelated_entity_facts": true,
+    "forbid_category_methodology_as_core_answer": true,
+    "similarity_is_review_signal_not_automatic_failure": true
+  }
+}

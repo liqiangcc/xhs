@@ -139,13 +139,13 @@
   - 保留历史交付记录，但显式注明旧口径不能证明语义完成。
 - Expected files: `docs/refactor/08_content_building_goals.md`, `review/plans/c8_full_answer_coverage.md`, `scripts/commands/report.js`
 - Validation: `node --test test/report.test.js test/report_no_fail.test.js && node scripts/xhs.js report quality --noWrite --noFail` -> passed; report correctly returns `ok=false`, `semantic_complete=false`
-- Commit: `pending`
+- Commit: `abd859f3`
 - Changed files: `scripts/commands/report.js`, `test/report.test.js`, `docs/refactor/08_content_building_goals.md`, `review/plans/c8_full_answer_coverage.md`, `review/plans/content_inventory.md`, `data/manifests/reports/quality_report.json`, `review/plans/quality_report.md`, `data/manifests/runs/latest_report_quality.json`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: C8 已按真实语义重新打开，C9 等待 curated-ready 100% 后再执行。总质量报告现在显示 curated-ready=100、baseline/needs_update/semantic_hard_fail=9160，并把整体状态标为 NEEDS ATTENTION。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T02` S1：校准精选答案与统一质量合同
 
-- Status: `pending`
+- Status: `in_progress`
 - Depends on: `TASK-20260711-0313-long-tail-answer-quality-T01`
 - Goal: 把“和精选答案一致”转换为可评分、可拒绝、可复现的质量合同，并先证明 100 份精选答案自身达到该合同。
 - Files likely touched: `config/answer_quality.json`, `docs/refactor/09_answer_content_standard.md`, `review/evidence/*.json`, `test/fixtures/answer_quality/*`
@@ -155,16 +155,17 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S01` 落盘评分规则和硬失败
 
-- Status: `pending`
+- Status: `done`
 - Goal: 将本任务 Quality Contract 写成机器可读规则和人工审查表。
 - Steps:
   - 定义六类题型的必答项、评分权重、最低分和硬失败。
   - 定义证据来源等级、版本敏感规则、引用日期和不确定结论处理方式。
   - 定义重复内容、通用追问、跨主题污染和虚构经历的判定标准。
 - Expected files: `config/answer_quality.json`, `docs/refactor/09_answer_content_standard.md`
-- Validation: `node scripts/xhs.js validate all --noWrite && node --test test/answer_quality_config.test.js`
+- Validation: `node scripts/xhs.js validate all --noWrite && node --test test/answer_quality_config.test.js` -> passed
 - Commit: `pending`
-- Notes:
+- Changed files: `config/answer_quality.json`, `docs/refactor/09_answer_content_standard.md`, `test/answer_quality_config.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 固化 100 分七维评分、90 分晋级线、13 项硬失败、第一手证据优先级、隔离审查输入、六题型专项要求与 10 题批次规则；无法核验统一保持 needs_update。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S02` 全量复核 100 份精选答案
 
