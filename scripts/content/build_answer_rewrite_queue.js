@@ -93,11 +93,28 @@ function run(options = {}) {
     const currentBatches = fs.existsSync(paths.batches) ? fs.readFileSync(paths.batches, 'utf8') : '';
     const checkOk = currentQueue === queueText && currentBatches === stablePrettyStringify(batchValue)
         && [...expectedTasks.entries()].every(([filePath, content]) => fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8') === content);
+    let pilotSet = null;
+    let pilotSetOk = true;
+    if (options.set) {
+        const setPath = path.resolve(root, options.set);
+        pilotSet = readJson(setPath);
+        const ids = pilotSet.canonical_ids || (pilotSet.items || []).map((item) => item.canonical_id);
+        const queueById = new Map(rows.map((row) => [row.canonical_id, row]));
+        const typeCounts = Object.fromEntries(Object.keys(TYPE_ORDER).map((type) => [type, 0]));
+        const seen = new Set();
+        for (const id of ids) {
+            const row = queueById.get(id);
+            if (!row || seen.has(id)) { pilotSetOk = false; continue; }
+            seen.add(id); typeCounts[row.answer_type]++;
+        }
+        pilotSetOk = pilotSetOk && ids.length === 60 && seen.size === 60 && Object.values(typeCounts).every((count) => count === 10);
+        pilotSet = { path: path.relative(root, setPath), item_count: ids.length, type_counts: typeCounts, ok: pilotSetOk };
+    }
     if (!options.noWrite && !options.check) {
         writeJsonl(paths.queue, rows); writeJson(paths.batches, batchValue);
         for (const [filePath, content] of expectedTasks) { ensureDir(path.dirname(filePath)); fs.writeFileSync(filePath, content, 'utf8'); }
     }
-    return { schema_version: 'answer_rewrite_queue_report.v1', ok: !options.check || checkOk, check: Boolean(options.check), queued_count: rows.length, batch_count: batches.length, batch_size: 10, type_counts: Object.fromEntries(Object.keys(TYPE_ORDER).map((type) => [type, rows.filter((row) => row.answer_type === type).length])), output: path.relative(root, paths.queue) };
+    return { schema_version: 'answer_rewrite_queue_report.v1', ok: (!options.check || checkOk) && pilotSetOk, check: Boolean(options.check), queued_count: rows.length, batch_count: batches.length, batch_size: 10, type_counts: Object.fromEntries(Object.keys(TYPE_ORDER).map((type) => [type, rows.filter((row) => row.answer_type === type).length])), pilot_set: pilotSet, output: path.relative(root, paths.queue) };
 }
 
 function main(argv = process.argv) {

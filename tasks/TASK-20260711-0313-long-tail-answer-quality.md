@@ -351,7 +351,7 @@
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T05` S4：完成六类型 60 题试点
 
-- Status: `pending`
+- Status: `in_progress`
 - Depends on: `TASK-20260711-0313-long-tail-answer-quality-T04`
 - Goal: 在规模化之前证明 Skill、评分器和晋级流程能对六类题分别产出不弱于精选答案的结果。
 - Files likely touched: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/pilot_answer_audit.json`
@@ -361,15 +361,15 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S01` 选择分层试点样本
 
-- Status: `pending`
+- Status: `done`
 - Goal: 每类 10 题同时覆盖高频实体、冷门题、版本敏感题、已知模板缺陷和题干不完整风险。
 - Steps:
   - 从稳定队列确定 60 个 canonical_id 并冻结样本清单。
   - 每类至少包含 3 个已知硬失败样本和 2 个与精选主题相近的对照样本。
 - Expected files: `data/manifests/quality/answer_pilot_set.json`
-- Validation: `node scripts/xhs.js answer queue check --set data/manifests/quality/answer_pilot_set.json --noWrite`
+- Validation: `node scripts/content/select_answer_pilot.js --check && node scripts/xhs.js answer queue check --set data/manifests/quality/answer_pilot_set.json --noWrite` -> passed (60 items, 10 per type)
 - Commit: `pending`
-- Notes:
+- Notes: 新增确定性 selector；每类选择 10 题，均至少包含 3 条历史精选审计失败样本，Coding 同时优先占位实现风险，Project/Behavior 同时优先真实材料/混合题风险。样本清单将作为首 60 题的 100% 人工审查范围。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S02` 执行 60 题完整闭环
 
