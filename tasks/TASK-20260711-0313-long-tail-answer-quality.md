@@ -368,7 +368,7 @@
   - 每类至少包含 3 个已知硬失败样本和 2 个与精选主题相近的对照样本。
 - Expected files: `data/manifests/quality/answer_pilot_set.json`
 - Validation: `node scripts/content/select_answer_pilot.js --check && node scripts/xhs.js answer queue check --set data/manifests/quality/answer_pilot_set.json --noWrite` -> passed (60 items, 10 per type)
-- Commit: `pending`
+- Commit: `a8e54c0f`
 - Notes: 新增确定性 selector；每类选择 10 题，均至少包含 3 条历史精选审计失败样本，Coding 同时优先占位实现风险，Project/Behavior 同时优先真实材料/混合题风险。样本清单将作为首 60 题的 100% 人工审查范围。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S02` 执行 60 题完整闭环
