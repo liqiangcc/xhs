@@ -568,8 +568,8 @@ C10 没有一次性完成点。连续四周保持每周闭环、全量可复习�
 | C2 | DONE | 已达到 60 个 Canonical、208 条 assigned rows；全部 60 份答案 ready 且复习进度已初始化 |
 | C3 | DONE | C2 范围内 20 个 P0、16 个 P1 均达到分题型社招内容 DoD；7 道算法题全部含 Java 实现 |
 | C4 | DONE | 已完成概念、原理、场景、算法、排障各 1 题的两轮受控复述，共 10 次 mark；5 个缺口已回写答案 |
-| C5 | IN_PROGRESS | C4 已验证答案与调度闭环，下一步扩展到 100 个 Canonical / 300 assigned rows 并形成专题知识网 |
-| C6 | TODO | 尚未达到 200 Canonical 和多入口复习能力 |
+| C5 | DONE | 已达到 100 个 Canonical、328 条 assigned rows、100 份 ready 答案，并形成 10 条专题学习路径 |
+| C6 | IN_PROGRESS | 需扩展到 200 个 Canonical / 600 assigned rows，并验证专题、公司和综合复习入口 |
 | C7 | TODO | 尚未复核 258 条无效记录，也未实现全部真实题 100% Canonical 绑定 |
 | C8 | TODO | 尚未实现所有 Canonical 的答案全覆盖 |
 | C9 | TODO | 尚无逐题全链路 reviewability 验证，无法证明所有题都可复习 |

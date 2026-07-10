@@ -152,3 +152,18 @@ Completed on 2026-07-10.
 | Answer feedback write-backs | 5 |
 
 The trial is agent-led content validation, not user mastery data. Every first-pass omission and second-pass correction is retained in `review/sessions/2026-07-10.json`; see `review/plans/c4_review_trial.md`.
+
+## C5 Topic Network Snapshot
+
+Completed on 2026-07-10.
+
+| Metric | Value |
+|---|---:|
+| Canonical records | 100 |
+| Assigned rows | 328 |
+| Distinct assigned question IDs | 134 |
+| Ready answers | 100 |
+| Review progress records | 100 |
+| P0 / P1 / P2 | 30 / 16 / 54 |
+
+Forty new assets and twelve existing-asset attachments formed the first ten-path topic network. See `review/plans/c5_topic_network_delivery.md` and `review/plans/c5_topic_map.md`.
