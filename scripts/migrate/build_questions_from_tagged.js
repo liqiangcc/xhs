@@ -44,9 +44,12 @@ function addCount(map, key) {
     map[value] = (map[value] || 0) + 1;
 }
 
-function buildQuestionRecord(note, question, sourceQuestionIndex, canonicalByQuestionId = new Map()) {
+function buildQuestionRecord(note, question, sourceQuestionIndex, canonicalByQuestionId = new Map(), validityAudit = null) {
     const originalQuestion = String(question.original_question);
     const questionId = computeQuestionId(originalQuestion);
+    const isValid = validityAudit
+        ? validityAudit.decision === 'include'
+        : question.is_valid_for_library === true;
     return {
         question_id: questionId,
         original_question: originalQuestion,
@@ -66,7 +69,9 @@ function buildQuestionRecord(note, question, sourceQuestionIndex, canonicalByQue
         cognitive_depth: stringValue(question.cognitive_depth, 'N_A'),
         tech_entities: normalizeArray(question.tech_entities),
         business_context: normalizeArray(question.business_context),
-        is_valid_for_library: question.is_valid_for_library === true,
+        is_valid_for_library: isValid,
+        exclusion_reason: isValid ? null : (validityAudit?.exclusion_reason || question.exclusion_reason || null),
+        exclusion_note: isValid ? null : (validityAudit?.exclusion_note || question.exclusion_note || null),
         canonical_id: canonicalByQuestionId.get(questionId) || null,
         schema_version: 'question.v1',
         taxonomy_version: 'taxonomy.v1',
@@ -115,6 +120,12 @@ function buildQuestionsFromTagged(options = {}) {
     const buildDate = defaultDate(options);
     const canonicalPath = options.canonicalPath || path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
     const canonicalByQuestionId = buildQuestionToCanonicalMap(loadCanonicalQuestions({ filePath: canonicalPath }));
+    const validityAuditPath = options.validityAuditPath || path.join(root, 'config', 'question_validity_audit.json');
+    const validityAudit = readJson(validityAuditPath, { decisions: [] });
+    const validityByRef = new Map((validityAudit.decisions || []).map((item) => [
+        `${item.source_note_id}|${item.source_question_index}`,
+        item,
+    ]));
 
     const questions = [];
     const questionSources = [];
@@ -185,7 +196,8 @@ function buildQuestionsFromTagged(options = {}) {
                 if (!(field in question)) addCount(missingFields, field);
             }
 
-            const record = buildQuestionRecord(note, question, sourceQuestionIndex, canonicalByQuestionId);
+            const auditDecision = validityByRef.get(`${location.source_note_id}|${sourceQuestionIndex}`) || null;
+            const record = buildQuestionRecord(note, question, sourceQuestionIndex, canonicalByQuestionId, auditDecision);
             const legacyQuestionId = question.question_id || null;
             if (!legacyQuestionId) {
                 addCount(missingFields, 'question_id');
@@ -256,6 +268,8 @@ function buildQuestionsFromTagged(options = {}) {
             malformed_files: malformedFiles.length,
             old_hash_mismatches: oldHashMismatches.length,
             duplicate_question_ids: duplicateQuestionIds.length,
+            validity_audit_decisions: validityByRef.size,
+            unexplained_invalid_questions: questions.filter((question) => !question.is_valid_for_library && !question.exclusion_reason).length,
         },
         missing_fields: missingFields,
         taxonomy_counts: taxonomyCounts,

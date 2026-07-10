@@ -570,8 +570,8 @@ C10 没有一次性完成点。连续四周保持每周闭环、全量可复习�
 | C4 | DONE | 已完成概念、原理、场景、算法、排障各 1 题的两轮受控复述，共 10 次 mark；5 个缺口已回写答案 |
 | C5 | DONE | 已达到 100 个 Canonical、328 条 assigned rows、100 份 ready 答案，并形成 10 条专题学习路径 |
 | C6 | DONE | 已达到 258 个 Canonical、600 条 assigned rows；专题、公司、P0 综合、weak 题单和 weak→learning→mastered 均已验证 |
-| C7 | IN_PROGRESS | 进入 9,620 条题目全量归一化：先复核 258 条 invalid，再清空全部真实题未绑定项 |
-| C8 | TODO | 尚未实现所有 Canonical 的答案全覆盖 |
+| C7 | DONE | 258 条 invalid 已逐条审计：恢复 247 条真实题，仅保留 11 条有原因排除；9,609 条真实题全部绑定至 9,260 个 Canonical |
+| C8 | IN_PROGRESS | 进入 9,260 个 Canonical 的答案全覆盖，当前 100 份 ready、9,160 份待建设 |
 | C9 | TODO | 尚无逐题全链路 reviewability 验证，无法证明所有题都可复习 |
 | C10 | TODO | 尚未形成连续四周且全量可复习率不回退的稳定节奏 |
 

@@ -464,6 +464,7 @@ function runCheck(options = {}) {
         rowsByQuestionId.get(question.question_id).push(question);
     }
     const recordsById = new Map(records.map((record) => [record.canonical_id, record]));
+    const questionIdsByRecord = new Map(records.map((record) => [record.canonical_id, new Set(record.question_ids || [])]));
     const canonicalByQuestionId = new Map();
     const duplicateQuestionIds = [];
     const missingQuestionIds = [];
@@ -501,7 +502,7 @@ function runCheck(options = {}) {
         const record = recordsById.get(question.canonical_id);
         if (!record) {
             orphanBindings.push(questionRef(question));
-        } else if (!(record.question_ids || []).includes(question.question_id)) {
+        } else if (!questionIdsByRecord.get(record.canonical_id).has(question.question_id)) {
             unlistedBindings.push({
                 ...questionRef(question),
                 canonical_id: question.canonical_id,
@@ -510,18 +511,20 @@ function runCheck(options = {}) {
     }
 
     const suspectedDuplicates = [];
-    for (let left = 0; left < records.length; left++) {
-        for (let right = left + 1; right < records.length; right++) {
-            const a = records[left];
-            const b = records[right];
-            if (normalizedTitle(a) && normalizedTitle(a) === normalizedTitle(b)) {
-                suspectedDuplicates.push({
-                    canonical_ids: [a.canonical_id, b.canonical_id],
-                    reason: 'same_normalized_title_or_aliases',
-                    titles: [a.canonical_title, b.canonical_title],
-                });
-            }
+    const recordsByNormalizedTitle = new Map();
+    for (const record of records) {
+        const normalized = normalizedTitle(record);
+        if (!normalized) continue;
+        const existing = recordsByNormalizedTitle.get(normalized) || [];
+        for (const other of existing) {
+            suspectedDuplicates.push({
+                canonical_ids: [other.canonical_id, record.canonical_id],
+                reason: 'same_normalized_title_or_aliases',
+                titles: [other.canonical_title, record.canonical_title],
+            });
         }
+        existing.push(record);
+        recordsByNormalizedTitle.set(normalized, existing);
     }
 
     const blockingCount = duplicateQuestionIds.length

@@ -60,6 +60,8 @@ function makeQuestion(original = 'Redis 为什么快？') {
         tech_entities: ['Redis'],
         business_context: [],
         is_valid_for_library: true,
+        exclusion_reason: null,
+        exclusion_note: null,
         canonical_id: 'cq_redis_fast',
         schema_version: 'question.v1',
         taxonomy_version: 'taxonomy.v1',

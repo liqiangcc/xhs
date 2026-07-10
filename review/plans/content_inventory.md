@@ -182,3 +182,21 @@ Completed on 2026-07-10.
 | Topic / company / P0 / weak saved plans | 4 |
 
 C6 added 158 P2 long-tail identities without force-merging distinct questions and verified multi-entry review plus weak-to-mastered scheduling. Their answer completion remains explicitly in C8. See `review/plans/c6_scale_and_entry_delivery.md`.
+
+## C7 Full-Coverage Snapshot
+
+Completed on 2026-07-10.
+
+| Metric | Value |
+|---|---:|
+| Question rows | 9,620 |
+| Previously invalid rows audited | 258 / 258 |
+| Restored reviewable rows | 247 |
+| Explained exclusions | 11 |
+| Final reviewable rows | 9,609 |
+| Canonical records | 9,260 |
+| Assigned reviewable rows | 9,609 |
+| Reviewable assigned rate | 100% |
+| Invalid reason rate | 100% |
+
+The row-level validity audit is now part of the migration input, and a repeatable coverage gate verifies that all valid rows have a Canonical while every excluded row has a reason. See `review/plans/c7_full_question_coverage.md`.
