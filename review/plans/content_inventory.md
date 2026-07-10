@@ -200,3 +200,19 @@ Completed on 2026-07-10.
 | Invalid reason rate | 100% |
 
 The row-level validity audit is now part of the migration input, and a repeatable coverage gate verifies that all valid rows have a Canonical while every excluded row has a reason. See `review/plans/c7_full_question_coverage.md`.
+
+## C8 Full-Answer Snapshot
+
+Completed on 2026-07-10.
+
+| Metric | Value |
+|---|---:|
+| Canonical records | 9,260 |
+| Ready answers | 9,260 |
+| Ready rate | 100% |
+| Curated core answers | 100 |
+| Deterministic long-tail baselines | 9,160 |
+| Missing / draft / needs_update | 0 / 0 / 0 |
+| Strict validation errors | 0 |
+
+All Canonical records now have a review-ready answer. Generated long-tail files retain explicit provenance and deterministic drift checks; project and behavioral material requires real user evidence rather than fabricated experience. See review/plans/c8_full_answer_coverage.md.
