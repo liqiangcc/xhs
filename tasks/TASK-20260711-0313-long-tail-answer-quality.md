@@ -283,7 +283,7 @@
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T04` S3：全量复核 Canonical 边界与答案题型
 
-- Status: `in_progress`
+- Status: `done`
 - Depends on: `TASK-20260711-0313-long-tail-answer-quality-T03`
 - Goal: 在重答前建立无重复、无错类、可稳定恢复的全量升级队列。
 - Files likely touched: `data/questions/canonical_questions.jsonl`, `data/questions/questions.jsonl`, `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/canonical/*`
@@ -307,7 +307,7 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S02` 审核并执行 merge/split
 
-- Status: `in_progress`
+- Status: `done`
 - Goal: 所有高置信重复和题簇边界冲突均有明确决策，Question、Answer、ReviewProgress 可追溯迁移。
 - Steps:
   - 按 10 组候选一批进行人工/Agent 语义审查。
@@ -317,7 +317,7 @@
 - Expected files: `data/questions/canonical_questions.jsonl`, `data/questions/questions.jsonl`, `review/progress.jsonl`, `data/manifests/runs/latest_canonical_merge.json`
 - Validation: `node scripts/xhs.js canonical check --noWrite && node scripts/xhs.js review integrity --noWrite`
 - Commit: `3c64f8ac`
-- Notes: Batch 0001–0022 已审查 227 组：213 组同义题簇已合并，14 组因算法状态、语言契约或专项深度不同而明确保留独立。当前保留 9,046 个 Canonical、19 条待审边界候选；所有 Canonical、ReviewProgress 与答案结构校验通过。
+- Notes: Batch 0001–0023 已审查全部 234 组：220 组同义题簇已合并，14 组因算法状态、语言契约或专项深度不同而明确保留独立。最终边界清单为 12 条 `keep_separate`、0 条 `pending`；保留 9,039 个 Canonical，所有 Canonical、ReviewProgress 与答案结构校验通过。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S03` 全量重新判定 answer_type
 
@@ -335,7 +335,7 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S04` 生成稳定重写队列和批次 ID
 
-- Status: `in_progress`
+- Status: `done`
 - Goal: 每个非 curated Canonical 恰好出现在一个最多 10 题的批次中，支持按 ID 恢复。
 - Steps:
   - 排序优先级依次为硬失败、明确占位、公司/主题价值、领域覆盖缺口、稳定 canonical_id。
@@ -344,10 +344,10 @@
   - 为每个最多 10 题的批次生成 `tasks/answer-batches/` 子任务文件；根 ID 固定为 `TASK-20260711-0313-answer-batch-NNNN`，每份文件包含题簇复核、研究编写、独立审查、晋级和批次验证子任务。
   - 队列记录 `task_file`，后续使用 `task-md-workflow:execute-task-md` 按批次任务 ID 执行和恢复；每个批次独立提交，阶段任务只在全部对应批次任务 done 后完成。
 - Expected files: `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/*.md`
-- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,250 rows, 925 batches, each ≤10); queue remains provisional until T04-S02 resolves the remaining 283 boundary candidates
+- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,039 rows, 904 batches, each ≤10); all retained boundary candidates have explicit keep_separate decisions
 - Commit: `pending`
 - Changed files: `scripts/content/build_answer_rewrite_queue.js`, `scripts/commands/answer.js`, `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/TASK-20260711-0313-answer-batch-*.md`, `test/answer_rewrite_queue.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
-- Notes: 生成 provisional 队列：全部非 curated Canonical 被稳定排序并分配唯一可恢复任务；优先级为历史精选审计失败、代码占位、review priority、题型、频次和 canonical_id。Batch 0001 合并后已重新生成至 9,250 行/925 批；队列仅冻结执行顺序，不等价于答案晋级，仍须在 T04-S02 的剩余 merge/split 决策后重建并关闭。
+- Notes: 已在边界清单清零（0 pending）后重建最终稳定队列：全部 9,039 个非 curated Canonical 被稳定排序并分配唯一可恢复任务，共 904 批，每批最多 10 题。队列只冻结执行顺序，不等价于答案晋级。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T05` S4：完成六类型 60 题试点
 
