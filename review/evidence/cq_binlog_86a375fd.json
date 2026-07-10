@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_binlog_86a375fd",
-  "candidate_sha256": "55e2e6b7f4530cda39d61315b7791d7b5ca25e9a89d630c4a78d37650eb73c31",
+  "candidate_sha256": "5ee0272cda3dbf1925f9544b91c6667852f46c0e919ea16cca98721bfec57d05",
   "checked_at": "2026-07-11",
   "writer": {
-    "writer_id": "historical-curated-audit",
-    "writer_version": "v1"
+    "writer_id": "answer-curator",
+    "writer_version": "binlog-replication.v2"
   },
   "sources": [
     {
@@ -28,26 +28,46 @@
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/binary-log.html",
       "source_type": "official_documentation",
       "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-semisync",
+      "title": "MySQL 8.4 Semisynchronous Replication",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication-semisync.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-replica-parallel-workers",
+      "title": "MySQL 8.4 replica_parallel_workers",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication-options-replica.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
     }
   ],
   "claims": [
     {
       "claim_id": "binlog-format-boundary",
-      "text": "STATEMENT logs statements, ROW logs row changes, and MIXED selects a format based on safety; the active format and unsafe-statement behavior are configuration/version dependent.",
+      "text": "In MySQL 8.4, STATEMENT logs SQL statements, ROW logs changed-row events and is the default, while MIXED uses statement logging by default and changes to row logging in specified cases; unsafe statement replication is a format boundary.",
       "source_ids": ["mysql-binlog-format"],
       "answer_locations": ["核心结论", "1 分钟版", "关键细节", "常见追问"]
     },
     {
       "claim_id": "replication-source-replica-flow",
-      "text": "Replication transfers source binary log events to a replica relay log and applies them; source commit and replica application are distinct stages, so asynchronous replication has a lag/staleness boundary.",
-      "source_ids": ["mysql-replication-implementation", "mysql-binlog-overview"],
+      "text": "A replica requests the source binary log, writes it locally as a relay log before processing, tracks source and relay positions, and later executes the received events; receipt and application are therefore distinct stages.",
+      "source_ids": ["mysql-replication-implementation"],
       "answer_locations": ["1 分钟版", "3 分钟版", "原理机制", "常见追问"]
     },
     {
-      "claim_id": "binlog-recovery-boundary",
-      "text": "The binary log records changes for replication and point-in-time recovery, while InnoDB redo log serves crash recovery; binlog retention must preserve the required recovery and replica catch-up window.",
-      "source_ids": ["mysql-binlog-overview"],
-      "answer_locations": ["核心结论", "关键细节", "原理机制", "易错点"]
+      "claim_id": "semisync-acknowledgement-boundary",
+      "text": "With semisynchronous replication, the source waits for configured replica acknowledgements after receipt and relay-log flush, not for the events to have been executed and committed by the replica; on timeout without an acknowledgement it reverts to asynchronous replication.",
+      "source_ids": ["mysql-semisync"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "replica-parallel-applier-boundary",
+      "text": "For MySQL 8.4, replica_parallel_workers enables a coordinator that reads transactions from the relay log and schedules worker threads; more workers raise only potential parallelism and can be limited by concurrency effects and workload shape.",
+      "source_ids": ["mysql-replica-parallel-workers"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
     }
   ],
   "source_question_coverage": [
@@ -58,25 +78,21 @@
     }
   ],
   "review": {
-    "reviewer_id": "isolated-binlog-reviewer",
-    "review_version": "v1",
+    "reviewer_id": "binlog-independent-reviewer-v2",
+    "review_version": "binlog-isolated-round2.v1",
     "independent": true,
-    "decision": "revise",
-    "revision_round": 1,
+    "decision": "pass",
+    "revision_round": 2,
     "scores": {
-      "facts_and_evidence": 16,
-      "directness_and_relevance": 18,
-      "type_specific_completeness": 13,
-      "mechanism_and_causality": 11,
-      "boundaries_and_tradeoffs": 9,
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
       "followup_quality": 5,
       "oral_quality": 5
     },
-    "hard_failures": ["unsupported_factual_claim", "missing_version_boundary", "missing_evidence"],
-    "revision_suggestions": [
-      "为两阶段提交、GTID/位点切换、半同步确认、ROW 行定位、并行复制和日志保留补齐逐项官方 claim 映射。",
-      "明确 MySQL 8.4、binlog_format、binlog_row_image、GTID 与半同步配置边界。",
-      "补全端到端状态流，并把半同步严格限定为接收/relay log 确认而非已应用。"
-    ]
+    "hard_failures": [],
+    "revision_suggestions": []
   }
 }
