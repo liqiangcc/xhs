@@ -316,7 +316,7 @@
   - 新增只读 `review integrity`，检查 ReviewProgress 引用、重复进度和失效 canonical_id。
 - Expected files: `data/questions/canonical_questions.jsonl`, `data/questions/questions.jsonl`, `review/progress.jsonl`, `data/manifests/runs/latest_canonical_merge.json`
 - Validation: `node scripts/xhs.js canonical check --noWrite && node scripts/xhs.js review integrity --noWrite`
-- Commit: `089e97fe`
+- Commit: `3c64f8ac`
 - Notes: 已新增只读 `review integrity`：阻断失效/重复/畸形 ReviewProgress 与失效 session 引用；当前 258 条已初始化进度均有效，剩余 9,002 条为按需初始化，不是完整性失败。接下来逐批处理 307 条候选的 merge/split 决策。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S03` 全量重新判定 answer_type
