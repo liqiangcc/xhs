@@ -373,7 +373,7 @@
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S02` 执行 60 题完整闭环
 
-- Status: `pending`
+- Status: `in_progress`
 - Goal: 60 题全部经研究、候选、独立审查、专项验证和晋级。
 - Steps:
   - 使用 `$xhs-answer-curator` 按 10 题批次执行。
@@ -382,7 +382,7 @@
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
 - Commit: `pending`
-- Notes:
+- Notes: 已初始化 `pilot_answer_audit.json`，60/60 题均处于候选、证据、独立审查、人工审查待完成状态；试点要求 100% 人工签核，任何未签核候选不得替换正式答案。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
