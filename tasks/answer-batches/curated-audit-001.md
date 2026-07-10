@@ -21,5 +21,6 @@
 
 ## Recorded result
 
-- `cq_aof_e522aa87`: independent review decision `revise`; score `86/100`; hard failures `missing_evidence`, `unsupported_factual_claim`.
-- Formal answer was atomically demoted to `needs_update` / `curated_audit_failed`, and its Canonical status was synchronized. It requires a version-bounded rewrite and a fresh independent review before any re-promotion.
+- `cq_aof_e522aa87`: historical-answer audit decision `revise`; score `86/100`; hard failures `missing_evidence`, `unsupported_factual_claim`.
+- Its version-bounded candidate then received a second isolated review: `90/100`, decision `revise`, hard failure `unsupported_factual_claim`. The reviewer found that Redis 7 manifest publication/recovery and incomplete-publication behavior still lack direct evidence mapping.
+- Formal answer was atomically demoted to `needs_update` / `curated_audit_failed`, and its Canonical status was synchronized. The candidate exhausted the two-revision limit and must remain unpromoted.

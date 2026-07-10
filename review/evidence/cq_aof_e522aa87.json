@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_aof_e522aa87",
-  "candidate_sha256": "52b97435c2c1b0f16a684faf5a3a5e1a9d79d39f3d59169edd7b7f7ed91d0477",
+  "candidate_sha256": "9abd671978683b61e7e91cc11c2ac65a4f04ddb23d352a90bbd653be919b174a",
   "checked_at": "2026-07-11",
   "writer": {
-    "writer_id": "historical-curated-audit",
-    "writer_version": "v1"
+    "writer_id": "answer-curator",
+    "writer_version": "aof-rewrite.v2"
   },
   "sources": [
     {
@@ -19,13 +19,13 @@
   "claims": [
     {
       "claim_id": "aof-rewrite-current-state",
-      "text": "AOF rewriting creates a new file containing the minimal operations needed to recreate the current data set rather than compressing the old append history.",
+      "text": "AOF rewriting produces a new file containing the minimal operations needed to recreate the current data set rather than compressing the old append history.",
       "source_ids": ["redis-persistence"],
       "answer_locations": ["核心结论", "3 分钟版"]
     },
     {
       "claim_id": "aof-rewrite-increment",
-      "text": "During rewriting, Redis continues appending to the old file; when the new file is ready, the parent appends the buffered increment before switching to it.",
+      "text": "For the pre-7.0 single-file flow, Redis continues appending during rewrite and appends the buffered increment to the rewritten result before switching files.",
       "source_ids": ["redis-persistence"],
       "answer_locations": ["1 分钟版", "原理机制", "常见追问"]
     },
@@ -33,7 +33,19 @@
       "claim_id": "aof-v7-multipart",
       "text": "Since Redis 7.0, AOF data is split into multiple files in the configured append directory, so older single-file descriptions are version-specific.",
       "source_ids": ["redis-persistence"],
-      "answer_locations": ["3 分钟版", "常见追问", "易错点"]
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "aof-cow-resource-boundary",
+      "text": "Redis documents copy-on-write memory overhead during pre-7.0 AOF rewrite when writes continue, so fork and write pressure are capacity and latency boundaries rather than a claim of zero interruption.",
+      "source_ids": ["redis-persistence"],
+      "answer_locations": ["1 分钟版", "关键细节", "原理机制", "易错点"]
+    },
+    {
+      "claim_id": "aof-published-set-boundary",
+      "text": "The published AOF set is the recoverable state; operational backup guidance requires checking whether rewrite is in progress before copying the multi-part AOF directory.",
+      "source_ids": ["redis-persistence"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制"]
     }
   ],
   "source_question_coverage": [
@@ -44,28 +56,25 @@
     }
   ],
   "review": {
-    "reviewer_id": "isolated_aof_reviewer",
-    "review_version": "v1",
+    "reviewer_id": "isolated-aof-reviewer",
+    "review_version": "1.0",
     "independent": true,
     "decision": "revise",
-    "revision_round": 1,
+    "revision_round": 2,
     "scores": {
-      "facts_and_evidence": 19,
-      "directness_and_relevance": 20,
-      "type_specific_completeness": 16,
-      "mechanism_and_causality": 12,
+      "facts_and_evidence": 22,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 17,
+      "mechanism_and_causality": 14,
       "boundaries_and_tradeoffs": 9,
       "followup_quality": 5,
-      "oral_quality": 5
+      "oral_quality": 4
     },
-    "hard_failures": [
-      "missing_evidence",
-      "unsupported_factual_claim"
-    ],
+    "hard_failures": ["unsupported_factual_claim"],
     "revision_suggestions": [
-      "按 Redis 版本分段描述经典单文件 AOF 与 Redis 7 multi-part AOF，避免把旧流程泛化为所有版本。",
-      "为 fork/COW、重写缓冲、增量衔接、失败保留旧 AOF、磁盘空间和发布机制补全官方来源 claim 映射。",
-      "明确一致性保证来自对应版本的快照或 manifest 发布机制，而不是笼统地称为原子替换。"
+      "为 Redis 7 base/incr/manifest 的发布与恢复作用补充逐项官方 claim 映射。",
+      "为未完成发布时继续使用已发布集合、半成品不能作为恢复日志补充直接官方证据。",
+      "在机制主链路中补齐 BGREWRITEAOF/自动触发、父进程、子进程、旧 AOF、rewrite buffer 与临时文件的角色。"
     ]
   }
 }

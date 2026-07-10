@@ -180,7 +180,7 @@
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/curated_answer_audit.json`
 - Validation: `manual check: 100/100 curated rows have completed rubric, evidence, reviewer decision, and zero hard failures`
 - Commit: `pending`
-- Notes: 历史精选全量审计已启动（batch `curated-audit-001`）。首题 `cq_aof_e522aa87` 的独立审查为 86/100、`revise`，因版本化 AOF 流程的实质性 claim 映射不足被原子降级为 `needs_update/curated_audit_failed`；未把历史 curated 标签当作正样本。其余 99 题仍待审计，首 60 题还需按合同获得人类抽查记录。
+- Notes: 历史精选全量审计已启动（batch `curated-audit-001`）。首题 `cq_aof_e522aa87` 的历史审查为 86/100、`revise`，版本化候选第 2 轮仍为 90/100、`revise`，均因 Redis 7 manifest 发布/恢复和未完成发布边界缺少直接 claim 映射而失败；它已原子降级为 `needs_update/curated_audit_failed`，候选耗尽两轮上限且未晋级。未把历史 curated 标签当作正样本。其余 99 题仍待审计，首 60 题还需按合同获得人类抽查记录。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S03` 建立正负评测集
 
