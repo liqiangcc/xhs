@@ -24,6 +24,7 @@ const {
     runAnswerAudit,
     atomicPromote,
     atomicDemote,
+    recordHumanReview,
 } = require('../lib/answer_quality');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
@@ -61,7 +62,7 @@ function parseArgs(argv) {
 
 function printHelp() {
     console.log([
-        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote|demote> [options]',
+        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote|demote|human-review> [options]',
         '',
         'Commands:',
         '  init --canonical-id <id> [--overwrite] [--status <draft|ready|needs_update>]',
@@ -76,6 +77,7 @@ function printHelp() {
         '  audit [--candidate <path>] [--tier <candidate|curated>] [--type <type> ...] [--set <json>] [--require-evidence] [--require-code] [--noWrite]',
         '  promote --canonical-id <id> --candidate <path> --evidence <path> [--noWrite]',
         '  demote --canonical-id <id> --evidence <path> [--noWrite]',
+        '  human-review --canonical-id <id> --evidence <path> --review <json> [--noWrite]',
         '',
         'Options:',
         '  --strict     Validate ready answer content sections and TODO placeholders',
@@ -419,6 +421,7 @@ function main(argv = process.argv) {
         else if (command === 'audit') result = runAnswerAudit(options);
         else if (command === 'promote') result = atomicPromote(options);
         else if (command === 'demote') result = atomicDemote(options);
+        else if (command === 'human-review') result = recordHumanReview(options);
         else throw new Error(`Unknown answer command: ${command}`);
         writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `answer_${command}`, result, options);
         console.log(JSON.stringify(result, null, 2));
@@ -447,5 +450,6 @@ module.exports = {
     runAnswerAudit,
     atomicPromote,
     atomicDemote,
+    recordHumanReview,
     main,
 };

@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { loadCanonicalQuestions } = require('./canonical_store');
-const { readJson, readJsonl, stablePrettyStringify, stableStringify, ensureDir } = require('./io');
+const { readJson, readJsonl, writeJson, stablePrettyStringify, stableStringify, ensureDir } = require('./io');
 const {
     answerPath,
     parseAnswerMetadata,
@@ -395,6 +395,46 @@ function evidencePathFor(candidate, paths, explicitPath) {
     return path.join(paths.evidenceDir, `${candidate.metadata.canonical_id}.json`);
 }
 
+function humanReviewError(evidence) {
+    const review = evidence?.human_review;
+    if (!review || review.reviewer_type !== 'human' || review.decision !== 'approved'
+        || !review.reviewer_id || !review.batch_id || !review.attestation
+        || !/^\d{4}-\d{2}-\d{2}$/.test(review.reviewed_at || '')) {
+        return 'human_review_required';
+    }
+    return null;
+}
+
+function countHumanReviewApprovals(paths) {
+    if (!fs.existsSync(paths.evidenceDir)) return 0;
+    return fs.readdirSync(paths.evidenceDir)
+        .filter((name) => name.endsWith('.json'))
+        .map((name) => readJson(path.join(paths.evidenceDir, name)))
+        .filter((evidence) => !humanReviewError(evidence))
+        .length;
+}
+
+function recordHumanReview(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = pathsFor(root);
+    const canonicalId = options['canonical-id'] || options.canonicalId;
+    if (!canonicalId || !options.evidence || !options.review) {
+        throw new Error('Usage: answer human-review --canonical-id <id> --evidence <path> --review <json>');
+    }
+    const evidencePath = assertPathWithin(path.resolve(options.evidence), paths.evidenceDir, 'evidence');
+    const evidence = readJson(evidencePath);
+    const review = readJson(path.resolve(options.review));
+    if (evidence.canonical_id !== canonicalId || review.canonical_id !== canonicalId) throw new Error('human review canonical_id mismatch');
+    if (review.candidate_sha256 !== evidence.candidate_sha256) throw new Error('human review candidate hash mismatch');
+    if (review.reviewer_type !== 'human' || !review.reviewer_id || !review.batch_id || !review.attestation
+        || !/^\d{4}-\d{2}-\d{2}$/.test(review.reviewed_at || '') || !['approved', 'rejected'].includes(review.decision)) {
+        throw new Error('invalid human review record');
+    }
+    const nextEvidence = { ...evidence, human_review: review };
+    if (!options.noWrite) writeJson(evidencePath, nextEvidence);
+    return { schema_version: 'answer_human_review.v1', ok: true, dry_run: Boolean(options.noWrite), canonical_id: canonicalId, decision: review.decision, batch_id: review.batch_id };
+}
+
 function auditOneCandidate(filePath, options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const paths = pathsFor(root);
@@ -527,6 +567,16 @@ function atomicPromote(options = {}) {
     const oldFormal = fs.existsSync(formalPath) ? fs.readFileSync(formalPath, 'utf8') : null;
     const oldMetadata = oldFormal ? parseAnswerMetadata(oldFormal, formalPath) : {};
     const evidence = readJson(evidencePath);
+    const qualityConfig = readJson(paths.qualityConfig);
+    const humanReviewNeeded = qualityConfig.promotion.require_human_review_for_pilot
+        && countHumanReviewApprovals(paths) < Number(qualityConfig.promotion.pilot_human_review_count || 0);
+    const humanError = humanReviewNeeded ? humanReviewError(evidence) : null;
+    if (humanError) {
+        return {
+            schema_version: 'answer_promote.v1', ok: false, promoted: false, canonical_id: canonicalId,
+            audit: { ...audit, ok: false, hard_failures: [...new Set([...audit.hard_failures, 'missing_human_review'])], errors: [...audit.errors, { error: humanError }] },
+        };
+    }
     const nextMetadata = {
         ...candidate.metadata,
         version: Number(oldMetadata.version || 0) + 1,
@@ -642,4 +692,7 @@ module.exports = {
     runAnswerAudit,
     atomicPromote,
     atomicDemote,
+    recordHumanReview,
+    humanReviewError,
+    countHumanReviewApprovals,
 };

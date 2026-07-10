@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ensureDir, readJsonl, writeJson, writeJsonl } = require('../scripts/lib/io');
 const { parseAnswerMetadata } = require('../scripts/lib/answer_store');
-const { sha256, atomicPromote, atomicDemote } = require('../scripts/lib/answer_quality');
+const { sha256, atomicPromote, atomicDemote, recordHumanReview } = require('../scripts/lib/answer_quality');
 
 const QUALITY = require('../config/answer_quality.json');
 
@@ -60,6 +60,10 @@ function passingEvidence(candidatePath) {
             scores: Object.fromEntries(Object.entries(QUALITY.dimensions).map(([key, rule]) => [key, rule.weight])),
             revision_suggestions: [],
         },
+        human_review: {
+            reviewer_id: 'human-reviewer', reviewer_type: 'human', reviewed_at: '2026-07-11',
+            decision: 'approved', attestation: 'I reviewed the canonical, candidate, evidence, and quality contract.', batch_id: 'pilot-001',
+        },
     };
 }
 
@@ -111,5 +115,17 @@ test('independent failed audit demotes historical curated metadata atomically', 
     assert.equal(metadata.status, 'needs_update');
     assert.equal(metadata.quality_tier, 'curated_audit_failed');
     assert.equal(readJsonl(fixtureData.canonicalPath)[0].answer_status, 'needs_update');
+    fs.rmSync(fixtureData.root, { recursive: true, force: true });
+});
+
+test('human review recorder rejects hash mismatch and writes a valid reviewer attestation', () => {
+    const fixtureData = fixture();
+    const evidence = passingEvidence(fixtureData.candidatePath);
+    writeJson(fixtureData.evidencePath, evidence);
+    const reviewPath = path.join(fixtureData.root, 'human-review.json');
+    writeJson(reviewPath, { ...evidence.human_review, canonical_id: 'cq_redis', candidate_sha256: evidence.candidate_sha256 });
+    const result = recordHumanReview({ root: fixtureData.root, canonicalId: 'cq_redis', evidence: fixtureData.evidencePath, review: reviewPath });
+    assert.equal(result.decision, 'approved');
+    assert.equal(require('../scripts/lib/io').readJson(fixtureData.evidencePath).human_review.reviewer_type, 'human');
     fs.rmSync(fixtureData.root, { recursive: true, force: true });
 });
