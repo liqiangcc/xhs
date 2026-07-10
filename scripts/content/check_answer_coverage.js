@@ -42,14 +42,21 @@ function main(argv = process.argv) {
     const statuses = {};
     const qualityTiers = {};
     const answerTypes = {};
+    let curatedReadyCount = 0;
+    let baselineCount = 0;
+    let needsUpdateCount = 0;
     for (const filePath of listAnswerFiles({ answersDir })) {
         const answer = readAnswerFile(filePath);
         const id = answer.metadata.canonical_id;
         if (answerByCanonical.has(id)) duplicateAnswerIds.push(id);
         answerByCanonical.set(id, answer);
         increment(statuses, answer.metadata.status);
-        increment(qualityTiers, answer.metadata.quality_tier || 'curated');
+        const qualityTier = answer.metadata.quality_tier || 'curated';
+        increment(qualityTiers, qualityTier);
         increment(answerTypes, answer.metadata.answer_type || 'curated');
+        if (qualityTier === 'curated' && answer.metadata.status === 'ready') curatedReadyCount += 1;
+        if (qualityTier === 'long_tail_baseline') baselineCount += 1;
+        if (answer.metadata.status === 'needs_update') needsUpdateCount += 1;
         for (const issue of validateAnswerContent(answer)) {
             strictErrors.push({ canonical_id: id, file: path.relative(root, filePath), ...issue });
         }
@@ -89,7 +96,6 @@ function main(argv = process.argv) {
     const report = {
         schema_version: 'answer_coverage_report.v1',
         ok: missing.length === 0
-            && nonReady.length === 0
             && statusMismatches.length === 0
             && orphanAnswers.length === 0
             && duplicateAnswerIds.length === 0
@@ -100,6 +106,14 @@ function main(argv = process.argv) {
         answer_file_count: answerByCanonical.size,
         ready_answer_count: readyCount,
         ready_rate: canonicals.length ? readyCount / canonicals.length : 1,
+        curated_ready_count: curatedReadyCount,
+        curated_ready_rate: canonicals.length ? curatedReadyCount / canonicals.length : 1,
+        baseline_count: baselineCount,
+        needs_update_count: needsUpdateCount,
+        semantic_complete: curatedReadyCount === canonicals.length
+            && baselineCount === 0
+            && needsUpdateCount === 0
+            && missing.length === 0,
         statuses,
         quality_tiers: qualityTiers,
         answer_types: answerTypes,

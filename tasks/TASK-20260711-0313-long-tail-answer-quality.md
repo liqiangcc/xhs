@@ -96,13 +96,13 @@
   - 报告记录生成时间、输入文件 hash 和统计口径。
 - Expected files: `scripts/content/analyze_answer_semantics.js`, `data/manifests/quality/answer_semantic_baseline.json`, `test/answer_semantics.test.js`
 - Validation: `node scripts/content/analyze_answer_semantics.js --check && node --test test/answer_semantics.test.js` -> passed
-- Commit: `pending`
+- Commit: `9e4c090c`
 - Changed files: `scripts/content/analyze_answer_semantics.js`, `data/manifests/quality/answer_semantic_baseline.json`, `test/answer_semantics.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
 - Notes: 冻结 2026-07-11 全量语义缺陷基线与输入 hash；`--check` 只阻断缺陷回升，允许后续重写持续降低缺陷数。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T01-S02` 修正 ready 与 quality_tier 语义
 
-- Status: `pending`
+- Status: `done`
 - Goal: 在代码和测试中明确 `ready` 只代表已经达到精选语义质量，并提供可检查的迁移命令。
 - Steps:
   - 为 100 份精选答案定义显式 `quality_tier=curated` 元数据规则。
@@ -110,9 +110,10 @@
   - 更新 coverage/report/review 口径，分别报告 baseline、needs_update 和 curated-ready。
   - 增加 `--check` / `--noWrite`，先证明迁移范围恰好是 100 + 9,160，不能误改后续新增答案。
 - Expected files: `scripts/commands/answer.js`, `scripts/lib/answer_store.js`, `scripts/content/check_answer_coverage.js`, `test/answer_quality_migration.test.js`
-- Validation: `node --test test/answer_quality_migration.test.js && node scripts/xhs.js answer quality-migrate --check --noWrite`
+- Validation: `node --test test/answer_quality_migration.test.js test/long_tail_answers.test.js && node scripts/xhs.js answer quality-migrate --check --noWrite && npm test` -> passed (54 tests)
 - Commit: `pending`
-- Notes:
+- Changed files: `scripts/commands/answer.js`, `scripts/lib/answer_store.js`, `scripts/content/check_answer_coverage.js`, `scripts/content/generate_long_tail_answers.js`, `test/answer_quality_migration.test.js`, `test/long_tail_answers.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
+- Notes: 新增 fail-closed、幂等的 `answer quality-migrate` dry-run/执行接口；精确识别 100 份 curated 与 9,160 份 baseline。Coverage 现在独立报告 curated-ready、baseline、needs_update 和 semantic_complete，长尾生成器不再产出 ready。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T01-S03` 执行质量状态迁移
 

@@ -10,6 +10,7 @@ const {
     answerPath,
     listAnswerFiles,
     readAnswerFile,
+    writeAnswerMetadata,
     writeAnswerTemplate,
     statusByCanonicalId,
     validateAnswerContent,
@@ -31,13 +32,16 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0];
     const options = {};
-    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict']);
+    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict', 'check']);
     for (let index = 1; index < args.length; index++) {
         const arg = args[index];
         if (arg.startsWith('--')) {
             const key = arg.replace(/^--/, '');
             if (applyGlobalBooleanOption(options, key)) continue;
-            if (booleanFlags.has(key)) options[key] = true;
+            if (booleanFlags.has(key)) {
+                options[key] = true;
+                if (key === 'check') options.noWrite = true;
+            }
             else options[key] = args[++index];
         }
     }
@@ -46,7 +50,7 @@ function parseArgs(argv) {
 
 function printHelp() {
     console.log([
-        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync> [options]',
+        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate> [options]',
         '',
         'Commands:',
         '  init --canonical-id <id> [--overwrite] [--status <draft|ready|needs_update>]',
@@ -55,12 +59,116 @@ function printHelp() {
         '  status [--missing|--draft|--ready]',
         '  validate [--strict]',
         '  sync',
+        '  quality-migrate [--check] [--expected-curated <n>] [--expected-long-tail <n>]',
         '',
         'Options:',
         '  --strict     Validate ready answer content sections and TODO placeholders',
         '  --noWrite    Do not write run manifests for read-only commands',
         '  --noManifest Do not write the run manifest',
     ].join('\n'));
+}
+
+function expectedCount(options, dashedKey, camelKey, fallback) {
+    const raw = options[dashedKey] ?? options[camelKey] ?? fallback;
+    if (raw === undefined || raw === null) return null;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 0) throw new Error(`${dashedKey} must be a non-negative integer`);
+    return value;
+}
+
+function planQualityMigration(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = defaultPaths(root);
+    const expectedCurated = expectedCount(options, 'expected-curated', 'expectedCurated', root === DEFAULT_ROOT ? 100 : null);
+    const expectedLongTail = expectedCount(options, 'expected-long-tail', 'expectedLongTail', root === DEFAULT_ROOT ? 9160 : null);
+    const rows = [];
+    const errors = [];
+    let curatedCount = 0;
+    let longTailCount = 0;
+
+    for (const filePath of listAnswerFiles({ answersDir: paths.answersDir })) {
+        const answer = readAnswerFile(filePath);
+        const metadata = answer.metadata;
+        let targetMetadata;
+        let classification;
+        if (metadata.quality_tier === 'long_tail_baseline') {
+            classification = 'long_tail_baseline';
+            longTailCount += 1;
+            targetMetadata = { ...metadata, status: 'needs_update' };
+        } else if (metadata.quality_tier === 'curated') {
+            classification = 'curated';
+            curatedCount += 1;
+            targetMetadata = metadata;
+        } else if (!metadata.quality_tier && metadata.status === 'ready' && !metadata.generator_version) {
+            classification = 'curated';
+            curatedCount += 1;
+            targetMetadata = { ...metadata, quality_tier: 'curated' };
+        } else {
+            errors.push({
+                file: path.relative(root, filePath),
+                canonical_id: metadata.canonical_id,
+                error: 'ambiguous_quality_tier',
+                quality_tier: metadata.quality_tier || null,
+                status: metadata.status || null,
+                generator_version: metadata.generator_version || null,
+            });
+            continue;
+        }
+        const changed = JSON.stringify(targetMetadata) !== JSON.stringify(metadata);
+        rows.push({
+            file: path.relative(root, filePath),
+            canonical_id: metadata.canonical_id,
+            classification,
+            from_status: metadata.status,
+            to_status: targetMetadata.status,
+            from_quality_tier: metadata.quality_tier || null,
+            to_quality_tier: targetMetadata.quality_tier,
+            changed,
+            filePath,
+            targetMetadata,
+        });
+    }
+
+    const scopeErrors = [];
+    if (expectedCurated !== null && curatedCount !== expectedCurated) {
+        scopeErrors.push({ error: 'curated_scope_mismatch', expected: expectedCurated, actual: curatedCount });
+    }
+    if (expectedLongTail !== null && longTailCount !== expectedLongTail) {
+        scopeErrors.push({ error: 'long_tail_scope_mismatch', expected: expectedLongTail, actual: longTailCount });
+    }
+    errors.push(...scopeErrors);
+    return {
+        root,
+        rows,
+        result: {
+            schema_version: 'answer_quality_migration.v1',
+            ok: errors.length === 0,
+            dry_run: true,
+            answer_count: rows.length,
+            curated_count: curatedCount,
+            long_tail_baseline_count: longTailCount,
+            changed_count: rows.filter((row) => row.changed).length,
+            unchanged_count: rows.filter((row) => !row.changed).length,
+            error_count: errors.length,
+            errors,
+            changes: rows.filter((row) => row.changed).slice(0, 20).map(({ filePath, targetMetadata, ...row }) => row),
+        },
+    };
+}
+
+function runQualityMigrate(options = {}) {
+    const plan = planQualityMigration(options);
+    const dryRun = Boolean(options.noWrite || options.check);
+    if (plan.result.ok && !dryRun) {
+        for (const row of plan.rows) {
+            if (row.changed) writeAnswerMetadata(row.filePath, row.targetMetadata);
+        }
+    }
+    return {
+        ...plan.result,
+        dry_run: dryRun,
+        migrated: plan.result.ok && !dryRun,
+    };
 }
 
 function runInit(options = {}) {
@@ -289,6 +397,7 @@ function main(argv = process.argv) {
         else if (command === 'status') result = runStatus(options);
         else if (command === 'validate') result = runValidate(options);
         else if (command === 'sync') result = runSync(options);
+        else if (command === 'quality-migrate') result = runQualityMigrate(options);
         else throw new Error(`Unknown answer command: ${command}`);
         writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `answer_${command}`, result, options);
         console.log(JSON.stringify(result, null, 2));
@@ -310,5 +419,7 @@ module.exports = {
     runStatus,
     runValidate,
     runSync,
+    planQualityMigration,
+    runQualityMigrate,
     main,
 };

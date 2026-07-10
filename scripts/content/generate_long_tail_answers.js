@@ -723,7 +723,7 @@ function renderAnswer(record, questions, date) {
         schema_version: 'answer.v1',
         canonical_id: record.canonical_id,
         version: 1,
-        status: 'ready',
+        status: 'needs_update',
         updated_at: date,
         answer_type: type,
         quality_tier: 'long_tail_baseline',

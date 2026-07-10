@@ -39,9 +39,9 @@ function question(overrides = {}) {
 test('renders a deterministic entity-grounded long-tail answer', () => {
     const content = renderAnswer(canonical(), [question()], '2026-07-10');
     const metadata = parseAnswerMetadata(content);
-    assert.equal(metadata.status, 'ready');
     assert.equal(metadata.generator_version, GENERATOR_VERSION);
     assert.equal(metadata.quality_tier, 'long_tail_baseline');
+    assert.equal(metadata.status, 'needs_update');
     assert.match(content, /数组容量至少 64/);
     assert.match(content, /项目经验版/);
     assert.equal(validateAnswerContent({ metadata, content }).length, 0);

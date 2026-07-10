@@ -41,6 +41,18 @@ function readAnswerFile(filePath) {
     };
 }
 
+function replaceAnswerMetadata(content, metadata) {
+    const lines = String(content || '').split(/\r?\n/);
+    parseAnswerMetadata(content);
+    lines[0] = `${META_PREFIX}${JSON.stringify(metadata)}${META_SUFFIX}`;
+    return lines.join('\n');
+}
+
+function writeAnswerMetadata(filePath, metadata) {
+    const content = fs.readFileSync(filePath, 'utf8');
+    fs.writeFileSync(filePath, replaceAnswerMetadata(content, metadata), 'utf8');
+}
+
 function listAnswerFiles(options = {}) {
     const dir = options.answersDir || DEFAULT_ANSWERS_DIR;
     if (!fs.existsSync(dir)) return [];
@@ -174,10 +186,12 @@ module.exports = {
     REQUIRED_READY_SECTIONS,
     answerPath,
     parseAnswerMetadata,
+    replaceAnswerMetadata,
     readAnswerFile,
     listAnswerFiles,
     buildAnswerTemplate,
     writeAnswerTemplate,
     statusByCanonicalId,
     validateAnswerContent,
+    writeAnswerMetadata,
 };
