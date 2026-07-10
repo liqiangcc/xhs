@@ -88,6 +88,20 @@ test('quality migration writes curated tier and downgrades baseline idempotently
     fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('quality migration preserves an audited curated failure as scoped but not ready', () => {
+    const root = setup();
+    const curatedPath = path.join(root, 'review', 'answers', 'cq_curated.md');
+    fs.writeFileSync(curatedPath, answer({
+        schema_version: 'answer.v1', canonical_id: 'cq_curated', version: 3, status: 'needs_update',
+        updated_at: '2026-07-11', quality_tier: 'curated_audit_failed',
+    }, '精选审计失败答案'), 'utf8');
+    const result = runQualityMigrate({ root, check: true, expectedCurated: 1, expectedLongTail: 1 });
+    assert.equal(result.ok, true);
+    assert.equal(result.changed_count, 1);
+    assert.equal(result.error_count, 0);
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('quality migration fails closed on ambiguous tiers and scope drift', () => {
     const root = setup();
     const ambiguousPath = path.join(root, 'review', 'answers', 'cq_ambiguous.md');

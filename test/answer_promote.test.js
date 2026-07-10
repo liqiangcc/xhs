@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ensureDir, readJsonl, writeJson, writeJsonl } = require('../scripts/lib/io');
 const { parseAnswerMetadata } = require('../scripts/lib/answer_store');
-const { sha256, atomicPromote } = require('../scripts/lib/answer_quality');
+const { sha256, atomicPromote, atomicDemote } = require('../scripts/lib/answer_quality');
 
 const QUALITY = require('../config/answer_quality.json');
 
@@ -94,5 +94,22 @@ test('passing promotion upgrades metadata and synchronizes canonical status', ()
     assert.equal(metadata.quality_tier, 'curated');
     assert.equal(metadata.generator_version, undefined);
     assert.equal(readJsonl(fixtureData.canonicalPath)[0].answer_status, 'ready');
+    fs.rmSync(fixtureData.root, { recursive: true, force: true });
+});
+
+test('independent failed audit demotes historical curated metadata atomically', () => {
+    const fixtureData = fixture();
+    const formal = fs.readFileSync(fixtureData.formalPath, 'utf8');
+    const reviewEvidence = passingEvidence(fixtureData.candidatePath);
+    reviewEvidence.candidate_sha256 = sha256(formal);
+    reviewEvidence.review.decision = 'revise';
+    reviewEvidence.review.hard_failures = ['unsupported_factual_claim'];
+    writeJson(fixtureData.evidencePath, reviewEvidence);
+    const result = atomicDemote({ root: fixtureData.root, canonicalId: 'cq_redis', evidence: fixtureData.evidencePath, date: '2026-07-11' });
+    assert.equal(result.demoted, true);
+    const metadata = parseAnswerMetadata(fs.readFileSync(fixtureData.formalPath, 'utf8'));
+    assert.equal(metadata.status, 'needs_update');
+    assert.equal(metadata.quality_tier, 'curated_audit_failed');
+    assert.equal(readJsonl(fixtureData.canonicalPath)[0].answer_status, 'needs_update');
     fs.rmSync(fixtureData.root, { recursive: true, force: true });
 });

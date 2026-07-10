@@ -180,7 +180,7 @@
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/curated_answer_audit.json`
 - Validation: `manual check: 100/100 curated rows have completed rubric, evidence, reviewer decision, and zero hard failures`
 - Commit: `pending`
-- Notes:
+- Notes: 历史精选全量审计已启动（batch `curated-audit-001`）。首题 `cq_aof_e522aa87` 的独立审查为 86/100、`revise`，因版本化 AOF 流程的实质性 claim 映射不足被原子降级为 `needs_update/curated_audit_failed`；未把历史 curated 标签当作正样本。其余 99 题仍待审计，首 60 题还需按合同获得人类抽查记录。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S03` 建立正负评测集
 
