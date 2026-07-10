@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_bean_319a398d","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_bean_319a398d","version":3,"status":"needs_update","updated_at":"2026-07-11","quality_tier":"curated_audit_failed","audit_evidence_version":"v1"} -->
 # Spring Bean的生命周期是怎样的？
 
 ## 核心结论

@@ -1,0 +1,93 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_bean_319a398d",
+  "candidate_sha256": "acaa99aa144c03e1f5d72daaa2fa47aaa9802468ccddc5cc2263d4db521682c5",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "historical-curated-audit",
+    "writer_version": "v1"
+  },
+  "sources": [
+    {
+      "source_id": "spring-lifecycle",
+      "title": "Spring Framework lifecycle callbacks",
+      "locator": "https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "spring-container-extension",
+      "title": "Spring Framework container extension points",
+      "locator": "https://docs.spring.io/spring-framework/reference/core/beans/factory-extension.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "spring-bean-scopes",
+      "title": "Spring Framework bean scopes",
+      "locator": "https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "bean-lifecycle-callbacks",
+      "text": "Container-managed lifecycle callbacks include initialization via InitializingBean or configured init methods and destruction via DisposableBean or configured destroy methods; @PostConstruct and @PreDestroy are supported lifecycle callback annotations.",
+      "source_ids": ["spring-lifecycle"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "bean-postprocessor-extension",
+      "text": "BeanFactoryPostProcessor operates on bean definitions before normal bean instantiation, while BeanPostProcessor participates in processing bean instances around initialization and can wrap or replace a bean reference.",
+      "source_ids": ["spring-container-extension"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "常见追问"]
+    },
+    {
+      "claim_id": "bean-proxy-lifecycle-boundary",
+      "text": "Lifecycle callback and post-processing ordering is framework/version/configuration sensitive; initialization callbacks run on the raw reference before post-processors may expose a proxy, so answers must not promise a universal proxy timing beyond the configured processor chain.",
+      "source_ids": ["spring-lifecycle", "spring-container-extension"],
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "bean-scope-destruction-boundary",
+      "text": "Scope affects lifecycle management; singleton is per IoC container by default, while prototype lifecycle cleanup is not fully managed by the container after creation.",
+      "source_ids": ["spring-bean-scopes", "spring-lifecycle"],
+      "answer_locations": ["关键细节", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "249d468420a540585a4fcfd69fec8aac",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+    },
+    {
+      "question_id": "cd71463c78e328406228766d169e1c83",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "review_bean_isolated_v1",
+    "review_version": "v1",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 15,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 10,
+      "mechanism_and_causality": 9,
+      "boundaries_and_tradeoffs": 7,
+      "followup_quality": 5,
+      "oral_quality": 3
+    },
+    "hard_failures": ["unsupported_factual_claim", "missing_version_boundary"],
+    "revision_suggestions": [
+      "区分容器直接回调的 BeanNameAware 与经 ApplicationContextAwareProcessor 参与的 ApplicationContextAware，不要笼统排列所有 Aware 回调。",
+      "为循环依赖、三级缓存、早期引用、构造器循环依赖和 prototype 限制补齐一手来源/claim 映射与 Spring 版本边界。",
+      "按 createBean、populateBean、initializeBean、后置处理器与代理暴露补足状态变化、资源代价和公平的口述层次。"
+    ]
+  }
+}

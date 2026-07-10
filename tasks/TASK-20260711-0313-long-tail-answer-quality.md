@@ -180,7 +180,7 @@
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/curated_answer_audit.json`
 - Validation: `manual check: 100/100 curated rows have completed rubric, evidence, reviewer decision, and zero hard failures`
 - Commit: `pending`
-- Notes: 历史精选全量审计已启动（batch `curated-audit-001`）。AOF 在两轮审查后仍因 Redis 7 manifest 发布/恢复证据不足失败；AQS 以 82/100、`revise` 失败，原因是 JDK 版本边界、取消/超时节点、park/unpark 和公平性取舍的证据/机制不足。两题均已原子降级为 `needs_update/curated_audit_failed`。刷新后的 100 题盘点为 0/100 通过、98 个缺 evidence/独立审查、2 个存在可追溯事实硬失败。新增受 hash 绑定的 `answer human-review` 记录命令；前 60 个晋级会强制 require human approval，避免将 AI 复核冒充为人工抽检。新增 100 题/10 批的机制优先审计队列，第一批按正式清单固定为 AOF、AQS、Bean、binlog、CMS、equals/hashCode、G1、两个 HashMap 与 I/O 多路复用。
+- Notes: 历史精选全量审计已启动（batch `curated-audit-001`）。AOF 在两轮审查后仍因 Redis 7 manifest 发布/恢复证据不足失败；AQS 为 82/100，Bean 为 68/100，binlog 为 77/100，均因版本/配置边界和材料性事实 claim 映射不足而 `revise`，四题均已原子降级为 `needs_update/curated_audit_failed`。刷新后的 100 题盘点为 0/100 通过、97 个缺 evidence、96 个缺独立审查、4 个存在可追溯事实硬失败。新增受 hash 绑定的 `answer human-review` 记录命令；前 60 个晋级会强制 require human approval，避免将 AI 复核冒充为人工抽检。新增 100 题/10 批的机制优先审计队列，第一批按正式清单固定为 AOF、AQS、Bean、binlog、CMS、equals/hashCode、G1、两个 HashMap 与 I/O 多路复用。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T02-S03` 建立正负评测集
 
