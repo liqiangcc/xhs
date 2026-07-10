@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { writeJsonl } = require('../scripts/lib/io');
+const { writeJson, writeJsonl } = require('../scripts/lib/io');
 const { buildCandidates } = require('../scripts/content/audit_canonical_boundaries');
 
 test('boundary audit proposes deterministic exact-title and related-topic review pairs', () => {
@@ -19,5 +19,12 @@ test('boundary audit proposes deterministic exact-title and related-topic review
     assert.equal(rows[0].canonical_ids.join(','), 'cq_a,cq_b');
     assert.equal(rows[0].proposed_action, 'merge_review');
     assert.equal(rows[0].reviewer_decision, 'pending');
+    writeJson(path.join(root, 'data', 'manifests', 'canonical', 'boundary_review_decisions.json'), {
+        schema_version: 'canonical_boundary_review_decisions.v1',
+        items: [{ candidate_id: rows[0].candidate_id, decision: 'keep_separate', note: 'different coding invariant' }],
+    });
+    const reviewed = buildCandidates({ root });
+    assert.equal(reviewed[0].reviewer_decision, 'keep_separate');
+    assert.equal(reviewed[0].reviewer_note, 'different coding invariant');
     fs.rmSync(root, { recursive: true, force: true });
 });

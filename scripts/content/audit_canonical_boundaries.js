@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeQuestion } = require('../lib/hash');
 const { loadCanonicalQuestions } = require('../lib/canonical_store');
-const { readJsonl, stableStringify, writeJsonl } = require('../lib/io');
+const { readJson, readJsonl, stableStringify, writeJsonl } = require('../lib/io');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -51,8 +51,17 @@ function addBucket(map, key, index) {
     map.get(key).push(index);
 }
 
+function reviewedDecisions(root) {
+    const manifest = readJson(path.join(root, 'data', 'manifests', 'canonical', 'boundary_review_decisions.json'), {
+        schema_version: 'canonical_boundary_review_decisions.v1',
+        items: [],
+    });
+    return new Map((manifest.items || []).map((item) => [item.candidate_id, item]));
+}
+
 function buildCandidates(options = {}) {
     const root = options.root || ROOT;
+    const decisions = reviewedDecisions(root);
     const features = featureRows(loadCanonicalQuestions({ filePath: path.join(root, 'data', 'questions', 'canonical_questions.jsonl') }));
     const buckets = new Map();
     features.forEach((row, index) => {
@@ -79,9 +88,11 @@ function buildCandidates(options = {}) {
         const score = Number((titleScore * 0.7 + entityScore * 0.2 + domainScore * 0.1).toFixed(4));
         if (!(left.normalized_title === right.normalized_title || (titleScore >= 0.55 && (entityScore || domainScore)))) continue;
         const [a, b] = [left.canonical, right.canonical].sort((x, y) => x.canonical_id.localeCompare(y.canonical_id));
+        const candidateId = `boundary_${a.canonical_id}_${b.canonical_id}`;
+        const decision = decisions.get(candidateId);
         rows.push({
             schema_version: 'canonical_boundary_candidate.v1',
-            candidate_id: `boundary_${a.canonical_id}_${b.canonical_id}`,
+            candidate_id: candidateId,
             canonical_ids: [a.canonical_id, b.canonical_id],
             algorithm_score: score,
             evidence: {
@@ -91,8 +102,8 @@ function buildCandidates(options = {}) {
                 same_domain: domainScore === 1,
             },
             proposed_action: left.normalized_title === right.normalized_title ? 'merge_review' : 'boundary_review',
-            reviewer_decision: 'pending',
-            reviewer_note: null,
+            reviewer_decision: decision?.decision || 'pending',
+            reviewer_note: decision?.note || null,
         });
     }
     return rows.sort((a, b) => b.algorithm_score - a.algorithm_score || a.candidate_id.localeCompare(b.candidate_id));
