@@ -139,3 +139,16 @@ Completed on 2026-07-10.
 | Unverified first-person project claims | 0 |
 
 Twenty-two existing files were upgraded and fourteen C1/C2 semantic-ready files were re-audited. See `review/plans/c3_semantic_answer_audit.md`.
+
+## C4 Review Trial Snapshot
+
+Completed on 2026-07-10.
+
+| Metric | Value |
+|---|---:|
+| Reviewed Canonical | 5 |
+| Recorded review marks | 10 |
+| Types covered | concept, mechanism, scenario, coding, troubleshooting |
+| Answer feedback write-backs | 5 |
+
+The trial is agent-led content validation, not user mastery data. Every first-pass omission and second-pass correction is retained in `review/sessions/2026-07-10.json`; see `review/plans/c4_review_trial.md`.

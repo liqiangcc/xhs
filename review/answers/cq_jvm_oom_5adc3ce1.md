@@ -43,3 +43,4 @@ Java heap space 要判断是业务峰值容量不足、无界缓存/队列，还
 - 不要在未区分 OOM 类型时只分析堆。
 - 不要在线上无评估执行可能长时间 STW 的诊断命令。
 - 不要把重启和扩容当成根因修复。
+- 复习反馈：第一步按报错与进程退出方式分流 Java heap、Metaspace、DirectBuffer、native thread 和 cgroup OOMKilled，再选择证据工具。
