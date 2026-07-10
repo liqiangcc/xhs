@@ -1,0 +1,124 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_lru_cache_0ef78597",
+  "candidate_sha256": "ff07a810afc720cd07af39101d2a5d15d54db4ff91e474b421a838e2ba0099b1",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "lru-cache.v1"
+  },
+  "sources": [
+    {
+      "source_id": "jdk21-hashmap",
+      "title": "Java SE 21 HashMap API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "lru-executable-test",
+      "title": "LRU candidate executable boundary test",
+      "locator": "review/evidence/tests/cq_lru_cache_0ef78597/LRUCacheTest.java",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "hashmap-average-basic-operations",
+      "text": "Java HashMap documents constant-time get and put under proper hash dispersion, so the answer bounds its O(1) statement as an average/assumption-dependent cost.",
+      "source_ids": ["jdk21-hashmap"],
+      "answer_locations": ["核心结论", "关键细节"]
+    },
+    {
+      "claim_id": "hashmap-concurrency-boundary",
+      "text": "Java HashMap is not synchronized and structurally concurrent modification requires external synchronization; the candidate therefore does not claim thread safety.",
+      "source_ids": ["jdk21-hashmap"],
+      "answer_locations": ["3 分钟版", "项目经验版", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "candidate-lru-boundary-behavior",
+      "text": "The rendered candidate compiles and its boundary test verifies capacity-one eviction, read-recency refresh, existing-key update, zero capacity, and negative-capacity rejection.",
+      "source_ids": ["lru-executable-test"],
+      "answer_locations": ["核心结论", "关键细节", "原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "071dedbeea5826b39a2f664a2235c2b9",
+      "covered": true,
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制"]
+    },
+    {
+      "question_id": "29581eb4982931a2b21a0feec468f681",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "382f7474b2b5d2d9909ba36b9456abce",
+      "covered": true,
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节"]
+    },
+    {
+      "question_id": "75b77ac9d12ac0cfe4746d8079fbfaa9",
+      "covered": true,
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制"]
+    },
+    {
+      "question_id": "7e242417fe98eccdbfeb015b0ddcdf67",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "question_id": "96ebe940815002ce6fa56353b40a9347",
+      "covered": true,
+      "answer_locations": ["核心结论", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "c6e8b3c89965b44f448bd912c26f37cb",
+      "covered": true,
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制"]
+    }
+  ],
+  "validation": {
+    "command": "tmpdir=$(mktemp -d); awk 'BEGIN { in_code = 0 } /^```java$/ { in_code = 1; next } in_code && /^```$/ { exit } in_code { print }' review/candidates/answers/cq_lru_cache_0ef78597.md > $tmpdir/LRUCache.java; javac -encoding UTF-8 -d $tmpdir $tmpdir/LRUCache.java review/evidence/tests/cq_lru_cache_0ef78597/LRUCacheTest.java; java -ea -cp $tmpdir LRUCacheTest",
+    "boundary_tests": [
+      {
+        "case": "capacity-one evicts the previous key",
+        "expected": "get(1) == -1 after put(1,1), put(2,2)",
+        "actual": "passed",
+        "passed": true
+      },
+      {
+        "case": "get refreshes recency before a later eviction",
+        "expected": "key 2 is evicted after get(1), put(3,3) at capacity 2",
+        "actual": "passed",
+        "passed": true
+      },
+      {
+        "case": "existing-key update, zero capacity, and negative capacity",
+        "expected": "updated value is returned; zero stores nothing; negative capacity throws",
+        "actual": "passed",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "lru-independent-review",
+    "review_version": "lru-cache.review.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "revision_suggestions": []
+  }
+}
