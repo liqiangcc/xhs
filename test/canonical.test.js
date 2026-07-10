@@ -9,6 +9,8 @@ const { computeQuestionId } = require('../scripts/lib/hash');
 const { writeJsonl, readJsonl, writeJson } = require('../scripts/lib/io');
 const { buildIndexes, writeIndexes } = require('../scripts/lib/index_store');
 const { runSuggest, runAccept, runStats, runList, runCheck, runMerge, runSplit } = require('../scripts/commands/canonical');
+const { runIntegrity } = require('../scripts/commands/review');
+const { answerPath } = require('../scripts/lib/answer_store');
 
 function makeQuestion(original, noteId, index, company) {
     return {
@@ -189,6 +191,56 @@ test('lists checks merges and splits canonical records', () => {
     assert.equal(readJsonl(questionsPath).find((question) => question.question_id === q2.question_id).canonical_id, splitId);
     assert.equal(runCheck({ root }).ok, true);
 
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('merge migrates review references and archives the redundant formal answer', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-merge-history-'));
+    const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
+    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
+    const targetId = 'cq_redis_target';
+    const sourceId = 'cq_redis_source';
+    const q1 = { ...makeQuestion('Redis 为什么快？', 'note-a', 0, '美团'), canonical_id: targetId };
+    const q2 = { ...makeQuestion('Redis 为什么这么快？', 'note-b', 0, '字节'), canonical_id: sourceId };
+    writeJsonl(questionsPath, [q1, q2]);
+    writeJsonl(canonicalPath, [
+        makeCanonical(targetId, 'Redis 为什么快？', [q1.question_id]),
+        makeCanonical(sourceId, 'Redis 为什么这么快？', [q2.question_id]),
+    ]);
+    writeJson(path.join(root, 'review', 'progress.json'), {
+        schema_version: 'review_progress_store.v1',
+        updated_at: '2026-06-30',
+        items: [
+            { canonical_id: targetId, status: 'learning', level: 2, review_count: 1, last_reviewed_at: '2026-06-29', next_review_at: '2026-07-03', confidence: 0.7, difficulty: 2, mistake_count: 0, updated_at: '2026-06-29' },
+            { canonical_id: sourceId, status: 'weak', level: 1, review_count: 2, last_reviewed_at: '2026-06-30', next_review_at: '2026-07-01', confidence: 0.4, difficulty: 5, mistake_count: 1, updated_at: '2026-06-30' },
+        ],
+    });
+    writeJson(path.join(root, 'review', 'sessions', '2026-06-30.json'), {
+        schema_version: 'review_session.v1', date: '2026-06-30', events: [{ canonical_id: sourceId, result: 'again' }],
+    });
+    for (const canonicalId of [targetId, sourceId]) {
+        fs.mkdirSync(path.join(root, 'review', 'answers'), { recursive: true });
+        fs.writeFileSync(answerPath(canonicalId, { answersDir: path.join(root, 'review', 'answers') }), `<!-- xhs-answer: ${JSON.stringify({ schema_version: 'answer.v1', canonical_id: canonicalId, version: 1, status: 'needs_update', updated_at: '2026-06-30', quality_tier: 'long_tail_baseline' })} -->\n# ${canonicalId}\n`, 'utf8');
+    }
+
+    const result = runMerge({ root, target: targetId, source: sourceId, reason: 'semantic_duplicate', date: '2026-06-30' });
+    assert.equal(result.ok, true);
+    assert.equal(result.review_migration.migrated_session_event_count, 1);
+    assert.equal(fs.existsSync(answerPath(sourceId, { answersDir: path.join(root, 'review', 'answers') })), false);
+    assert.equal(fs.existsSync(path.join(root, 'review', 'archive', 'answers', `${sourceId}.md`)), true);
+    const progress = readJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'));
+    assert.equal(progress.length, 1);
+    const migratedProgress = require('../scripts/lib/io').readJson(path.join(root, 'review', 'progress.json')).items;
+    assert.equal(migratedProgress.length, 1);
+    assert.equal(migratedProgress[0].canonical_id, targetId);
+    assert.equal(migratedProgress[0].review_count, 3);
+    assert.equal(migratedProgress[0].status, 'weak');
+    const event = require('../scripts/lib/io').readJson(path.join(root, 'review', 'sessions', '2026-06-30.json')).events[0];
+    assert.equal(event.canonical_id, targetId);
+    assert.equal(event.migrated_from_canonical_id, sourceId);
+    assert.equal(runIntegrity({ root, noWrite: true }).ok, true);
+    const history = require('../scripts/lib/io').readJson(path.join(root, 'data', 'manifests', 'canonical', 'canonical_merge_history.json'));
+    assert.equal(history.items[0].source, sourceId);
     fs.rmSync(root, { recursive: true, force: true });
 });
 
