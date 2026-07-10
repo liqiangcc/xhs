@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_f003d8b7","version":2,"status":"ready","updated_at":"2026-07-10","quality_tier":"curated"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_f003d8b7","version":3,"status":"needs_update","updated_at":"2026-07-11","quality_tier":"curated_audit_failed","audit_failure":"missing_evidence"} -->
 # 线上的API接口响应比较慢，该如何快速排查和定位问题？
 
 ## 核心结论
