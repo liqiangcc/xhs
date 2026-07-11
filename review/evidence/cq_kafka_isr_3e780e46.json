@@ -1,0 +1,103 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_kafka_isr_3e780e46",
+  "candidate_sha256": "90acee9c8b94f6e09d1ef7707b97e65892ce3a4272371d31e7096bd44b03c9be",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "kafka-trunk-isr.v1"
+  },
+  "sources": [
+    {
+      "source_id": "kafka-replication-config",
+      "title": "Apache Kafka replication config source",
+      "locator": "https://github.com/apache/kafka/blob/trunk/server/src/main/java/org/apache/kafka/server/config/ReplicationConfigs.java",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "kafka-topic-config",
+      "title": "Apache Kafka topic config source",
+      "locator": "https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/config/TopicConfig.java",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "isr-lag-boundary",
+      "text": "Kafka trunk ReplicationConfigs defines replica.lag.time.max.ms with default 30000ms and documents leader removal of a follower from ISR when it has not sent fetch requests or consumed to the leader log end offset for at least that time.",
+      "source_ids": [
+        "kafka-replication-config"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "acks-min-isr-contract",
+      "text": "Kafka trunk TopicConfig documents min.insync.replicas including leader for acks=all/-1, all ISR acknowledgements for a successful acks=all write, failure when ISR is below the configured minimum, and consumer visibility after replication to ISR and satisfying min ISR.",
+      "source_ids": [
+        "kafka-topic-config"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "2c0de0b15817b9a129c83a71b2199faa",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    }
+  ],
+  "review": {
+    "reviewer_id": "kafka_isr_isolated_review_r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 20,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 18,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": ["unsupported_factual_claim", "missing_evidence"],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [
+      {
+        "claim": "完整复制链路和 in-sync → lagging → removed-from-ISR 状态模型",
+        "reason": "现有证据只覆盖 follower 的 fetch/LEO 滞后剔除规则及 acks/min ISR 契约，未逐项映射该链路和状态模型。"
+      },
+      {
+        "claim": "ISR 抖动会增加拒写与恢复等待",
+        "reason": "拒写可由 acks=all 与 min ISR 推出，但恢复等待依赖未取证的重新加入 ISR 行为。"
+      }
+    ],
+    "findings": [
+      "候选覆盖了所有来源问法，且 30000ms、ISR 剔除、acks=all、min ISR 和 ELR 边界与列出的 Kafka trunk 源码一致。",
+      "第二轮仍未给完整复制链路、状态转换和恢复等待提供逐项第一手证据映射；按质量契约保持 needs_update，禁止第三轮修订。"
+    ]
+  }
+}
