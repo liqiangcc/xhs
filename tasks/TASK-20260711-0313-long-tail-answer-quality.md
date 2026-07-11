@@ -760,7 +760,7 @@ ZooKeeper 锁合并与进展（2026-07-11）：将 `cq_q_17a452529374881c0a57e96
   - 修复正式答案复审对“候选哈希”与“晋级后元数据哈希”混淆的问题，并加入回归测试。
 - Expected files: `scripts/commands/answer.js`, `scripts/lib/answer_completion.js`, `scripts/lib/answer_quality.js`, `test/answer_completion.test.js`, `test/answer_promote.test.js`
 - Validation: `node --test test/answer_completion.test.js test/answer_promote.test.js && npm test && node scripts/xhs.js answer validate --strict --noWrite && node scripts/xhs.js canonical check --noWrite` -> passed (94 tests; 9,035 formal answers and 9,609 Question bindings remain structurally valid)
-- Commit: `pending`
+- Commit: `abc968ff`
 - Notes: 实现 queue status、closure check/audit、reachability 和 stability/sample 的 fail-closed 验证；正式 curated 复审改为校验晋级时保存的 `candidate_sha256`，不再误用元数据变更后的正式文件哈希。真实库只读结果正确保持未完成：Coding 余量 1,673，四周计划与快照尚未建立；该子任务不改变任何答案的晋级状态。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T12` S11：连续四周复习稳定性验证
