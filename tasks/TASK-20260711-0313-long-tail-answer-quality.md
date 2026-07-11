@@ -316,8 +316,8 @@
   - 新增只读 `review integrity`，检查 ReviewProgress 引用、重复进度和失效 canonical_id。
 - Expected files: `data/questions/canonical_questions.jsonl`, `data/questions/questions.jsonl`, `review/progress.jsonl`, `data/manifests/runs/latest_canonical_merge.json`
 - Validation: `node scripts/xhs.js canonical check --noWrite && node scripts/xhs.js review integrity --noWrite`
-- Commit: `3c64f8ac`
-- Notes: Batch 0001–0023 已审查全部 234 组：220 组同义题簇已合并，14 组因算法状态、语言契约或专项深度不同而明确保留独立。最终边界清单为 12 条 `keep_separate`、0 条 `pending`；保留 9,039 个 Canonical，所有 Canonical、ReviewProgress 与答案结构校验通过。
+- Commit: `3c64f8ac`, `70f81127`
+- Notes: Batch 0001–0023 已审查全部 234 组：220 组同义题簇已合并，14 组因算法状态、语言契约或专项深度不同而明确保留独立。后续试点边界复核又发现 `cq_http_c439559c` 与 `cq_q_010f2eb81d953d0c20a9c0f0d33e410d` 为同义 HTTP/HTTPS 对比题，已归并并迁移 Question、归档源答案、重建队列；当前保留 9,038 个 Canonical，所有 Canonical、ReviewProgress 与答案结构校验通过。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S03` 全量重新判定 answer_type
 
@@ -344,10 +344,10 @@
   - 为每个最多 10 题的批次生成 `tasks/answer-batches/` 子任务文件；根 ID 固定为 `TASK-20260711-0313-answer-batch-NNNN`，每份文件包含题簇复核、研究编写、独立审查、晋级和批次验证子任务。
   - 队列记录 `task_file`，后续使用 `task-md-workflow:execute-task-md` 按批次任务 ID 执行和恢复；每个批次独立提交，阶段任务只在全部对应批次任务 done 后完成。
 - Expected files: `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/*.md`
-- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,039 rows, 904 batches, each ≤10); all retained boundary candidates have explicit keep_separate decisions
+- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,038 rows, 904 batches, each ≤10); all retained boundary candidates have explicit keep_separate decisions
 - Commit: `pending`
 - Changed files: `scripts/content/build_answer_rewrite_queue.js`, `scripts/commands/answer.js`, `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/TASK-20260711-0313-answer-batch-*.md`, `test/answer_rewrite_queue.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
-- Notes: 已在边界清单清零（0 pending）后重建最终稳定队列：全部 9,039 个非 curated Canonical 被稳定排序并分配唯一可恢复任务，共 904 批，每批最多 10 题。队列只冻结执行顺序，不等价于答案晋级。
+- Notes: 已在边界清单清零（0 pending）后重建最终稳定队列；HTTP 同义题后续归并后再次重建：全部 9,038 个非 curated Canonical 被稳定排序并分配唯一可恢复任务，共 904 批，每批最多 10 题。首 60 题试点清单保持冻结，不以队列重新排序覆盖。队列只冻结执行顺序，不等价于答案晋级。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T05` S4：完成六类型 60 题试点
 
