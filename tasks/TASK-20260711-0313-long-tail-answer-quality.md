@@ -381,7 +381,7 @@
   - 对 60 题进行 100% 人工审查和盲对比。
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
-- Commit: `5f91877c`, `d9f29df2`, `4f945bc6`, `d68f69b9`, `9c92c429`, `0203e816`, `d172ca10`, `99fc664e`, `a5a927d4`, `971c1a4c`, `886360ee`, `d7b3efbb`, `60102414`, `28ea0ec6`
+- Commit: `5f91877c`, `d9f29df2`, `4f945bc6`, `d68f69b9`, `9c92c429`, `0203e816`, `d172ca10`, `99fc664e`, `a5a927d4`, `971c1a4c`, `886360ee`, `d7b3efbb`, `60102414`, `28ea0ec6`, `4d65fbbd`
 - Notes: `cq_arraylist_9d3444a1`、`cq_binlog_86a375fd`、`cq_cache_consistency_a83eeb36`、`cq_clustered_index_8c8cbedb`、`cq_daemon_thread_a38b0a9b`、`cq_stringbuffer_8b8caf0d`、`cq_http_c439559c`、`cq_thread_states_2db7d11`、`cq_topic_c569b06e`、`cq_spring_injection_5060c47f` 与 `cq_bean_319a398d` 已完成候选、可追溯取证、独立审查和机器审计，均无硬失败。Spring 注入候选依据 Spring Framework 7.0.8 官方文档明确区分 `@Resource` 显式 `name` 与无 `name` 的默认名称/限定回退路径，第二轮隔离审查得分 95；Bean 生命周期候选用同一版本官方文档核验扩展点、组合回调顺序与 prototype 销毁边界，第一轮隔离审查得分 96。因首 60 题尚未人工签核，两者仍不得晋级。`cq_topic_f575096b` 先归并两组同义进程/线程题；两轮审查后仍有未经逐项取证的选型/机制断言，以 `unsupported_factual_claim`、`missing_evidence` 保持 `needs_update`，不再修订。`cq_gc_algorithms_3f884748` 因 JDK 版本证据不足保持 `needs_update`；`cq_incident_diagnosis_4e5a6405` 因缺少可验证的真实个人事故事实，以 `template_only_answer`、`uncovered_source_variant` 保持 `needs_update`。台账当前为 11/60 `awaiting_human_review`、3/60 保持 `needs_update`、46/60 待处理；任何未签核候选不得替换正式答案。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
