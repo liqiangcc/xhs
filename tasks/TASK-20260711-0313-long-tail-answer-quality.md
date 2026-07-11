@@ -412,6 +412,8 @@ Undo Log 进展（2026-07-11）：`cq_undo_log_ed9636b1` 依据 MySQL 8.4 InnoDB
 
 CAS 记录（2026-07-11）：`cq_cas_64fa0b00` 两轮隔离审查后，CAS 条件更新、ABA 的 reference+stamp 边界以及 Java SE 21 API 证据均通过；但第二轮指出机制题没有经证据支撑的高竞争重试资源成本与性能边界，题型专项仅 15 分（最低 16）。候选保持 `needs_update`，不进行第三轮修订，正式答案未修改。台账为 20/60 `awaiting_human_review`、10/60 `needs_update`、30/60 待处理。试点队列遗留标注为 scenario，但原题实际要求原理解释，候选采用 mechanism，冲突已记录。
 
+协程进展（2026-07-11）：`cq_coroutine_878b831f` 依据 Kotlin 官方协程基础、`runBlocking` 与 `supervisorScope` API 完成两轮隔离审查；第二轮得分 100、无硬失败，候选审计通过。候选明确限定 Kotlin/JVM、区分普通 Job 与监督作用域的失败边界、阻塞与 suspend、并发组织与实际并行度。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 21/60 `awaiting_human_review`、10/60 `needs_update`、29/60 待处理。试点队列遗留标注为 scenario，但原题实际为概念/对比选型题，候选采用 concept，冲突已记录。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`

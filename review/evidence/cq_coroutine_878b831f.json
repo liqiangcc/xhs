@@ -1,0 +1,65 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_coroutine_878b831f",
+  "candidate_sha256": "99711109de7daae36d943051044895cbd857c03a3fc8639031e5a195b7fec402",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "kotlin-coroutines-docs.v1"},
+  "sources": [
+    {
+      "source_id": "kotlin-coroutines-basics",
+      "title": "Kotlin coroutines basics",
+      "locator": "https://kotlinlang.org/docs/coroutines-basics.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "kotlin-runblocking-api",
+      "title": "kotlinx.coroutines runBlocking API",
+      "locator": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/run-blocking.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "kotlin-supervisor-scope-api",
+      "title": "kotlinx.coroutines supervisorScope API",
+      "locator": "https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines/supervisor-scope.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "kotlin-coroutine-thread-suspension-dispatcher",
+      "text": "Kotlin documentation defines a coroutine as a suspendable computation, states that on the JVM and Kotlin/Native coroutines run on operating-system-managed threads, explains that suspension can let another coroutine run on the same thread, and states that a dispatcher controls the threads or thread pool used and coroutines are not always tied to one thread.",
+      "source_ids": ["kotlin-coroutines-basics"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "kotlin-structured-concurrency-and-runblocking",
+      "text": "Kotlin documentation states that structured concurrency organizes coroutines into parent-child tree hierarchies, parents wait for children, and parent failure or cancellation recursively cancels children in the ordinary hierarchy; it also states that runBlocking blocks the current thread.",
+      "source_ids": ["kotlin-coroutines-basics"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "kotlin-supervisor-and-runblocking-boundaries",
+      "text": "The official supervisorScope API states that its scope contains a SupervisorJob and a child failure does not affect other children, while an exception completing the block cancels the scope and its children. The official runBlocking API states that it blocks the current thread until completion, is designed to bridge regular blocking code to suspending libraries, and calling it from a suspend function redundantly blocks the thread.",
+      "source_ids": ["kotlin-supervisor-scope-api", "kotlin-runblocking-api"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {"question_id": "444aba6b82aa518c570570ee66b82f69", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]}
+  ],
+  "review": {
+    "reviewer_id": "isolated-reviewer-r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 25, "directness_and_relevance": 20, "type_specific_completeness": 20, "mechanism_and_causality": 15, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 5},
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": ["候选正确限定 Kotlin/JVM，并区分普通 Job 与 supervisorScope 的失败边界。", "runBlocking、suspend/阻塞及 CPU 并行度边界均有官方证据映射。"]
+  }
+}
