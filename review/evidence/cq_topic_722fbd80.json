@@ -1,0 +1,83 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_topic_722fbd80",
+  "candidate_sha256": "a97881959cb910139fdb3eae157a3702cc744c183624e4565eb1e5efd540868e",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "codex-long-tail-parallel-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "three-sum-boundary-test",
+      "title": "ThreeSum Java reproducible boundary test",
+      "locator": "review/evidence/tests/cq_topic_722fbd80/ThreeSumTest.java",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "candidate-boundary-results",
+      "text": "The supplied Java implementation returns the declared unique triples for null, empty input, duplicate zeros, the standard mixed-sign case, and an int-extreme case.",
+      "source_ids": ["three-sum-boundary-test"],
+      "answer_locations": ["关键细节", "3 分钟版"]
+    },
+    {
+      "claim_id": "input-not-mutated",
+      "text": "The supplied Java implementation sorts a copied array and leaves the caller input unchanged in the declared boundary cases.",
+      "source_ids": ["three-sum-boundary-test"],
+      "answer_locations": ["1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "overflow-safe-comparison",
+      "text": "The supplied Java implementation evaluates the three-value sum as long, passes the declared Integer.MIN_VALUE/Integer.MAX_VALUE boundary case, and its separate target variant returns [1,2,3] for target 6 without applying the zero-target early exit.",
+      "source_ids": ["three-sum-boundary-test"],
+      "answer_locations": ["3 分钟版", "原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6e2101df45388471dca45c0319c0e4f9",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    }
+  ],
+  "validation": {
+    "boundary_tests": [
+      {"case": "null_or_empty", "expected": "[]", "actual": "[]", "passed": true},
+      {"case": "duplicate_and_standard_values", "expected": "unique triples only", "actual": "[[-1,-1,2],[-1,0,1]] and [[0,0,0]]", "passed": true},
+      {"case": "integer_extremes", "expected": "no overflow-directed pointer error", "actual": "[[-2147483648,1,2147483647],[-1,0,1]]", "passed": true}
+    ],
+    "command": "javac -d /tmp/xhs-three-sum review/evidence/tests/cq_topic_722fbd80/ThreeSum.java review/evidence/tests/cq_topic_722fbd80/ThreeSumTest.java && java -cp /tmp/xhs-three-sum ThreeSumTest"
+  },
+  "review": {
+    "reviewer_id": "codex-isolated-review-three-sum-r2",
+    "review_version": "xhs-answer-curator.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "hard_failures": [],
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "revision_suggestions": []
+  },
+  "review_history": [
+    {
+      "reviewer_id": "codex-isolated-review-three-sum-v1",
+      "review_version": "xhs-answer-curator.v1",
+      "independent": true,
+      "decision": "revise",
+      "revision_round": 0,
+      "hard_failures": ["unsupported_factual_claim"],
+      "finding": "The zero-target values[i] > 0 early exit must not be reused for arbitrary target."
+    }
+  ]
+}
