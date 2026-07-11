@@ -1,0 +1,43 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_74d36d6bdeee0a5c1894daee54b67ce8",
+  "candidate_sha256": "814b673b8454a59eb0c7860305c10ca5f4c13457e92e036b835553ab521e2460",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "maven-classpath-conflict.v1"},
+  "sources": [
+    {"source_id": "maven-dependency-mechanism", "title": "Apache Maven: Introduction to the Dependency Mechanism", "locator": "https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "maven-dependency-tree-plugin", "title": "Apache Maven Dependency Plugin: dependency:tree", "locator": "https://maven.apache.org/plugins/maven-dependency-plugin/tree-mojo.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "java-se21-classloader", "title": "Java SE 21 ClassLoader API", "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ClassLoader.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "java-se21-class", "title": "Java SE 21 Class API", "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "java-se21-protection-domain", "title": "Java SE 21 ProtectionDomain API", "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/security/ProtectionDomain.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "java-se21-code-source", "title": "Java SE 21 CodeSource API", "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/security/CodeSource.html", "source_type": "official_documentation", "checked_at": "2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id": "maven-mediation-boundary", "text": "Maven documents dependency mediation as nearest definition; at equal depth the first declaration wins, and an explicit POM dependency can guarantee a version.", "source_ids": ["maven-dependency-mechanism"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "maven-dependency-tree-boundary", "text": "The Maven Dependency Plugin documents the dependency:tree goal and its verbose parameter for dependency-tree output; the candidate uses that output as build-graph evidence only.", "source_ids": ["maven-dependency-tree-plugin"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]},
+    {"claim_id": "java-se21-loader-observation-boundary", "text": "Java SE 21 documents that Class objects expose their defining ClassLoader, possibly null for bootstrap, and that the default ClassLoader loadClass implementation checks loaded classes, delegates to its parent, then calls findClass; implementations may override loading behavior.", "source_ids": ["java-se21-classloader", "java-se21-class"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "java-se21-codesource-observation-boundary", "text": "Java SE 21 documents Class.getProtectionDomain, ProtectionDomain.getCodeSource and CodeSource.getLocation; the candidate treats a non-null location only as an observation and explicitly allows CodeSource/location to be absent or non-JAR.", "source_ids": ["java-se21-class", "java-se21-protection-domain", "java-se21-code-source"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "maven-conflict-scenario-design", "text": "The build SLOs, diagnostic record schema, authority choice, retry/rollback/recovery process, CI gates, observability, rollout and isolation alternatives are explicit scenario assumptions and acceptance criteria, not Maven defaults or personal project facts.", "source_ids": ["maven-dependency-mechanism", "maven-dependency-tree-plugin", "java-se21-classloader", "java-se21-class", "java-se21-protection-domain", "java-se21-code-source"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问", "易错点"]}
+  ],
+  "source_question_coverage": [
+    {"question_id": "74d36d6bdeee0a5c1894daee54b67ce8", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}
+  ],
+  "review": {
+    "reviewer_id": "maven_classpath_isolated_review_r2",
+    "review_version": "isolated-review.v2",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 22, "directness_and_relevance": 15, "type_specific_completeness": 18, "mechanism_and_causality": 13, "boundaries_and_tradeoffs": 9, "followup_quality": 5, "oral_quality": 3},
+    "hard_failures": ["cross_topic_contamination", "unsupported_factual_claim"],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [
+      "JPMS、shading、应用服务器共享库改变加载链路没有一手映射。",
+      "通用的分区/缓存/异步扩展/持久层最终不变量段落与 Maven 题无关。"
+    ],
+    "findings": [
+      "原理机制和 3 分钟版被渲染器附加的通用场景模板污染，需删除但两轮上限禁止第三次修订。",
+      "本题场景专项已覆盖，但直接性、事实与口述未达到门槛。"
+    ]
+  }
+}

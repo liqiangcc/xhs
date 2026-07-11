@@ -1,0 +1,31 @@
+{
+  "canonical_id": "cq_q_74d36d6bdeee0a5c1894daee54b67ce8",
+  "type": "mechanism",
+  "updated_at": "2026-07-11",
+  "core": "Maven 冲突先区分构建时的依赖选择与运行时的实际 classpath：用 dependency:tree 找到同一 GA 的所有引入路径和最终被 mediation 选中的版本，再用运行包、启动参数和类的 CodeSource/ClassLoader 证明线上究竟加载了哪一个 JAR。修复优先在根 POM 的 dependencyManagement 显式收敛版本或在错误的传递边排除；不要靠调整本机仓库、随意复制 JAR 或仅看 IDE 依赖视图。",
+  "points": [
+    "复现并分类异常：ClassNotFound/NoSuchMethod/LinkageError 常指向运行时类定义或 API 不匹配；先保留完整堆栈、Java 版本、打包方式和启动 classpath。",
+    "执行 mvn dependency:tree -Dverbose，按 groupId:artifactId 搜索全部路径；Maven 默认选择最近定义，深度相同则先声明者胜出，显式声明可固定版本。",
+    "把构建树与产物核对：检查 fat JAR、容器镜像、应用服务器 lib、插件或隔离 classloader；打印冲突类的 ProtectionDomain CodeSource 和 getClassLoader，确认定义来源。",
+    "在根 dependencyManagement/BOM 收敛版本，或对错误传递路径 exclusions；重新跑单元/集成测试并在 CI 对 dependency tree、重复类和最终镜像做门禁。"
+  ],
+  "deep": "诊断顺序是“异常符号 → 构建图 → 发布物 → 运行时定义”。例如 `NoSuchMethodError` 不能只凭名字断定 Maven 选错版本：先记录调用方、缺失方法签名、完整堆栈、JDK、启动参数和部署方式；再运行 `mvn dependency:tree -Dverbose`，确认谁引入了同一 artifact 的多个版本、Maven 最终调解了哪个版本。Maven 的 nearest-definition 只描述构建图的版本选择，不能证明容器、插件或 fat JAR 在运行时没有额外放入另一份类。\n\n运行态用 `clazz.getProtectionDomain().getCodeSource()` 查类来自哪个 JAR，用 `clazz.getClassLoader()` 查定义它的 loader；若两个同名类由不同 loader 定义，它们不是可互换的运行时类型，应分别检查父子委派、应用服务器共享库和插件隔离边界。JDK ClassLoader 的默认 loadClass 顺序是已加载检查、父 loader、再 findClass，因此不要把“classloader 冲突”笼统等同于 Maven 冲突。\n\n修复以一个权威版本为目标：根 POM 的 dependencyManagement 或受控 BOM 固定版本，对不该进入的传递依赖加 exclusion；随后重新生成产物和镜像，跑 API 覆盖到冲突调用点的集成测试。若第三方库要求不兼容 major version，不要强行把两个版本塞进同一普通 classpath；选择升级/替换依赖、拆分进程，或在确实支持的容器/插件框架中使用隔离 loader，并把跨 loader 的接口边界设计清楚。代价是依赖升级回归、维护 BOM 和增加构建门禁；它比线上临时替换 JAR 可追溯且可复现。",
+  "mechanism": "Maven 阶段的状态是依赖声明图 → 传递闭包 → mediation 后的构建 classpath；运行阶段的状态是打包内容与外部 lib → 某个 ClassLoader 按委派次序定义 Class → 调用点链接到实际 API。`dependency:tree` 解释第一段，CodeSource/ClassLoader 和最终部署物解释第二段。两段证据一致时才修改 POM；否则先消除发布物或容器额外注入的 JAR。时间成本随依赖图、镜像和环境数量增长，风险边界是不同 loader、shading/repackaging 与 JDK/服务器版本会让构建树和运行事实分离。",
+  "constraints": [
+    "Maven 官方依赖机制文档规定：同一 artifact 出现多个版本时采用 nearest definition；同深度时先声明的依赖胜出，显式 POM 依赖可固定版本。",
+    "Java ClassLoader API 的默认 loadClass 顺序是已加载检查、父加载器、findClass；每个 Class 对象关联定义它的 ClassLoader。",
+    "Maven 版本收敛不处理运行环境额外追加的 JAR；fat JAR、容器共享库和插件 classloader 必须在产物/运行态另行验证。"
+  ],
+  "followups": [
+    "dependency:tree 显示一个版本，为什么线上仍 NoSuchMethodError？|它只说明 Maven 构建图；还要检查最终 JAR、镜像、容器共享库，并用 CodeSource 证明加载来源。",
+    "同名类一定冲突吗？|不一定；同一 loader 可见路径中通常只会定义一份。不同 loader 定义的同名类可能类型不兼容，需检查隔离和委派。",
+    "为什么不直接排除所有旧版本？|排除可能让依赖失去所需 API；先找到调用方和兼容版本，再用测试验证收敛后的图。",
+    "怎样防止复发？|在 CI 固定 dependency tree/BOM，检查最终产物重复类与漏洞/许可证，并以集成测试覆盖冲突 API。"
+  ],
+  "mistakes": [
+    "不要把 Maven 的 nearest-definition 说成运行时 classloader 的选择规则。",
+    "不要只在 IDE 里点排除而不复查最终 artifact 和镜像。",
+    "不要把不同 classloader 定义的同名类当作同一个运行时类型。",
+    "不要用临时复制 JAR 或改本机仓库替代可复现的 POM 修复。"
+  ]
+}
