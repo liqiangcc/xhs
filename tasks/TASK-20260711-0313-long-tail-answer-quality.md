@@ -381,8 +381,8 @@
   - 对 60 题进行 100% 人工审查和盲对比。
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
-- Commit: `5f91877c`, `d9f29df2`, `4f945bc6`, `d68f69b9`, `9c92c429`, `0203e816`, `d172ca10`, `99fc664e`
-- Notes: `cq_arraylist_9d3444a1`、`cq_binlog_86a375fd`、`cq_cache_consistency_a83eeb36`、`cq_clustered_index_8c8cbedb` 与 `cq_daemon_thread_a38b0a9b` 已完成候选、可追溯取证、独立审查和机器审计，均无硬失败；后两题按实际提问期望校正为 concept，均在首轮删除未取证断言后第二轮通过。`cq_gc_algorithms_3f884748` 因 JDK 版本证据不足保持 `needs_update`；`cq_incident_diagnosis_4e5a6405` 因缺少可验证的真实个人事故事实，以 `template_only_answer`、`uncovered_source_variant` 保持 `needs_update`。台账当前为 5/60 `awaiting_human_review`、2/60 保持 `needs_update`、53/60 待处理；任何未签核候选不得替换正式答案。
+- Commit: `5f91877c`, `d9f29df2`, `4f945bc6`, `d68f69b9`, `9c92c429`, `0203e816`, `d172ca10`, `99fc664e`, `pending`
+- Notes: `cq_arraylist_9d3444a1`、`cq_binlog_86a375fd`、`cq_cache_consistency_a83eeb36`、`cq_clustered_index_8c8cbedb`、`cq_daemon_thread_a38b0a9b` 与 `cq_stringbuffer_8b8caf0d` 已完成候选、可追溯取证、独立审查和机器审计，均无硬失败；后两题按实际提问期望校正为 concept，守护线程在首轮删除未取证断言后第二轮通过，StringBuilder/StringBuffer 以 Java SE 21 的同步、容量和 `Comparable`/`equals` 边界首轮通过。`cq_gc_algorithms_3f884748` 因 JDK 版本证据不足保持 `needs_update`；`cq_incident_diagnosis_4e5a6405` 因缺少可验证的真实个人事故事实，以 `template_only_answer`、`uncovered_source_variant` 保持 `needs_update`。台账当前为 6/60 `awaiting_human_review`、2/60 保持 `needs_update`、52/60 待处理；任何未签核候选不得替换正式答案。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
