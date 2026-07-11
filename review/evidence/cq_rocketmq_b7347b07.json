@@ -1,0 +1,38 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_rocketmq_b7347b07",
+  "candidate_sha256": "d40c372023871a318eaa84547d37cda56229f979af79397718217e000f728cfc",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "rocketmq-5-orderly-consumption.v1"},
+  "sources": [
+    {"source_id": "rocketmq-5-ordered-message", "title": "Apache RocketMQ 5.0 Ordered Message", "locator": "https://rocketmq.apache.org/docs/featureBehavior/03fifomessage/", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "rocketmq-5-consumer-types", "title": "Apache RocketMQ 5.0 Consumer Types", "locator": "https://rocketmq.apache.org/docs/featureBehavior/06consumertype/", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "rocketmq-5-consumer-load-balance", "title": "Apache RocketMQ 5.0 Consumer Load Balancing", "locator": "https://rocketmq.apache.org/docs/featureBehavior/08consumerloadbalance/", "source_type": "official_documentation", "checked_at": "2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id": "rocketmq-message-group-order-boundary", "text": "RocketMQ 5.0 documents FIFO ordering within a message group, no ordering across different groups, the fine-grained group concurrency benefit, and the production/consumption conditions and limits for ordered messages.", "source_ids": ["rocketmq-5-ordered-message"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "rocketmq-orderly-retry-and-processing-boundary", "text": "RocketMQ 5.0 documents receive-process-reply order requirements, PushConsumer ordered behavior, SimpleConsumer ordering responsibility, bounded retry for ordered messages, and later-message blocking while an earlier ordered message is unconsumed.", "source_ids": ["rocketmq-5-ordered-message", "rocketmq-5-consumer-types"], "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "rocketmq-group-load-balance-sequential-lock", "text": "RocketMQ 5.0 load-balancing documentation states that ordered-message groups are consumed sequentially, and later messages cannot be consumed in parallel while preceding messages are not submitted; the candidate's throughput estimate and SLO values are explicit planning assumptions.", "source_ids": ["rocketmq-5-consumer-load-balance"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "rocketmq-orderly-performance-design", "text": "Capacity values, outbox use, idempotency, metrics, pressure tests, rollout, rollback and disaster recovery are declared design assumptions and acceptance criteria for this scenario, not claims about a deployed RocketMQ system.", "source_ids": ["rocketmq-5-ordered-message", "rocketmq-5-consumer-types"], "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版"]}
+  ],
+  "source_question_coverage": [
+    {"question_id": "32cd7dd6a9e95ed7fb782a8e133b189a", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]},
+    {"question_id": "38d83f7f102a80836014c95e436a1d53", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}
+  ],
+  "review": {
+    "reviewer_id": "isolated-reviewer-r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 25, "directness_and_relevance": 20, "type_specific_completeness": 20, "mechanism_and_causality": 15, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 5},
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "候选直接回答顺序消费性能提升，并覆盖全部来源问法。",
+      "RocketMQ 5.0 的版本边界与材料性主张均映射到官方文档；场景题的容量、幂等、故障、观测和取舍要求完整。",
+      "1 分钟版可口述，3 分钟版补充了运行与故障处理细节而未重复。"
+    ]
+  }
+}
