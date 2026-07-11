@@ -513,6 +513,18 @@ ZooKeeper 锁合并与进展（2026-07-11）：将 `cq_q_17a452529374881c0a57e96
 - Commit: `pending`
 - Notes: 2026-07-11 已将 26 份独立审查通过、待人工签核的候选整理为 `review/plans/pilot_human_review.md`（提交 `680ce0df`），其中包含不可替代的 candidate SHA-256 与签核/晋级命令；尚未产生任何人工决定，子任务保持 pending。
 
+##### `TASK-20260711-0313-long-tail-answer-quality-T05-S04` 收集 Project/Behavior 试点真实材料
+
+- Status: `in_progress`
+- Goal: 为无法由公开资料替代的 Project/Behavior（及疑似误标个人题）取得用户提供的可核验事实，或明确改为技术题后重新分类。
+- Steps:
+  - 对每题收集真实背景、个人职责、约束、行动、结果、证据和复盘；敏感信息允许脱敏。
+  - 没有真实材料时不写完成态第一人称故事；技术主问题转入类型复核而非套 STAR。
+- Expected files: `review/plans/pilot_project_behavior_fact_intake.md`, `review/candidates/answers/*.md`, `review/evidence/*.json`
+- Validation: `manual check: every promoted Project/Behavior candidate has user-provided facts or a documented technical reclassification`
+- Commit: `pending`
+- Notes: 2026-07-11 已建立 16 题的逐题事实采集清单；尚待用户材料，不能用模型补全。
+
 ### `TASK-20260711-0313-long-tail-answer-quality-T06` S5：全量升级 Coding 与 SQL
 
 - Status: `pending`
