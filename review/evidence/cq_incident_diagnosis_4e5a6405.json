@@ -1,0 +1,69 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_incident_diagnosis_4e5a6405",
+  "candidate_sha256": "cac88d5c86c8e255718fb1f27dd575402ad1a20733b9f9b7ccc097a05a64b090",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "incident-diagnosis-framework.v1"
+  },
+  "sources": [
+    {
+      "source_id": "jdk21-jstack",
+      "title": "Java SE 21 jstack command",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/specs/man/jstack.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "arthas-dashboard-v431",
+      "title": "Arthas v4.3.1 dashboard command",
+      "locator": "https://arthas.aliyun.com/en/doc/dashboard.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "jstack-jdk21-boundary",
+      "text": "In Java SE 21, jstack prints Java thread stack traces for a specified Java process, is marked experimental and unsupported, and therefore must be used with version and production-environment boundaries rather than as a universal safe procedure.",
+      "source_ids": ["jdk21-jstack"],
+      "answer_locations": ["3 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "arthas-dashboard-observation-boundary",
+      "text": "Arthas v4.3.1 documents dashboard as a real-time current-system statistics view including thread and memory information; the candidate treats it as observational evidence rather than proof of root cause.",
+      "source_ids": ["arthas-dashboard-v431"],
+      "answer_locations": ["3 分钟版", "关键细节", "常见追问"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "86c045375b8aabd9ba67faaaca486290",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "项目经验版", "常见追问"]
+    }
+  ],
+  "experience_facts": [],
+  "review": {
+    "reviewer_id": "independent-reviewer-incident-diagnosis-v1",
+    "review_version": "incident-diagnosis-isolated-review.v1",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 23,
+      "directness_and_relevance": 15,
+      "type_specific_completeness": 15,
+      "mechanism_and_causality": 13,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": ["template_only_answer", "uncovered_source_variant"],
+    "revision_suggestions": [
+      "补充真实背景与影响范围、本人职责、时间线、告警和止血动作、工具原始观察、根因证据、修复变更、验证数据及复盘行动项。",
+      "只保留实际使用过且有原始证据支撑的 jstack、jmap 或 Arthas 操作；未使用时说明原因。"
+    ]
+  }
+}
