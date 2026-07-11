@@ -381,7 +381,7 @@
   - 对 60 题进行 100% 人工审查和盲对比。
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
-- Commit: `5f91877c`, `d9f29df2`, `4f945bc6`, `d68f69b9`, `9c92c429`, `0203e816`, `pending`
+- Commit: `5f91877c`, `d9f29df2`, `4f945bc6`, `d68f69b9`, `9c92c429`, `0203e816`, `d172ca10`
 - Notes: `cq_arraylist_9d3444a1`、`cq_binlog_86a375fd`、`cq_cache_consistency_a83eeb36` 与 `cq_clustered_index_8c8cbedb` 已完成候选、可追溯取证、独立审查和机器审计（分别为 100/100、100/100、93/100、97/100，均无硬失败）；ArrayList/LinkedList 候选按实际提问期望校正为 concept，对 Java SE 21 API 的复杂度、容量、并发和 fail-fast 边界逐项取证，首轮未映射的实现/性能推断已删除或收窄后在第二轮通过。binlog 首轮发现并修正 relay log 持久化的配置边界后在第二轮通过，聚簇索引首轮发现并修正二级索引/覆盖索引的绝对化表述后在第二轮通过。缓存一致性候选包含 outbox/幂等删除/binlog 纠偏的可执行状态模型。`cq_gc_algorithms_3f884748` 已两轮审查并保持 `needs_update`：现有来源只能证明 JDK 21 的 `-Xlog:gc*`，不能证明“JDK 9+”版本起点，因此以 `unsupported_factual_claim` 硬失败收口，不进入人工签核。`cq_incident_diagnosis_4e5a6405` 是项目题，仓库没有可验证的个人事故事实；候选仅给出诚实的材料框架，独立审查以 `template_only_answer`、`uncovered_source_variant` 硬失败拒绝，保持 `needs_update`，不虚构第一人称经历。台账现由候选、证据、审计与人工签核工件派生，当前为 4/60 `awaiting_human_review`、2/60 保持 `needs_update`、54/60 待处理。试点仍要求 100% 人工签核，任何未签核候选不得替换正式答案。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
