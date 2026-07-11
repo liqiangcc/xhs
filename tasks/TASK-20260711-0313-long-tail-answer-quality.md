@@ -511,7 +511,7 @@ ZooKeeper 锁合并与进展（2026-07-11）：将 `cq_q_17a452529374881c0a57e96
 - Expected files: `.agents/skills/xhs-answer-curator/SKILL.md`, `config/answer_quality.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `npm test && node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
 - Commit: `pending`
-- Notes: 2026-07-11 已将 26 份独立审查通过、待人工签核的候选整理为 `review/plans/pilot_human_review.md`，其中包含不可替代的 candidate SHA-256 与签核/晋级命令；尚未产生任何人工决定，子任务保持 pending。
+- Notes: 2026-07-11 已将 26 份独立审查通过、待人工签核的候选整理为 `review/plans/pilot_human_review.md`（提交 `680ce0df`），其中包含不可替代的 candidate SHA-256 与签核/晋级命令；尚未产生任何人工决定，子任务保持 pending。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T06` S5：全量升级 Coding 与 SQL
 
