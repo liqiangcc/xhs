@@ -388,6 +388,8 @@
 
 台账校正（2026-07-11）：重新生成试点台账后为 12/60 `awaiting_human_review`、7/60 `needs_update`、41/60 待处理（SPI 候选正处于第二轮隔离审查）。`cq_kafka_isr_3e780e46` 的 pilot 队列题型为 mechanism，但 `answer context` 基于原题返回 concept；按 Skill 的“以面试期待回应决定题型”原则，此冲突已记录，当前失败候选不再改写或晋级。
 
+SPI 进展（2026-07-11）：`cq_spi_3342eb14` 按 Java SE 21 `ServiceLoader` 一手文档完成两轮隔离审查；第二轮得分 98、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 13/60 `awaiting_human_review`、6/60 `needs_update`、41/60 待处理。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`

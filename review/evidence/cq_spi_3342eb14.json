@@ -1,0 +1,76 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_spi_3342eb14",
+  "candidate_sha256": "8bedc54db81698b68bfcb541ec278bf41bcee07a699e9dc13aeccded2fdae4b9",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "java-se-21-spi.v1"
+  },
+  "sources": [
+    {
+      "source_id": "java-21-serviceloader-api",
+      "title": "Java SE 21 ServiceLoader API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ServiceLoader.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "spi-declaration-and-discovery",
+      "text": "Java SE 21 documents that applications obtain a ServiceLoader through load methods; a module consumer declares uses, a provider module declares provides, and class-path providers are declared by META-INF/services/<service fully qualified binary name> with one provider name per line.",
+      "source_ids": ["java-21-serviceloader-api"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "spi-lazy-cache-and-stream",
+      "text": "Java SE 21 documents lazy provider locating and instantiation, a cache of loaded providers, stream inspection/filtering through Provider before get, reload clearing the provider cache, and discarding iterators or streams after reload.",
+      "source_ids": ["java-21-serviceloader-api"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "spi-configuration-errors",
+      "text": "Java SE 21 documents ServiceConfigurationError when locating, loading, or instantiating a provider fails; it also specifies class-loader visibility requirements for class-path provider classes and says ServiceLoader instances are not safe for concurrent use by multiple threads.",
+      "source_ids": ["java-21-serviceloader-api"],
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "spi-provider-construction-boundary",
+      "text": "Java SE 21 documents that a module service provider may supply a service instance through a public static no-argument provider method whose return type is assignable to the service, in which case the provider type itself need not be assignable; absent that method, a public no-argument provider constructor is used and the provider type must be assignable.",
+      "source_ids": ["java-21-serviceloader-api"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "4740052bda110b15bc336162e0231ae2",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "spi-isolated-reviewer-r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "JDK 21 ServiceLoader API 与候选及证据映射一致，覆盖 uses/provides、classpath 配置、provider method/构造器规则、懒发现/缓存/reload、stream、错误和并发边界。",
+      "候选直接覆盖来源变体并满足 mechanism 题型的参与者、流程、状态、开销、版本和故障边界要求。",
+      "多 provider 的选择、启动校验和受信任 provider 是明确工程建议，未伪装为 JDK 自动保证。"
+    ]
+  }
+}
