@@ -546,7 +546,7 @@ ZooKeeper 锁合并与进展（2026-07-11）：将 `cq_q_17a452529374881c0a57e96
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/answer_rewrite_queue.jsonl`
 - Validation: `node scripts/content/analyze_answer_semantics.js --check --forbid-code-placeholders`
 - Commit: `pending`
-- Notes: 2026-07-11 用户授权先跳过人工签核/真实材料阻塞项，先并行推进不依赖个人事实的 Coding candidate；在 T05 完成前不将此并行工作计为 S5 已完成，也不绕过晋级门槛。`cq_topic_722fbd80`（三数之和，`adabbd86`）、`cq_topic_3f61dd36`（反转链表 II，`24aaaf0e`）和 `cq_topic_77ee33f1`（反转单链表，`e5dfef04`）均已完成候选、可执行 Java 边界测试、隔离审查和候选审计（99 分、无硬失败）。三题晋级预检均仅失败于 `missing_human_review`，正式答案未改。
+- Notes: 2026-07-11 用户授权先跳过人工签核/真实材料阻塞项，先并行推进不依赖个人事实的 Coding candidate；在 T05 完成前不将此并行工作计为 S5 已完成，也不绕过晋级门槛。`cq_topic_722fbd80`（三数之和，`adabbd86`）、`cq_topic_3f61dd36`（反转链表 II，`24aaaf0e`）、`cq_topic_77ee33f1`（反转单链表，`e5dfef04`）和 `cq_topic_745b29f7`（K 组翻转，`f87ac08a`）均已完成候选、可执行 Java 边界测试、隔离审查和候选审计（99 分、无硬失败）。四题晋级预检均仅失败于 `missing_human_review`，正式答案未改。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T06-S02` 完成剩余 Coding/SQL 队列
 
