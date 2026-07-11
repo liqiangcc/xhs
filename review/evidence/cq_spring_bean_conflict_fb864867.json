@@ -1,0 +1,35 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_spring_bean_conflict_fb864867",
+  "candidate_sha256": "9640c01f77c3f086e50b35d11ba485348ee8ccaf8fcda23344628057e1659124",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "spring-bean-definition-overriding.v1"},
+  "sources": [
+    {"source_id": "spring-framework-bean-overview-current", "title": "Spring Framework Reference: Bean Overview and Overriding Beans", "locator": "https://docs.spring.io/spring-framework/reference/core/beans/definition.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "spring-framework-7-bean-override-exception", "title": "Spring Framework 7.0.8 API: BeanDefinitionOverrideException", "locator": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/beans/factory/support/BeanDefinitionOverrideException.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "spring-framework-7-no-unique-bean", "title": "Spring Framework 7.0.8 API: NoUniqueBeanDefinitionException", "locator": "https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/beans/factory/NoUniqueBeanDefinitionException.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "spring-boot-4-common-properties", "title": "Spring Boot 4.0 Common Application Properties", "locator": "https://docs.spring.io/spring-boot/4.0/appendix/application-properties/index.html", "source_type": "official_documentation", "checked_at": "2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id": "spring-same-name-registration-and-framework-boundary", "text": "Spring Framework defines bean overriding as registering a bean with an already allocated identifier; setting allowBeanDefinitionOverriding false before ApplicationContext refresh causes an exception, while current reference documentation describes INFO logging by default and documents the matching @Bean/scanned-component override boundary.", "source_ids": ["spring-framework-bean-overview-current"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "spring-override-exception-registration", "text": "Spring Framework 7.0.8 documents BeanDefinitionOverrideException (since 5.1) as an invalid override attempt, typically registering a new definition with the same bean name while DefaultListableBeanFactory bean-definition overriding is false.", "source_ids": ["spring-framework-7-bean-override-exception"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]},
+    {"claim_id": "spring-boot-override-default", "text": "Spring Boot 4.0 documents spring.main.allow-bean-definition-overriding as controlling registration with an existing name and lists its default as false.", "source_ids": ["spring-boot-4-common-properties"], "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]},
+    {"claim_id": "spring-multiple-type-candidates", "text": "Spring Framework 7.0.8 documents NoUniqueBeanDefinitionException as thrown when a BeanFactory is asked for a bean instance and multiple matching candidates are found when one is expected.", "source_ids": ["spring-framework-7-no-unique-bean"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "spring-dynamic-registration-concurrency-boundary", "text": "The current Spring Framework reference documentation says that registering new beans at runtime concurrently with live factory access is not officially supported and can lead to concurrent-access exceptions or inconsistent container state.", "source_ids": ["spring-framework-bean-overview-current"], "answer_locations": ["关键细节"]}
+  ],
+  "source_question_coverage": [
+    {"question_id": "54d81f46162039dca194837935e6c541", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}
+  ],
+  "review": {
+    "reviewer_id": "isolated_reviewer",
+    "review_version": "isolated-review.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 24, "directness_and_relevance": 20, "type_specific_completeness": 19, "mechanism_and_causality": 15, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 5},
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": ["同名注册与按类型多候选清晰区分，覆盖全部来源问法。", "版本、默认值和异常契约均有官方映射。"]
+  }
+}
