@@ -1,0 +1,87 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_clustered_index_8c8cbedb",
+  "candidate_sha256": "375f15d27488defb9a903aa49f69d55d877aa271cf8a3604d4358412372f70c7",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "innodb-clustered-index.v1"
+  },
+  "sources": [
+    {
+      "source_id": "mysql84-innodb-clustered-secondary",
+      "title": "MySQL 8.4 InnoDB Clustered and Secondary Indexes",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql84-index-usage",
+      "title": "MySQL 8.4 How MySQL Uses Indexes",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/mysql-indexes.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "innodb-clustered-key-selection",
+      "text": "For MySQL 8.4 InnoDB, the clustered index stores row data; InnoDB uses PRIMARY KEY when present, otherwise the first all-NOT-NULL UNIQUE index, otherwise a hidden generated clustered index.",
+      "source_ids": ["mysql84-innodb-clustered-secondary"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "innodb-secondary-primary-key-lookup",
+      "text": "In MySQL 8.4 InnoDB, a secondary-index record contains the indexed columns and primary-key columns; InnoDB uses the primary-key value to locate the row through the clustered index, and long primary keys enlarge secondary indexes.",
+      "source_ids": ["mysql84-innodb-clustered-secondary"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "innodb-clustered-access-boundary",
+      "text": "The MySQL 8.4 documentation states that clustered-index lookup leads directly to the page containing row data and can save an I/O relative to a different storage organization; this is an InnoDB storage-organization statement, not a universal performance guarantee.",
+      "source_ids": ["mysql84-innodb-clustered-secondary"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制", "易错点"]
+    },
+    {
+      "claim_id": "mysql-covering-index-and-order-boundaries",
+      "text": "MySQL 8.4 defines a covering index as one providing all necessary query results from the index tree; it also states that index-based sorting/grouping requires a usable index leftmost prefix and compatible direction, while each additional index adds insert, update, and delete maintenance cost.",
+      "source_ids": ["mysql84-index-usage"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "2899582274f7773b01e4c9eb859c4917",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节"]
+    },
+    {
+      "question_id": "4ebd3e4d33b8d66cb0eee00c0d22dabe",
+      "covered": true,
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "83256bc439a542ad19a6801e8f27038b",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节", "易错点"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "clustered-index-isolated-reviewer-round2",
+    "review_version": "answer-review.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "revision_suggestions": []
+  }
+}
