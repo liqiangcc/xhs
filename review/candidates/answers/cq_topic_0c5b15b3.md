@@ -1,0 +1,56 @@
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_0c5b15b3","version":1,"status":"draft","updated_at":"2026-07-11","quality_tier":"candidate","answer_type":"scenario"} -->
+# 搜索引擎如何避免全量扫描并高效检索？
+
+## 核心结论
+
+避免全量扫描的核心是写入时把文档分析为 term，并建立 term 到有序 docID 列表的倒排索引；查询把关键词按兼容的 analyzer 转成 term，只枚举命中的 postings，再依次做 tenant/ACL/状态过滤、相关度排序和 TopK 取详情。扩容前先用路由键缩小要查询的分片和候选集；索引始终是可从权威源重建的检索副本，不把它当作业务事实源。
+
+## 1 分钟版
+
+- 先定边界：全文检索、精确过滤、排序、聚合和权限校验分别建模；写入端为 text/keyword 等不同用途建立字段映射，查询端强制 tenant 和 ACL 条件。
+- 写路径是权威源变更日志 → 版本化索引 worker → 分词/映射 → bulk 索引；worker 只提交不早于已存版本的事件，失败保留 offset 并可从日志重放。
+- 查路径是 query 分析 → alias 选择目标索引和 search routing → term dictionary/postings 候选 → filter → TopK 排序；候选过大、超时或复杂度超限时限流或要求缩小条件，不扩大为全库扫描。
+- 容量以真实语料基准：100M 文档、平均 2KB 原文、20k QPS、60 秒可见延迟、150ms P99 是本题假设；先测每分片的写入/查询 p99、索引字节和 merge，再按 60% 利用率与副本数计算节点数并压测热点。
+
+## 3 分钟版
+
+假设 1 亿商品或知识文档、平均原文 2KB、峰值 2 万 query/s、可见延迟小于 60 秒、查询 P99 小于 150ms，且 tenant 绝不串读。容量不套“每文档固定膨胀倍数”：导入代表性语料后测 `index_bytes/doc`、单分片可持续 `qps_shard`、写入/merge P99 和副本数；查询分片数至少满足 `ceil(20000 / (0.6 * qps_shard))`，存储至少满足 `100M * index_bytes/doc * (1 + replica_count)`，再为重建和恢复留余量。若测试显示热点 term 或租户集中，即使总容量足够，仍需以租户路由、限流和隔离处理该热点。
+
+写入以数据库或不可变事件日志为权威：事件携带 source_id、source_version 和 payload，消费者先比较文档内版本再写索引；若要使用 Elasticsearch 的并发控制，则保存读取到的 `_seq_no` 与 `_primary_term` 并带入 `if_seq_no`/`if_primary_term`，避免旧写覆盖新写。失败不确认 offset，修复后从 checkpoint 重放；定期以 source_id/version 对账。全量重建写新索引，比较文档数、抽样版本和离线 query 集；用 aliases API 的单个多动作请求原子移除旧 alias 并加入新 alias，旧索引保留至回滚窗口结束。
+
+查询服务先将全文条件分析为 term，再在 postings 得到候选，对候选强制 tenant/ACL/状态/时间 filter、相关度排序并只取 TopK 展示字段。必须把 ACL 作为服务端查询不变量，同时覆盖按 ID 读取路径，因为 alias filter 只对 Query DSL 生效。监控索引滞后、重放积压、写失败、P50/P95/P99、零结果率、候选数、分片慢查询、权限拒绝和 snapshot 成功率。先镜像查询并比较 TopK/P99/权限结果，再小流量 alias 灰度；P99 超过 150ms、滞后超过 60 秒、权限校验异常或数据对账失败时停止扩大、回到旧 alias。灾备目标是先恢复权威源和事件日志，再从日志重建索引；同时按恢复目标保存集群 snapshot，因为 snapshot 可恢复索引与集群配置，但不替代权威源。数据库全文索引适合规模较小、事务一致性优先的场景；托管搜索减少集群运维，但增加成本、网络和供应商边界。 先澄清规模、QPS、数据量、一致性、延迟和故障目标，再画主链路，补齐幂等、容量、降级、对账、观测和替代方案。
+
+## 关键细节
+
+- 先定边界：全文检索、精确过滤、排序、聚合和权限校验分别建模；写入端为 text/keyword 等不同用途建立字段映射，查询端强制 tenant 和 ACL 条件。
+- 写路径是权威源变更日志 → 版本化索引 worker → 分词/映射 → bulk 索引；worker 只提交不早于已存版本的事件，失败保留 offset 并可从日志重放。
+- 查路径是 query 分析 → alias 选择目标索引和 search routing → term dictionary/postings 候选 → filter → TopK 排序；候选过大、超时或复杂度超限时限流或要求缩小条件，不扩大为全库扫描。
+- 容量以真实语料基准：100M 文档、平均 2KB 原文、20k QPS、60 秒可见延迟、150ms P99 是本题假设；先测每分片的写入/查询 p99、索引字节和 merge，再按 60% 利用率与副本数计算节点数并压测热点。
+- Lucene 10.3 的 term dictionary 加 postings 提供 term 到有序文档列表的查找；postings 不能高效反查单个文档的所有 term。
+- Elasticsearch text 字段在索引和全文查询时经过 analyzer；通常使用相同 analyzer，独立 search_analyzer 只针对明确需求并须测试。
+- Elasticsearch aliases API 可在一个原子操作内执行多项 add/remove；alias filter 仅适用于 Query DSL，不适用于按 ID 取文档。
+- Elasticsearch 的 `_seq_no`/`_primary_term` 可用于乐观并发控制；snapshot 可恢复集群数据/配置，但恢复前要验证快照、版本兼容和容量。
+
+## 原理机制
+
+入口按容量预算接收流量，核心链路用分区/缓存/异步扩展，持久层维护最终不变量，补偿与对账让故障状态收敛。 专属链路是 `query text → search analyzer → terms → term dictionary → postings candidate docIDs → tenant/ACL/status filter → scorer/sorter → TopK stored fields`。倒排索引把 term 指向包含该 term 的有序文档列表，故不从每篇文档逐一比对关键词；但高频 term 的 postings、filter/排序、跨分片扇出和取 TopK 仍是资源成本。写时 analyzer 与查时 analyzer 产生不兼容 token 会造成漏召回或无关匹配，因此 analyzer、同义词和 mapping 以新索引/验证过的 search-analyzer 版本发布；别名原子切换只保证应用指向的索引切换，不自动证明语料、权限或相关性正确。
+
+## 项目经验版
+
+项目映射提示：把示例数字替换为真实规模和 SLO，补齐个人决策、压测证据、回滚与复盘；不使用未经确认的项目成果。
+
+## 常见追问
+
+- 问：倒排索引为什么能避免全量扫描？答：term dictionary 定位 term 后只读包含该 term 的 postings；高频词仍可能有巨大候选集，后续 filter 和排序不是免费的。
+- 问：分词器更新为什么会导致旧数据漏召回？答：旧文档 token 已按旧 analyzer 落盘，新 query 若产生不同 token 就无法匹配；应使用版本化的新索引重建或经过 query 集验证的 search analyzer。
+- 问：乱序事件怎样避免旧索引覆盖新索引？答：业务事件带 source_version，worker 比较后拒绝旧版本；若由 ES 执行并发保护，使用读取到的 `_seq_no` 和 `_primary_term` 作条件写入。
+- 问：集群丢失时为什么不能只恢复快照？答：快照可恢复索引和配置，但可能不满足业务数据新鲜度；权威源和事件日志必须能恢复并重建索引，再用对账和 query 集验证。
+
+## 易错点
+
+- 不要只罗列组件而没有数据流和容量。
+- 不要只设计成功路径，必须说明超时、重试、降级和对账。
+- 不要把倒排索引说成任何条件下 O(1)；高频词、过滤、排序、聚合和跨分片都会增加成本。
+- 不要把 alias filter 当作完整 ACL；按 ID 读取不应用该 filter。
+- 不要把 snapshot 或索引写成功当作业务权威提交；必须说明权威源、事件重放、恢复目标和对账。
+- 不要因加分片就假设热点消失；路由键、热点 term 和热点租户可能仍集中。
