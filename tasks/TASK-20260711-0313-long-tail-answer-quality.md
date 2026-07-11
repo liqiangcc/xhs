@@ -404,6 +404,8 @@ InnoDB/MyISAM 进展（2026-07-11）：`cq_innodb_myisam_754c10e6` 依据 MySQL 
 
 MySQL 索引类型记录（2026-07-11）：`cq_mysql_index_types_8ee09a1a` 两轮隔离审查后，现有 MySQL 8.4 侧车仍未逐项映射 FULLTEXT/SPATIAL 用途、PRIMARY/UNIQUE 写入约束语义、列组合选型条件及覆盖索引避免回表；以 `unsupported_factual_claim` 保持 `needs_update`，不进行第三轮修订。候选机器审计为 85 分且事实维度低于门槛，正式答案未修改。台账为 18/60 `awaiting_human_review`、8/60 `needs_update`、34/60 待处理。
 
+MySQL 隔离级别进展（2026-07-11）：`cq_mysql_isolation_c43c6784` 依据 MySQL 8.4 InnoDB 隔离级别与一致性读文档完成两轮隔离审查；第二轮得分 97、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 19/60 `awaiting_human_review`、8/60 `needs_update`、33/60 待处理。试点队列遗留标注为 coding，但原题实际要求解释隔离级别和解决的问题，`answer context` 判定 concept，候选采用 concept，冲突已记录。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
