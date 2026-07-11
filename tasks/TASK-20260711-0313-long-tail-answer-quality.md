@@ -400,6 +400,8 @@ TCP/UDP 进展（2026-07-11）：`cq_tcp_e9932fa7` 依据 RFC 9293 与 RFC 768 �
 
 InnoDB/MyISAM 进展（2026-07-11）：`cq_innodb_myisam_754c10e6` 依据 MySQL 8.4 官方引擎与索引文档在首轮隔离审查获 98 分、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 18/60 `awaiting_human_review`、7/60 `needs_update`、35/60 待处理（线程池拒绝策略候选已起草并待取证/独立审查）。
 
+线程池拒绝策略记录（2026-07-11）：`cq_topic_36aeccc5` 两轮隔离审查后仍将特定构造器的默认 handler 误概括为“默认构造器”，并给出未被 Java SE 21 API 取证的递归提交适用性结论；以 `unsupported_factual_claim` 保持 `needs_update`，不进行第三轮修订。台账维持 18/60 `awaiting_human_review`、7/60 `needs_update`、35/60 待处理。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`

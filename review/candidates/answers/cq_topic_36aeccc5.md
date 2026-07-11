@@ -1,0 +1,52 @@
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_36aeccc5","version":1,"status":"draft","updated_at":"2026-07-11","answer_type":"concept","quality_tier":"candidate"} -->
+# 线程池的拒绝策略有哪些？
+
+## 核心结论
+
+`ThreadPoolExecutor` 在 executor 已 shutdown，或最大线程数与工作队列都有界且线程池已饱和时拒绝新任务，并调用 `RejectedExecutionHandler`。JDK 21 提供四个预置策略：默认 `AbortPolicy` 抛 `RejectedExecutionException`；`CallerRunsPolicy` 由提交线程执行；`DiscardPolicy` 静默丢弃；`DiscardOldestPolicy` 丢队首未处理任务后重试。选择取决于任务能否丢、提交线程能否被反压，以及是否必须把拒绝显式暴露。
+
+## 1 分钟版
+
+- `AbortPolicy`：默认策略，拒绝时抛运行时 `RejectedExecutionException`；适合让调用方看到过载并决定重试、降级或失败。
+- `CallerRunsPolicy`：提交 `execute` 的线程自己跑任务，JDK 说明它会降低新任务提交速率；代价是把执行时间转移给调用路径。
+- `DiscardPolicy`：直接丢弃无法执行的任务；JDK 限定为“任务完成从不被依赖”的少见情形。
+- `DiscardOldestPolicy`：未 shutdown 时丢弃工作队列队首后重试，可能再次失败；JDK 说明它很少可接受，不能当成普通队列清理。
+
+## 3 分钟版
+
+先说触发条件而非只背四个类名。`execute` 提交任务时，若 executor 已 shutdown 会拒绝；若最大线程数和工作队列容量都有界、且线程池饱和，也会拒绝。拒绝不是队列满的唯一同义词：shutdown、core/max 线程数、队列类型和容量共同决定是否走到 `RejectedExecutionHandler`。
+
+四个策略的统一比较维度是“拒绝信号交给谁、任务是否仍执行、调用路径代价是什么”。`AbortPolicy` 抛异常，保留显式失败信号；默认构造器使用它。`CallerRunsPolicy` 不新建 worker，而让调用 `execute` 的线程运行任务，JDK 将其描述为降低提交速率的简单反馈控制；它不适合提交线程不能被阻塞或任务可能递归提交的场景。`DiscardPolicy` 不报告地丢任务，因此只有业务证明任务完成不被依赖时才可用。`DiscardOldestPolicy` 丢弃队首未处理任务并重试，若仍失败可重复；JDK 直接说明它很少可接受，并建议取消被丢弃且可能被等待其完成的任务，和/或记录失败。
+
+实际选择先定义任务语义。必须处理、必须让上游感知失败的任务通常采用 `AbortPolicy` 或自定义 handler，把拒绝转成可观测的业务结果；是否重试由幂等性、截止时间与上游容量另行决定。若希望将饱和压力同步传回提交者，可评估 `CallerRunsPolicy`，但要确认调用线程角色和任务耗时。只有可明确丢失且已观察丢弃量的工作才讨论 `DiscardPolicy`；不要把 `DiscardOldestPolicy` 用于按提交顺序有业务意义的队列。
+
+## 关键细节
+
+- 拒绝处理器的入口是 `RejectedExecutionHandler.rejectedExecution(Runnable, ThreadPoolExecutor)`，不是任务在 worker 中抛异常后的处理器。
+- `CallerRunsPolicy` 在 executor 未 shutdown 时由调用 `execute` 的线程直接运行任务；若 executor 已 shutdown，任务会被丢弃。
+- `DiscardOldestPolicy` 丢的是 work queue 的 head，也就是最久未处理的队首任务，再重试 `execute`；它没有保证重试成功。
+- 自定义 handler 可以记录、计数或将拒绝转换为业务动作，但它不能凭空增加队列/线程容量；必须与 core/max/queue 配置和上游限流一起验证。
+
+## 原理机制
+
+状态链是 `execute(task) → 尝试创建 core worker / 入队 / 创建 non-core worker → shutdown 或有限线程+有限队列饱和 → rejectedExecution(task, executor)`。`AbortPolicy` 在末端抛异常；`CallerRunsPolicy` 把状态转到提交线程执行；`DiscardPolicy` 终止任务；`DiscardOldestPolicy` 先删除队首再回到 `execute` 重试。策略改变的是拒绝后的任务命运，不会改变已提交任务的正确性，也不替代容量规划。
+
+资源取舍是吞吐、排队时间与调用方负担：CallerRuns 的反压消耗提交线程时间；丢弃策略牺牲任务完成；Abort 把失败留给调用方处理；DiscardOldest 牺牲等待最久的任务并带来重试的不确定性。应监控拒绝数、按策略的丢弃/CallerRuns 次数、队列长度、活跃线程和提交端失败，而不是只观察线程池是否“还活着”。
+
+## 项目经验版
+
+项目映射提示：补充线程池 core/max、队列类型和容量、提交线程角色、任务幂等性/截止时间、拒绝时的上游协议、监控指标与一次饱和压测。没有这些事实时，不要虚构“CallerRuns 解决了线上流量洪峰”或具体拒绝数量。
+
+## 常见追问
+
+- 问：线程池满了为什么不一定只是队列满？答：JDK 的拒绝还发生在 executor shutdown，或最大线程与队列都有限且饱和；线程数、queue 和生命周期要一起看。
+- 问：CallerRunsPolicy 会创建新线程吗？答：不会。它在未 shutdown 时让调用 `execute` 的线程运行被拒绝的任务，因此把执行成本传回提交路径。
+- 问：DiscardPolicy 为什么危险？答：它静默丢任务，JDK 限定其只适合任务完成从不被依赖的少见情况；否则调用方会误以为任务已被接收。
+- 问：DiscardOldestPolicy 丢的是新任务还是旧任务？答：它丢工作队列队首的最久未处理任务，再尝试执行新任务；重试还可能再次失败。
+
+## 易错点
+
+- 不要把拒绝策略当成线程池容量配置的替代品；先说明 core/max、队列和 shutdown 的触发条件。
+- 不要说 CallerRuns“保证任务最终完成”；executor shutdown 时它会丢弃任务，调用线程也可能被业务限制。
+- 不要把 DiscardPolicy 用于必须处理的订单、通知或持久化任务，或省略拒绝/丢弃观测。
+- 不要把 DiscardOldestPolicy 说成“自动淘汰低优先级任务”；它只按队首处理，并不知道业务优先级。

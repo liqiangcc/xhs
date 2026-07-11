@@ -1,0 +1,88 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_topic_36aeccc5",
+  "candidate_sha256": "c173568860dbcf945bf3f6a2c774705b969842c2c66f2c60cc5e019b7cb9db44",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "java-se-21-threadpoolexecutor.v1"
+  },
+  "sources": [
+    {
+      "source_id": "java-21-threadpoolexecutor-api",
+      "title": "Java SE 21 ThreadPoolExecutor API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "threadpool-rejection-trigger-and-handler",
+      "text": "Java SE 21 documents rejection when the executor is shut down or when both maximum threads and work-queue capacity are finite and the executor is saturated; execute then invokes RejectedExecutionHandler.rejectedExecution, with four predefined policies.",
+      "source_ids": ["java-21-threadpoolexecutor-api"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "threadpool-predefined-policies",
+      "text": "Java SE 21 documents AbortPolicy throwing RejectedExecutionException, CallerRunsPolicy running the task in the execute-calling thread as feedback slowing submissions, DiscardPolicy silently dropping the task only when completion is never relied upon, and DiscardOldestPolicy dropping the work-queue head then retrying and being rarely acceptable; AbortPolicy is the default handler.",
+      "source_ids": ["java-21-threadpoolexecutor-api"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "threadpool-policy-boundaries",
+      "text": "Java SE 21 documents that CallerRunsPolicy discards when the executor is shut down, and that DiscardOldestPolicy discards the queue head then retries unless shutdown, potentially repeating failure; its documentation advises cancellation/logging in nearly all cases.",
+      "source_ids": ["java-21-threadpoolexecutor-api"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "260edb4eab489f8fd27458f025729ad3",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "cea0dd0678b5d50fd1e2182d176971a6",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "e646b040b976aafe58949bd4b6d81fee",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "isolated-reviewer-r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 21,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 3
+    },
+    "hard_failures": ["unsupported_factual_claim"],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [
+      {
+        "claim": "AbortPolicy 是默认构造器使用的策略",
+        "reason": "Java SE 21 只说明未显式传入 handler 的特定 ThreadPoolExecutor 构造器使用默认拒绝处理器，不存在对应的无参默认构造器表述。"
+      },
+      {
+        "claim": "CallerRunsPolicy 不适合递归提交任务",
+        "reason": "现有一手证据只支持调用 execute 的线程执行任务并形成降速反馈，未覆盖该适用性结论。"
+      }
+    ],
+    "findings": [
+      "四个预置策略、拒绝触发、CallerRuns shutdown 边界和 DiscardOldest 队首重试均已核验。",
+      "两轮审查后仍有未经映射的构造器/递归提交结论，并且核心结论口述密度过高；保持 needs_update，禁止第三轮修订。"
+    ]
+  }
+}
