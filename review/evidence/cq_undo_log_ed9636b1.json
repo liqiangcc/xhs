@@ -1,0 +1,70 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_undo_log_ed9636b1",
+  "candidate_sha256": "03b5a7342edebe77521f26cb7384008e98d9413b61ac734d32261d9b63934c95",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "mysql-8.4-undo-recovery.v1"
+  },
+  "sources": [
+    {
+      "source_id": "mysql-8-4-innodb-undo-logs",
+      "title": "MySQL 8.4 InnoDB undo logs",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-undo-logs.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-8-4-innodb-recovery",
+      "title": "MySQL 8.4 InnoDB recovery",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-recovery.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "innodb-undo-record-purpose-and-boundary",
+      "text": "MySQL 8.4 documents that an undo log is associated with a single read-write transaction and contains information for undoing the latest transaction change to a clustered-index record; original data for consistent reads can be retrieved from undo records. Undo logs in the global temporary tablespace for user-defined temporary tables are not redo-logged, are not required for crash recovery, and are only used for rollback while the server runs.",
+      "source_ids": ["mysql-8-4-innodb-undo-logs"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "innodb-crash-recovery-redo-and-incomplete-rollback",
+      "text": "MySQL 8.4 documents that after unexpected exit InnoDB automatically checks logs, rolls forward to the present, and rolls back uncommitted transactions. Recovery includes tablespace discovery, redo log application before accepting connections, and rollback of incomplete transactions. Transactions not committed or in XA PREPARE state at exit are rolled back; the rollback can run in a background thread with new connections, which can encounter locking conflicts until it completes. Rollback time can be three or four times interrupted transaction active time depending on server load.",
+      "source_ids": ["mysql-8-4-innodb-recovery"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "26bdd88df4ab3644f8a4bc8747e1635a",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "isolated-reviewer-r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "候选准确区分 redo 的前滚职责与 Undo 对未完成事务的回滚职责。",
+      "XA PREPARE、已提交事务、后台回滚锁冲突和临时表 Undo 边界均已覆盖。"
+    ]
+  }
+}
