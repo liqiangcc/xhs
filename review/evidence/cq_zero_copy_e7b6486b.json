@@ -1,0 +1,70 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_zero_copy_e7b6486b",
+  "candidate_sha256": "33bd740e84ee59fc5d3450bb1265d8c91403b0afd4cdda60f2d9e266194a1f66",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "linux-sendfile-jdk21.v1"
+  },
+  "sources": [
+    {
+      "source_id": "linux-sendfile-man7",
+      "title": "Linux sendfile(2) manual",
+      "locator": "https://man7.org/linux/man-pages/man2/sendfile.2.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "java-21-filechannel-api",
+      "title": "Java SE 21 FileChannel API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/channels/FileChannel.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "linux-sendfile-kernel-and-boundaries",
+      "text": "Linux sendfile(2) documents in-kernel copying between file descriptors, greater efficiency than read/write requiring user-space transfers, the ordinary input mmap-like restriction, the Linux 5.12 pipe-output splice exception, the Linux 2.6.33 output-fd boundary, possible short successful writes, fallback on EINVAL/ENOSYS, and the requirement not to modify zero-copy file portions before the reader consumes them.",
+      "source_ids": ["linux-sendfile-man7"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "java-transfer-to-contract",
+      "text": "Java SE 21 FileChannel.transferTo documents an attempt to transfer up to count bytes, a possibly-zero return, short transfer when the target non-blocking channel lacks output-buffer capacity, unchanged source file position, and that many operating systems can transfer directly from filesystem cache to target without actually copying.",
+      "source_ids": ["java-21-filechannel-api"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "582bb865735a9beef00c036489ae3791",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "isolated-zero-copy-reviewer",
+    "review_version": "r2.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Linux sendfile(2) 与 Java SE 21 FileChannel.transferTo 的主张、短传边界、版本例外和哈希映射均已独立核对。",
+      "候选满足 mechanism 题型的参与组件、流程、position/remaining 状态推进、资源代价、版本与性能边界要求，并覆盖来源问法。"
+    ]
+  }
+}

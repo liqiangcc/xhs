@@ -390,6 +390,8 @@
 
 SPI 进展（2026-07-11）：`cq_spi_3342eb14` 按 Java SE 21 `ServiceLoader` 一手文档完成两轮隔离审查；第二轮得分 98、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 13/60 `awaiting_human_review`、6/60 `needs_update`、41/60 待处理。
 
+零拷贝进展（2026-07-11）：`cq_zero_copy_e7b6486b` 依据 Linux `sendfile(2)` 与 Java SE 21 `FileChannel.transferTo` 完成两轮隔离审查；第二轮得分 100、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 14/60 `awaiting_human_review`、8/60 `needs_update`、38/60 待处理（RAG 和 Redis 持久化候选正在隔离审查/取证）。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
