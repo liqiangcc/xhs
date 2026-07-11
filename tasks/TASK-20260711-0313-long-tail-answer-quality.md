@@ -436,6 +436,8 @@ RocketMQ 顺序消费进展（2026-07-11）：`cq_rocketmq_b7347b07` 依据 Rock
 
 搜索引擎设计记录（2026-07-11）：`cq_topic_0c5b15b3` 依据 Lucene 10.3 postings/term dictionary 与 Elasticsearch 当前 analyzer、text field、alias、乐观并发控制、snapshot 官方文档完成两轮隔离审查。第二轮总分 91，但口述维度仅 3（最低 4）：1 分钟版四点仍承载过多设计信息，且 3 分钟版重复较多。按最多两轮规则保持 `needs_update`，不再修订；正式答案 SHA-256 仍为 `6aca1238f2c5ef6f67f2aacb4c30361b9a322c60670a35a961a4890ce97a1d32`，未修改。当前台账为 25/60 `awaiting_human_review`、17/60 `needs_update`、18/60 未起草。
 
+待补充真实素材记录（2026-07-11）：只读盘点剩余未起草试点后，`cq_ai_055f19f9`（本人 AI 实践/思考）、`cq_q_18848d921d4665b4a96a8e455d2c83ed`（离职与成长）、`cq_q_1c6a767f1cb3bd48baae269f3d5dcd12`（实际冲突）、`cq_q_29c89bfc2929e423edec84f13ebab049`（个人职业规划/业务见解）、`cq_q_5b4e008e58ab3a24f638a6160292f6de`（本人选型经历）、`cq_q_0633d30c8c0b5548ac47dcbc35939e00`（项目发钱逻辑）、`cq_q_063fb18784fc2d9677aba13b1b3f3791`（秒杀项目 QPS）、`cq_q_0e26bffea609c7de57b1404293587fba`（上一家公司蓝绿发布）均没有候选人的背景、职责、原始证据和结果。为避免已验证会失败的模板化个人回答，不生成候选、不计入修订轮次；等待真实素材。其余题目虽在 pilot 队列中被误标为 behavior/project，但题干是可独立核验的技术题，继续按实际题型处理。
+
 ZooKeeper 锁 Canonical 边界记录（2026-07-11）：`cq_zookeeper_lock_2808e178` 的 `answer context` 显示相邻 `cq_q_17a452529374881c0a57e963f08a18e2` 标题为“Zookeeper分布式锁实现原理？”，与当前题为同一语义边界。按去重规则撤回未审候选和证据，不增加试点计数、不修改正式答案；该对 Canonical 待合并/迁移审查后再进入重写队列。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
