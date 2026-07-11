@@ -416,6 +416,8 @@ CAS 记录（2026-07-11）：`cq_cas_64fa0b00` 两轮隔离审查后，CAS 条�
 
 IPC 记录（2026-07-11）：`cq_ipc_84b09f40` 两轮隔离审查后，Linux/POSIX 本机 IPC 的管道、消息队列、共享内存/信号量、信号和 AF_UNIX 核心 API 已取证；但 FIFO 事实没有一手映射，AF_UNIX 的类型级消息边界/连接契约未逐项映射，五类机制的统一比较矩阵也未达到题型完整性要求。以 `unsupported_factual_claim`、`missing_evidence` 保持 `needs_update`，不进行第三轮修订，正式答案未修改。台账为 21/60 `awaiting_human_review`、11/60 `needs_update`、28/60 待处理。
 
+JVM 安全点记录（2026-07-11）：`cq_jvm_safepoint_f7c9b757` 两轮隔离审查后已以 OpenJDK 21u 源码区分普通 native 安全状态、state transition 与 JNI critical/GC Locker；但将“源码创建/提交 JFR safepoint 事件”外推为运行时必然可见，且没有为 JVM-operation 日志归因与完整处置链提供一手映射。以 `unsupported_factual_claim` 保持 `needs_update`，不进行第三轮修订，正式答案未修改。台账为 21/60 `awaiting_human_review`、12/60 `needs_update`、27/60 待处理。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`

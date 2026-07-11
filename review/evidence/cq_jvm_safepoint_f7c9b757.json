@@ -1,0 +1,31 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_jvm_safepoint_f7c9b757",
+  "candidate_sha256": "42e9bed92b53e86a0bed689e65ba6f32b6b2cdbb80a0368df60782e7d78784e2",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "openjdk-21u-safepoint-source.v1"},
+  "sources": [
+    {"source_id": "openjdk21u-safepoint-cpp", "title": "OpenJDK 21u HotSpot safepoint.cpp", "locator": "https://github.com/openjdk/jdk21u/blob/master/src/hotspot/share/runtime/safepoint.cpp", "source_type": "upstream_source_code_or_release_note", "checked_at": "2026-07-11"},
+    {"source_id": "openjdk21u-safepoint-mechanism-cpp", "title": "OpenJDK 21u HotSpot safepointMechanism.cpp", "locator": "https://github.com/openjdk/jdk21u/blob/master/src/hotspot/share/runtime/safepointMechanism.cpp", "source_type": "upstream_source_code_or_release_note", "checked_at": "2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id": "openjdk21-safepoint-thread-paths", "text": "OpenJDK 21u safepoint.cpp documents HotSpot safepoint paths for interpreted code, compiled code polling page, blocked threads, native return, and VM/state-transition threads; SafepointSynchronize::begin is VM-thread-only, arms the safepoint, waits for threads to be safe, then records synchronized state.", "source_ids": ["openjdk21u-safepoint-cpp"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "openjdk21-safepoint-local-poll", "text": "OpenJDK 21u safepoint.cpp and safepointMechanism.cpp document per-thread local poll arming, a global-poll check in SafepointMechanism::process, and blocking through SafepointSynchronize::block when the global poll is armed.", "source_ids": ["openjdk21u-safepoint-cpp", "openjdk21u-safepoint-mechanism-cpp"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]},
+    {"claim_id": "openjdk21-safepoint-native-and-jni-boundary", "text": "OpenJDK 21u safepoint.cpp states the VM thread does not wait for a Java thread seen in native to block; its safepoint-safe check treats _thread_in_native as safe when there is no last Java frame or the frame anchor is walkable. The source separately counts active JNI critical threads and passes that count to GC Locker.", "source_ids": ["openjdk21u-safepoint-cpp"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "openjdk21-safepoint-jfr-events", "text": "OpenJDK 21u safepoint.cpp creates and commits JFR events EventSafepointBegin, EventSafepointStateSynchronization, EventSafepointCleanup, EventSafepointCleanupTask, and EventSafepointEnd around synchronization and cleanup.", "source_ids": ["openjdk21u-safepoint-cpp"], "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问"]},
+    {"claim_id": "openjdk21-safepoint-timeout-boundary", "text": "OpenJDK 21u safepoint.cpp contains SafepointTimeout and SafepointTimeoutDelay diagnostic paths while synchronizing threads, including print_safepoint_timeout; their enablement and behavior are runtime-version-and-option dependent.", "source_ids": ["openjdk21u-safepoint-cpp"], "answer_locations": ["3 分钟版", "关键细节", "项目经验版"]}
+  ],
+  "source_question_coverage": [{"question_id": "9682320d0b2692b04ee06f18d8c06979", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}],
+  "review": {
+    "reviewer_id": "isolated-openjdk21u-safepoint-r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 21, "directness_and_relevance": 18, "type_specific_completeness": 18, "mechanism_and_causality": 14, "boundaries_and_tradeoffs": 9, "followup_quality": 5, "oral_quality": 4},
+    "hard_failures": ["unsupported_factual_claim"],
+    "uncovered_source_variants": [],
+    "unsupported_claims": ["源码创建/提交 JFR safepoint 事件不等于任意运行时录制必然可见；需受 recording/event setting 限定。", "现有映射未证明 JFR 可直接归因任意 VM operation 耗时或 -Xlog:safepoint 的具体字段。", "JNI critical、状态转换和锁/I/O 的处置路径未逐项限定为可核验状态。"],
+    "findings": ["普通 native、native transition、blocked/state transition 与 JNI critical/GC Locker 的源码边界已正确区分。", "JFR 配置敏感性和可执行诊断链仍不满足证据要求，候选保持 needs_update。"]
+  }
+}
