@@ -75,6 +75,28 @@ test('context includes source variants and candidate rendering stays isolated', 
     fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('structured candidate rendering excludes generic type guidance', () => {
+    const root = fixtureRoot();
+    const specPath = path.join(root, 'structured-candidate.json');
+    writeJson(specPath, {
+        canonical_id: 'cq_redis',
+        answer_type: 'scenario',
+        core: 'Redis 候选的题目专属核心结论。',
+        points: ['专属要点一。', '专属要点二。', '专属要点三。'],
+        deep: 'Redis 候选的题目专属展开。',
+        mechanism: 'Redis 候选的题目专属机制。',
+        followups: ['Redis 失败怎么办？|按 Redis 的题目边界回答。', 'Redis 热点怎么办？|按 Redis 的热点边界回答。', 'Redis 如何验证？|按 Redis 的验证路径回答。'],
+        mistakes: ['不要把 Redis 的题目写成通用系统设计。'],
+    });
+    const rendered = renderCandidate({ root, spec: specPath, date: '2026-07-11' });
+    const content = fs.readFileSync(path.join(root, rendered.candidate_path), 'utf8');
+    assert.match(content, /Redis 候选的题目专属展开。/);
+    assert.match(content, /Redis 候选的题目专属机制。/);
+    assert.doesNotMatch(content, /先澄清规模、QPS、数据量、一致性、延迟和故障目标/);
+    assert.doesNotMatch(content, /入口按容量预算接收流量，核心链路用分区\/缓存\/异步扩展/);
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('curated tier audit reads formal answers without treating them as candidates', () => {
     const root = fixtureRoot();
     const answersDir = path.join(root, 'review', 'answers');

@@ -157,7 +157,10 @@ function renderCandidate(options = {}) {
         parseAnswerMetadata(entry.content, specPath);
         content = replaceAnswerMetadata(entry.content, candidateMetadata(parseAnswerMetadata(entry.content), canonicalId, answerType, date));
     } else {
-        content = render({ ...entry, type: answerType }, canonical, date);
+        // Candidates must contain only writer-supplied topic prose. The
+        // historical renderer's generic type guidance belongs to curated specs
+        // and would otherwise introduce cross-topic contamination.
+        content = render({ ...entry, type: answerType, include_type_guidance: false }, canonical, date);
         content = replaceAnswerMetadata(content, candidateMetadata(parseAnswerMetadata(content), canonicalId, answerType, date));
     }
     const filePath = path.join(paths.candidateAnswersDir, `${canonicalId}.md`);

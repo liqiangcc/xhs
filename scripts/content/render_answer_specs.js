@@ -66,7 +66,16 @@ function render(entry, canonical, date) {
         ? `\n\n\`\`\`java\n${entry.java.trim()}\n\`\`\``
         : '';
     const complexity = entry.complexity ? `\n- 复杂度：${entry.complexity}` : '';
-    const mistakes = [...profile.mistakes, ...(entry.mistakes || [])].map((item) => `- ${item}`);
+    // Curated specs historically include type guidance as a fallback. Candidate
+    // prose is independently researched and reviewed, so appending generic
+    // guidance there can contaminate an otherwise topic-specific answer.
+    const includeTypeGuidance = entry.include_type_guidance !== false;
+    const deep = [entry.deep, includeTypeGuidance ? profile.deep : null].filter(Boolean).join(' ');
+    const mechanism = [includeTypeGuidance ? profile.mechanism : null, entry.mechanism || entry.core].filter(Boolean).join(' ');
+    const mistakes = [
+        ...(includeTypeGuidance ? profile.mistakes : []),
+        ...(entry.mistakes || []),
+    ].map((item) => `- ${item}`);
     return [
         `<!-- xhs-answer: ${JSON.stringify({ schema_version: 'answer.v1', canonical_id: entry.canonical_id, version: 1, status: 'ready', updated_at: date, quality_tier: 'curated' })} -->`,
         `# ${canonical.canonical_title}`,
@@ -81,7 +90,7 @@ function render(entry, canonical, date) {
         '',
         '## 3 分钟版',
         '',
-        `${entry.deep} ${profile.deep}${implementation}`,
+        `${deep}${implementation}`,
         '',
         '## 关键细节',
         '',
@@ -91,7 +100,7 @@ function render(entry, canonical, date) {
         '',
         '## 原理机制',
         '',
-        `${profile.mechanism} ${entry.mechanism || entry.core}${complexity}`,
+        `${mechanism}${complexity}`,
         '',
         '## 项目经验版',
         '',
