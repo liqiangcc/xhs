@@ -808,7 +808,7 @@ ZooKeeper 锁合并与进展（2026-07-11）：将 `cq_q_17a452529374881c0a57e96
   - 验证 `--noWrite` 不修改 progress 或 session。
 - Expected files: `scripts/commands/review.js`, `test/review.test.js`
 - Validation: `node --test test/review.test.js test/answer_completion.test.js && npm test` -> passed (95 tests)
-- Commit: `pending`
+- Commit: `74a2dae8`
 - Notes: `review mark` 保存 `oral_version`、`followup_answered`、`quality_defects`、`hard_failures` 和 `feedback_closed_at`；只读调用返回事件预览而不写 progress/session。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T12-S03` 完成根任务审计
