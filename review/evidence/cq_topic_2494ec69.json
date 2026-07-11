@@ -1,0 +1,84 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_topic_2494ec69",
+  "candidate_sha256": "9693fd181b2457fe647a12dfc6eca9bbc7e51cfe3b278aada5d51410fcad0e63",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "redis-persistence-current-docs.v1"
+  },
+  "sources": [
+    {
+      "source_id": "redis-persistence-docs",
+      "title": "Redis persistence documentation",
+      "locator": "https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "redis-rdb-aof-options-and-tradeoffs",
+      "text": "Redis documentation defines RDB as point-in-time snapshots, AOF as logging every write operation for replay at startup, no persistence, and combined RDB+AOF. It documents RDB's compact backup/disaster-recovery and faster-large-dataset restart advantages, and snapshot data-loss/fork-stall boundaries; it documents AOF size and fsync-policy tradeoffs and recommends using both methods when higher data safety is needed.",
+      "source_ids": ["redis-persistence-docs"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "redis-aof-fsync-and-rewrite",
+      "text": "Redis documentation specifies appendfsync always/everysec/no behavior, says everysec is the suggested and default policy and may lose one second of data in a disaster, and documents background AOF rewrite while the old file continues receiving appends before switching to the new file.",
+      "source_ids": ["redis-persistence-docs"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "redis-aof-version-and-recovery-boundaries",
+      "text": "Redis documentation states that Redis 7.0.0 introduced multi-part AOF with base and incremental files tracked by a manifest, documents its rewrite manifest replacement, and distinguishes truncated AOF recovery from invalid mid-file corruption and repair outcomes.",
+      "source_ids": ["redis-persistence-docs"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "3660e5e268dc1d22690971aeee67170f",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "ac29bc287a8dd1c42f488ba68cb2b71c",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "b88d9add388b4634a215dc862c3c213e",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "f29c5c14f94d49edb2a1c01085ece590",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "redis_persistence_isolated_review_r1",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "2026-07-11 核验的 Redis 官方 persistence 文档覆盖全部材料性主张，候选哈希与 evidence sidecar 一致。",
+      "答案按 concept 审查，覆盖 RDB/AOF 定义、统一比较、选型条件、关闭持久化边界、Redis 7.0.0 multi-part AOF 与配置敏感的 fsync/rewrite 细节。"
+    ]
+  }
+}

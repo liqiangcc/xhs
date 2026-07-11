@@ -394,6 +394,8 @@ SPI 进展（2026-07-11）：`cq_spi_3342eb14` 按 Java SE 21 `ServiceLoader` �
 
 RAG 进展（2026-07-11）：`cq_rag_2ff8f969` 依据 Lewis 等人的 RAG 原始论文完成两轮隔离审查；第二轮得分 100、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 15/60 `awaiting_human_review`、7/60 `needs_update`、38/60 待处理。该题 pilot 队列标 mechanism，而 `answer context` 取原题分类显示 scenario；按题干要求的原理解释与试点队列，候选采用 mechanism，冲突已记录。
 
+Redis 持久化进展（2026-07-11）：`cq_topic_2494ec69` 依据 Redis 官方 persistence 文档在首轮隔离审查即获 100 分、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 16/60 `awaiting_human_review`、6/60 `needs_update`、38/60 待处理。该题试点队列标 mechanism，但原题及 `answer context` 均指向 RDB/AOF 的 concept 对比，候选采用 concept，冲突已记录。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
