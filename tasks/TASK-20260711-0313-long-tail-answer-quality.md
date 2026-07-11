@@ -406,6 +406,8 @@ MySQL 索引类型记录（2026-07-11）：`cq_mysql_index_types_8ee09a1a` 两�
 
 MySQL 隔离级别进展（2026-07-11）：`cq_mysql_isolation_c43c6784` 依据 MySQL 8.4 InnoDB 隔离级别与一致性读文档完成两轮隔离审查；第二轮得分 97、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 19/60 `awaiting_human_review`、8/60 `needs_update`、33/60 待处理。试点队列遗留标注为 coding，但原题实际要求解释隔离级别和解决的问题，`answer context` 判定 concept，候选采用 concept，冲突已记录。
 
+MySQL 备份与 PITR 记录（2026-07-11）：`cq_mysql_backup_0daa23c7` 两轮隔离审查后已纠正“以备份完成时刻作为 binlog 起点”的错误，并以 MySQL 8.4 position 恢复文档限定一致性坐标、连续日志链和误操作前 stop position；但一致性坐标与备份基线的建立、并发写入/DDL/非事务对象边界没有一手证据，机制题专项仅 15 分（最低 16）。候选保持 `needs_update`，不进行第三轮修订；正式答案未修改。台账为 19/60 `awaiting_human_review`、9/60 `needs_update`、32/60 待处理。试点队列遗留标注为 coding，但原题要求恢复流程解释，`answer context` 判定 mechanism，候选采用 mechanism，冲突已记录。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
