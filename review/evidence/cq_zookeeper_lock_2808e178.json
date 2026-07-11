@@ -1,0 +1,38 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_zookeeper_lock_2808e178",
+  "candidate_sha256": "8ee3f5bc34f5726b4a467e9f412cc05267c91b82adeea24ee0337ed1203cfaf4",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "zookeeper-lock-recipe-3.9.v1"},
+  "sources": [
+    {"source_id": "zookeeper-recipes-locks-r372", "title": "Apache ZooKeeper Recipes and Solutions: Locks", "locator": "https://zookeeper.apache.org/doc/r3.7.2/recipes.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "zookeeper-395-create-mode", "title": "Apache ZooKeeper 3.9.5 CreateMode API", "locator": "https://zookeeper.apache.org/doc/current/apidocs/zookeeper-server/org/apache/zookeeper/CreateMode.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "zookeeper-363-client-api", "title": "Apache ZooKeeper 3.6.3 ZooKeeper client API", "locator": "https://zookeeper.apache.org/doc/r3.6.3/apidocs/zookeeper-server/org/apache/zookeeper/ZooKeeper.html", "source_type": "official_documentation", "checked_at": "2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id": "zookeeper-lock-recipe-predecessor-watch", "text": "ZooKeeper's official lock recipe creates a GUID-prefixed sequential ephemeral node, grants the lock to the lowest process node, and has other clients watch the node with the next lowest sequence number rather than polling or watching all waiters; the recipe documents the GUID recovery case after an ambiguous create response.", "source_ids": ["zookeeper-recipes-locks-r372"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "zookeeper-ephemeral-sequential-boundary", "text": "ZooKeeper 3.9.5 documents EPHEMERAL_SEQUENTIAL as a znode deleted upon client disconnect with a monotonically increasing suffix appended to its name.", "source_ids": ["zookeeper-395-create-mode"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "zookeeper-watch-and-session-boundary", "text": "ZooKeeper's client API documents that ephemeral nodes are removed when the associated session expires, sequential paths receive a suffix, and create/delete operations trigger the relevant exists, getData, and getChildren watches.", "source_ids": ["zookeeper-363-client-api"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "zookeeper-lock-design-boundaries", "text": "Lock suitability, contention monitoring, pressure tests, and downstream business-state handling are explicit application design boundaries; they are not claims that ZooKeeper automatically performs downstream state transitions or supplies a production lock implementation.", "source_ids": ["zookeeper-recipes-locks-r372", "zookeeper-395-create-mode", "zookeeper-363-client-api"], "answer_locations": ["3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问", "易错点"]}
+  ],
+  "source_question_coverage": [
+    {"question_id": "17a452529374881c0a57e963f08a18e2", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]},
+    {"question_id": "b51e8c0b2e219f7327542953fb119b90", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}
+  ],
+  "review": {
+    "reviewer_id": "isolated-reviewer-r2",
+    "review_version": "xhs-answer-curator-isolated-r2.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 24, "directness_and_relevance": 20, "type_specific_completeness": 19, "mechanism_and_causality": 15, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 5},
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "候选覆盖两个来源问法，机制题的参与者、持锁流程、前驱监听、会话失效、成本与边界完整。",
+      "官方证据、候选哈希与材料主张映射一致。",
+      "1 分钟版四个主干点，3 分钟版补充惊群规避、会话边界与模糊 create 恢复，无虚构项目经历。"
+    ]
+  }
+}
