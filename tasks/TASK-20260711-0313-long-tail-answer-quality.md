@@ -410,6 +410,8 @@ MySQL 备份与 PITR 记录（2026-07-11）：`cq_mysql_backup_0daa23c7` 两轮�
 
 Undo Log 进展（2026-07-11）：`cq_undo_log_ed9636b1` 依据 MySQL 8.4 InnoDB Undo 与恢复文档完成两轮隔离审查；第二轮得分 99、无硬失败，候选审计通过。首轮发现的 XA 条件已修正为“未提交或处于 XA PREPARE 状态”，并明确已提交事务不属于恢复回滚对象。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 20/60 `awaiting_human_review`、9/60 `needs_update`、31/60 待处理。试点队列遗留标注为 coding，但原题实际要求恢复机制解释，`answer context` 判定 mechanism，候选采用 mechanism，冲突已记录。
 
+CAS 记录（2026-07-11）：`cq_cas_64fa0b00` 两轮隔离审查后，CAS 条件更新、ABA 的 reference+stamp 边界以及 Java SE 21 API 证据均通过；但第二轮指出机制题没有经证据支撑的高竞争重试资源成本与性能边界，题型专项仅 15 分（最低 16）。候选保持 `needs_update`，不进行第三轮修订，正式答案未修改。台账为 20/60 `awaiting_human_review`、10/60 `needs_update`、30/60 待处理。试点队列遗留标注为 scenario，但原题实际要求原理解释，候选采用 mechanism，冲突已记录。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
