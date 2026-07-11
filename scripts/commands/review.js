@@ -39,13 +39,14 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0];
     const options = { _: [] };
-    const booleanFlags = new Set(['with-issues']);
+    const booleanFlags = new Set(['with-issues', 'followup-answered']);
     for (let index = 1; index < args.length; index++) {
         const arg = args[index];
         if (arg.startsWith('--')) {
             const key = arg.replace(/^--/, '');
             if (applyGlobalBooleanOption(options, key)) continue;
             if (booleanFlags.has(key)) options[key] = true;
+            else if (key === 'quality-defect' || key === 'hard-failure') options[key] = [...(options[key] || []), args[++index]];
             else options[key] = args[++index];
         } else {
             options._.push(arg);
@@ -61,7 +62,7 @@ function printHelp() {
         'Commands:',
         '  prepare --target <name> [--limit <n>] [--priority <P0|P1>] [--status <new|weak|learning|mastered>] [--domain <l1>] [--company <name>] [--topic <text>] [--level <text>] [--days <n>] [--with-issues]',
         '  today [--limit <n>] [--with-issues]',
-        '  mark --canonical-id <id> --result <again|hard|good|easy> [--status <again|hard|good|easy>] [--notes <text>]',
+        '  mark --canonical-id <id> --result <again|hard|good|easy> [--oral-version one_minute] [--followup-answered] [--quality-defect <kind>] [--hard-failure <id>] [--feedback-closed-at <YYYY-MM-DD>] [--notes <text>]',
         '  next [--limit <n>] [--days <n>] [--with-issues]',
         '  weak [--limit <n>] [--with-issues]',
         '  integrity',
@@ -245,26 +246,41 @@ function runMark(options = {}) {
     if (!records.some((record) => record.canonical_id === canonicalId)) {
         throw new Error(`Canonical not found: ${canonicalId}`);
     }
+    const oralVersion = options['oral-version'] || null;
+    if (oralVersion && oralVersion !== 'one_minute') throw new Error('oral-version must be one_minute');
+    const qualityDefects = [...new Set(options['quality-defect'] || [])].filter(Boolean);
+    const hardFailures = [...new Set(options['hard-failure'] || [])].filter(Boolean);
+    const feedbackClosedAt = options['feedback-closed-at'] || null;
+    if (feedbackClosedAt && !/^\d{4}-\d{2}-\d{2}$/.test(feedbackClosedAt)) throw new Error('feedback-closed-at must use YYYY-MM-DD');
+    if (feedbackClosedAt && qualityDefects.length === 0) throw new Error('feedback-closed-at requires at least one quality-defect');
     let progress = loadProgress({ progressPath: paths.progressPath, date: options.date });
     progress = ensureProgressItems(progress, records, { date: options.date });
     const byId = progressMap(progress);
     const updated = applyReviewResult(byId.get(canonicalId), result, options);
     progress.items = progress.items.map((item) => item.canonical_id === canonicalId ? updated : item);
-    progress = saveProgress(progress, { progressPath: paths.progressPath, date: options.date });
-    const sessionPath = appendSessionEvent({
+    const event = {
         canonical_id: canonicalId,
         result,
         notes: options.notes || '',
         reviewed_at: todayString(options),
         next_review_at: updated.next_review_at,
-    }, { reviewDir: paths.reviewDir, date: options.date });
+        oral_version: oralVersion,
+        followup_answered: Boolean(options['followup-answered']),
+        quality_defects: qualityDefects,
+        hard_failures: hardFailures,
+        feedback_closed_at: feedbackClosedAt,
+    };
+    if (!options.noWrite) progress = saveProgress(progress, { progressPath: paths.progressPath, date: options.date });
+    const sessionPath = options.noWrite ? null : appendSessionEvent(event, { reviewDir: paths.reviewDir, date: options.date });
     return {
         schema_version: 'review_mark_result.v1',
         ok: true,
+        dry_run: Boolean(options.noWrite),
         canonical_id: canonicalId,
         result,
         progress: updated,
-        session_path: path.relative(root, sessionPath),
+        session_event: event,
+        session_path: sessionPath ? path.relative(root, sessionPath) : null,
     };
 }
 

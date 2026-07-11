@@ -79,6 +79,22 @@ test('applies hard good and easy review intervals deterministically', () => {
     fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('records one-minute oral checks, followups and closed quality feedback for stability audits', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-review-stability-event-'));
+    writeJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'), [canonical('cq_redis_fast', 'Redis 为什么快？')]);
+    const marked = runMark({
+        root, date: '2026-07-11', 'canonical-id': 'cq_redis_fast', result: 'good',
+        'oral-version': 'one_minute', 'followup-answered': true,
+        'quality-defect': ['too_long'], 'feedback-closed-at': '2026-07-11',
+    });
+    assert.equal(marked.session_event.oral_version, 'one_minute');
+    assert.equal(marked.session_event.followup_answered, true);
+    assert.deepEqual(marked.session_event.quality_defects, ['too_long']);
+    const session = readJson(path.join(root, 'review', 'sessions', '2026-07-11.json'));
+    assert.equal(session.events[0].feedback_closed_at, '2026-07-11');
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('recovers a weak card through learning to mastered', () => {
     const weak = {
         canonical_id: 'cq_recovery_path',
