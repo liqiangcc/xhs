@@ -1,0 +1,31 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_redis_lock_wait_a9bfb6eb",
+  "candidate_sha256": "7260bb768e5a2d4abf7c5c44f5d2dc929906cfb983d40ad6fc3b8a98fab48230",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "redisson-e40b177-lock-wait.v1"},
+  "sources": [
+    {"source_id": "redisson-lock-source", "title": "Redisson RedissonLock source (commit e40b177, checked date)", "locator": "https://github.com/redisson/redisson/blob/e40b1773d12c5123746aaa594411affbae26b969/redisson/src/main/java/org/redisson/RedissonLock.java", "source_type": "upstream_source_code_or_release_note", "checked_at": "2026-07-11"},
+    {"source_id": "redisson-lock-pubsub-source", "title": "Redisson LockPubSub source (commit e40b177, checked date)", "locator": "https://github.com/redisson/redisson/blob/e40b1773d12c5123746aaa594411affbae26b969/redisson/src/main/java/org/redisson/pubsub/LockPubSub.java", "source_type": "upstream_source_code_or_release_note", "checked_at": "2026-07-11"},
+    {"source_id": "redis-distributed-lock-doc", "title": "Redis distributed locks documentation", "locator": "https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/", "source_type": "official_documentation", "checked_at": "2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id": "redisson-lock-wait-retry-flow", "text": "At Redisson commit e40b177, RedissonLock is documented as non-fair. Its blocking tryLock first attempts tryAcquire, subtracts elapsed time from total waitTime, subscribes only while remaining budget is positive, subtracts subscription time, retries in a loop, waits on an entry latch for the applicable TTL or remaining wait time, and unsubscribes in finally when the flow ends.", "source_ids": ["redisson-lock-source"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "redisson-unlock-pubsub-latch", "text": "At Redisson commit e40b177, RedissonLock's unlock script returns without release for a non-owner, decrements the reentrancy counter and retains/extends the lock while the counter remains positive, and only deletes the lock then publishes LockPubSub.UNLOCK_MESSAGE on final release. LockPubSub.onMessage releases the entry latch for that message; a released latch is followed by another acquisition attempt in RedissonLock rather than direct lock ownership transfer.", "source_ids": ["redisson-lock-source", "redisson-lock-pubsub-source"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "redisson-ttl-wait-fallback", "text": "At Redisson commit e40b177, an unsuccessful acquisition waits on the local latch for TTL when TTL is shorter than remaining wait time, otherwise for remaining wait time, then retries; this time-based path is independent of a received unlock latch release.", "source_ids": ["redisson-lock-source"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "redis-single-instance-lock-token-release", "text": "Redis official distributed-lock documentation describes SET with NX and PX for a single-instance lock, a unique random lock value, and conditional release so a client does not delete a lock acquired later by another client; it explains the lease validity-time boundary.", "source_ids": ["redis-distributed-lock-doc"], "answer_locations": ["3 分钟版", "关键细节", "常见追问", "易错点"]}
+  ],
+  "source_question_coverage": [{"question_id": "45b0b976634daba4c401485bb63a4202", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}],
+  "review": {
+    "reviewer_id": "isolated-reviewer-r2",
+    "review_version": "redisson-lock-wait-review.v2",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 23, "directness_and_relevance": 19, "type_specific_completeness": 18, "mechanism_and_causality": 13, "boundaries_and_tradeoffs": 8, "followup_quality": 5, "oral_quality": 4},
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": ["版本、总 waitTime 预算、最终释放发布、latch 重新竞争与 TTL 定时等待主链路均已核验。", "非 owner 解锁的无状态变化边界和 TTL 非正值时的源码等待分支未在正文精确表述；第二轮保持 needs_update。"]
+  }
+}

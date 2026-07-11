@@ -418,6 +418,8 @@ IPC 记录（2026-07-11）：`cq_ipc_84b09f40` 两轮隔离审查后，Linux/POS
 
 JVM 安全点记录（2026-07-11）：`cq_jvm_safepoint_f7c9b757` 两轮隔离审查后已以 OpenJDK 21u 源码区分普通 native 安全状态、state transition 与 JNI critical/GC Locker；但将“源码创建/提交 JFR safepoint 事件”外推为运行时必然可见，且没有为 JVM-operation 日志归因与完整处置链提供一手映射。以 `unsupported_factual_claim` 保持 `needs_update`，不进行第三轮修订，正式答案未修改。台账为 21/60 `awaiting_human_review`、12/60 `needs_update`、27/60 待处理。
 
+Redis 锁等待记录（2026-07-11）：`cq_redis_lock_wait_a9bfb6eb` 两轮隔离审查后已固定 Redisson commit `e40b1773d12c5123746aaa594411affbae26b969`，并取证总 waitTime 预算、订阅耗时、最终释放发布、latch 后重新竞争和 TTL 时间等待；但正文未精确说明非 owner unlock 不改变锁状态/不发布，也未保留 TTL 非正值时按剩余预算等待的源码分支。第二轮决策仍为 revise，候选保持 `needs_update`，不进行第三轮修订；正式答案未修改。台账为 21/60 `awaiting_human_review`、13/60 `needs_update`、26/60 待处理。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
