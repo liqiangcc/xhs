@@ -382,7 +382,7 @@
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
 - Commit: `5f91877c`, `d9f29df2`
-- Notes: `cq_lru_cache_0ef78597` 与 `cq_binlog_86a375fd` 已完成候选、可追溯取证、独立审查和机器审计（均为 100/100、零硬失败）；binlog 首轮发现并修正 relay log 持久化的配置边界后在第二轮通过。台账现由候选、证据、审计与人工签核工件派生，当前为 2/60 `awaiting_human_review`、58/60 待处理。试点仍要求 100% 人工签核，任何未签核候选不得替换正式答案。
+- Notes: `cq_lru_cache_0ef78597`、`cq_binlog_86a375fd` 与 `cq_cache_consistency_a83eeb36` 已完成候选、可追溯取证、独立审查和机器审计（分别为 100/100、100/100、93/100，均无硬失败）；binlog 首轮发现并修正 relay log 持久化的配置边界后在第二轮通过。缓存一致性候选包含 outbox/幂等删除/binlog 纠偏的可执行状态模型。台账现由候选、证据、审计与人工签核工件派生，当前为 3/60 `awaiting_human_review`、57/60 待处理。试点仍要求 100% 人工签核，任何未签核候选不得替换正式答案。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 

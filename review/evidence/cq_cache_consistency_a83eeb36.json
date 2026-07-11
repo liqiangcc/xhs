@@ -1,0 +1,93 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_cache_consistency_a83eeb36",
+  "candidate_sha256": "f83c93f51468987c4a509faae3bd3da265f23fd8d4fc7a9c60048d94224d1a8d",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "cache-consistency.v1"
+  },
+  "sources": [
+    {
+      "source_id": "redis-del",
+      "title": "Redis DEL command",
+      "locator": "https://redis.io/docs/latest/commands/del/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-binlog",
+      "title": "MySQL 8.4 Binary Log",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/binary-log.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-replication-flow",
+      "title": "MySQL 8.4 Replication Implementation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication-implementation.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "cache-invalidation-trace",
+      "title": "Cache invalidation state-model trace",
+      "locator": "review/evidence/tests/cq_cache_consistency_a83eeb36/cache_invalidation_trace.test.js",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "redis-delete-idempotent-boundary",
+      "text": "Redis DEL deletes specified keys and ignores absent keys, so repeated cache invalidation can use a delete operation without requiring the key to exist.",
+      "source_ids": ["redis-del"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "mysql-binlog-change-stream",
+      "text": "MySQL binary logging records database changes and MySQL replication transfers requested binary-log events for later execution, which supports treating a controlled binlog subscriber as a change-driven invalidation input rather than a second source of truth.",
+      "source_ids": ["mysql-binlog", "mysql-replication-flow"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "outbox-delete-state-model",
+      "text": "The reproducible state model verifies the conditional design invariant: after a committed DB version has a delivered invalidation event, repeated deletion leaves the cache absent and the next read-through rebuild observes the DB version; it also demonstrates that a DB commit can precede invalidation.",
+      "source_ids": ["cache-invalidation-trace"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "398169cd09bbf07891d26502dffe815f",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    }
+  ],
+  "validation": {
+    "command": "node review/evidence/tests/cq_cache_consistency_a83eeb36/cache_invalidation_trace.test.js",
+    "result": "passed"
+  },
+  "review": {
+    "reviewer_id": "cache-consistency-isolated-reviewer",
+    "review_version": "v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 23,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 18,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 4
+    },
+    "hard_failures": [],
+    "revision_suggestions": [
+      "明确旧读窗口依赖 TTL、正确回填源和后续失效；删除先发生、旧读后回填仍可能留下一个 TTL 窗口。",
+      "补充以 R/W/C/T 为变量的容量验算模板。",
+      "补充 outbox 完成事件的保留与清理边界。"
+    ]
+  }
+}
