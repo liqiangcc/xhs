@@ -1,0 +1,43 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_topic_99ffa229",
+  "candidate_sha256": "75cbfb89d420b378fe7e67301017c3e9bb9c67370998c4f71d3ea85a305a1bdd",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "mysql-8.4-index-usage.v1"},
+  "sources": [
+    {"source_id": "mysql-8-4-index-use", "title": "MySQL 8.4 Reference Manual: How MySQL Uses Indexes", "locator": "https://dev.mysql.com/doc/refman/8.4/en/mysql-indexes.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "mysql-8-4-range-optimization", "title": "MySQL 8.4 Reference Manual: Range Optimization", "locator": "https://dev.mysql.com/doc/refman/8.4/en/range-optimization.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "mysql-8-4-generated-column-index", "title": "MySQL 8.4 Reference Manual: Optimizer Use of Generated Column Indexes", "locator": "https://dev.mysql.com/doc/refman/8.4/en/generated-column-index-optimizations.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "mysql-8-4-type-conversion", "title": "MySQL 8.4 Reference Manual: Type Conversion in Expression Evaluation", "locator": "https://dev.mysql.com/doc/refman/8.4/en/type-conversion.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "mysql-8-4-verifying-index-usage", "title": "MySQL 8.4 Reference Manual: Verifying Index Usage", "locator": "https://dev.mysql.com/doc/refman/8.4/en/verifying-index-usage.html", "source_type": "official_documentation", "checked_at": "2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id": "mysql-index-left-prefix-and-cost", "text": "MySQL 8.4 states that any leftmost prefix of a multiple-column index can be used for lookup, that the optimizer normally chooses the most selective candidate index, and that sequential reading can be faster when most rows are accessed; it also documents index maintenance and space costs.", "source_ids": ["mysql-8-4-index-use"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "mysql-index-like-range-boundary", "text": "MySQL 8.4 range optimization lists LIKE patterns that do not begin with a wildcard as range conditions; the candidate limits the leading-wildcard conclusion to ordinary B-tree prefix-range access.", "source_ids": ["mysql-8-4-range-optimization"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "mysql-index-expression-generated-column-boundary", "text": "MySQL 8.4 documents that an optimizer can consider an indexed generated column when a WHERE, ORDER BY, or GROUP BY expression matches its definition, with documented matching restrictions.", "source_ids": ["mysql-8-4-generated-column-index"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "mysql-implicit-conversion-is-contextual", "text": "MySQL 8.4 documents implicit type conversion for operands of different types; the candidate deliberately does not turn this into an unconditional index-use rule and requires plan verification.", "source_ids": ["mysql-8-4-type-conversion"], "answer_locations": ["关键细节", "项目经验版", "易错点"]}
+    ,{"claim_id": "mysql-explain-verifies-index-use", "text": "MySQL 8.4 explicitly directs users to use EXPLAIN to verify whether queries use created indexes.", "source_ids": ["mysql-8-4-verifying-index-usage"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "项目经验版", "常见追问", "易错点"]}
+  ],
+  "source_question_coverage": [
+    {"question_id": "37ef24a4910e4b6796fa01c828b7a91e", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]},
+    {"question_id": "807e5323d01ca20cd170884172590821", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]},
+    {"question_id": "90da07c0319687961ec14db2e557aa6f", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]},
+    {"question_id": "a8e1a675f9f4d3696ca81eab7b038fb1", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]}
+  ],
+  "review": {
+    "reviewer_id": "isolated-reviewer-r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 25, "directness_and_relevance": 20, "type_specific_completeness": 20, "mechanism_and_causality": 15, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 5},
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "候选 SHA-256 与 evidence sidecar 一致，四个来源问法均被覆盖。",
+      "MySQL 8.4 的材料性行为均有官方文档与 claim 映射。",
+      "概念题专项、八个章节与题目专属追问均通过。"
+    ]
+  }
+}

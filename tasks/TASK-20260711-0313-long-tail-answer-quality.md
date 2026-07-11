@@ -420,6 +420,8 @@ JVM 安全点记录（2026-07-11）：`cq_jvm_safepoint_f7c9b757` 两轮隔离�
 
 Redis 锁等待记录（2026-07-11）：`cq_redis_lock_wait_a9bfb6eb` 两轮隔离审查后已固定 Redisson commit `e40b1773d12c5123746aaa594411affbae26b969`，并取证总 waitTime 预算、订阅耗时、最终释放发布、latch 后重新竞争和 TTL 时间等待；但正文未精确说明非 owner unlock 不改变锁状态/不发布，也未保留 TTL 非正值时按剩余预算等待的源码分支。第二轮决策仍为 revise，候选保持 `needs_update`，不进行第三轮修订；正式答案未修改。台账为 21/60 `awaiting_human_review`、13/60 `needs_update`、26/60 待处理。
 
+MySQL 索引失效进展（2026-07-11）：`cq_topic_99ffa229` 依据 MySQL 8.4 的索引使用、范围优化、生成列索引、类型转换与索引使用核验文档完成两轮隔离审查；第二轮得分 100、无硬失败，候选审计通过。首轮删去未映射的 Skip Scan、FULLTEXT/外部检索与 EXPLAIN 字段外推，改为逐项一手证据。晋级预检仅以 `missing_human_review` 失败，正式答案未修改。试点队列遗留标注为 coding、`answer context` 标为 scenario，但全部来源问法实际要求索引可用性条件解释，候选采用 concept，冲突已记录。台账生成后为 22/60 `awaiting_human_review`、13/60 `needs_update`、24/60 未起草，另 `cq_arch_layering_02c49d25` 候选已渲染并待隔离审查。
+
 ZooKeeper 锁 Canonical 边界记录（2026-07-11）：`cq_zookeeper_lock_2808e178` 的 `answer context` 显示相邻 `cq_q_17a452529374881c0a57e963f08a18e2` 标题为“Zookeeper分布式锁实现原理？”，与当前题为同一语义边界。按去重规则撤回未审候选和证据，不增加试点计数、不修改正式答案；该对 Canonical 待合并/迁移审查后再进入重写队列。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
