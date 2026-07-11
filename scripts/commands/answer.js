@@ -20,6 +20,7 @@ const { applyGlobalBooleanOption } = require('../lib/cli_options');
 const { defaultDate } = require('../lib/date');
 const { run: runAnswerTypeAudit } = require('../content/audit_answer_types');
 const { run: runAnswerQueue } = require('../content/build_answer_rewrite_queue');
+const { queueStatus, closure, reachability, weeklySample, stability } = require('../lib/answer_completion');
 const {
     buildAnswerContext,
     renderCandidate,
@@ -43,7 +44,7 @@ function parseArgs(argv) {
     const args = argv.slice(2);
     const command = args[0];
     const options = { _: [] };
-    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict', 'check', 'fixtures', 'require-evidence', 'require-code']);
+    const booleanFlags = new Set(['missing', 'draft', 'ready', 'overwrite', 'strict', 'check', 'fixtures', 'require-evidence', 'require-code', 'expect-empty', 'full', 'require-zero-hard-fail', 'require-no-regression']);
     for (let index = 1; index < args.length; index++) {
         const arg = args[index];
         if (arg.startsWith('--')) {
@@ -65,7 +66,7 @@ function parseArgs(argv) {
 
 function printHelp() {
     console.log([
-        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote|demote|demote-missing-evidence|human-review|type-audit|queue> [options]',
+        'Usage: node scripts/xhs.js answer <init|init-batch|missing|status|validate|sync|quality-migrate|context|candidate|audit|promote|demote|demote-missing-evidence|human-review|type-audit|queue|closure|reachability|stability> [options]',
         '',
         'Commands:',
         '  init --canonical-id <id> [--overwrite] [--status <draft|ready|needs_update>]',
@@ -84,6 +85,11 @@ function printHelp() {
         '  human-review --canonical-id <id> --evidence <path> --review <json> [--noWrite]',
         '  type-audit [--check] [--noWrite]',
         '  queue check [--noWrite]',
+        '  queue status [--type <type[,type]>] [--expect-empty] [--noWrite]',
+        '  closure check|audit [--full] [--noWrite]',
+        '  reachability [--full] [--noWrite]',
+        '  stability sample --week <YYYY-Www> [--check] [--noWrite]',
+        '  stability --weeks <n> [--week <YYYY-Www>] [--require-zero-hard-fail] [--require-no-regression] [--noWrite]',
         '',
         'Options:',
         '  --strict     Validate ready answer content sections and TODO placeholders',
@@ -431,6 +437,12 @@ function main(argv = process.argv) {
         else if (command === 'human-review') result = recordHumanReview(options);
         else if (command === 'type-audit') result = runAnswerTypeAudit(options);
         else if (command === 'queue' && options._[0] === 'check') result = runAnswerQueue({ ...options, check: true, noWrite: true });
+        else if (command === 'queue' && options._[0] === 'status') result = queueStatus(options);
+        else if (command === 'closure' && options._[0] === 'check') result = closure(options);
+        else if (command === 'closure' && options._[0] === 'audit') result = closure({ ...options, audit: true });
+        else if (command === 'reachability') result = reachability(options);
+        else if (command === 'stability' && options._[0] === 'sample') result = weeklySample(options.week, options);
+        else if (command === 'stability') result = stability(options);
         else throw new Error(`Unknown answer command: ${command}`);
         writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `answer_${command}`, result, options);
         console.log(JSON.stringify(result, null, 2));
@@ -461,5 +473,10 @@ module.exports = {
     atomicDemote,
     atomicDemoteMissingEvidence,
     recordHumanReview,
+    queueStatus,
+    closure,
+    reachability,
+    weeklySample,
+    stability,
     main,
 };

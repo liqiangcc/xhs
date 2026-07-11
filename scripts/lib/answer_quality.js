@@ -234,7 +234,17 @@ function validateAnswerEvidence(evidence, candidate, context, config) {
     if (!evidence || typeof evidence !== 'object') return { errors: [{ error: 'missing_evidence' }], hard_failures: ['missing_evidence'] };
     if (evidence.schema_version !== 'answer_evidence.v1') errors.push({ error: 'invalid_evidence_schema_version' });
     if (evidence.canonical_id !== candidate.metadata.canonical_id) errors.push({ error: 'evidence_canonical_mismatch' });
-    if (evidence.candidate_sha256 !== sha256(candidate.content)) errors.push({ error: 'candidate_hash_mismatch' });
+    // Promotion intentionally changes only the formal answer metadata (status,
+    // quality tier and version).  The evidence remains bound to the immutable
+    // candidate bytes, whose hash is copied into formal metadata at promotion.
+    // Re-auditing a curated answer must therefore compare that recorded
+    // candidate hash instead of the post-promotion file hash.
+    const expectedCandidateHash = candidate.metadata.quality_tier === 'curated'
+        ? candidate.metadata.candidate_sha256
+        : sha256(candidate.content);
+    if (!expectedCandidateHash || evidence.candidate_sha256 !== expectedCandidateHash) {
+        errors.push({ error: 'candidate_hash_mismatch' });
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(evidence.checked_at || '')) errors.push({ error: 'invalid_checked_at' });
     if (!evidence.writer?.writer_id || !evidence.writer?.writer_version) errors.push({ error: 'missing_writer_version' });
     if (!evidence.review?.reviewer_id || !evidence.review?.review_version) errors.push({ error: 'missing_reviewer_version' });
@@ -640,7 +650,12 @@ function atomicDemote(options = {}) {
     if (formal.metadata.canonical_id !== canonicalId || evidence.canonical_id !== canonicalId) {
         throw new Error('canonical_id must match the formal answer and evidence');
     }
-    if (evidence.candidate_sha256 !== sha256(formal.content)) throw new Error('evidence does not match formal answer hash');
+    const expectedCandidateHash = formal.metadata.quality_tier === 'curated'
+        ? formal.metadata.candidate_sha256
+        : sha256(formal.content);
+    if (!expectedCandidateHash || evidence.candidate_sha256 !== expectedCandidateHash) {
+        throw new Error('evidence does not match formal answer candidate hash');
+    }
     if (!evidence.review?.independent || !evidence.review?.reviewer_id || evidence.review.reviewer_id === evidence.writer?.writer_id) {
         throw new Error('demotion requires an independent reviewer record');
     }
