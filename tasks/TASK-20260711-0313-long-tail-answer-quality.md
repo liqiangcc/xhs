@@ -523,7 +523,7 @@ ZooKeeper 锁合并与进展（2026-07-11）：将 `cq_q_17a452529374881c0a57e96
 - Expected files: `review/plans/pilot_project_behavior_fact_intake.md`, `review/candidates/answers/*.md`, `review/evidence/*.json`
 - Validation: `manual check: every promoted Project/Behavior candidate has user-provided facts or a documented technical reclassification`
 - Commit: `pending`
-- Notes: 2026-07-11 已建立 16 题的逐题事实采集清单；尚待用户材料，不能用模型补全。
+- Notes: 2026-07-11 已建立 16 题的逐题事实采集清单（提交 `33c7cfcc`）；尚待用户材料，不能用模型补全。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T06` S5：全量升级 Coding 与 SQL
 
