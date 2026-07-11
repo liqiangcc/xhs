@@ -1,0 +1,35 @@
+{
+  "updated_at": "2026-07-11",
+  "answer": {
+    "canonical_id": "cq_spring_transaction_a3b170d7",
+    "answer_type": "mechanism",
+    "core": "Spring 声明式事务的关键不是注解本身，而是代理在外部调用进入时读取 @Transactional 元数据，由 TransactionInterceptor 委托 TransactionManager 在目标方法前后开启、提交或回滚事务。排查失效先查事务注解驱动、目标 Bean 与调用是否经过代理，再查事务管理器/资源是否匹配，最后核对异常是否按回滚规则传播。",
+    "points": [
+      "参与者是调用方持有的 AOP 代理、TransactionInterceptor、TransactionManager、事务属性和目标 Service 方法。",
+      "外部调用到代理后，拦截器按传播属性取得或创建事务，再执行目标方法；正常返回提交，异常按回滚规则标记并完成回滚或提交。",
+      "默认 proxy 模式只拦截经代理进入的调用，因此同类 this 调用不会触发被调方法上的事务拦截。",
+      "当前 Spring 文档的默认回滚规则是未检查异常触发回滚；受检异常要用 rollbackFor 等规则显式声明。"
+    ],
+    "deep": "注解只是事务属性元数据；启用事务注解驱动且目标对象由 Spring 管理后，Spring 将其与 AOP 事务通知组合成代理。一次经代理的调用先由 TransactionInterceptor 根据传播、隔离、只读、超时和回滚规则向匹配的 TransactionManager 请求事务，再调用目标方法，最后依据完成状态提交或回滚。常见失效不是注解随机失灵，而是事务注解驱动、Bean 或代理链路没被触发（自调用、非 Spring 管理对象、初始化阶段调用），或业务异常被捕获/被默认规则视为可提交，或实际数据访问没有接入同一事务管理器。",
+    "constraints": [
+      "本答案适用于 Spring 默认 proxy 模式；AspectJ mode 采用织入，self-invocation 的代理绕过结论不适用。",
+      "代理类型受配置和目标类型影响：可用 JDK 动态代理或 CGLIB；CGLIB 不能代理 final 类，不能通知 final/private 方法。",
+      "默认未检查异常回滚是当前文档的默认规则；Spring Framework 6.2 起 @EnableTransactionManagement 提供可选 rollbackOn=ALL_EXCEPTIONS 全局默认，事务专属规则仍可覆盖，须按实际版本与配置核对。",
+      "事务不跨远程调用自动传播；跨服务一致性应使用明确的分布式一致性方案，而非假设本地声明式事务覆盖。"
+    ],
+    "mechanism": "入口：调用方通过代理调用 Service。状态变化：拦截器解析 TransactionAttribute，TransactionManager 按传播属性加入或创建事务并把资源绑定到当前事务上下文；目标方法执行后，未处理异常匹配回滚规则则标记回滚，否则完成提交。输出是一次确定的事务完成结果。若调用在目标对象内部经 this 发生，入口不再是代理，事务通知没有机会执行。",
+    "complexity": "额外框架成本包括事务属性解析、事务同步以及具体 TransactionManager 可能触发的资源获取；其成本取决于实现、缓存和配置。实际时间、锁和连接资源成本主要仍由底层数据库操作、隔离级别和事务持续时间决定。",
+    "followups": [
+      "自调用为什么失效？|默认 proxy 模式只拦截从代理进入的外部调用；同类 this 调用直接到目标对象。通常拆到另一 Bean 或改为经代理调用；若切换 AspectJ mode，语义不同。",
+      "为什么抛了 checked exception 仍提交？|默认规则只自动回滚未检查异常；对业务受检异常使用 rollbackFor，且不要在方法内吞掉异常而不标记回滚。",
+      "final/private 方法一定没有事务吗？|这取决于代理方式；CGLIB 不能通知 final/private 方法。先确认实际代理类型和调用是否经过代理，避免把特定限制说成所有配置都一样。",
+      "@PostConstruct 里调用可以依赖事务吗？|不能依赖默认代理事务；官方文档说明代理须完全初始化才提供预期行为。把事务工作放到容器初始化后的正常代理调用路径。"
+    ],
+    "mistakes": [
+      "不要只说加 @Transactional 就行，要先验证事务注解驱动、Bean、调用代理和管理器。",
+      "不要把受检异常默认回滚说成通用事实。",
+      "不要把 self-invocation 的结论套到 AspectJ mode。",
+      "不要把事务边界扩大到远程服务调用或长时间外部 I/O。"
+    ]
+  }
+}
