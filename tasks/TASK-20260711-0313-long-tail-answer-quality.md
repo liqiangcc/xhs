@@ -430,6 +430,8 @@ Spring 同名 Bean 进展（2026-07-11）：`cq_spring_bean_conflict_fb864867` �
 
 哈希表碰撞记录（2026-07-11）：`cq_hash_table_286e0112` 以分离链接、开放寻址 tombstone、重散列和碰撞比较模型测试完成两轮隔离审查。第二轮总分 89，事实与证据仅 18（最低 23）：开放寻址探测方法、装载因子/性能外推、链接法选型细节以及抽象哈希表的并发适用边界没有可接受的一手或可复现逐项证据。按最多两轮规则保持 `needs_update`，不再修订，正式答案未修改；候选测试通过。试点队列遗留标注为 behavior、`answer context` 同样误判为 behavior，但原题实际为 mechanism，候选采用 mechanism；当前台账为 24/60 `awaiting_human_review`、15/60 `needs_update`、21/60 未起草。
 
+消息 exactly-once 记录（2026-07-11）：`cq_message_exactly_once_4aede2ce` 以 Kafka 4.3 producer 幂等/事务、`read_committed` 与 destination cooperation 文档，以及 processed-event/outbox/retry 状态机测试完成两轮隔离审查。第二轮总分 93，但场景题专项 15（最低 16）、口述 3（最低 4）：缺少端到端 SLO/业务规模或待澄清验收目标，且 3 分钟版超过可口述密度。按最多两轮规则保持 `needs_update`，不再修订，正式答案未修改；候选测试通过。`answer context` 正确给出 scenario，候选采用 scenario；当前台账为 24/60 `awaiting_human_review`、16/60 `needs_update`、20/60 未起草。
+
 ZooKeeper 锁 Canonical 边界记录（2026-07-11）：`cq_zookeeper_lock_2808e178` 的 `answer context` 显示相邻 `cq_q_17a452529374881c0a57e963f08a18e2` 标题为“Zookeeper分布式锁实现原理？”，与当前题为同一语义边界。按去重规则撤回未审候选和证据，不增加试点计数、不修改正式答案；该对 Canonical 待合并/迁移审查后再进入重写队列。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
