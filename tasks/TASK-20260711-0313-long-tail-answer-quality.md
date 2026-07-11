@@ -414,6 +414,8 @@ CAS 记录（2026-07-11）：`cq_cas_64fa0b00` 两轮隔离审查后，CAS 条�
 
 协程进展（2026-07-11）：`cq_coroutine_878b831f` 依据 Kotlin 官方协程基础、`runBlocking` 与 `supervisorScope` API 完成两轮隔离审查；第二轮得分 100、无硬失败，候选审计通过。候选明确限定 Kotlin/JVM、区分普通 Job 与监督作用域的失败边界、阻塞与 suspend、并发组织与实际并行度。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 21/60 `awaiting_human_review`、10/60 `needs_update`、29/60 待处理。试点队列遗留标注为 scenario，但原题实际为概念/对比选型题，候选采用 concept，冲突已记录。
 
+IPC 记录（2026-07-11）：`cq_ipc_84b09f40` 两轮隔离审查后，Linux/POSIX 本机 IPC 的管道、消息队列、共享内存/信号量、信号和 AF_UNIX 核心 API 已取证；但 FIFO 事实没有一手映射，AF_UNIX 的类型级消息边界/连接契约未逐项映射，五类机制的统一比较矩阵也未达到题型完整性要求。以 `unsupported_factual_claim`、`missing_evidence` 保持 `needs_update`，不进行第三轮修订，正式答案未修改。台账为 21/60 `awaiting_human_review`、11/60 `needs_update`、28/60 待处理。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`

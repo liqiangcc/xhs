@@ -1,0 +1,40 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_ipc_84b09f40",
+  "candidate_sha256": "3293c21590fc482ed961f5d90b4706a42e0b5b4a4c7c9b6125279defc60485f0",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id": "answer-curator", "writer_version": "linux-man-pages-6.7-ipc.v1"},
+  "sources": [
+    {"source_id": "linux-pipe-2", "title": "Linux pipe(2)", "locator": "https://man7.org/linux/man-pages/man2/pipe.2.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "linux-unix-7", "title": "Linux unix(7)", "locator": "https://man7.org/linux/man-pages/man7/unix.7.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "linux-shm-overview-7", "title": "Linux shm_overview(7)", "locator": "https://man7.org/linux/man-pages/man7/shm_overview.7.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "linux-mq-overview-7", "title": "Linux mq_overview(7)", "locator": "https://man7.org/linux/man-pages/man7/mq_overview.7.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "linux-sem-overview-7", "title": "Linux sem_overview(7)", "locator": "https://man7.org/linux/man-pages/man7/sem_overview.7.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
+    {"source_id": "linux-signal-7", "title": "Linux signal(7)", "locator": "https://man7.org/linux/man-pages/man7/signal.7.html", "source_type": "official_documentation", "checked_at": "2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id": "linux-pipe-contract", "text": "Linux pipe(2) documents a unidirectional IPC data channel with a read end and write end; data written to the write end is buffered by the kernel until read from the read end.", "source_ids": ["linux-pipe-2"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "linux-posix-mq-contract", "text": "Linux mq_overview(7) documents POSIX message queues as processes exchanging data in messages; queues are named, opened with mq_open, use mq_send/mq_receive, and are delivered highest-priority first.", "source_ids": ["linux-mq-overview-7"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]},
+    {"claim_id": "linux-shm-and-semaphore-boundary", "text": "Linux shm_overview(7) documents POSIX shared memory mapping with shm_open, ftruncate and mmap, and says processes typically need synchronization such as POSIX semaphores. Linux sem_overview(7) documents semaphores as synchronization for processes and threads, using sem_post and sem_wait, and process-shared unnamed semaphores residing in shared memory.", "source_ids": ["linux-shm-overview-7", "linux-sem-overview-7"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "linux-unix-socket-contract", "text": "Linux unix(7) documents AF_UNIX/AF_LOCAL as local-machine process communication, supporting SOCK_STREAM, SOCK_DGRAM and Linux SOCK_SEQPACKET, and supporting ancillary-data transfer of file descriptors or process credentials.", "source_ids": ["linux-unix-7"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
+    {"claim_id": "linux-signal-notification-contract", "text": "Linux signal(7) documents signals, kill for sending to a specified process, and sigqueue for sending a real-time signal with accompanying data; it also documents asynchronous handlers and synchronous signal-acceptance APIs.", "source_ids": ["linux-signal-7"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]}
+  ],
+  "source_question_coverage": [
+    {"question_id": "34e780d05ddaf5d1380f0104ce70caf4", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]},
+    {"question_id": "71595323777b567d5a5d943b18bf3873", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]},
+    {"question_id": "1465b4a080b80481eb817b854fff2166", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]},
+    {"question_id": "b770647fb77bd0e7a69a93b1c1e78af2", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]}
+  ],
+  "review": {
+    "reviewer_id": "ipc-isolated-reviewer-r2",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "reject",
+    "revision_round": 2,
+    "scores": {"facts_and_evidence": 19, "directness_and_relevance": 19, "type_specific_completeness": 14, "mechanism_and_causality": 11, "boundaries_and_tradeoffs": 8, "followup_quality": 5, "oral_quality": 4},
+    "hard_failures": ["unsupported_factual_claim", "missing_evidence"],
+    "uncovered_source_variants": [],
+    "unsupported_claims": ["FIFO 是具有名称的管道变体，现有侧车无 FIFO 一手证据映射。", "AF_UNIX 三种 socket 类型的消息边界和连接语义未逐项映射。"],
+    "findings": ["五类 IPC 的统一比较矩阵、POSIX 与 Linux 特性范围、共享内存同步条件和 AF_UNIX 类型级契约未达到候选晋级门槛。", "第二轮仍有硬失败，候选保持 needs_update。"]
+  }
+}
