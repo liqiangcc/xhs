@@ -426,6 +426,8 @@ MySQL 索引失效进展（2026-07-11）：`cq_topic_99ffa229` 依据 MySQL 8.4 
 
 Spring 同名 Bean 进展（2026-07-11）：`cq_spring_bean_conflict_fb864867` 依据 Spring Framework 当前 BeanDefinition/覆盖文档、Framework 7.0.8 异常 API 与 Spring Boot 4.0 属性附录完成两轮隔离审查；第二轮得分 98、无硬失败，候选审计通过。首轮补齐运行中并发注册 Bean 的官方事实映射；候选明确同名 definition 注册与同类型多候选解析不同，区分 Framework 当前文档与 Boot 默认禁止覆盖的边界。晋级预检仅以 `missing_human_review` 失败，正式答案未修改。试点队列遗留标注为 behavior、`answer context` 同样误判为 behavior，但原题实际要求注册机制解释，候选采用 mechanism；当前台账为 24/60 `awaiting_human_review`、13/60 `needs_update`、23/60 未起草。
 
+短 URL 记录（2026-07-11）：`cq_short_url_c0218e46` 以 RFC 3986 的 URI 未保留字符、Base62 容量与号段/幂等状态机可复现测试完成两轮隔离审查。第二轮总分 91，但场景题专项仅 15（最低 16）：创建/解析 SLO 未明确、号段源或映射存储不可用时缺少创建降级与超时补偿、缓存状态版本未定义权威比较或失效通知。按最多两轮规则保持 `needs_update`，不再修订，正式答案未修改；候选测试通过。试点队列遗留标注为 behavior、`answer context` 同样误判为 behavior，但原题实际为 scenario，候选采用 scenario；当前台账为 24/60 `awaiting_human_review`、14/60 `needs_update`、22/60 未起草。
+
 ZooKeeper 锁 Canonical 边界记录（2026-07-11）：`cq_zookeeper_lock_2808e178` 的 `answer context` 显示相邻 `cq_q_17a452529374881c0a57e963f08a18e2` 标题为“Zookeeper分布式锁实现原理？”，与当前题为同一语义边界。按去重规则撤回未审候选和证据，不增加试点计数、不修改正式答案；该对 Canonical 待合并/迁移审查后再进入重写队列。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
