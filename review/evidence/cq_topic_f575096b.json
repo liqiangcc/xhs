@@ -1,0 +1,31 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_topic_f575096b",
+  "candidate_sha256": "35941f83caf80506b892d301ca779255fde98e5846aa32400d5b56b6f40bf810",
+  "checked_at": "2026-07-11",
+  "writer": {"writer_id":"answer-curator","writer_version":"process-thread-linux-clone.v1"},
+  "sources": [
+    {"source_id":"linux-clone","title":"Linux clone(2) manual","locator":"https://man7.org/linux/man-pages/man2/clone.2.html","source_type":"official_documentation","checked_at":"2026-07-11"},
+    {"source_id":"linux-fork","title":"Linux fork(2) manual","locator":"https://man7.org/linux/man-pages/man2/fork.2.html","source_type":"official_documentation","checked_at":"2026-07-11"},
+    {"source_id":"posix-pthreads","title":"Linux pthreads(7) manual (POSIX threads)","locator":"https://man7.org/linux/man-pages/man7/pthreads.7.html","source_type":"official_documentation","checked_at":"2026-07-11"}
+  ],
+  "claims": [
+    {"claim_id":"clone-sharing-boundary","text":"Linux clone/clone3 controls whether a child shares virtual address space, file descriptor table, and signal-handler table with the caller, so process/thread resource-sharing statements require platform boundaries.","source_ids":["linux-clone"],"answer_locations":["核心结论","3 分钟版","关键细节","原理机制","易错点"]},
+    {"claim_id":"clone-stack-boundary","text":"Linux clone documentation states that when memory is shared, the caller must set up memory space for the child stack; the child cannot execute on the caller's same stack.","source_ids":["linux-clone"],"answer_locations":["关键细节","原理机制","常见追问","易错点"]},
+    {"claim_id":"fork-address-space-boundary","text":"Linux fork creates a child with its own virtual address space and uses copy-on-write so copying of memory pages is deferred, so full-memory-copy claims need qualification.","source_ids":["linux-fork"],"answer_locations":["关键细节","易错点"]}
+    ,{"claim_id":"pthreads-sharing-and-execution","text":"POSIX threads documentation states that one process can contain multiple threads executing the same program; they share global memory and several process-wide attributes while each has its own stack and thread identifier.","source_ids":["posix-pthreads"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","原理机制","常见追问","易错点"]}
+  ],
+  "source_question_coverage": [
+    {"question_id":"0b287451b9a79b49a363a8d2918b0fa6","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
+    {"question_id":"a58eb286daf2003402cbb6d41206008d","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节"]},
+    {"question_id":"babf69eba9a171735537cf3f7d80ea95","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
+    {"question_id":"d79777d2b5bae279e629344d187bc42d","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节"]},
+    {"question_id":"dd0155712d3f67c17c3fd97356083107","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
+    {"question_id":"214b9eb0d72a4d59e62b0ac21ad86604","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
+    {"question_id":"254af0339396b53ed02cbcd2592acdda","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
+    {"question_id":"6194f31a8f77fd758cdc61e803c353b4","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
+    {"question_id":"e7b0ec9e5408f4374c3b265a757fb059","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
+    {"question_id":"f401587f3563ac57fd2fcf707bb114eb","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]}
+  ],
+  "review": {"reviewer_id":"isolated-reviewer-r2","review_version":"process-thread-posix-linux-r2.v1","independent":true,"decision":"revise","revision_round":2,"scores":{"facts_and_evidence":22,"directness_and_relevance":20,"type_specific_completeness":20,"mechanism_and_causality":14,"boundaries_and_tradeoffs":10,"followup_quality":5,"oral_quality":4},"hard_failures":["unsupported_factual_claim","missing_evidence"],"revision_suggestions":["补齐或删除独立权限/崩溃隔离、IPC 复杂度、共享程度与并发控制责任等未经映射的选型和机制断言。"]}
+}

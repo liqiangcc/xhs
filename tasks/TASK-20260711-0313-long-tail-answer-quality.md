@@ -381,8 +381,8 @@
   - 对 60 题进行 100% 人工审查和盲对比。
 - Expected files: `review/answers/*.md`, `review/evidence/*.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
-- Commit: `5f91877c`, `d9f29df2`, `4f945bc6`, `d68f69b9`, `9c92c429`, `0203e816`, `d172ca10`, `99fc664e`, `a5a927d4`, `971c1a4c`, `886360ee`, `d7b3efbb`
-- Notes: `cq_arraylist_9d3444a1`、`cq_binlog_86a375fd`、`cq_cache_consistency_a83eeb36`、`cq_clustered_index_8c8cbedb`、`cq_daemon_thread_a38b0a9b`、`cq_stringbuffer_8b8caf0d`、`cq_http_c439559c`、`cq_thread_states_2db7d11` 与 `cq_topic_c569b06e` 已完成候选、可追溯取证、独立审查和机器审计，均无硬失败；`==/equals` 首轮补齐 String/Objects 证据、删除未取证缓存表述并收窄哈希机制后第二轮通过。`cq_gc_algorithms_3f884748` 因 JDK 版本证据不足保持 `needs_update`；`cq_incident_diagnosis_4e5a6405` 因缺少可验证的真实个人事故事实，以 `template_only_answer`、`uncovered_source_variant` 保持 `needs_update`。台账当前为 9/60 `awaiting_human_review`、2/60 保持 `needs_update`、49/60 待处理；任何未签核候选不得替换正式答案。
+- Commit: `5f91877c`, `d9f29df2`, `4f945bc6`, `d68f69b9`, `9c92c429`, `0203e816`, `d172ca10`, `99fc664e`, `a5a927d4`, `971c1a4c`, `886360ee`, `d7b3efbb`, `pending`
+- Notes: `cq_arraylist_9d3444a1`、`cq_binlog_86a375fd`、`cq_cache_consistency_a83eeb36`、`cq_clustered_index_8c8cbedb`、`cq_daemon_thread_a38b0a9b`、`cq_stringbuffer_8b8caf0d`、`cq_http_c439559c`、`cq_thread_states_2db7d11` 与 `cq_topic_c569b06e` 已完成候选、可追溯取证、独立审查和机器审计，均无硬失败。`cq_topic_f575096b` 先归并两组同义进程/线程题；两轮审查后仍有未经逐项取证的选型/机制断言，以 `unsupported_factual_claim`、`missing_evidence` 保持 `needs_update`，不再修订。`cq_gc_algorithms_3f884748` 因 JDK 版本证据不足保持 `needs_update`；`cq_incident_diagnosis_4e5a6405` 因缺少可验证的真实个人事故事实，以 `template_only_answer`、`uncovered_source_variant` 保持 `needs_update`。台账当前为 9/60 `awaiting_human_review`、3/60 保持 `needs_update`、48/60 待处理；任何未签核候选不得替换正式答案。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
