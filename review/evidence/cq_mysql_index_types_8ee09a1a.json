@@ -1,0 +1,93 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_mysql_index_types_8ee09a1a",
+  "candidate_sha256": "479867b5d297321d6a0e76c3d8438e9dea5823c8fbb6110214beefdbc78dfa72",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "mysql-8.4-index-types.v1"
+  },
+  "sources": [
+    {
+      "source_id": "mysql-8-4-create-table",
+      "title": "MySQL 8.4 CREATE TABLE statement",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/create-table.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-8-4-optimization-indexes",
+      "title": "MySQL 8.4 optimization and indexes",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/optimization-indexes.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-8-4-innodb-index-types",
+      "title": "MySQL 8.4 InnoDB clustered and secondary indexes",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "mysql-ddl-index-classifications",
+      "text": "MySQL 8.4 CREATE TABLE syntax supports INDEX/KEY, PRIMARY KEY, UNIQUE, FULLTEXT and SPATIAL definitions; KEY is synonymous with INDEX and index type syntax is USING {BTREE|HASH}. Multiple key parts can be specified for an index.",
+      "source_ids": ["mysql-8-4-create-table"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "mysql-index-benefit-and-maintenance-cost",
+      "text": "MySQL 8.4 documents that index entries help locate rows matching WHERE conditions, but unnecessary indexes waste space and every index adds insert, update and delete maintenance cost.",
+      "source_ids": ["mysql-8-4-optimization-indexes"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "innodb-clustered-secondary-boundary",
+      "text": "MySQL 8.4 documents that InnoDB clustered indexes store row data, normally use the primary key, and secondary records contain primary-key columns used to find the row in the clustered index; long primary keys increase secondary-index space.",
+      "source_ids": ["mysql-8-4-innodb-index-types"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "8ad9aa9788d9e9410d5421f8cfc1447c",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "e0091bc780849b431db02c6f329a6339",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "isolated-reviewer-r2",
+    "review_version": "mysql-index-types-isolated.v1",
+    "independent": true,
+    "decision": "reject",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 18,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 17,
+      "mechanism_and_causality": 13,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 4
+    },
+    "hard_failures": ["unsupported_factual_claim"],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [
+      "FULLTEXT/SPATIAL 的用途未由现有侧车直接映射。",
+      "PRIMARY KEY/UNIQUE 的写入时约束校验未由现有 DDL 映射直接支持。",
+      "单列/多列索引的具体选型条件未逐项映射。",
+      "二级索引覆盖所需列时可能避免按主键取行，未由现有映射直接支持。"
+    ],
+    "findings": [
+      "候选覆盖全部来源问法，但三条宽泛证据映射不足以覆盖正文中的独立实质性事实。",
+      "第二轮仍有硬失败；按最多两轮修订规则，候选保持 needs_update。"
+    ]
+  }
+}

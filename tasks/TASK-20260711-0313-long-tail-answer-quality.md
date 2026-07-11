@@ -402,6 +402,8 @@ InnoDB/MyISAM 进展（2026-07-11）：`cq_innodb_myisam_754c10e6` 依据 MySQL 
 
 线程池拒绝策略记录（2026-07-11）：`cq_topic_36aeccc5` 两轮隔离审查后仍将特定构造器的默认 handler 误概括为“默认构造器”，并给出未被 Java SE 21 API 取证的递归提交适用性结论；以 `unsupported_factual_claim` 保持 `needs_update`，不进行第三轮修订。台账维持 18/60 `awaiting_human_review`、7/60 `needs_update`、35/60 待处理。
 
+MySQL 索引类型记录（2026-07-11）：`cq_mysql_index_types_8ee09a1a` 两轮隔离审查后，现有 MySQL 8.4 侧车仍未逐项映射 FULLTEXT/SPATIAL 用途、PRIMARY/UNIQUE 写入约束语义、列组合选型条件及覆盖索引避免回表；以 `unsupported_factual_claim` 保持 `needs_update`，不进行第三轮修订。候选机器审计为 85 分且事实维度低于门槛，正式答案未修改。台账为 18/60 `awaiting_human_review`、8/60 `needs_update`、34/60 待处理。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
