@@ -1,0 +1,98 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_innodb_myisam_754c10e6",
+  "candidate_sha256": "1fba3e13327010f431e21bad92610a0b0dadb6f8c0dc895b669b3271ca6e9cdb",
+  "checked_at": "2026-07-11",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "mysql-8.4-engine-index-docs.v1"
+  },
+  "sources": [
+    {
+      "source_id": "mysql-8-4-innodb-intro",
+      "title": "MySQL 8.4 InnoDB introduction",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-introduction.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-8-4-innodb-indexes",
+      "title": "MySQL 8.4 InnoDB clustered and secondary indexes",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    },
+    {
+      "source_id": "mysql-8-4-myisam",
+      "title": "MySQL 8.4 MyISAM storage engine",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/myisam-storage-engine.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-07-11"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "innodb-8-4-transaction-concurrency-default",
+      "text": "MySQL 8.4 documents InnoDB as the default storage engine, with ACID DML including commit, rollback and crash recovery, row-level locking, consistent reads, and foreign-key support.",
+      "source_ids": ["mysql-8-4-innodb-intro"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "innodb-clustered-secondary-indexes",
+      "text": "MySQL 8.4 documents that each InnoDB table has a clustered index storing row data; a primary key is used when defined, otherwise a suitable NOT NULL unique index or hidden 6-byte row-ID index is used. Secondary records include primary-key columns and use them to find rows in the clustered index; long primary keys increase secondary-index space.",
+      "source_ids": ["mysql-8-4-innodb-indexes"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "myisam-8-4-capabilities-and-files",
+      "text": "MySQL 8.4 documents that MyISAM has B-tree indexes but no clustered indexes, transactions, foreign-key support or MVCC; its locking granularity is table, it stores data in .MYD and indexes in .MYI, and it can check/repair improperly closed tables when configured with myisam_recover_options.",
+      "source_ids": ["mysql-8-4-myisam"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "018bceae70db74af06301d7563100778",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "1020cfc1ec313ce70cb6f549f1511a1d",
+      "covered": true,
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "715204cc65893ef3fa7e907541535501",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "95de03286b1696fefa323dda33b56ec8",
+      "covered": true,
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "innodb_myisam_isolated_review_r1",
+    "review_version": "mysql-8.4-official-docs-r1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "候选覆盖引擎能力和索引结构的所有来源问法；MySQL 8.4 的默认、事务、锁、恢复、外键和索引结构结论均由三份官方文档核验。",
+      "MyISAM 异常关闭检查/修复与 InnoDB 事务崩溃恢复已明确区分，题型与版本边界完整。"
+    ]
+  }
+}

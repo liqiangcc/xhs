@@ -398,6 +398,8 @@ Redis 持久化进展（2026-07-11）：`cq_topic_2494ec69` 依据 Redis 官方 
 
 TCP/UDP 进展（2026-07-11）：`cq_tcp_e9932fa7` 依据 RFC 9293 与 RFC 768 完成两轮隔离审查；第二轮得分 100、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 17/60 `awaiting_human_review`、7/60 `needs_update`、36/60 待处理（InnoDB/MyISAM 候选正在隔离审查）。
 
+InnoDB/MyISAM 进展（2026-07-11）：`cq_innodb_myisam_754c10e6` 依据 MySQL 8.4 官方引擎与索引文档在首轮隔离审查获 98 分、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案未修改；当前台账为 18/60 `awaiting_human_review`、7/60 `needs_update`、35/60 待处理（线程池拒绝策略候选已起草并待取证/独立审查）。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
