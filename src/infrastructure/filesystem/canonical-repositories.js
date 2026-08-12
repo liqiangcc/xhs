@@ -20,6 +20,10 @@ function questionResource(questionId) {
     return `question-bindings-by-question:${questionId}`;
 }
 
+function ownershipResource(questionId) {
+    return `canonical-ownership-by-question:${questionId}`;
+}
+
 function hashValue(value) {
     return crypto.createHash('sha256').update(stableStringify(value), 'utf8').digest('hex');
 }
@@ -38,6 +42,13 @@ function readCanonicalRecords(paths) {
 
 function readQuestionRows(paths) {
     return readJsonl(paths.questions, []);
+}
+
+function canonicalOwners(records, questionId) {
+    return records
+        .filter((record) => (record.question_ids || []).includes(questionId))
+        .map((record) => record.canonical_id)
+        .sort((a, b) => String(a).localeCompare(String(b)));
 }
 
 function revisionForResource(paths, resource) {
@@ -59,6 +70,10 @@ function revisionForResource(paths, resource) {
             readQuestionRows(paths).filter((row) => row.question_id === questionId),
         );
         return hashValue(bindings);
+    }
+    if (resource.startsWith('canonical-ownership-by-question:')) {
+        const questionId = resource.slice('canonical-ownership-by-question:'.length);
+        return hashValue(canonicalOwners(readCanonicalRecords(paths), questionId));
     }
     throw new Error(`Unsupported filesystem canonical resource: ${resource}`);
 }
@@ -116,9 +131,21 @@ function createFsCanonicalRepositories(options = {}) {
         },
     };
 
+    const canonicalQuestionOwnershipRepository = {
+        async findOwners(questionId) {
+            const resource = ownershipResource(questionId);
+            return {
+                canonical_ids: canonicalOwners(readCanonicalRecords(paths), questionId),
+                resource,
+                revision: revisionForResource(paths, resource),
+            };
+        },
+    };
+
     return {
         canonicalRepository,
         questionBindingRepository,
+        canonicalQuestionOwnershipRepository,
         paths,
     };
 }
@@ -127,6 +154,7 @@ module.exports = {
     canonicalResource,
     bindingResource,
     questionResource,
+    ownershipResource,
     revisionForResource,
     createFsCanonicalRepositories,
 };
