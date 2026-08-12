@@ -52,7 +52,7 @@ function makeCanonical(canonicalId, title, questionIds) {
     };
 }
 
-test('suggests and accepts canonical hotspot candidates idempotently', () => {
+test('suggests and accepts canonical hotspot candidates idempotently', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const indexDir = path.join(root, 'data', 'indexes');
@@ -67,7 +67,7 @@ test('suggests and accepts canonical hotspot candidates idempotently', () => {
     const manifest = runSuggest({ root, hotspot: true, limit: 10 });
     assert.equal(manifest.candidate_count, 1);
     const candidate = manifest.candidates[0];
-    const accepted = runAccept({
+    const accepted = await runAccept({
         root,
         'candidate-id': candidate.candidate_id,
         'canonical-id': candidate.canonical_id_suggestion,
@@ -75,7 +75,7 @@ test('suggests and accepts canonical hotspot candidates idempotently', () => {
     assert.equal(accepted.ok, true);
     assert.equal(accepted.updated_question_rows, 2);
 
-    const acceptedAgain = runAccept({
+    const acceptedAgain = await runAccept({
         root,
         'candidate-id': candidate.candidate_id,
         'canonical-id': candidate.canonical_id_suggestion,
@@ -89,7 +89,7 @@ test('suggests and accepts canonical hotspot candidates idempotently', () => {
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('preserves an editorial domain override when accepting more questions', () => {
+test('preserves an editorial domain override when accepting more questions', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-domain-override-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
@@ -121,7 +121,7 @@ test('preserves an editorial domain override when accepting more questions', () 
         }],
     });
 
-    runAccept({ root, 'candidate-id': 'cand_search_efficiency', 'canonical-id': canonicalId });
+    await runAccept({ root, 'candidate-id': 'cand_search_efficiency', 'canonical-id': canonicalId });
 
     const refreshed = readJsonl(canonicalPath)[0];
     assert.deepEqual(refreshed.primary_domain, canonical.primary_domain_override);
@@ -244,7 +244,7 @@ test('merge migrates review references and archives the redundant formal answer'
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('rejects accepting a candidate whose question is already bound elsewhere', () => {
+test('rejects accepting a candidate whose question is already bound elsewhere', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-conflict-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
@@ -267,8 +267,8 @@ test('rejects accepting a candidate whose question is already bound elsewhere', 
         }],
     });
 
-    assert.throws(
-        () => runAccept({ root, 'candidate-id': 'cand_conflict', 'canonical-id': 'cq_new_redis' }),
+    await assert.rejects(
+        runAccept({ root, 'candidate-id': 'cand_conflict', 'canonical-id': 'cq_new_redis' }),
         /already belongs to cq_existing_redis/
     );
     assert.equal(readJsonl(questionsPath)[0].canonical_id, 'cq_existing_redis');
