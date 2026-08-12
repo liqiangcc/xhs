@@ -2,8 +2,10 @@
 
 const { mergeCanonical } = require('../../domain/canonical/merge-policy');
 const { createCanonicalMutationPlan } = require('./mutation-plan');
+const { planCanonicalReviewMigration } = require('./review-migration-plan');
 const { assertCanonicalRepository } = require('../../ports/repositories/canonical-repository');
 const { assertQuestionBindingRepository } = require('../../ports/repositories/question-binding-repository');
+const { assertReviewRepository } = require('../../ports/repositories/review-repository');
 const { assertCanonicalMutationStore } = require('../../ports/canonical-mutation-store');
 
 function assertSnapshot(snapshot, label, valueKey) {
@@ -18,6 +20,17 @@ function assertSnapshot(snapshot, label, valueKey) {
     }
     if (!(valueKey in snapshot)) {
         throw new Error(`${label} snapshot ${valueKey} is required`);
+    }
+    return snapshot;
+}
+
+function assertReviewSnapshot(snapshot) {
+    assertSnapshot(snapshot, 'review merge', 'target_items');
+    if (!Array.isArray(snapshot.target_items)) {
+        throw new Error('review merge snapshot target_items must be an array');
+    }
+    if (!Array.isArray(snapshot.source_items)) {
+        throw new Error('review merge snapshot source_items must be an array');
     }
     return snapshot;
 }
@@ -59,6 +72,7 @@ function assertPostCommitState(targetId, sourceId, movedQuestionIds, targetSnaps
 function createMergeCanonicalUseCase(dependencies = {}) {
     const canonicalRepository = assertCanonicalRepository(dependencies.canonicalRepository);
     const questionBindingRepository = assertQuestionBindingRepository(dependencies.questionBindingRepository);
+    const reviewRepository = assertReviewRepository(dependencies.reviewRepository);
     const mutationStore = assertCanonicalMutationStore(dependencies.mutationStore);
     const clock = dependencies.clock || (() => new Date().toISOString());
 
@@ -73,11 +87,12 @@ function createMergeCanonicalUseCase(dependencies = {}) {
         }
         if (targetId === sourceId) throw new Error('target and source must be different');
 
-        const [targetSnapshot, sourceSnapshot, targetBindingSnapshot, sourceBindingSnapshot] = await Promise.all([
+        const [targetSnapshot, sourceSnapshot, targetBindingSnapshot, sourceBindingSnapshot, reviewSnapshot] = await Promise.all([
             canonicalRepository.get(targetId),
             canonicalRepository.get(sourceId),
             questionBindingRepository.findByCanonical(targetId),
             questionBindingRepository.findByCanonical(sourceId),
+            reviewRepository.loadMergeState(targetId, sourceId),
         ]);
 
         if (!targetSnapshot) throw new Error(`Target canonical not found: ${targetId}`);
@@ -86,10 +101,18 @@ function createMergeCanonicalUseCase(dependencies = {}) {
         assertSnapshot(sourceSnapshot, 'source canonical', 'record');
         assertSnapshot(targetBindingSnapshot, 'target question bindings', 'bindings');
         assertSnapshot(sourceBindingSnapshot, 'source question bindings', 'bindings');
+        assertReviewSnapshot(reviewSnapshot);
 
         const merged = mergeCanonical(targetSnapshot.record, sourceSnapshot.record);
         const movedQuestionIds = uniqueSorted(sourceSnapshot.record.question_ids);
         const mergedAt = clock();
+        const reviewMigration = planCanonicalReviewMigration({
+            targetCanonicalId: targetId,
+            sourceCanonicalId: sourceId,
+            targetItems: reviewSnapshot.target_items,
+            sourceItems: reviewSnapshot.source_items,
+            updatedAtFallback: String(mergedAt).slice(0, 10),
+        });
         const plan = createCanonicalMutationPlan({
             operation: 'merge',
             expected_revisions: [
@@ -97,6 +120,7 @@ function createMergeCanonicalUseCase(dependencies = {}) {
                 expectedRevision(sourceSnapshot),
                 expectedRevision(targetBindingSnapshot),
                 expectedRevision(sourceBindingSnapshot),
+                expectedRevision(reviewSnapshot),
             ],
             changes: {
                 canonical_upserts: [merged],
@@ -106,10 +130,7 @@ function createMergeCanonicalUseCase(dependencies = {}) {
                     from_canonical_id: sourceId,
                     to_canonical_id: targetId,
                 })),
-                review_migrations: [{
-                    from_canonical_id: sourceId,
-                    to_canonical_id: targetId,
-                }],
+                review_migrations: [reviewMigration],
                 answer_invalidations: [{
                     canonical_id: targetId,
                     reason: 'canonical_merge',
