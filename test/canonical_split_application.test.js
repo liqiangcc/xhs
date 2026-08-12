@@ -62,6 +62,7 @@ function passingIntegrityReport(overrides = {}) {
 function createUseCase(adapters, overrides = {}) {
     return createSplitCanonicalUseCase({
         canonicalRepository: adapters.canonicalRepository,
+        canonicalIdentityRepository: adapters.canonicalIdentityRepository,
         questionBindingRepository: adapters.questionBindingRepository,
         mutationStore: adapters.mutationStore,
         integrityChecker: {
@@ -112,6 +113,7 @@ test('plans and commits a split while refreshing both resulting canonicals', asy
         result.plan.expected_revisions.map((item) => item.resource),
         [
             'canonical:cq_source',
+            'canonical:cq_redis_fast',
             'question-bindings-by-question:q1',
             'question-bindings-by-question:q2',
         ],
@@ -216,6 +218,44 @@ test('rejects an existing new canonical before mutation preflight', async () => 
     );
     assert.equal(preflightCalled, false);
     assert.deepEqual(adapters.snapshot(), before);
+});
+
+test('rejects a concurrent create of the planned new canonical id', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const originalPreflight = adapters.mutationStore.preflight.bind(adapters.mutationStore);
+    const mutationStore = {
+        ...adapters.mutationStore,
+        async preflight(plan) {
+            const absenceRevision = plan.expected_revisions.find(
+                (item) => item.resource === 'canonical:cq_new',
+            );
+            assert.ok(absenceRevision);
+            adapters.testSupport.upsertCanonical(canonical('cq_new', ['q9']));
+            return originalPreflight(plan);
+        },
+    };
+    const split = createUseCase(adapters, { mutationStore });
+
+    await assert.rejects(
+        split({
+            source: 'cq_source',
+            question_id: 'q2',
+            new_canonical_id: 'cq_new',
+            title: 'Redis 为什么快？',
+        }),
+        /Revision mismatch for canonical:cq_new/,
+    );
+
+    const state = adapters.snapshot();
+    const source = state.canonicals.find((item) => item.canonical_id === 'cq_source');
+    const concurrent = state.canonicals.find((item) => item.canonical_id === 'cq_new');
+    assert.ok(concurrent);
+    assert.deepEqual(concurrent.question_ids, ['q9']);
+    assert.deepEqual(source.question_ids, ['q1', 'q2']);
+    assert.deepEqual(
+        state.bindings.filter((item) => item.question_id === 'q2').map((item) => item.canonical_id),
+        ['cq_source', 'cq_source', 'cq_source'],
+    );
 });
 
 test('rejects a stale question snapshot without publishing split state', async () => {
