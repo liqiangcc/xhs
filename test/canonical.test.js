@@ -179,7 +179,7 @@ test('lists checks merges and splits canonical records', async () => {
     assert.equal(readJsonl(canonicalPath).length, 1);
     assert.equal(readJsonl(questionsPath).find((question) => question.question_id === q2.question_id).canonical_id, targetId);
 
-    const split = runSplit({
+    const split = await runSplit({
         root,
         'canonical-id': targetId,
         'question-id': q2.question_id,
