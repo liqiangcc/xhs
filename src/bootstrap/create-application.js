@@ -1,6 +1,7 @@
 'use strict';
 
 const { createMergeCanonicalUseCase } = require('../application/canonical/merge-canonical');
+const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
@@ -10,14 +11,15 @@ const { createFsCanonicalMutationStore } = require('../infrastructure/filesystem
 /**
  * Production composition root for migrated application slices.
  *
- * Concrete filesystem adapters are constructed only here and injected into the
- * Application layer. Interfaces can depend on this module without learning
- * persistence paths, revision formats, or transaction mechanics.
+ * Concrete filesystem/config adapters are constructed only here and injected
+ * into the Application layer. Interfaces can depend on this module without
+ * learning persistence paths, revision formats, or transaction mechanics.
  */
 function createApplication(options = {}) {
     if (!options.root) throw new Error('Application root is required');
 
     const paths = createCanonicalFsPaths(options.root);
+    const taxonomy = options.taxonomy || loadTaxonomy({ taxonomyPath: options.taxonomyPath });
     const {
         canonicalRepository,
         questionBindingRepository,
@@ -32,6 +34,7 @@ function createApplication(options = {}) {
         reviewRepository,
         answerRepository,
         mutationStore,
+        taxonomy,
         ...(options.clock ? { clock: options.clock } : {}),
     });
 
