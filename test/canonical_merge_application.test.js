@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const taxonomy = require('../config/taxonomy.json');
 const { createMergeCanonicalUseCase } = require('../src/application/canonical/merge-canonical');
 const { createInMemoryCanonicalAdapters } = require('../src/infrastructure/in-memory/canonical-adapters');
 
@@ -55,6 +56,17 @@ function answer(canonicalId, metadataOverrides = {}) {
     };
 }
 
+function binding(questionId, canonicalId, rowId, company) {
+    return {
+        question_id: questionId,
+        canonical_id: canonicalId,
+        row_id: rowId,
+        company,
+        domain: { l1: '缓存', l2: 'Redis' },
+        tech_entities: ['redis'],
+    };
+}
+
 function createSeed() {
     return {
         canonicals: [
@@ -76,9 +88,9 @@ function createSeed() {
             }),
         ],
         bindings: [
-            { question_id: 'q1', canonical_id: 'cq_target', row_id: 'r1' },
-            { question_id: 'q2', canonical_id: 'cq_source', row_id: 'r2' },
-            { question_id: 'q3', canonical_id: 'cq_source', row_id: 'r3' },
+            binding('q1', 'cq_target', 'r1', '美团'),
+            binding('q2', 'cq_source', 'r2', '字节'),
+            binding('q3', 'cq_source', 'r3', '字节'),
         ],
         review_progress: [
             progress('cq_target', {
@@ -126,6 +138,7 @@ function createUseCase(adapters, overrides = {}) {
         reviewRepository: adapters.reviewRepository,
         answerRepository: adapters.answerRepository,
         mutationStore: adapters.mutationStore,
+        taxonomy,
         clock: () => '2026-08-12T05:52:00.000Z',
         ...overrides,
     });
@@ -145,13 +158,25 @@ test('orchestrates canonical, review, and answer merge state in one mutation', a
     assert.deepEqual(result.moved_question_ids, ['q2', 'q3']);
     assert.equal(Object.isFrozen(result.plan), true);
     assert.equal(result.plan.operation, 'merge');
-    assert.equal(result.plan.expected_revisions.length, 6);
+    assert.equal(result.plan.expected_revisions.length, 9);
     assert.match(result.plan.expected_revisions[4].resource, /^review-merge:/);
     assert.match(result.plan.expected_revisions[5].resource, /^answer-merge:/);
+    assert.deepEqual(
+        result.plan.expected_revisions.slice(6).map((item) => item.resource),
+        [
+            'question-bindings-by-question:q1',
+            'question-bindings-by-question:q2',
+            'question-bindings-by-question:q3',
+        ],
+    );
     assert.equal(result.plan.changes.rebuild_indexes, true);
     assert.deepEqual(result.plan.changes.canonical_removals, ['cq_source']);
     assert.equal(result.plan.changes.canonical_upserts[0].canonical_id, 'cq_target');
     assert.equal(result.plan.changes.canonical_upserts[0].answer_status, 'needs_update');
+    assert.equal(result.plan.changes.canonical_upserts[0].frequency, 3);
+    assert.deepEqual(result.plan.changes.canonical_upserts[0].companies, ['字节', '美团'].sort((a, b) => a.localeCompare(b, 'zh')));
+    assert.deepEqual(result.plan.changes.canonical_upserts[0].primary_domain, { l1: '缓存', l2: 'Redis' });
+    assert.deepEqual(result.plan.changes.canonical_upserts[0].primary_entities, ['Redis']);
     assert.deepEqual(result.plan.changes.question_rebindings, [
         { question_id: 'q2', from_canonical_id: 'cq_source', to_canonical_id: 'cq_target' },
         { question_id: 'q3', from_canonical_id: 'cq_source', to_canonical_id: 'cq_target' },
@@ -194,8 +219,9 @@ test('orchestrates canonical, review, and answer merge state in one mutation', a
     const state = adapters.snapshot();
     assert.deepEqual(state.canonicals.map((record) => record.canonical_id), ['cq_target']);
     assert.deepEqual(state.canonicals[0].question_ids, ['q1', 'q2', 'q3']);
+    assert.equal(state.canonicals[0].frequency, 3);
     assert.deepEqual(
-        state.bindings.map((binding) => [binding.question_id, binding.canonical_id]),
+        state.bindings.map((item) => [item.question_id, item.canonical_id]),
         [
             ['q1', 'cq_target'],
             ['q2', 'cq_target'],
