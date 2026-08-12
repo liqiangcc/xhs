@@ -116,6 +116,8 @@ function createInMemoryCanonicalAdapters(seed = {}) {
                 source_items: reviewProgress
                     .filter((item) => item.canonical_id === sourceCanonicalId)
                     .map(clone),
+                source_session_event_count: reviewSessionEvents
+                    .filter((event) => event.canonical_id === sourceCanonicalId).length,
                 resource,
                 revision: revision(resource),
             };
@@ -323,6 +325,7 @@ function createInMemoryCanonicalAdapters(seed = {}) {
             return {
                 committed: true,
                 operation: plan.operation,
+                canonical_count: nextCanonicals.size,
                 canonical_upsert_count: (plan.changes.canonical_upserts || []).length,
                 canonical_removal_count: (plan.changes.canonical_removals || []).length,
                 question_rebinding_count: (plan.changes.question_rebindings || []).length,
