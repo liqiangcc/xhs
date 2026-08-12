@@ -32,6 +32,7 @@ const {
     computePriority,
 } = require('../../src/domain/canonical/priority-policy');
 const { mergeCanonical } = require('../../src/domain/canonical/merge-policy');
+const { splitCanonical } = require('../../src/domain/canonical/split-policy');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -771,24 +772,26 @@ function runSplit(options = {}) {
             ? { ...question, canonical_id: newCanonicalId }
             : question
     );
-    const remainingQuestionIds = (source.question_ids || []).filter((id) => id !== questionId);
-    const newRecord = {
-        canonical_id: newCanonicalId,
-        canonical_title: title,
-        aliases: [...new Set([title, ...sourceRows.map((question) => question.original_question)])],
-        question_ids: [questionId],
+    const questionFacts = {
+        aliases: sourceRows.map((question) => question.original_question),
         primary_domain: normalizedDomain(sourceRows[0]),
-        primary_entities: [...new Set(sourceRows.flatMap((question) => question.tech_entities || []).map((entity) => normalizeEntity(entity)).filter(Boolean))],
-        companies: [...new Set(sourceRows.map((question) => question.company || '未知'))].sort((a, b) => a.localeCompare(b, 'zh')),
+        primary_entities: sourceRows
+            .flatMap((question) => question.tech_entities || [])
+            .map((entity) => normalizeEntity(entity))
+            .filter(Boolean),
+        companies: sourceRows.map((question) => question.company || '未知'),
         frequency: sourceRows.length,
-        review_priority: computePriority(sourceRows.length, new Set(sourceRows.map((question) => question.company || '未知')).size),
-        answer_status: 'missing',
-        schema_version: 'canonical_question.v1',
     };
+    const split = splitCanonical(source, {
+        questionId,
+        newCanonicalId,
+        title,
+        questionFacts,
+    });
     const nextRecords = records
         .filter((record) => record.canonical_id !== canonicalId)
-        .concat(remainingQuestionIds.length ? [{ ...source, question_ids: remainingQuestionIds }] : [])
-        .concat(newRecord);
+        .concat(split.remaining_source ? [split.remaining_source] : [])
+        .concat(split.new_canonical);
     const refreshed = persistCanonicalState(paths, updatedQuestions, nextRecords);
     const report = runCheck({ root });
     return {
