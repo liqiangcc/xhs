@@ -6,6 +6,7 @@ const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonic
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
+const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
 const { createFsCanonicalMutationStore } = require('../infrastructure/filesystem/fs-canonical-mutation-store');
 
 /**
@@ -26,6 +27,7 @@ function createApplication(options = {}) {
     } = createFsCanonicalRepositories({ root: options.root, paths });
     const reviewRepository = createFsReviewRepository({ root: options.root, paths });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
+    const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
     const mutationStore = createFsCanonicalMutationStore({ root: options.root, paths });
 
     const merge = createMergeCanonicalUseCase({
@@ -33,6 +35,7 @@ function createApplication(options = {}) {
         questionBindingRepository,
         reviewRepository,
         answerRepository,
+        integrityChecker,
         mutationStore,
         taxonomy,
         ...(options.clock ? { clock: options.clock } : {}),
