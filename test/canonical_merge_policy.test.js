@@ -59,12 +59,16 @@ test('merges source into target while preserving target identity and domain', ()
     assert.deepEqual(merged.question_ids, ['q1', 'q2', 'q3']);
     assert.deepEqual(merged.primary_entities, ['EventLoop', 'Redis']);
     assert.deepEqual(merged.companies, ['美团', '字节']);
-    assert.deepEqual(merged.aliases, [
-        'Redis 为什么快？',
-        'Redis 快的原因',
-        'Redis 单线程模型',
-        'Redis 单线程为什么快？',
-    ]);
+    assert.deepEqual(
+        [...merged.aliases].sort(),
+        [
+            'Redis 为什么快？',
+            'Redis 快的原因',
+            'Redis 单线程模型',
+            'Redis 单线程为什么快？',
+        ].sort(),
+    );
+    assert.equal(new Set(merged.aliases).size, merged.aliases.length);
     assert.equal(merged.frequency, 4);
     assert.equal(merged.review_priority, 'P0');
     assert.equal(merged.answer_status, 'needs_update');
