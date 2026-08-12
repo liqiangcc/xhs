@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { computeQuestionId } = require('../scripts/lib/hash');
-const { readJson, readJsonl, writeJson, writeJsonl } = require('../scripts/lib/io');
+const { readJsonl, writeJson, writeJsonl } = require('../scripts/lib/io');
 
 const CLI = path.resolve(__dirname, '..', 'scripts', 'xhs.js');
 
@@ -180,7 +180,7 @@ test('characterizes canonical accept CLI output and persisted side effects', () 
         assert.equal(result.json.updated_question_rows, 1);
         assert.equal(readJsonl(questionsPath(root))[0].canonical_id, canonicalId);
         assert.equal(readJsonl(canonicalPath(root))[0].canonical_id, canonicalId);
-        for (const name of ['entity.json', 'company.json', 'domain.json', 'hotspot.json']) {
+        for (const name of ['entity_index.json', 'company_index.json', 'domain_index.json', 'hotspot_index.json']) {
             assert.equal(fs.existsSync(path.join(root, 'data', 'indexes', name)), true, name);
         }
         assert.equal(fs.existsSync(path.join(root, 'data', 'manifests', 'runs', 'latest_canonical_accept.json')), false);
