@@ -10,6 +10,7 @@ const { assertQuestionBindingRepository } = require('../../ports/repositories/qu
 const { assertReviewRepository } = require('../../ports/repositories/review-repository');
 const { assertAnswerRepository } = require('../../ports/repositories/answer-repository');
 const { assertCanonicalMutationStore } = require('../../ports/canonical-mutation-store');
+const { assertCanonicalIntegrityChecker } = require('../../ports/services/canonical-integrity-checker');
 
 function assertSnapshot(snapshot, label, valueKey) {
     if (!snapshot || typeof snapshot !== 'object') {
@@ -52,6 +53,19 @@ function assertAnswerSnapshot(snapshot) {
     return snapshot;
 }
 
+function assertIntegrityReport(report) {
+    if (!report || typeof report !== 'object') {
+        throw new Error('canonical integrity report is required');
+    }
+    if (report.schema_version !== 'canonical_quality_report.v1') {
+        throw new Error('canonical integrity report schema_version must be canonical_quality_report.v1');
+    }
+    if (typeof report.ok !== 'boolean') {
+        throw new Error('canonical integrity report ok must be a boolean');
+    }
+    return report;
+}
+
 function expectedRevision(snapshot) {
     return {
         resource: snapshot.resource,
@@ -61,6 +75,33 @@ function expectedRevision(snapshot) {
 
 function uniqueSorted(values) {
     return [...new Set(values || [])].sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+function reviewMigrationSummary(reviewMigration, reviewSnapshot) {
+    return {
+        source_progress_found: reviewMigration.progress.source_found,
+        target_progress_found: reviewMigration.progress.target_found,
+        migrated_session_event_count: reviewSnapshot.source_session_event_count,
+    };
+}
+
+function invalidatedAnswerSummary(answerMerge) {
+    if (!answerMerge.target_invalidation) return null;
+    return {
+        canonical_id: answerMerge.target_invalidation.canonical_id,
+        version: answerMerge.target_invalidation.next_metadata.version,
+        status: answerMerge.target_invalidation.next_metadata.status,
+        quality_tier: answerMerge.target_invalidation.next_metadata.quality_tier,
+    };
+}
+
+function archivedAnswerSummary(answerMerge) {
+    if (!answerMerge.source_archive) return null;
+    return {
+        canonical_id: answerMerge.source_archive.canonical_id,
+        source_answer_status: answerMerge.source_archive.source_answer_status,
+        target_canonical_id: answerMerge.source_archive.target_canonical_id,
+    };
 }
 
 function assertPostCommitState(targetId, sourceId, movedQuestionIds, targetSnapshot, sourceSnapshot, sourceBindings, targetBindings) {
@@ -92,6 +133,7 @@ function createMergeCanonicalUseCase(dependencies = {}) {
     const reviewRepository = assertReviewRepository(dependencies.reviewRepository);
     const answerRepository = assertAnswerRepository(dependencies.answerRepository);
     const mutationStore = assertCanonicalMutationStore(dependencies.mutationStore);
+    const integrityChecker = assertCanonicalIntegrityChecker(dependencies.integrityChecker);
     const taxonomy = dependencies.taxonomy;
     const clock = dependencies.clock || (() => new Date().toISOString());
 
@@ -165,6 +207,9 @@ function createMergeCanonicalUseCase(dependencies = {}) {
             sourceArchiveExists: answerSnapshot.source_archive_exists,
             updatedAt: mergedDate,
         });
+        const reviewSummary = reviewMigrationSummary(reviewMigration, reviewSnapshot);
+        const invalidatedTargetAnswer = invalidatedAnswerSummary(answerMerge);
+        const archivedSourceAnswer = archivedAnswerSummary(answerMerge);
         const plan = createCanonicalMutationPlan({
             operation: 'merge',
             expected_revisions: [
@@ -199,6 +244,9 @@ function createMergeCanonicalUseCase(dependencies = {}) {
                     source: sourceId,
                     reason,
                     moved_question_ids: movedQuestionIds,
+                    review_migration: reviewSummary,
+                    invalidated_target_answer: invalidatedTargetAnswer,
+                    archived_source_answer: archivedSourceAnswer,
                 },
             },
         });
@@ -221,29 +269,20 @@ function createMergeCanonicalUseCase(dependencies = {}) {
             postSourceBindings,
             postTargetBindings,
         );
+        const integrity = assertIntegrityReport(await integrityChecker.check());
 
         return {
-            ok: true,
+            ok: integrity.ok,
             target: targetId,
             source: sourceId,
             reason,
             canonical_count: commitResult?.canonical_count ?? null,
             moved_question_ids: movedQuestionIds,
             assigned_question_rows: (postTargetBindings?.bindings || []).length,
-            review_migration: {
-                source_progress_found: reviewMigration.progress.source_found,
-                target_progress_found: reviewMigration.progress.target_found,
-                migrated_session_event_count: reviewSnapshot.source_session_event_count,
-            },
-            invalidated_target_answer: answerMerge.target_invalidation
-                ? { version: answerMerge.target_invalidation.next_metadata.version }
-                : null,
-            archived_source_answer: answerMerge.source_archive
-                ? {
-                    source_answer_status: answerMerge.source_archive.source_answer_status,
-                    target_canonical_id: answerMerge.source_archive.target_canonical_id,
-                }
-                : null,
+            review_migration: reviewSummary,
+            invalidated_target_answer: invalidatedTargetAnswer,
+            archived_source_answer: archivedSourceAnswer,
+            integrity,
             plan,
             commit: commitResult || null,
         };
