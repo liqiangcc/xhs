@@ -13,6 +13,7 @@ const {
 const { buildIndexes, getIndexPaths } = require('../../../scripts/lib/index_store');
 const { createCanonicalFsPaths } = require('./canonical-paths');
 const { revisionForResource } = require('./canonical-repositories');
+const { revisionForReviewResource } = require('./review-repositories');
 
 let transactionSequence = 0;
 
@@ -72,20 +73,33 @@ function processIsAlive(pid) {
 
 function assertSupportedSideEffects(plan) {
     const changes = plan.changes || {};
-    if ((changes.review_migrations || []).length) {
-        throw new Error('FsCanonicalMutationStore core slice does not yet materialize review_migrations');
-    }
     if ((changes.answer_invalidations || []).length) {
-        throw new Error('FsCanonicalMutationStore core slice does not yet materialize answer_invalidations');
+        throw new Error('FsCanonicalMutationStore does not yet materialize answer_invalidations');
     }
     if ((changes.answer_archives || []).length) {
-        throw new Error('FsCanonicalMutationStore core slice does not yet materialize answer_archives');
+        throw new Error('FsCanonicalMutationStore does not yet materialize answer_archives');
     }
+}
+
+function assertReviewConcurrencyCoverage(plan) {
+    if (!(plan.changes?.review_migrations || []).length) return;
+    const covered = (plan.expected_revisions || [])
+        .some((item) => String(item.resource || '').startsWith('review-merge:'));
+    if (!covered) {
+        throw new Error('Filesystem review migration requires an opaque review-merge revision');
+    }
+}
+
+function revisionForMutationResource(paths, resource) {
+    if (String(resource).startsWith('review-merge:')) {
+        return revisionForReviewResource(paths, resource);
+    }
+    return revisionForResource(paths, resource);
 }
 
 function assertExpectedRevisions(paths, plan) {
     for (const expected of plan.expected_revisions || []) {
-        const actual = revisionForResource(paths, expected.resource);
+        const actual = revisionForMutationResource(paths, expected.resource);
         if (actual !== expected.revision) {
             throw new Error(
                 `Revision mismatch for ${expected.resource}: expected ${expected.revision}, got ${actual}`,
@@ -129,6 +143,89 @@ function applyQuestionRebindings(rows, plan) {
     return sortQuestionRows(nextRows);
 }
 
+function readReviewSessions(paths) {
+    if (!fs.existsSync(paths.reviewSessionsDir)) return new Map();
+    return new Map(
+        fs.readdirSync(paths.reviewSessionsDir)
+            .filter((name) => name.endsWith('.json'))
+            .sort()
+            .map((name) => [name, readJson(path.join(paths.reviewSessionsDir, name))]),
+    );
+}
+
+function materializeReviewOperations(paths, plan) {
+    const migrations = plan.changes.review_migrations || [];
+    if (!migrations.length) return [];
+    assertReviewConcurrencyCoverage(plan);
+
+    let progress = readJson(paths.reviewProgress, {
+        schema_version: 'review_progress_store.v1',
+        updated_at: null,
+        items: [],
+    });
+    const sessions = readReviewSessions(paths);
+    let progressChanged = false;
+    const changedSessionNames = new Set();
+
+    for (const migration of migrations) {
+        const progressIntent = migration.progress || {};
+        if (progressIntent.source_found) {
+            const removed = new Set(progressIntent.remove_canonical_ids || []);
+            const items = (progress.items || [])
+                .filter((item) => !removed.has(item.canonical_id));
+            if (progressIntent.upsert) items.push(clone(progressIntent.upsert));
+            items.sort((a, b) => String(a.canonical_id || '').localeCompare(String(b.canonical_id || '')));
+            progress = {
+                ...progress,
+                updated_at: progressIntent.store_updated_at || progress.updated_at || null,
+                items,
+            };
+            progressChanged = true;
+        }
+
+        const sessionIntent = migration.session_events || {};
+        const fromCanonicalId = sessionIntent.rebind_from_canonical_id;
+        const toCanonicalId = sessionIntent.rebind_to_canonical_id;
+        if (!fromCanonicalId || !toCanonicalId) continue;
+
+        for (const [name, session] of sessions.entries()) {
+            let changed = false;
+            const events = (session.events || []).map((event) => {
+                if (event.canonical_id !== fromCanonicalId) return event;
+                changed = true;
+                return {
+                    ...event,
+                    canonical_id: toCanonicalId,
+                    ...(sessionIntent.annotate_migrated_from
+                        ? { migrated_from_canonical_id: fromCanonicalId }
+                        : {}),
+                };
+            });
+            if (changed) {
+                sessions.set(name, { ...session, events });
+                changedSessionNames.add(name);
+            }
+        }
+    }
+
+    const operations = [];
+    if (progressChanged) {
+        operations.push({
+            kind: 'review_progress',
+            target: paths.reviewProgress,
+            content: stablePrettyStringify(progress),
+        });
+    }
+    for (const name of [...changedSessionNames].sort()) {
+        operations.push({
+            kind: `review_session:${name}`,
+            target: path.join(paths.reviewSessionsDir, name),
+            content: stablePrettyStringify(sessions.get(name)),
+        });
+    }
+    return operations;
+}
+
 function buildHistory(paths, historyEntry) {
     if (!historyEntry) return null;
     const current = readJson(paths.mergeHistory, {
@@ -149,6 +246,7 @@ function buildHistory(paths, historyEntry) {
 
 function materializeOperations(paths, plan) {
     assertSupportedSideEffects(plan);
+    assertReviewConcurrencyCoverage(plan);
     const canonicalRecords = readJsonl(paths.canonicalQuestions, []);
     const questionRows = readJsonl(paths.questions, []);
     const nextCanonicals = applyCanonicalChanges(canonicalRecords, plan);
@@ -165,6 +263,7 @@ function materializeOperations(paths, plan) {
             target: paths.questions,
             content: serializeJsonl(nextQuestions),
         },
+        ...materializeReviewOperations(paths, plan),
     ];
 
     if (plan.changes.rebuild_indexes) {
@@ -368,6 +467,7 @@ function createFsCanonicalMutationStore(options = {}) {
                     canonical_upsert_count: (plan.changes.canonical_upserts || []).length,
                     canonical_removal_count: (plan.changes.canonical_removals || []).length,
                     question_rebinding_count: (plan.changes.question_rebindings || []).length,
+                    review_migration_count: (plan.changes.review_migrations || []).length,
                 };
             } catch (error) {
                 if (error?.simulatedCrash) throw error;
