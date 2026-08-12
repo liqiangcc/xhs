@@ -62,9 +62,14 @@ test('Application depends on ports/domain rather than concrete infrastructure', 
     }
 });
 
-test('Composition Root exists before the first migrated vertical slice', () => {
+test('Composition Root exposes only migrated application capabilities', () => {
     const bootstrap = require('../src/bootstrap/create-application');
-    const app = bootstrap.createApplication();
+    assert.throws(() => bootstrap.createApplication(), /Application root is required/);
+
+    const app = bootstrap.createApplication({ root: ROOT });
     assert.equal(Object.isFrozen(app), true);
-    assert.deepEqual(Object.keys(app), []);
+    assert.equal(Object.isFrozen(app.canonical), true);
+    assert.deepEqual(Object.keys(app), ['canonical']);
+    assert.deepEqual(Object.keys(app.canonical), ['merge']);
+    assert.equal(typeof app.canonical.merge, 'function');
 });
