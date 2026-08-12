@@ -28,10 +28,10 @@ const {
     pickPriority,
     computePriority,
 } = require('../../src/domain/canonical/priority-policy');
-const { splitCanonical } = require('../../src/domain/canonical/split-policy');
 const { evaluateCanonicalIntegrity } = require('../../src/domain/canonical/integrity-policy');
 const { createApplication } = require('../../src/bootstrap/create-application');
 const { presentCanonicalMergeResult } = require('../../src/interfaces/cli/canonical-merge-presenter');
+const { presentCanonicalSplitResult } = require('../../src/interfaces/cli/canonical-split-presenter');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -479,9 +479,8 @@ async function runMerge(options = {}) {
     return presentCanonicalMergeResult(result);
 }
 
-function runSplit(options = {}) {
+async function runSplit(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const paths = defaultPaths(root);
     const canonicalId = options['canonical-id'];
     const questionId = options['question-id'];
     const newCanonicalId = options['new-canonical-id'];
@@ -493,52 +492,14 @@ function runSplit(options = {}) {
     assertCanonicalId(newCanonicalId);
     if (canonicalId === newCanonicalId) throw new Error('new-canonical-id must differ from canonical-id');
 
-    const questions = loadQuestions({ filePath: paths.questions });
-    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
-    if (records.some((record) => record.canonical_id === newCanonicalId)) {
-        throw new Error(`Canonical already exists: ${newCanonicalId}`);
-    }
-    const source = records.find((record) => record.canonical_id === canonicalId);
-    if (!source) throw new Error(`Canonical not found: ${canonicalId}`);
-    if (!(source.question_ids || []).includes(questionId)) {
-        throw new Error(`Question ${questionId} is not part of ${canonicalId}`);
-    }
-    const sourceRows = questions.filter((question) => question.question_id === questionId);
-    if (!sourceRows.length) throw new Error(`Question not found: ${questionId}`);
-    const updatedQuestions = questions.map((question) =>
-        question.question_id === questionId && question.canonical_id === canonicalId
-            ? { ...question, canonical_id: newCanonicalId }
-            : question
-    );
-    const questionFacts = {
-        aliases: sourceRows.map((question) => question.original_question),
-        primary_domain: normalizedDomain(sourceRows[0]),
-        primary_entities: sourceRows
-            .flatMap((question) => question.tech_entities || [])
-            .map((entity) => normalizeEntity(entity))
-            .filter(Boolean),
-        companies: sourceRows.map((question) => question.company || '未知'),
-        frequency: sourceRows.length,
-    };
-    const split = splitCanonical(source, {
-        questionId,
-        newCanonicalId,
-        title,
-        questionFacts,
-    });
-    const nextRecords = records
-        .filter((record) => record.canonical_id !== canonicalId)
-        .concat(split.remaining_source ? [split.remaining_source] : [])
-        .concat(split.new_canonical);
-    const refreshed = persistCanonicalState(paths, updatedQuestions, nextRecords);
-    const report = runCheck({ root });
-    return {
-        ok: report.ok,
+    const application = createApplication({ root });
+    const result = await application.canonical.split({
         source: canonicalId,
-        new_canonical_id: newCanonicalId,
         question_id: questionId,
-        canonical_count: refreshed.length,
-    };
+        new_canonical_id: newCanonicalId,
+        title,
+    });
+    return presentCanonicalSplitResult(result);
 }
 
 function runStats(options = {}) {
