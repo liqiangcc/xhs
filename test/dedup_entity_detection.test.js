@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { detectEntityQuestionClusters } = require('../src/domain/dedup/entity-cluster-detection');
+const { groupEntityCandidates } = require('../scripts/commands/canonical');
 
 function question(overrides = {}) {
     return {
@@ -85,4 +86,53 @@ test('same question id from only one source does not become a duplicate cluster'
     ]);
 
     assert.deepEqual(clusters, []);
+});
+
+test('new detector characterizes the legacy entity grouping boundary without replacing production', () => {
+    const legacyQuestions = [
+        {
+            question_id: 'q_redis_fast',
+            original_question: 'Redis 为什么快？',
+            source_note_id: 'note-a',
+            source_question_index: 0,
+            company: '美团',
+            domain: { l1: '缓存', l2: 'Redis' },
+            tech_entities: ['Redis'],
+            is_valid_for_library: true,
+            canonical_id: null,
+        },
+        {
+            question_id: 'q_redis_faster',
+            original_question: 'Redis 为什么这么快？',
+            source_note_id: 'note-b',
+            source_question_index: 0,
+            company: '字节',
+            domain: { l1: '缓存', l2: 'Redis' },
+            tech_entities: ['Redis'],
+            is_valid_for_library: true,
+            canonical_id: null,
+        },
+        {
+            question_id: 'q_redis_persistence',
+            original_question: 'Redis 持久化机制是什么？',
+            source_note_id: 'note-c',
+            source_question_index: 0,
+            company: '阿里',
+            domain: { l1: '缓存', l2: 'Redis' },
+            tech_entities: ['Redis'],
+            is_valid_for_library: true,
+            canonical_id: null,
+        },
+    ];
+
+    const legacyQuestionGroups = groupEntityCandidates(legacyQuestions, 'redis', 10)
+        .map((candidate) => candidate.question_ids);
+    const detectedQuestionGroups = detectEntityQuestionClusters(
+        legacyQuestions.map((item) => ({
+            ...item,
+            domain_key: `${item.domain.l1}/${item.domain.l2}`,
+        })),
+    ).map((cluster) => cluster.question_ids);
+
+    assert.deepEqual(detectedQuestionGroups, legacyQuestionGroups);
 });
