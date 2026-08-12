@@ -425,8 +425,8 @@ function createFsCanonicalMutationStore(options = {}) {
         }
 
         for (const operation of [...(journal.operations || [])].reverse()) {
-            ensureDir(path.dirname(operation.target));
             if (operation.existed_before) {
+                ensureDir(path.dirname(operation.target));
                 if (!fs.existsSync(operation.backup)) {
                     throw new Error(`Cannot recover canonical mutation; backup missing: ${operation.backup}`);
                 }
