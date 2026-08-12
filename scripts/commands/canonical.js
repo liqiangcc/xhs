@@ -29,6 +29,7 @@ const {
     computePriority,
 } = require('../../src/domain/canonical/priority-policy');
 const { splitCanonical } = require('../../src/domain/canonical/split-policy');
+const { evaluateCanonicalIntegrity } = require('../../src/domain/canonical/integrity-policy');
 const { createApplication } = require('../../src/bootstrap/create-application');
 const { presentCanonicalMergeResult } = require('../../src/interfaces/cli/canonical-merge-presenter');
 
@@ -443,110 +444,12 @@ function runList(options = {}) {
     };
 }
 
-function normalizedTitle(record) {
-    return normalizeQuestion([
-        record.canonical_title,
-        ...(record.aliases || []),
-    ].join(' '));
-}
-
 function runCheck(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const paths = defaultPaths(root);
     const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
     const questions = loadQuestions({ filePath: paths.questions });
-    const rowsByQuestionId = new Map();
-    for (const question of questions) {
-        if (!rowsByQuestionId.has(question.question_id)) rowsByQuestionId.set(question.question_id, []);
-        rowsByQuestionId.get(question.question_id).push(question);
-    }
-    const recordsById = new Map(records.map((record) => [record.canonical_id, record]));
-    const questionIdsByRecord = new Map(records.map((record) => [record.canonical_id, new Set(record.question_ids || [])]));
-    const canonicalByQuestionId = new Map();
-    const duplicateQuestionIds = [];
-    const missingQuestionIds = [];
-    const bindingMismatches = [];
-    const orphanBindings = [];
-    const unlistedBindings = [];
-
-    for (const record of records) {
-        for (const questionId of record.question_ids || []) {
-            if (!rowsByQuestionId.has(questionId)) {
-                missingQuestionIds.push({ canonical_id: record.canonical_id, question_id: questionId });
-            }
-            const owner = canonicalByQuestionId.get(questionId);
-            if (owner && owner !== record.canonical_id) {
-                duplicateQuestionIds.push({ question_id: questionId, canonical_ids: [owner, record.canonical_id].sort() });
-            } else {
-                canonicalByQuestionId.set(questionId, record.canonical_id);
-            }
-            for (const question of rowsByQuestionId.get(questionId) || []) {
-                if (question.canonical_id !== record.canonical_id) {
-                    bindingMismatches.push({
-                        question_id: question.question_id,
-                        source_note_id: question.source_note_id,
-                        source_question_index: question.source_question_index,
-                        expected_canonical_id: record.canonical_id,
-                        actual_canonical_id: question.canonical_id,
-                    });
-                }
-            }
-        }
-    }
-
-    for (const question of questions) {
-        if (!question.canonical_id) continue;
-        const record = recordsById.get(question.canonical_id);
-        if (!record) {
-            orphanBindings.push(questionRef(question));
-        } else if (!questionIdsByRecord.get(record.canonical_id).has(question.question_id)) {
-            unlistedBindings.push({
-                ...questionRef(question),
-                canonical_id: question.canonical_id,
-            });
-        }
-    }
-
-    const suspectedDuplicates = [];
-    const recordsByNormalizedTitle = new Map();
-    for (const record of records) {
-        const normalized = normalizedTitle(record);
-        if (!normalized) continue;
-        const existing = recordsByNormalizedTitle.get(normalized) || [];
-        for (const other of existing) {
-            suspectedDuplicates.push({
-                canonical_ids: [other.canonical_id, record.canonical_id],
-                reason: 'same_normalized_title_or_aliases',
-                titles: [other.canonical_title, record.canonical_title],
-            });
-        }
-        existing.push(record);
-        recordsByNormalizedTitle.set(normalized, existing);
-    }
-
-    const blockingCount = duplicateQuestionIds.length
-        + missingQuestionIds.length
-        + bindingMismatches.length
-        + orphanBindings.length
-        + unlistedBindings.length;
-    const report = {
-        schema_version: 'canonical_quality_report.v1',
-        ok: blockingCount === 0,
-        record_count: records.length,
-        assigned_question_rows: questions.filter((question) => question.canonical_id).length,
-        duplicate_question_id_count: duplicateQuestionIds.length,
-        missing_question_id_count: missingQuestionIds.length,
-        binding_mismatch_count: bindingMismatches.length,
-        orphan_binding_count: orphanBindings.length,
-        unlisted_binding_count: unlistedBindings.length,
-        suspected_duplicate_count: suspectedDuplicates.length,
-        duplicate_question_ids: duplicateQuestionIds,
-        missing_question_ids: missingQuestionIds,
-        binding_mismatches: bindingMismatches,
-        orphan_bindings: orphanBindings,
-        unlisted_bindings: unlistedBindings,
-        suspected_duplicates: suspectedDuplicates,
-    };
+    const report = evaluateCanonicalIntegrity(records, questions);
     if (shouldWriteReports(options)) {
         writeJson(paths.qualityReport, report);
     }
