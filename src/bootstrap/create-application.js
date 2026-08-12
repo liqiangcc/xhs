@@ -1,6 +1,7 @@
 'use strict';
 
 const { createMergeCanonicalUseCase } = require('../application/canonical/merge-canonical');
+const { createSplitCanonicalUseCase } = require('../application/canonical/split-canonical');
 const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
@@ -40,10 +41,19 @@ function createApplication(options = {}) {
         taxonomy,
         ...(options.clock ? { clock: options.clock } : {}),
     });
+    const split = createSplitCanonicalUseCase({
+        canonicalRepository,
+        canonicalIdentityRepository: canonicalRepository,
+        questionBindingRepository,
+        integrityChecker,
+        mutationStore,
+        taxonomy,
+    });
 
     return Object.freeze({
         canonical: Object.freeze({
             merge,
+            split,
         }),
     });
 }
