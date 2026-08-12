@@ -14,10 +14,8 @@ test('dedup similarity preserves historical english and chinese token signals', 
         [...tokenizeSimilarityText('Redis 为什么快？')],
         ['redis', '为什', '什么', '么快'],
     );
-    assert.deepEqual(
-        [...tokenizeSimilarityText('A？')],
-        ['a'],
-    );
+    assert.deepEqual([...tokenizeSimilarityText('A？')], []);
+    assert.deepEqual([...tokenizeSimilarityText('快？')], ['快']);
 });
 
 test('jaccard similarity is a signal and does not classify a semantic relation', () => {
