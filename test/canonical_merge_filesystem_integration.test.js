@@ -172,7 +172,11 @@ test('composition root runs merge application through real filesystem adapters a
 
         assert.equal(result.ok, true);
         assert.deepEqual(result.moved_question_ids, ['q2']);
-        assert.equal(result.plan.expected_revisions.length, 6);
+        assert.equal(result.plan.expected_revisions.length, 8);
+        assert.deepEqual(
+            result.plan.expected_revisions.slice(6).map((item) => item.resource),
+            ['question-bindings-by-question:q1', 'question-bindings-by-question:q2'],
+        );
         assert.equal(result.commit.committed, true);
         assert.equal(result.commit.recoverable, true);
         assert.equal(result.commit.answer_invalidation_count, 1);
@@ -181,6 +185,10 @@ test('composition root runs merge application through real filesystem adapters a
         const canonicals = readJsonl(fixture.paths.canonicalQuestions, []);
         assert.deepEqual(canonicals.map((item) => item.canonical_id), ['cq_target']);
         assert.deepEqual(canonicals[0].question_ids, ['q1', 'q2']);
+        assert.equal(canonicals[0].frequency, 2);
+        assert.deepEqual(canonicals[0].companies, ['字节', '美团'].sort((a, b) => a.localeCompare(b, 'zh')));
+        assert.deepEqual(canonicals[0].primary_domain, { l1: '缓存', l2: 'Redis' });
+        assert.deepEqual(canonicals[0].primary_entities, ['Redis']);
         assert.equal(canonicals[0].review_priority, 'P0');
         assert.equal(canonicals[0].answer_status, 'needs_update');
 
