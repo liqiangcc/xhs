@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const { normalizeQuestion } = require('../lib/hash');
 const { readJson, writeJson } = require('../lib/io');
-const { answerPath, readAnswerFile, replaceAnswerMetadata } = require('../lib/answer_store');
 const {
     loadQuestions,
     saveQuestions,
@@ -17,7 +15,6 @@ const { normalizeEntity, validateDomain } = require('../lib/taxonomy');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption, shouldWriteReports } = require('../lib/cli_options');
 const { defaultDate } = require('../lib/date');
-const { loadProgress, saveProgress } = require('../lib/review_store');
 const {
     loadCanonicalQuestions,
     saveCanonicalQuestions,
@@ -31,8 +28,9 @@ const {
     pickPriority,
     computePriority,
 } = require('../../src/domain/canonical/priority-policy');
-const { mergeCanonical } = require('../../src/domain/canonical/merge-policy');
 const { splitCanonical } = require('../../src/domain/canonical/split-policy');
+const { createApplication } = require('../../src/bootstrap/create-application');
+const { presentCanonicalMergeResult } = require('../../src/interfaces/cli/canonical-merge-presenter');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -555,131 +553,8 @@ function runCheck(options = {}) {
     return report;
 }
 
-function maxDate(...values) {
-    return values.filter(Boolean).sort().at(-1) || null;
-}
-
-function minDate(...values) {
-    return values.filter(Boolean).sort()[0] || null;
-}
-
-function mergedProgressItem(target, source, targetId) {
-    if (!target) {
-        return {
-            ...source,
-            canonical_id: targetId,
-            migrated_from_canonical_ids: [...new Set([...(source.migrated_from_canonical_ids || []), source.canonical_id])].sort(),
-        };
-    }
-    const level = Math.min(Number(target.level || 0), Number(source.level || 0));
-    const mistakeCount = Number(target.mistake_count || 0) + Number(source.mistake_count || 0);
-    return {
-        ...target,
-        canonical_id: targetId,
-        status: mistakeCount > 0 ? 'weak' : (level >= 5 ? 'mastered' : 'learning'),
-        level,
-        review_count: Number(target.review_count || 0) + Number(source.review_count || 0),
-        last_reviewed_at: maxDate(target.last_reviewed_at, source.last_reviewed_at),
-        next_review_at: minDate(target.next_review_at, source.next_review_at),
-        confidence: Math.min(Number(target.confidence ?? 0.5), Number(source.confidence ?? 0.5)),
-        difficulty: Math.max(Number(target.difficulty || 3), Number(source.difficulty || 3)),
-        mistake_count: mistakeCount,
-        updated_at: maxDate(target.updated_at, source.updated_at) || defaultDate(),
-        migrated_from_canonical_ids: [...new Set([
-            ...(target.migrated_from_canonical_ids || []),
-            ...(source.migrated_from_canonical_ids || []),
-            source.canonical_id,
-        ])].sort(),
-    };
-}
-
-function migrateReviewReferences(paths, targetId, sourceId, options = {}) {
-    const progress = loadProgress({ progressPath: paths.reviewProgress, date: options.date });
-    const targetItems = (progress.items || []).filter((item) => item.canonical_id === targetId);
-    const sourceItems = (progress.items || []).filter((item) => item.canonical_id === sourceId);
-    if (targetItems.length > 1 || sourceItems.length > 1) {
-        throw new Error(`Cannot merge review progress with duplicate rows: ${targetId}=${targetItems.length}, ${sourceId}=${sourceItems.length}`);
-    }
-    let mergedItem = null;
-    if (sourceItems.length) mergedItem = mergedProgressItem(targetItems[0], sourceItems[0], targetId);
-    const retainedItems = (progress.items || []).filter((item) => item.canonical_id !== targetId && item.canonical_id !== sourceId);
-    if (mergedItem) retainedItems.push(mergedItem);
-    else if (targetItems[0]) retainedItems.push(targetItems[0]);
-    if (sourceItems.length) saveProgress({ ...progress, items: retainedItems }, { progressPath: paths.reviewProgress, date: options.date });
-
-    let migratedSessionEventCount = 0;
-    const sessionDir = path.join(paths.reviewDir, 'sessions');
-    if (fs.existsSync(sessionDir)) {
-        for (const file of fs.readdirSync(sessionDir).filter((name) => name.endsWith('.json')).sort()) {
-            const filePath = path.join(sessionDir, file);
-            const session = readJson(filePath);
-            let changed = false;
-            const events = (session.events || []).map((event) => {
-                if (event.canonical_id !== sourceId) return event;
-                changed = true;
-                migratedSessionEventCount++;
-                return {
-                    ...event,
-                    canonical_id: targetId,
-                    migrated_from_canonical_id: sourceId,
-                };
-            });
-            if (changed) writeJson(filePath, { ...session, events });
-        }
-    }
-    return {
-        source_progress_found: sourceItems.length === 1,
-        target_progress_found: targetItems.length === 1,
-        migrated_session_event_count: migratedSessionEventCount,
-    };
-}
-
-function archiveSourceAnswer(paths, sourceId, targetId, options = {}) {
-    const sourcePath = answerPath(sourceId, { answersDir: paths.answersDir });
-    if (!fs.existsSync(sourcePath)) return null;
-    const archivePath = path.join(paths.answerArchiveDir, `${sourceId}.md`);
-    if (fs.existsSync(archivePath)) throw new Error(`Source answer archive already exists: ${archivePath}`);
-    const sourceAnswer = readAnswerFile(sourcePath);
-    fs.mkdirSync(paths.answerArchiveDir, { recursive: true });
-    fs.renameSync(sourcePath, archivePath);
-    return {
-        source_answer_path: path.relative(options.root || DEFAULT_ROOT, sourcePath),
-        archived_answer_path: path.relative(options.root || DEFAULT_ROOT, archivePath),
-        source_answer_status: sourceAnswer.metadata.status || 'draft',
-        target_canonical_id: targetId,
-    };
-}
-
-function invalidateMergedTargetAnswer(paths, targetId, sourceId, options = {}) {
-    const targetPath = answerPath(targetId, { answersDir: paths.answersDir });
-    if (!fs.existsSync(targetPath)) return null;
-    const answer = readAnswerFile(targetPath);
-    if (answer.metadata.status !== 'ready' && answer.metadata.quality_tier !== 'curated') return null;
-    const metadata = {
-        ...answer.metadata,
-        status: 'needs_update',
-        quality_tier: 'needs_update',
-        version: Number(answer.metadata.version || 0) + 1,
-        updated_at: defaultDate(options),
-        invalidated_by_canonical_merge: sourceId,
-    };
-    fs.writeFileSync(targetPath, replaceAnswerMetadata(answer.content, metadata), 'utf8');
-    return { answer_path: path.relative(options.root || DEFAULT_ROOT, targetPath), version: metadata.version };
-}
-
-function recordMergeHistory(paths, record, options = {}) {
-    const history = readJson(paths.mergeHistory, {
-        schema_version: 'canonical_merge_history.v1',
-        items: [],
-    });
-    const items = [...(history.items || []), record]
-        .sort((a, b) => a.source.localeCompare(b.source) || a.target.localeCompare(b.target) || a.merged_at.localeCompare(b.merged_at));
-    writeJson(paths.mergeHistory, { schema_version: 'canonical_merge_history.v1', items });
-}
-
-function runMerge(options = {}) {
+async function runMerge(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const paths = defaultPaths(root);
     const targetId = options.target;
     const sourceId = options.source;
     if (!targetId || !sourceId || !options.reason) {
@@ -689,56 +564,16 @@ function runMerge(options = {}) {
     assertCanonicalId(sourceId);
     if (targetId === sourceId) throw new Error('target and source must be different');
 
-    const questions = loadQuestions({ filePath: paths.questions });
-    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
-    const target = records.find((record) => record.canonical_id === targetId);
-    const source = records.find((record) => record.canonical_id === sourceId);
-    if (!target) throw new Error(`Target canonical not found: ${targetId}`);
-    if (!source) throw new Error(`Source canonical not found: ${sourceId}`);
-    const sourceAnswerPath = answerPath(sourceId, { answersDir: paths.answersDir });
-    const sourceArchivePath = path.join(paths.answerArchiveDir, `${sourceId}.md`);
-    if (fs.existsSync(sourceAnswerPath) && fs.existsSync(sourceArchivePath)) {
-        throw new Error(`Source answer archive already exists: ${sourceArchivePath}`);
-    }
-
-    const merged = mergeCanonical(target, source);
-    const updatedQuestions = questions.map((question) =>
-        question.canonical_id === sourceId
-            ? { ...question, canonical_id: targetId }
-            : question
-    );
-    const nextRecords = records
-        .filter((record) => record.canonical_id !== sourceId)
-        .map((record) => (record.canonical_id === targetId ? merged : record));
-    const reviewMigration = migrateReviewReferences(paths, targetId, sourceId, { ...options, root });
-    const invalidatedTargetAnswer = invalidateMergedTargetAnswer(paths, targetId, sourceId, { ...options, root });
-    const archivedSourceAnswer = archiveSourceAnswer(paths, sourceId, targetId, { ...options, root });
-    const refreshed = persistCanonicalState(paths, updatedQuestions, nextRecords);
-    const report = runCheck({ root });
-    const historyRecord = {
-        schema_version: 'canonical_merge.v1',
-        merged_at: defaultDate(options),
+    const application = createApplication({
+        root,
+        clock: () => defaultDate(options),
+    });
+    const result = await application.canonical.merge({
         target: targetId,
         source: sourceId,
         reason: options.reason,
-        moved_question_ids: [...(source.question_ids || [])].sort(),
-        review_migration: reviewMigration,
-        invalidated_target_answer: invalidatedTargetAnswer,
-        archived_source_answer: archivedSourceAnswer,
-    };
-    recordMergeHistory(paths, historyRecord, options);
-    return {
-        ok: report.ok,
-        target: targetId,
-        source: sourceId,
-        reason: options.reason,
-        canonical_count: refreshed.length,
-        moved_question_ids: source.question_ids,
-        assigned_question_rows: updatedQuestions.filter((question) => question.canonical_id === targetId).length,
-        review_migration: reviewMigration,
-        invalidated_target_answer: invalidatedTargetAnswer,
-        archived_source_answer: archivedSourceAnswer,
-    };
+    });
+    return presentCanonicalMergeResult(result);
 }
 
 function runSplit(options = {}) {
@@ -827,6 +662,17 @@ function runStats(options = {}) {
     };
 }
 
+function emitCommandResult(command, options, result) {
+    writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `canonical_${command}`, result, options);
+    console.log(JSON.stringify(result, null, 2));
+    return 0;
+}
+
+function handleCommandError(error) {
+    console.error(error.message);
+    return 1;
+}
+
 function main(argv = process.argv) {
     const { command, options } = parseArgs(argv);
     if (!command || command === 'help' || options.help) {
@@ -843,17 +689,27 @@ function main(argv = process.argv) {
         else if (command === 'split') result = runSplit(options);
         else if (command === 'stats') result = runStats(options);
         else throw new Error(`Unknown canonical command: ${command}`);
-        writeRunManifest(options.root ? path.resolve(options.root) : DEFAULT_ROOT, `canonical_${command}`, result, options);
-        console.log(JSON.stringify(result, null, 2));
-        return 0;
+
+        if (result && typeof result.then === 'function') {
+            return result
+                .then((resolved) => emitCommandResult(command, options, resolved))
+                .catch(handleCommandError);
+        }
+        return emitCommandResult(command, options, result);
     } catch (error) {
-        console.error(error.message);
-        return 1;
+        return handleCommandError(error);
     }
 }
 
 if (require.main === module) {
-    process.exitCode = main(process.argv);
+    Promise.resolve(main(process.argv))
+        .then((exitCode) => {
+            process.exitCode = exitCode;
+        })
+        .catch((error) => {
+            console.error(error.message);
+            process.exitCode = 1;
+        });
 }
 
 module.exports = {
