@@ -1,10 +1,6 @@
 'use strict';
 
-function normalizeQuestionText(text) {
-    return String(text ?? '')
-        .toLowerCase()
-        .replace(/[^\w\u4e00-\u9fa5]/g, '');
-}
+const { normalizeQuestionText } = require('../question/normalization-policy');
 
 function questionRef(question) {
     return {
@@ -134,5 +130,4 @@ function evaluateCanonicalIntegrity(records = [], questions = []) {
 
 module.exports = {
     evaluateCanonicalIntegrity,
-    normalizeQuestionText,
 };
