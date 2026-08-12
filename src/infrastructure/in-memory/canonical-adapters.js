@@ -20,6 +20,10 @@ function reviewResource(targetCanonicalId, sourceCanonicalId) {
     return `review-merge:${targetCanonicalId}:${sourceCanonicalId}`;
 }
 
+function answerResource(targetCanonicalId, sourceCanonicalId) {
+    return `answer-merge:${targetCanonicalId}:${sourceCanonicalId}`;
+}
+
 function createInMemoryCanonicalAdapters(seed = {}) {
     let canonicalRecords = new Map(
         (seed.canonicals || []).map((record) => [record.canonical_id, clone(record)]),
@@ -27,6 +31,12 @@ function createInMemoryCanonicalAdapters(seed = {}) {
     let questionBindings = (seed.bindings || []).map(clone);
     let reviewProgress = (seed.review_progress || []).map(clone);
     let reviewSessionEvents = (seed.review_session_events || []).map(clone);
+    let answers = new Map(
+        (seed.answers || []).map((answer) => [answer.canonical_id, clone(answer)]),
+    );
+    let answerArchives = new Map(
+        (seed.answer_archives || []).map((answer) => [answer.canonical_id, clone(answer)]),
+    );
     let revisionSequence = 0;
     const revisions = new Map();
     const preflightPlans = new WeakMap();
@@ -112,6 +122,23 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         },
     };
 
+    const answerRepository = {
+        async loadMergeState(targetCanonicalId, sourceCanonicalId) {
+            const resource = answerResource(targetCanonicalId, sourceCanonicalId);
+            return {
+                target_answer: answers.has(targetCanonicalId)
+                    ? clone(answers.get(targetCanonicalId))
+                    : null,
+                source_answer: answers.has(sourceCanonicalId)
+                    ? clone(answers.get(sourceCanonicalId))
+                    : null,
+                source_archive_exists: answerArchives.has(sourceCanonicalId),
+                resource,
+                revision: revision(resource),
+            };
+        },
+    };
+
     function applyReviewMigrations(progressRows, sessionEvents, migrations) {
         let nextProgress = progressRows.map(clone);
         let nextSessions = sessionEvents.map(clone);
@@ -142,6 +169,46 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         return {
             progress: nextProgress,
             sessions: nextSessions,
+        };
+    }
+
+    function applyAnswerMutations(activeAnswers, archivedAnswers, invalidations, archives) {
+        const nextAnswers = new Map(
+            [...activeAnswers.entries()].map(([canonicalId, answer]) => [canonicalId, clone(answer)]),
+        );
+        const nextArchives = new Map(
+            [...archivedAnswers.entries()].map(([canonicalId, answer]) => [canonicalId, clone(answer)]),
+        );
+
+        for (const invalidation of invalidations || []) {
+            const answer = nextAnswers.get(invalidation.canonical_id);
+            if (!answer) {
+                throw new Error(`Target answer not found for ${invalidation.canonical_id}`);
+            }
+            if (!invalidation.next_metadata) {
+                throw new Error(`Answer invalidation next_metadata is required for ${invalidation.canonical_id}`);
+            }
+            nextAnswers.set(invalidation.canonical_id, {
+                ...answer,
+                metadata: clone(invalidation.next_metadata),
+            });
+        }
+
+        for (const archive of archives || []) {
+            const source = nextAnswers.get(archive.canonical_id);
+            if (!source) {
+                throw new Error(`Source answer not found for archive ${archive.canonical_id}`);
+            }
+            if (nextArchives.has(archive.canonical_id)) {
+                throw new Error(`Source answer archive already exists for ${archive.canonical_id}`);
+            }
+            nextAnswers.delete(archive.canonical_id);
+            nextArchives.set(archive.canonical_id, clone(source));
+        }
+
+        return {
+            active: nextAnswers,
+            archived: nextArchives,
         };
     }
 
@@ -203,11 +270,19 @@ function createInMemoryCanonicalAdapters(seed = {}) {
                 reviewSessionEvents,
                 plan.changes.review_migrations || [],
             );
+            const nextAnswerState = applyAnswerMutations(
+                answers,
+                answerArchives,
+                plan.changes.answer_invalidations || [],
+                plan.changes.answer_archives || [],
+            );
 
             canonicalRecords = nextCanonicals;
             questionBindings = nextBindings;
             reviewProgress = nextReview.progress;
             reviewSessionEvents = nextReview.sessions;
+            answers = nextAnswerState.active;
+            answerArchives = nextAnswerState.archived;
 
             for (const record of plan.changes.canonical_upserts || []) {
                 bump(canonicalResource(record.canonical_id));
@@ -223,6 +298,20 @@ function createInMemoryCanonicalAdapters(seed = {}) {
             for (const migration of plan.changes.review_migrations || []) {
                 bump(reviewResource(migration.to_canonical_id, migration.from_canonical_id));
             }
+            const answerResources = new Set();
+            for (const invalidation of plan.changes.answer_invalidations || []) {
+                answerResources.add(answerResource(
+                    invalidation.canonical_id,
+                    invalidation.source_canonical_id,
+                ));
+            }
+            for (const archive of plan.changes.answer_archives || []) {
+                answerResources.add(answerResource(
+                    archive.target_canonical_id,
+                    archive.canonical_id,
+                ));
+            }
+            for (const resource of answerResources) bump(resource);
 
             effects.review_migrations.push(...clone(plan.changes.review_migrations || []));
             effects.answer_invalidations.push(...clone(plan.changes.answer_invalidations || []));
@@ -238,6 +327,8 @@ function createInMemoryCanonicalAdapters(seed = {}) {
                 canonical_removal_count: (plan.changes.canonical_removals || []).length,
                 question_rebinding_count: (plan.changes.question_rebindings || []).length,
                 review_migration_count: (plan.changes.review_migrations || []).length,
+                answer_invalidation_count: (plan.changes.answer_invalidations || []).length,
+                answer_archive_count: (plan.changes.answer_archives || []).length,
             };
         },
 
@@ -256,6 +347,8 @@ function createInMemoryCanonicalAdapters(seed = {}) {
             bindings: questionBindings.map(clone),
             review_progress: reviewProgress.map(clone),
             review_session_events: reviewSessionEvents.map(clone),
+            answers: [...answers.values()].map(clone),
+            answer_archives: [...answerArchives.values()].map(clone),
             effects: clone(effects),
         };
     }
@@ -264,6 +357,7 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         canonicalRepository,
         questionBindingRepository,
         reviewRepository,
+        answerRepository,
         mutationStore,
         snapshot,
     };
