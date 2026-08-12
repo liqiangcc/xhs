@@ -47,6 +47,7 @@ function planCanonicalReviewMigration(input = {}) {
         progress: Object.freeze({
             source_found: Boolean(source),
             target_found: Boolean(target),
+            store_updated_at: source ? (input.updatedAtFallback || null) : null,
             remove_canonical_ids: Object.freeze(
                 source ? [targetCanonicalId, sourceCanonicalId] : [],
             ),
