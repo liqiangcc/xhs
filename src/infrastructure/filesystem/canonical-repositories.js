@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { readJsonl, stableStringify } = require('../../../scripts/lib/io');
 const { createCanonicalFsPaths } = require('./canonical-paths');
+const { revisionForCandidateResource } = require('./canonical-candidate-repositories');
 
 function clone(value) {
     return structuredClone(value);
@@ -52,6 +53,9 @@ function canonicalOwners(records, questionId) {
 }
 
 function revisionForResource(paths, resource) {
+    if (resource.startsWith('canonical-candidate:')) {
+        return revisionForCandidateResource(paths, resource);
+    }
     if (resource.startsWith('canonical:')) {
         const canonicalId = resource.slice('canonical:'.length);
         const record = readCanonicalRecords(paths).find((item) => item.canonical_id === canonicalId) || null;
