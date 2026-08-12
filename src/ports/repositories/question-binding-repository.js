@@ -5,9 +5,11 @@ const { assertPort } = require('../port-contract');
 /**
  * QuestionBindingRepository is a read-oriented outbound port for Canonical use cases.
  *
- * findByCanonical(canonicalId) returns the bindings currently owned by a Canonical.
- * findByQuestionId(questionId) returns every row/reference for a question id.
- * Implementations may attach an opaque revision token to their returned snapshot.
+ * findByCanonical(canonicalId) and findByQuestionId(questionId) return snapshots:
+ *   { bindings, resource, revision }
+ * where resource/revision are opaque adapter-owned concurrency tokens.
+ * Application may carry them into a MutationPlan but must not interpret their
+ * format or expose storage paths.
  */
 function assertQuestionBindingRepository(repository) {
     return assertPort(
