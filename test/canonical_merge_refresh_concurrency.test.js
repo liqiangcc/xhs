@@ -63,6 +63,11 @@ test('rejects a merge when a question snapshot used for canonical refresh become
         reviewRepository: adapters.reviewRepository,
         answerRepository: adapters.answerRepository,
         mutationStore,
+        integrityChecker: {
+            async check() {
+                return { schema_version: 'canonical_quality_report.v1', ok: true };
+            },
+        },
         taxonomy,
         clock: () => '2026-08-12T07:00:00.000Z',
     });
