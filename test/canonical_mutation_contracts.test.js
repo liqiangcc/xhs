@@ -5,16 +5,33 @@ const assert = require('node:assert/strict');
 
 const { createCanonicalMutationPlan } = require('../src/application/canonical/mutation-plan');
 const { assertCanonicalRepository } = require('../src/ports/repositories/canonical-repository');
+const { assertCanonicalCandidateRepository } = require('../src/ports/repositories/canonical-candidate-repository');
+const { assertCanonicalQuestionOwnershipRepository } = require('../src/ports/repositories/canonical-question-ownership-repository');
 const { assertQuestionBindingRepository } = require('../src/ports/repositories/question-binding-repository');
 const { assertCanonicalMutationStore } = require('../src/ports/canonical-mutation-store');
 
 test('Canonical read ports require only the narrow capabilities used by application', () => {
     const canonicalRepository = { get() {} };
+    const candidateRepository = { get() {} };
+    const ownershipRepository = { findOwners() {} };
     const questionBindingRepository = { findByCanonical() {}, findByQuestionId() {} };
 
     assert.equal(assertCanonicalRepository(canonicalRepository), canonicalRepository);
+    assert.equal(assertCanonicalCandidateRepository(candidateRepository), candidateRepository);
+    assert.equal(
+        assertCanonicalQuestionOwnershipRepository(ownershipRepository),
+        ownershipRepository,
+    );
     assert.equal(assertQuestionBindingRepository(questionBindingRepository), questionBindingRepository);
     assert.throws(() => assertCanonicalRepository({}), /CanonicalRepository\.get\(\) is required/);
+    assert.throws(
+        () => assertCanonicalCandidateRepository({}),
+        /CanonicalCandidateRepository\.get\(\) is required/,
+    );
+    assert.throws(
+        () => assertCanonicalQuestionOwnershipRepository({}),
+        /CanonicalQuestionOwnershipRepository\.findOwners\(\) is required/,
+    );
     assert.throws(
         () => assertQuestionBindingRepository({ findByCanonical() {} }),
         /QuestionBindingRepository\.findByQuestionId\(\) is required/,
@@ -78,6 +95,22 @@ test('MutationPlan is storage agnostic, immutable, and carries opaque revisions'
     assert.doesNotMatch(serialized, /questions\.jsonl|canonical_questions\.jsonl|review\/answers|filePath|temp file/i);
 });
 
+test('MutationPlan supports accept assignment from an explicitly unbound Question state', () => {
+    const plan = createCanonicalMutationPlan({
+        operation: 'accept',
+        expected_revisions: [{ resource: 'question:q1', revision: 'opaque-q1' }],
+        changes: {
+            canonical_upserts: [{ canonical_id: 'cq_target', question_ids: ['q1'] }],
+            question_rebindings: [
+                { question_id: 'q1', from_canonical_id: null, to_canonical_id: 'cq_target' },
+            ],
+        },
+    });
+
+    assert.equal(plan.operation, 'accept');
+    assert.equal(plan.changes.question_rebindings[0].from_canonical_id, null);
+});
+
 test('MutationPlan rejects contradictory or ineffective semantic changes', () => {
     assert.throws(
         () => createCanonicalMutationPlan({
@@ -100,6 +133,19 @@ test('MutationPlan rejects contradictory or ineffective semantic changes', () =>
             },
         }),
         /must change canonical ownership/,
+    );
+
+    assert.throws(
+        () => createCanonicalMutationPlan({
+            operation: 'accept',
+            changes: {
+                canonical_upserts: [{ canonical_id: 'cq_target' }],
+                question_rebindings: [
+                    { question_id: 'q1', to_canonical_id: 'cq_target' },
+                ],
+            },
+        }),
+        /from_canonical_id is required/,
     );
 
     assert.throws(
