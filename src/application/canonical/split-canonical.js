@@ -4,6 +4,7 @@ const { splitCanonical } = require('../../domain/canonical/split-policy');
 const { refreshCanonicalFromQuestions } = require('../../domain/canonical/refresh-policy');
 const { createCanonicalMutationPlan } = require('./mutation-plan');
 const { assertCanonicalRepository } = require('../../ports/repositories/canonical-repository');
+const { assertCanonicalIdentityRepository } = require('../../ports/repositories/canonical-identity-repository');
 const { assertQuestionBindingRepository } = require('../../ports/repositories/question-binding-repository');
 const { assertCanonicalMutationStore } = require('../../ports/canonical-mutation-store');
 const { assertCanonicalIntegrityChecker } = require('../../ports/services/canonical-integrity-checker');
@@ -86,6 +87,7 @@ function assertPostCommitState(
 
 function createSplitCanonicalUseCase(dependencies = {}) {
     const canonicalRepository = assertCanonicalRepository(dependencies.canonicalRepository);
+    const canonicalIdentityRepository = assertCanonicalIdentityRepository(dependencies.canonicalIdentityRepository);
     const questionBindingRepository = assertQuestionBindingRepository(dependencies.questionBindingRepository);
     const mutationStore = assertCanonicalMutationStore(dependencies.mutationStore);
     const integrityChecker = assertCanonicalIntegrityChecker(dependencies.integrityChecker);
@@ -108,13 +110,16 @@ function createSplitCanonicalUseCase(dependencies = {}) {
             throw new Error('new-canonical-id must differ from canonical-id');
         }
 
-        const [sourceSnapshot, existingNewCanonical] = await Promise.all([
+        const [sourceSnapshot, newCanonicalIdentity] = await Promise.all([
             canonicalRepository.get(sourceCanonicalId),
-            canonicalRepository.get(newCanonicalId),
+            canonicalIdentityRepository.inspect(newCanonicalId),
         ]);
         if (!sourceSnapshot) throw new Error(`Canonical not found: ${sourceCanonicalId}`);
-        if (existingNewCanonical) throw new Error(`Canonical already exists: ${newCanonicalId}`);
         assertSnapshot(sourceSnapshot, 'source canonical', 'record');
+        assertSnapshot(newCanonicalIdentity, 'new canonical identity', 'record');
+        if (newCanonicalIdentity.record) {
+            throw new Error(`Canonical already exists: ${newCanonicalId}`);
+        }
 
         const sourceQuestionIds = uniqueSorted(sourceSnapshot.record.question_ids);
         const questionSnapshots = await Promise.all(
@@ -162,6 +167,7 @@ function createSplitCanonicalUseCase(dependencies = {}) {
             operation: 'split',
             expected_revisions: [
                 expectedRevision(sourceSnapshot),
+                expectedRevision(newCanonicalIdentity),
                 ...questionSnapshots.map(expectedRevision),
             ],
             changes: {
