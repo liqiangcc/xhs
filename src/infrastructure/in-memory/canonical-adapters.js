@@ -80,6 +80,16 @@ function createInMemoryCanonicalAdapters(seed = {}) {
                 revision: revision(resource),
             };
         },
+
+        async inspect(canonicalId) {
+            const record = canonicalRecords.get(canonicalId) || null;
+            const resource = canonicalResource(canonicalId);
+            return {
+                record: record ? clone(record) : null,
+                resource,
+                revision: revision(resource),
+            };
+        },
     };
 
     const questionBindingRepository = {
@@ -344,6 +354,14 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         },
     };
 
+    const testSupport = Object.freeze({
+        upsertCanonical(record) {
+            if (!record || !record.canonical_id) throw new Error('canonical record is required');
+            canonicalRecords.set(record.canonical_id, clone(record));
+            bump(canonicalResource(record.canonical_id));
+        },
+    });
+
     function snapshot() {
         return {
             canonicals: [...canonicalRecords.values()].map(clone),
@@ -358,10 +376,12 @@ function createInMemoryCanonicalAdapters(seed = {}) {
 
     return {
         canonicalRepository,
+        canonicalIdentityRepository: canonicalRepository,
         questionBindingRepository,
         reviewRepository,
         answerRepository,
         mutationStore,
+        testSupport,
         snapshot,
     };
 }
