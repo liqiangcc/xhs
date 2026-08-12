@@ -171,6 +171,10 @@ test('composition root runs merge application through real filesystem adapters a
         });
 
         assert.equal(result.ok, true);
+        assert.equal(result.integrity.schema_version, 'canonical_quality_report.v1');
+        assert.equal(result.integrity.ok, true);
+        assert.equal(result.integrity.record_count, 1);
+        assert.equal(result.integrity.assigned_question_rows, 2);
         assert.deepEqual(result.moved_question_ids, ['q2']);
         assert.equal(result.plan.expected_revisions.length, 8);
         assert.deepEqual(
@@ -228,6 +232,25 @@ test('composition root runs merge application through real filesystem adapters a
         assert.equal(history.items[0].source, 'cq_source');
         assert.equal(history.items[0].merged_at, '2026-08-12T06:44:00.000Z');
         assert.equal(history.items[0].reason, 'same interview knowledge point');
+        assert.deepEqual(history.items[0].review_migration, {
+            source_progress_found: true,
+            target_progress_found: true,
+            migrated_session_event_count: 1,
+        });
+        assert.deepEqual(history.items[0].invalidated_target_answer, {
+            canonical_id: 'cq_target',
+            version: 5,
+            status: 'needs_update',
+            quality_tier: 'needs_update',
+        });
+        assert.deepEqual(history.items[0].archived_source_answer, {
+            canonical_id: 'cq_source',
+            source_answer_status: 'draft',
+            target_canonical_id: 'cq_target',
+        });
+        const historyText = JSON.stringify(history.items[0]);
+        assert.equal(historyText.includes('answer_path'), false);
+        assert.equal(historyText.includes('archived_answer_path'), false);
 
         assert.equal(fs.existsSync(fixture.paths.journal), false);
         assert.equal(fs.existsSync(fixture.paths.lock), false);
