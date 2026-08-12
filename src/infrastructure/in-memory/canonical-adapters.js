@@ -16,11 +16,17 @@ function questionResource(questionId) {
     return `question-bindings-by-question:${questionId}`;
 }
 
+function reviewResource(targetCanonicalId, sourceCanonicalId) {
+    return `review-merge:${targetCanonicalId}:${sourceCanonicalId}`;
+}
+
 function createInMemoryCanonicalAdapters(seed = {}) {
     let canonicalRecords = new Map(
         (seed.canonicals || []).map((record) => [record.canonical_id, clone(record)]),
     );
     let questionBindings = (seed.bindings || []).map(clone);
+    let reviewProgress = (seed.review_progress || []).map(clone);
+    let reviewSessionEvents = (seed.review_session_events || []).map(clone);
     let revisionSequence = 0;
     const revisions = new Map();
     const preflightPlans = new WeakMap();
@@ -90,6 +96,55 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         },
     };
 
+    const reviewRepository = {
+        async loadMergeState(targetCanonicalId, sourceCanonicalId) {
+            const resource = reviewResource(targetCanonicalId, sourceCanonicalId);
+            return {
+                target_items: reviewProgress
+                    .filter((item) => item.canonical_id === targetCanonicalId)
+                    .map(clone),
+                source_items: reviewProgress
+                    .filter((item) => item.canonical_id === sourceCanonicalId)
+                    .map(clone),
+                resource,
+                revision: revision(resource),
+            };
+        },
+    };
+
+    function applyReviewMigrations(progressRows, sessionEvents, migrations) {
+        let nextProgress = progressRows.map(clone);
+        let nextSessions = sessionEvents.map(clone);
+
+        for (const migration of migrations || []) {
+            const progress = migration.progress || {};
+            if (progress.source_found) {
+                const removeIds = new Set(progress.remove_canonical_ids || []);
+                nextProgress = nextProgress.filter((item) => !removeIds.has(item.canonical_id));
+                if (progress.upsert) nextProgress.push(clone(progress.upsert));
+            }
+
+            const session = migration.session_events || {};
+            if (session.rebind_from_canonical_id && session.rebind_to_canonical_id) {
+                nextSessions = nextSessions.map((event) => {
+                    if (event.canonical_id !== session.rebind_from_canonical_id) return event;
+                    return {
+                        ...event,
+                        canonical_id: session.rebind_to_canonical_id,
+                        ...(session.annotate_migrated_from
+                            ? { migrated_from_canonical_id: session.rebind_from_canonical_id }
+                            : {}),
+                    };
+                });
+            }
+        }
+
+        return {
+            progress: nextProgress,
+            sessions: nextSessions,
+        };
+    }
+
     const mutationStore = {
         async preflight(plan) {
             assertExpectedRevisions(plan);
@@ -143,8 +198,16 @@ function createInMemoryCanonicalAdapters(seed = {}) {
                 }
             }
 
+            const nextReview = applyReviewMigrations(
+                reviewProgress,
+                reviewSessionEvents,
+                plan.changes.review_migrations || [],
+            );
+
             canonicalRecords = nextCanonicals;
             questionBindings = nextBindings;
+            reviewProgress = nextReview.progress;
+            reviewSessionEvents = nextReview.sessions;
 
             for (const record of plan.changes.canonical_upserts || []) {
                 bump(canonicalResource(record.canonical_id));
@@ -156,6 +219,9 @@ function createInMemoryCanonicalAdapters(seed = {}) {
                 bump(bindingResource(rebinding.from_canonical_id));
                 bump(bindingResource(rebinding.to_canonical_id));
                 bump(questionResource(rebinding.question_id));
+            }
+            for (const migration of plan.changes.review_migrations || []) {
+                bump(reviewResource(migration.to_canonical_id, migration.from_canonical_id));
             }
 
             effects.review_migrations.push(...clone(plan.changes.review_migrations || []));
@@ -171,6 +237,7 @@ function createInMemoryCanonicalAdapters(seed = {}) {
                 canonical_upsert_count: (plan.changes.canonical_upserts || []).length,
                 canonical_removal_count: (plan.changes.canonical_removals || []).length,
                 question_rebinding_count: (plan.changes.question_rebindings || []).length,
+                review_migration_count: (plan.changes.review_migrations || []).length,
             };
         },
 
@@ -187,6 +254,8 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         return {
             canonicals: [...canonicalRecords.values()].map(clone),
             bindings: questionBindings.map(clone),
+            review_progress: reviewProgress.map(clone),
+            review_session_events: reviewSessionEvents.map(clone),
             effects: clone(effects),
         };
     }
@@ -194,6 +263,7 @@ function createInMemoryCanonicalAdapters(seed = {}) {
     return {
         canonicalRepository,
         questionBindingRepository,
+        reviewRepository,
         mutationStore,
         snapshot,
     };
