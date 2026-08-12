@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const {
     RELATION_TYPES,
     createRelationCandidate,
+    relationCandidateKey,
 } = require('../src/domain/dedup/relation-candidate');
 
 function cluster(overrides = {}) {
@@ -41,6 +42,7 @@ test('relation candidate is an immutable review object rather than a decision', 
     });
 
     assert.equal(candidate.schema_version, 'dedup_relation_candidate.v1');
+    assert.equal(candidate.relation_candidate_key, 'entity|Redis|q_a,q_b');
     assert.equal(candidate.review_state, 'pending');
     assert.equal(candidate.scope, 'entity');
     assert.equal(candidate.seed, 'Redis');
@@ -51,9 +53,21 @@ test('relation candidate is an immutable review object rather than a decision', 
     assert.equal(Object.isFrozen(candidate.evidence), true);
     assert.equal(Object.hasOwn(candidate, 'relation'), false);
     assert.equal(Object.hasOwn(candidate, 'canonical_id'), false);
+    assert.equal(Object.hasOwn(candidate, 'candidate_id'), false);
     assert.equal(Object.hasOwn(candidate, 'mutation_plan'), false);
     assert.equal(Object.hasOwn(candidate, 'plan'), false);
     assert.deepEqual(source, before);
+});
+
+test('relation candidate review identity is deterministic and distinct from executable candidate ids', () => {
+    assert.equal(
+        relationCandidateKey('entity', 'Redis', ['q_a', 'q_b']),
+        'entity|Redis|q_a,q_b',
+    );
+    assert.notEqual(
+        relationCandidateKey('entity', 'Redis', ['q_a', 'q_b']),
+        relationCandidateKey('entity', 'Redis', ['q_a', 'q_c']),
+    );
 });
 
 test('relation candidate keeps detection evidence but cannot silently manufacture it', () => {
