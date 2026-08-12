@@ -1,6 +1,6 @@
 'use strict';
 
-const { measureQuestionSimilarity, tokenizeSimilarityText } = require('./similarity');
+const { jaccardSimilarity, tokenizeSimilarityText } = require('./similarity');
 
 function clone(value) {
     return structuredClone(value);
@@ -78,19 +78,15 @@ function detectEntityQuestionClusters(questions, options = {}) {
                 break;
             }
 
-            const similarity = measureQuestionSimilarity(
-                cluster.anchor_text,
-                question.original_question,
-                { threshold },
-            );
-            if (similarity.matched) {
+            const score = jaccardSimilarity(cluster.anchor_tokens, questionTokens);
+            if (score >= threshold) {
                 target = cluster;
                 evidence = {
-                    signal: similarity.metric,
+                    signal: 'jaccard',
                     left_question_id: cluster.anchor_question_id,
                     right_question_id: question.question_id,
-                    score: similarity.score,
-                    threshold: similarity.threshold,
+                    score,
+                    threshold,
                     matched: true,
                 };
                 break;
@@ -101,7 +97,6 @@ function detectEntityQuestionClusters(questions, options = {}) {
             clusters.push({
                 domain_key: question.domain_key,
                 anchor_question_id: question.question_id,
-                anchor_text: question.original_question,
                 anchor_tokens: questionTokens,
                 question_ids: [question.question_id],
                 members: [memberRef(question)],
