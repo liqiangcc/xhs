@@ -208,6 +208,15 @@ test('characterizes merge then split CLI state transitions', () => {
         ]);
         assert.equal(merged.status, 0);
         assert.equal(merged.json.ok, true);
+        assert.equal(merged.json.canonical_count, 1);
+        assert.equal(merged.json.assigned_question_rows, 2);
+        assert.deepEqual(merged.json.review_migration, {
+            source_progress_found: false,
+            target_progress_found: false,
+            migrated_session_event_count: 0,
+        });
+        assert.equal(merged.json.invalidated_target_answer, null);
+        assert.equal(merged.json.archived_source_answer, null);
         assert.equal(readJsonl(canonicalPath(root)).length, 1);
         assert.equal(readJsonl(questionsPath(root)).find((q) => q.question_id === q2.question_id).canonical_id, targetId);
 
@@ -342,8 +351,8 @@ test('characterizes duplicate review rows failure: exits one before canonical an
     }
 });
 
-test('characterizes known merge partial-write failure when index persistence fails', () => {
-    const root = makeRoot('xhs-canonical-char-partial-write-');
+test('characterizes merge index failure as a fully rolled-back mutation', () => {
+    const root = makeRoot('xhs-canonical-char-atomic-rollback-');
     try {
         const targetId = 'cq_redis_target';
         const sourceId = 'cq_redis_source';
@@ -356,11 +365,11 @@ test('characterizes known merge partial-write failure when index persistence fai
         ]);
         writeAnswer(root, sourceId);
 
-        // Force persistCanonicalState() to fail only after canonical/questions have been written.
-        // This intentionally freezes the current unsafe behavior so the mutation-boundary
-        // refactor has a concrete failure mode to eliminate.
+        // Make the index directory path invalid so publication fails after earlier
+        // transaction operations have already been attempted.
         fs.mkdirSync(path.join(root, 'data'), { recursive: true });
         fs.writeFileSync(path.join(root, 'data', 'indexes'), 'not-a-directory\n', 'utf8');
+        const before = snapshotFiles(root);
 
         const result = runCanonicalCli(root, [
             'merge', '--target', targetId, '--source', sourceId, '--reason', 'duplicate',
@@ -368,11 +377,12 @@ test('characterizes known merge partial-write failure when index persistence fai
         assert.equal(result.status, 1);
         assert.notEqual(result.stderr, '');
 
-        // Known defect: formal state has already been partially mutated even though CLI failed.
-        assert.equal(readJsonl(canonicalPath(root)).length, 1);
-        assert.equal(readJsonl(questionsPath(root)).find((q) => q.question_id === q2.question_id).canonical_id, targetId);
-        assert.equal(fs.existsSync(path.join(root, 'review', 'answers', `${sourceId}.md`)), false);
-        assert.equal(fs.existsSync(path.join(root, 'review', 'archive', 'answers', `${sourceId}.md`)), true);
+        // Fixed behavior: every formal file is restored to its exact pre-merge bytes.
+        assertSnapshotEqual(snapshotFiles(root), before);
+        assert.equal(readJsonl(canonicalPath(root)).length, 2);
+        assert.equal(readJsonl(questionsPath(root)).find((q) => q.question_id === q2.question_id).canonical_id, sourceId);
+        assert.equal(fs.existsSync(path.join(root, 'review', 'answers', `${sourceId}.md`)), true);
+        assert.equal(fs.existsSync(path.join(root, 'review', 'archive', 'answers', `${sourceId}.md`)), false);
         assert.equal(fs.existsSync(path.join(root, 'data', 'manifests', 'canonical', 'canonical_merge_history.json')), false);
     } finally {
         cleanup(root);
