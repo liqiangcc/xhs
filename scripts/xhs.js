@@ -59,7 +59,14 @@ function main(argv = process.argv) {
 }
 
 if (require.main === module) {
-    process.exitCode = main(process.argv);
+    Promise.resolve(main(process.argv))
+        .then((exitCode) => {
+            process.exitCode = exitCode;
+        })
+        .catch((error) => {
+            console.error(error.message);
+            process.exitCode = 1;
+        });
 }
 
 module.exports = {
