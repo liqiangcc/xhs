@@ -1,7 +1,7 @@
 'use strict';
 
 const SCHEMA_VERSION = 'canonical_mutation_plan.v1';
-const SUPPORTED_OPERATIONS = new Set(['merge', 'split']);
+const SUPPORTED_OPERATIONS = new Set(['merge', 'split', 'accept']);
 
 function assertObject(value, label) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -47,8 +47,18 @@ function normalizeCanonicalRemoval(canonicalId, index) {
 function normalizeQuestionRebinding(binding, index) {
     assertObject(binding, `question_rebindings[${index}]`);
     if (!binding.question_id) throw new Error(`question_rebindings[${index}].question_id is required`);
-    if (!binding.from_canonical_id) throw new Error(`question_rebindings[${index}].from_canonical_id is required`);
-    if (!binding.to_canonical_id) throw new Error(`question_rebindings[${index}].to_canonical_id is required`);
+    if (!Object.prototype.hasOwnProperty.call(binding, 'from_canonical_id')) {
+        throw new Error(`question_rebindings[${index}].from_canonical_id is required`);
+    }
+    if (
+        binding.from_canonical_id !== null
+        && (!binding.from_canonical_id || typeof binding.from_canonical_id !== 'string')
+    ) {
+        throw new Error(`question_rebindings[${index}].from_canonical_id must be a canonical_id or null`);
+    }
+    if (!binding.to_canonical_id || typeof binding.to_canonical_id !== 'string') {
+        throw new Error(`question_rebindings[${index}].to_canonical_id is required`);
+    }
     if (binding.from_canonical_id === binding.to_canonical_id) {
         throw new Error(`question_rebindings[${index}] must change canonical ownership`);
     }
