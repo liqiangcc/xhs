@@ -545,6 +545,7 @@ function createFsCanonicalMutationStore(options = {}) {
                     committed: true,
                     recoverable: true,
                     operation: plan.operation,
+                    canonical_count: readJsonl(paths.canonicalQuestions, []).length,
                     file_operation_count: journal.operations.length,
                     canonical_upsert_count: (plan.changes.canonical_upserts || []).length,
                     canonical_removal_count: (plan.changes.canonical_removals || []).length,
