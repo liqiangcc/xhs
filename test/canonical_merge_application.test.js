@@ -67,6 +67,13 @@ function binding(questionId, canonicalId, rowId, company) {
     };
 }
 
+function passingIntegrityReport() {
+    return {
+        schema_version: 'canonical_quality_report.v1',
+        ok: true,
+    };
+}
+
 function createSeed() {
     return {
         canonicals: [
@@ -138,6 +145,11 @@ function createUseCase(adapters, overrides = {}) {
         reviewRepository: adapters.reviewRepository,
         answerRepository: adapters.answerRepository,
         mutationStore: adapters.mutationStore,
+        integrityChecker: {
+            async check() {
+                return passingIntegrityReport();
+            },
+        },
         taxonomy,
         clock: () => '2026-08-12T05:52:00.000Z',
         ...overrides,
@@ -155,6 +167,7 @@ test('orchestrates canonical, review, and answer merge state in one mutation', a
     });
 
     assert.equal(result.ok, true);
+    assert.equal(result.integrity.ok, true);
     assert.deepEqual(result.moved_question_ids, ['q2', 'q3']);
     assert.equal(Object.isFrozen(result.plan), true);
     assert.equal(result.plan.operation, 'merge');
@@ -216,6 +229,25 @@ test('orchestrates canonical, review, and answer merge state in one mutation', a
         reason: 'canonical_merge',
     });
 
+    assert.deepEqual(result.plan.changes.history_entry.review_migration, {
+        source_progress_found: true,
+        target_progress_found: true,
+        migrated_session_event_count: 1,
+    });
+    assert.deepEqual(result.plan.changes.history_entry.invalidated_target_answer, {
+        canonical_id: 'cq_target',
+        version: 5,
+        status: 'needs_update',
+        quality_tier: 'needs_update',
+    });
+    assert.deepEqual(result.plan.changes.history_entry.archived_source_answer, {
+        canonical_id: 'cq_source',
+        source_answer_status: 'draft',
+        target_canonical_id: 'cq_target',
+    });
+    assert.equal(JSON.stringify(result.plan.changes.history_entry).includes('answer_path'), false);
+    assert.equal(JSON.stringify(result.plan.changes.history_entry).includes('archived_answer_path'), false);
+
     const state = adapters.snapshot();
     assert.deepEqual(state.canonicals.map((record) => record.canonical_id), ['cq_target']);
     assert.deepEqual(state.canonicals[0].question_ids, ['q1', 'q2', 'q3']);
@@ -256,14 +288,31 @@ test('orchestrates canonical, review, and answer merge state in one mutation', a
     assert.deepEqual(state.effects.answer_invalidations, [invalidation]);
     assert.deepEqual(state.effects.answer_archives, [archiveIntent]);
     assert.equal(state.effects.index_rebuild_count, 1);
-    assert.deepEqual(state.effects.history, [{
-        schema_version: 'canonical_merge.v1',
-        merged_at: '2026-08-12T05:52:00.000Z',
-        target: 'cq_target',
-        source: 'cq_source',
-        reason: 'same interview knowledge point',
-        moved_question_ids: ['q2', 'q3'],
-    }]);
+    assert.deepEqual(state.effects.history, [result.plan.changes.history_entry]);
+});
+
+test('reports a global post-commit integrity failure without rolling back a committed merge', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const merge = createUseCase(adapters, {
+        integrityChecker: {
+            async check() {
+                return {
+                    schema_version: 'canonical_quality_report.v1',
+                    ok: false,
+                    orphan_binding_count: 1,
+                };
+            },
+        },
+    });
+
+    const result = await merge({ target: 'cq_target', source: 'cq_source', reason: 'same' });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.integrity.ok, false);
+    const state = adapters.snapshot();
+    assert.deepEqual(state.canonicals.map((record) => record.canonical_id), ['cq_target']);
+    assert.deepEqual(state.bindings.map((item) => item.canonical_id), ['cq_target', 'cq_target', 'cq_target']);
+    assert.equal(state.effects.history.length, 1);
 });
 
 test('rejects stale canonical revisions during preflight without publishing mutation state', async () => {
