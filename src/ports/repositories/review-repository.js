@@ -9,6 +9,7 @@ const { assertPort } = require('../port-contract');
  *   {
  *     target_items,
  *     source_items,
+ *     source_session_event_count,
  *     resource,
  *     revision,
  *   }
