@@ -42,12 +42,18 @@ function assertDetectionCluster(cluster) {
     }
 }
 
+function relationCandidateKey(scope, seed, questionIds) {
+    return [scope, seed == null ? '' : String(seed), questionIds.join(',')].join('|');
+}
+
 /**
  * Project detection evidence into an explicit review candidate.
  *
  * A RelationCandidate is deliberately not a relation decision. Reviewers may
  * choose one of RELATION_TYPES later, but this object cannot authorize a
  * Canonical mutation and therefore carries no canonical_id or MutationPlan.
+ * `relation_candidate_key` is only a stable review identity; it is distinct
+ * from the executable Canonical candidate IDs consumed by Accept.
  */
 function createRelationCandidate(input = {}) {
     const cluster = input.cluster;
@@ -60,12 +66,14 @@ function createRelationCandidate(input = {}) {
     if (!questionIds.includes(cluster.anchor_question_id)) {
         throw new Error('Dedup relation candidate anchor must belong to question_ids');
     }
+    const seed = input.seed == null ? null : String(input.seed);
 
     return deepFreeze({
         schema_version: 'dedup_relation_candidate.v1',
+        relation_candidate_key: relationCandidateKey(scope, seed, questionIds),
         review_state: 'pending',
         scope,
-        seed: input.seed == null ? null : String(input.seed),
+        seed,
         anchor_question_id: cluster.anchor_question_id,
         question_ids: questionIds,
         member_count: cluster.members.length,
@@ -79,4 +87,5 @@ function createRelationCandidate(input = {}) {
 module.exports = {
     RELATION_TYPES,
     createRelationCandidate,
+    relationCandidateKey,
 };
