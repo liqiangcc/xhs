@@ -153,7 +153,7 @@ test('suggests entity candidates by normalized entity and question overlap', () 
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('lists checks merges and splits canonical records', () => {
+test('lists checks merges and splits canonical records', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-maintain-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
@@ -174,7 +174,7 @@ test('lists checks merges and splits canonical records', () => {
 
     assert.equal(runList({ root, priority: 'P0' }).returned_count, 2);
     assert.equal(runCheck({ root }).ok, true);
-    const merged = runMerge({ root, target: targetId, source: sourceId, reason: 'same_topic' });
+    const merged = await runMerge({ root, target: targetId, source: sourceId, reason: 'same_topic' });
     assert.equal(merged.ok, true);
     assert.equal(readJsonl(canonicalPath).length, 1);
     assert.equal(readJsonl(questionsPath).find((question) => question.question_id === q2.question_id).canonical_id, targetId);
@@ -194,7 +194,7 @@ test('lists checks merges and splits canonical records', () => {
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('merge migrates review references and archives the redundant formal answer', () => {
+test('merge migrates review references and archives the redundant formal answer', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-merge-history-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
@@ -223,7 +223,7 @@ test('merge migrates review references and archives the redundant formal answer'
         fs.writeFileSync(answerPath(canonicalId, { answersDir: path.join(root, 'review', 'answers') }), `<!-- xhs-answer: ${JSON.stringify({ schema_version: 'answer.v1', canonical_id: canonicalId, version: 1, status: 'needs_update', updated_at: '2026-06-30', quality_tier: 'long_tail_baseline' })} -->\n# ${canonicalId}\n`, 'utf8');
     }
 
-    const result = runMerge({ root, target: targetId, source: sourceId, reason: 'semantic_duplicate', date: '2026-06-30' });
+    const result = await runMerge({ root, target: targetId, source: sourceId, reason: 'semantic_duplicate', date: '2026-06-30' });
     assert.equal(result.ok, true);
     assert.equal(result.review_migration.migrated_session_event_count, 1);
     assert.equal(fs.existsSync(answerPath(sourceId, { answersDir: path.join(root, 'review', 'answers') })), false);
