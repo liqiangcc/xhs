@@ -1,6 +1,7 @@
 'use strict';
 
 const { mergeCanonical } = require('../../domain/canonical/merge-policy');
+const { refreshCanonicalFromQuestions } = require('../../domain/canonical/refresh-policy');
 const { createCanonicalMutationPlan } = require('./mutation-plan');
 const { planCanonicalReviewMigration } = require('./review-migration-plan');
 const { planCanonicalAnswerMerge } = require('./answer-merge-plan');
@@ -91,8 +92,12 @@ function createMergeCanonicalUseCase(dependencies = {}) {
     const reviewRepository = assertReviewRepository(dependencies.reviewRepository);
     const answerRepository = assertAnswerRepository(dependencies.answerRepository);
     const mutationStore = assertCanonicalMutationStore(dependencies.mutationStore);
+    const taxonomy = dependencies.taxonomy;
     const clock = dependencies.clock || (() => new Date().toISOString());
 
+    if (!taxonomy || typeof taxonomy !== 'object' || Array.isArray(taxonomy)) {
+        throw new Error('taxonomy is required');
+    }
     if (typeof clock !== 'function') throw new Error('clock must be a function');
 
     return async function mergeCanonicalUseCase(input = {}) {
@@ -130,6 +135,18 @@ function createMergeCanonicalUseCase(dependencies = {}) {
         assertAnswerSnapshot(answerSnapshot);
 
         const merged = mergeCanonical(targetSnapshot.record, sourceSnapshot.record);
+        const mergedQuestionIds = uniqueSorted(merged.question_ids);
+        const questionSnapshots = await Promise.all(
+            mergedQuestionIds.map((questionId) => questionBindingRepository.findByQuestionId(questionId)),
+        );
+        questionSnapshots.forEach((snapshot, index) => {
+            assertSnapshot(snapshot, `question ${mergedQuestionIds[index]} bindings`, 'bindings');
+            if (!Array.isArray(snapshot.bindings)) {
+                throw new Error(`question ${mergedQuestionIds[index]} snapshot bindings must be an array`);
+            }
+        });
+        const mergedQuestionRows = questionSnapshots.flatMap((snapshot) => snapshot.bindings);
+        const refreshedMerged = refreshCanonicalFromQuestions(merged, mergedQuestionRows, taxonomy);
         const movedQuestionIds = uniqueSorted(sourceSnapshot.record.question_ids);
         const mergedAt = clock();
         const mergedDate = String(mergedAt).slice(0, 10);
@@ -157,9 +174,10 @@ function createMergeCanonicalUseCase(dependencies = {}) {
                 expectedRevision(sourceBindingSnapshot),
                 expectedRevision(reviewSnapshot),
                 expectedRevision(answerSnapshot),
+                ...questionSnapshots.map(expectedRevision),
             ],
             changes: {
-                canonical_upserts: [merged],
+                canonical_upserts: [refreshedMerged],
                 canonical_removals: [sourceId],
                 question_rebindings: movedQuestionIds.map((questionId) => ({
                     question_id: questionId,
