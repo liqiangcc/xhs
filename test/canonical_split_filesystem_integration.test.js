@@ -121,12 +121,10 @@ test('composition root runs split through real filesystem adapters and refreshes
         assert.equal(rows.find((item) => item.question_id === 'q1').canonical_id, 'cq_source');
 
         const hotspot = readJson(getIndexPaths(fixture.paths.indexDir).hotspot);
+        assert.equal(hotspot.total_hotspots, 1);
         assert.deepEqual(
             hotspot.entries.map((entry) => [entry.canonical_id, entry.frequency]),
-            [
-                ['cq_redis_fast', 2],
-                ['cq_source', 1],
-            ],
+            [['cq_redis_fast', 2]],
         );
         assert.equal(result.integrity.ok, true);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
@@ -168,10 +166,8 @@ test('filesystem split removes an empty source canonical when its last question 
         assert.equal(rows[0].canonical_id, 'cq_new');
 
         const hotspot = readJson(getIndexPaths(fixture.paths.indexDir).hotspot);
-        assert.deepEqual(
-            hotspot.entries.map((entry) => entry.canonical_id),
-            ['cq_new'],
-        );
+        assert.equal(hotspot.total_hotspots, 0);
+        assert.deepEqual(hotspot.entries, []);
         assert.equal(result.integrity.ok, true);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
         assert.equal(fs.existsSync(fixture.paths.lock), false);
