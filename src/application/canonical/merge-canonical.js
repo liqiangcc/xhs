@@ -34,6 +34,9 @@ function assertReviewSnapshot(snapshot) {
     if (!Array.isArray(snapshot.source_items)) {
         throw new Error('review merge snapshot source_items must be an array');
     }
+    if (!Number.isInteger(snapshot.source_session_event_count) || snapshot.source_session_event_count < 0) {
+        throw new Error('review merge snapshot source_session_event_count must be a non-negative integer');
+    }
     return snapshot;
 }
 
@@ -206,7 +209,23 @@ function createMergeCanonicalUseCase(dependencies = {}) {
             target: targetId,
             source: sourceId,
             reason,
+            canonical_count: commitResult?.canonical_count ?? null,
             moved_question_ids: movedQuestionIds,
+            assigned_question_rows: (postTargetBindings?.bindings || []).length,
+            review_migration: {
+                source_progress_found: reviewMigration.progress.source_found,
+                target_progress_found: reviewMigration.progress.target_found,
+                migrated_session_event_count: reviewSnapshot.source_session_event_count,
+            },
+            invalidated_target_answer: answerMerge.target_invalidation
+                ? { version: answerMerge.target_invalidation.next_metadata.version }
+                : null,
+            archived_source_answer: answerMerge.source_archive
+                ? {
+                    source_answer_status: answerMerge.source_archive.source_answer_status,
+                    target_canonical_id: answerMerge.source_archive.target_canonical_id,
+                }
+                : null,
             plan,
             commit: commitResult || null,
         };
