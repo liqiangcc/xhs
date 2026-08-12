@@ -10,10 +10,16 @@ const {
     stablePrettyStringify,
     stableStringify,
 } = require('../../../scripts/lib/io');
+const { replaceAnswerMetadata } = require('../../../scripts/lib/answer_store');
 const { buildIndexes, getIndexPaths } = require('../../../scripts/lib/index_store');
 const { createCanonicalFsPaths } = require('./canonical-paths');
 const { revisionForResource } = require('./canonical-repositories');
 const { revisionForReviewResource } = require('./review-repositories');
+const {
+    activeAnswerPath,
+    archivedAnswerPath,
+    revisionForAnswerResource,
+} = require('./answer-repositories');
 
 let transactionSequence = 0;
 
@@ -71,16 +77,6 @@ function processIsAlive(pid) {
     }
 }
 
-function assertSupportedSideEffects(plan) {
-    const changes = plan.changes || {};
-    if ((changes.answer_invalidations || []).length) {
-        throw new Error('FsCanonicalMutationStore does not yet materialize answer_invalidations');
-    }
-    if ((changes.answer_archives || []).length) {
-        throw new Error('FsCanonicalMutationStore does not yet materialize answer_archives');
-    }
-}
-
 function assertReviewConcurrencyCoverage(plan) {
     if (!(plan.changes?.review_migrations || []).length) return;
     const covered = (plan.expected_revisions || [])
@@ -90,9 +86,22 @@ function assertReviewConcurrencyCoverage(plan) {
     }
 }
 
+function assertAnswerConcurrencyCoverage(plan) {
+    const changes = plan.changes || {};
+    if (!(changes.answer_invalidations || []).length && !(changes.answer_archives || []).length) return;
+    const covered = (plan.expected_revisions || [])
+        .some((item) => String(item.resource || '').startsWith('answer-merge:'));
+    if (!covered) {
+        throw new Error('Filesystem answer mutation requires an opaque answer-merge revision');
+    }
+}
+
 function revisionForMutationResource(paths, resource) {
     if (String(resource).startsWith('review-merge:')) {
         return revisionForReviewResource(paths, resource);
+    }
+    if (String(resource).startsWith('answer-merge:')) {
+        return revisionForAnswerResource(paths, resource);
     }
     return revisionForResource(paths, resource);
 }
@@ -212,6 +221,7 @@ function materializeReviewOperations(paths, plan) {
     if (progressChanged) {
         operations.push({
             kind: 'review_progress',
+            action: 'write',
             target: paths.reviewProgress,
             content: stablePrettyStringify(progress),
         });
@@ -219,10 +229,64 @@ function materializeReviewOperations(paths, plan) {
     for (const name of [...changedSessionNames].sort()) {
         operations.push({
             kind: `review_session:${name}`,
+            action: 'write',
             target: path.join(paths.reviewSessionsDir, name),
             content: stablePrettyStringify(sessions.get(name)),
         });
     }
+    return operations;
+}
+
+function materializeAnswerOperations(paths, plan) {
+    const invalidations = plan.changes.answer_invalidations || [];
+    const archives = plan.changes.answer_archives || [];
+    if (!invalidations.length && !archives.length) return [];
+    assertAnswerConcurrencyCoverage(plan);
+
+    const operations = [];
+    for (const invalidation of invalidations) {
+        if (!invalidation.canonical_id || !invalidation.next_metadata) {
+            throw new Error('Filesystem answer invalidation requires canonical_id and next_metadata');
+        }
+        const target = activeAnswerPath(paths, invalidation.canonical_id);
+        if (!fs.existsSync(target)) {
+            throw new Error(`Target answer not found for ${invalidation.canonical_id}`);
+        }
+        const current = fs.readFileSync(target, 'utf8');
+        operations.push({
+            kind: `answer_invalidation:${invalidation.canonical_id}`,
+            action: 'write',
+            target,
+            content: replaceAnswerMetadata(current, invalidation.next_metadata),
+        });
+    }
+
+    for (const archive of archives) {
+        if (!archive.canonical_id || !archive.target_canonical_id) {
+            throw new Error('Filesystem answer archive requires canonical_id and target_canonical_id');
+        }
+        const source = activeAnswerPath(paths, archive.canonical_id);
+        const target = archivedAnswerPath(paths, archive.canonical_id);
+        if (!fs.existsSync(source)) {
+            throw new Error(`Source answer not found for archive ${archive.canonical_id}`);
+        }
+        if (fs.existsSync(target)) {
+            throw new Error(`Source answer archive already exists for ${archive.canonical_id}`);
+        }
+        const content = fs.readFileSync(source, 'utf8');
+        operations.push({
+            kind: `answer_archive_write:${archive.canonical_id}`,
+            action: 'write',
+            target,
+            content,
+        });
+        operations.push({
+            kind: `answer_archive_delete_source:${archive.canonical_id}`,
+            action: 'delete',
+            target: source,
+        });
+    }
+
     return operations;
 }
 
@@ -245,8 +309,8 @@ function buildHistory(paths, historyEntry) {
 }
 
 function materializeOperations(paths, plan) {
-    assertSupportedSideEffects(plan);
     assertReviewConcurrencyCoverage(plan);
+    assertAnswerConcurrencyCoverage(plan);
     const canonicalRecords = readJsonl(paths.canonicalQuestions, []);
     const questionRows = readJsonl(paths.questions, []);
     const nextCanonicals = applyCanonicalChanges(canonicalRecords, plan);
@@ -255,15 +319,18 @@ function materializeOperations(paths, plan) {
     const operations = [
         {
             kind: 'canonical_questions',
+            action: 'write',
             target: paths.canonicalQuestions,
             content: serializeJsonl(nextCanonicals),
         },
         {
             kind: 'questions',
+            action: 'write',
             target: paths.questions,
             content: serializeJsonl(nextQuestions),
         },
         ...materializeReviewOperations(paths, plan),
+        ...materializeAnswerOperations(paths, plan),
     ];
 
     if (plan.changes.rebuild_indexes) {
@@ -272,6 +339,7 @@ function materializeOperations(paths, plan) {
         for (const key of ['entity', 'company', 'domain', 'hotspot']) {
             operations.push({
                 kind: `index:${key}`,
+                action: 'write',
                 target: indexPaths[key],
                 content: stablePrettyStringify(indexes[key]),
             });
@@ -282,6 +350,7 @@ function materializeOperations(paths, plan) {
     if (history) {
         operations.push({
             kind: 'merge_history',
+            action: 'write',
             target: paths.mergeHistory,
             content: stablePrettyStringify(history),
         });
@@ -387,13 +456,17 @@ function createFsCanonicalMutationStore(options = {}) {
         const journalOperations = [];
         try {
             operations.forEach((operation, index) => {
-                const stage = path.join(stageDir, `${String(index).padStart(3, '0')}.next`);
+                const action = operation.action || 'write';
+                const stage = action === 'delete'
+                    ? null
+                    : path.join(stageDir, `${String(index).padStart(3, '0')}.next`);
                 const backup = path.join(backupDir, `${String(index).padStart(3, '0')}.previous`);
                 const existedBefore = fs.existsSync(operation.target);
                 if (existedBefore) fs.copyFileSync(operation.target, backup);
-                fs.writeFileSync(stage, operation.content, 'utf8');
+                if (action !== 'delete') fs.writeFileSync(stage, operation.content, 'utf8');
                 journalOperations.push({
                     kind: operation.kind,
+                    action,
                     target: operation.target,
                     stage,
                     backup,
@@ -420,7 +493,11 @@ function createFsCanonicalMutationStore(options = {}) {
     function publishOperation(operation, index, total) {
         invokeFault('before_publish', { operation, index, total });
         ensureDir(path.dirname(operation.target));
-        fs.renameSync(operation.stage, operation.target);
+        if (operation.action === 'delete') {
+            fs.unlinkSync(operation.target);
+        } else {
+            fs.renameSync(operation.stage, operation.target);
+        }
         invokeFault('after_publish', { operation, index, total });
     }
 
@@ -468,6 +545,8 @@ function createFsCanonicalMutationStore(options = {}) {
                     canonical_removal_count: (plan.changes.canonical_removals || []).length,
                     question_rebinding_count: (plan.changes.question_rebindings || []).length,
                     review_migration_count: (plan.changes.review_migrations || []).length,
+                    answer_invalidation_count: (plan.changes.answer_invalidations || []).length,
+                    answer_archive_count: (plan.changes.answer_archives || []).length,
                 };
             } catch (error) {
                 if (error?.simulatedCrash) throw error;
