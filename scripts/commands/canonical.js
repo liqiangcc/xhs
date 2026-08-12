@@ -31,6 +31,7 @@ const {
     pickPriority,
     computePriority,
 } = require('../../src/domain/canonical/priority-policy');
+const { mergeCanonical } = require('../../src/domain/canonical/merge-policy');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -699,14 +700,7 @@ function runMerge(options = {}) {
         throw new Error(`Source answer archive already exists: ${sourceArchivePath}`);
     }
 
-    const merged = mergeCanonicalRecord(target, {
-        ...source,
-        canonical_id: targetId,
-        aliases: [source.canonical_title, ...(source.aliases || [])].filter(Boolean),
-        answer_status: 'needs_update',
-    });
-    merged.review_priority = pickPriority(target.review_priority, source.review_priority);
-    merged.answer_status = 'needs_update';
+    const merged = mergeCanonical(target, source);
     const updatedQuestions = questions.map((question) =>
         question.canonical_id === sourceId
             ? { ...question, canonical_id: targetId }
