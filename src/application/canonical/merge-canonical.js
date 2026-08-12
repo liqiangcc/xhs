@@ -3,9 +3,11 @@
 const { mergeCanonical } = require('../../domain/canonical/merge-policy');
 const { createCanonicalMutationPlan } = require('./mutation-plan');
 const { planCanonicalReviewMigration } = require('./review-migration-plan');
+const { planCanonicalAnswerMerge } = require('./answer-merge-plan');
 const { assertCanonicalRepository } = require('../../ports/repositories/canonical-repository');
 const { assertQuestionBindingRepository } = require('../../ports/repositories/question-binding-repository');
 const { assertReviewRepository } = require('../../ports/repositories/review-repository');
+const { assertAnswerRepository } = require('../../ports/repositories/answer-repository');
 const { assertCanonicalMutationStore } = require('../../ports/canonical-mutation-store');
 
 function assertSnapshot(snapshot, label, valueKey) {
@@ -31,6 +33,17 @@ function assertReviewSnapshot(snapshot) {
     }
     if (!Array.isArray(snapshot.source_items)) {
         throw new Error('review merge snapshot source_items must be an array');
+    }
+    return snapshot;
+}
+
+function assertAnswerSnapshot(snapshot) {
+    assertSnapshot(snapshot, 'answer merge', 'target_answer');
+    if (!Object.prototype.hasOwnProperty.call(snapshot, 'source_answer')) {
+        throw new Error('answer merge snapshot source_answer is required');
+    }
+    if (typeof snapshot.source_archive_exists !== 'boolean') {
+        throw new Error('answer merge snapshot source_archive_exists must be a boolean');
     }
     return snapshot;
 }
@@ -73,6 +86,7 @@ function createMergeCanonicalUseCase(dependencies = {}) {
     const canonicalRepository = assertCanonicalRepository(dependencies.canonicalRepository);
     const questionBindingRepository = assertQuestionBindingRepository(dependencies.questionBindingRepository);
     const reviewRepository = assertReviewRepository(dependencies.reviewRepository);
+    const answerRepository = assertAnswerRepository(dependencies.answerRepository);
     const mutationStore = assertCanonicalMutationStore(dependencies.mutationStore);
     const clock = dependencies.clock || (() => new Date().toISOString());
 
@@ -87,12 +101,20 @@ function createMergeCanonicalUseCase(dependencies = {}) {
         }
         if (targetId === sourceId) throw new Error('target and source must be different');
 
-        const [targetSnapshot, sourceSnapshot, targetBindingSnapshot, sourceBindingSnapshot, reviewSnapshot] = await Promise.all([
+        const [
+            targetSnapshot,
+            sourceSnapshot,
+            targetBindingSnapshot,
+            sourceBindingSnapshot,
+            reviewSnapshot,
+            answerSnapshot,
+        ] = await Promise.all([
             canonicalRepository.get(targetId),
             canonicalRepository.get(sourceId),
             questionBindingRepository.findByCanonical(targetId),
             questionBindingRepository.findByCanonical(sourceId),
             reviewRepository.loadMergeState(targetId, sourceId),
+            answerRepository.loadMergeState(targetId, sourceId),
         ]);
 
         if (!targetSnapshot) throw new Error(`Target canonical not found: ${targetId}`);
@@ -102,16 +124,26 @@ function createMergeCanonicalUseCase(dependencies = {}) {
         assertSnapshot(targetBindingSnapshot, 'target question bindings', 'bindings');
         assertSnapshot(sourceBindingSnapshot, 'source question bindings', 'bindings');
         assertReviewSnapshot(reviewSnapshot);
+        assertAnswerSnapshot(answerSnapshot);
 
         const merged = mergeCanonical(targetSnapshot.record, sourceSnapshot.record);
         const movedQuestionIds = uniqueSorted(sourceSnapshot.record.question_ids);
         const mergedAt = clock();
+        const mergedDate = String(mergedAt).slice(0, 10);
         const reviewMigration = planCanonicalReviewMigration({
             targetCanonicalId: targetId,
             sourceCanonicalId: sourceId,
             targetItems: reviewSnapshot.target_items,
             sourceItems: reviewSnapshot.source_items,
-            updatedAtFallback: String(mergedAt).slice(0, 10),
+            updatedAtFallback: mergedDate,
+        });
+        const answerMerge = planCanonicalAnswerMerge({
+            targetCanonicalId: targetId,
+            sourceCanonicalId: sourceId,
+            targetAnswer: answerSnapshot.target_answer,
+            sourceAnswer: answerSnapshot.source_answer,
+            sourceArchiveExists: answerSnapshot.source_archive_exists,
+            updatedAt: mergedDate,
         });
         const plan = createCanonicalMutationPlan({
             operation: 'merge',
@@ -121,6 +153,7 @@ function createMergeCanonicalUseCase(dependencies = {}) {
                 expectedRevision(targetBindingSnapshot),
                 expectedRevision(sourceBindingSnapshot),
                 expectedRevision(reviewSnapshot),
+                expectedRevision(answerSnapshot),
             ],
             changes: {
                 canonical_upserts: [merged],
@@ -131,16 +164,12 @@ function createMergeCanonicalUseCase(dependencies = {}) {
                     to_canonical_id: targetId,
                 })),
                 review_migrations: [reviewMigration],
-                answer_invalidations: [{
-                    canonical_id: targetId,
-                    reason: 'canonical_merge',
-                    source_canonical_id: sourceId,
-                }],
-                answer_archives: [{
-                    canonical_id: sourceId,
-                    target_canonical_id: targetId,
-                    reason: 'canonical_merge',
-                }],
+                answer_invalidations: answerMerge.target_invalidation
+                    ? [answerMerge.target_invalidation]
+                    : [],
+                answer_archives: answerMerge.source_archive
+                    ? [answerMerge.source_archive]
+                    : [],
                 rebuild_indexes: true,
                 history_entry: {
                     schema_version: 'canonical_merge.v1',
