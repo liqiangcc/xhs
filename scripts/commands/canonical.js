@@ -26,6 +26,11 @@ const {
     mergeCanonicalRecord,
     shortHash,
 } = require('../lib/canonical_store');
+const {
+    priorityRank,
+    pickPriority,
+    computePriority,
+} = require('../../src/domain/canonical/priority-policy');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -88,22 +93,6 @@ function assertCanonicalId(canonicalId) {
     if (!/^cq_[a-z0-9_]+$/.test(canonicalId || '')) {
         throw new Error(`Invalid canonical_id: ${canonicalId}`);
     }
-}
-
-function priorityRank(priority) {
-    return { P0: 0, P1: 1, P2: 2, P3: 3 }[priority] ?? 9;
-}
-
-function pickPriority(...priorities) {
-    return priorities
-        .filter(Boolean)
-        .sort((a, b) => priorityRank(a) - priorityRank(b))[0] || 'P2';
-}
-
-function computePriority(frequency, companiesLength) {
-    if (frequency >= 5 || companiesLength >= 4) return 'P0';
-    if (frequency >= 3) return 'P1';
-    return 'P2';
 }
 
 function buildQuestionMap(questions) {
@@ -220,7 +209,7 @@ function buildCandidate(mode, seed, questions) {
         frequency,
         source_note_ids: sourceNoteIds,
         refs: sorted.map(questionRef),
-        review_priority: frequency >= 5 || companies.length >= 4 ? 'P0' : (frequency >= 3 ? 'P1' : 'P2'),
+        review_priority: computePriority(frequency, companies.length),
     };
 }
 
