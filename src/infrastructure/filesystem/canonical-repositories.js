@@ -78,6 +78,16 @@ function createFsCanonicalRepositories(options = {}) {
                 revision: revisionForResource(paths, resource),
             };
         },
+
+        async inspect(canonicalId) {
+            const record = readCanonicalRecords(paths).find((item) => item.canonical_id === canonicalId) || null;
+            const resource = canonicalResource(canonicalId);
+            return {
+                record: record ? clone(record) : null,
+                resource,
+                revision: revisionForResource(paths, resource),
+            };
+        },
     };
 
     const questionBindingRepository = {
