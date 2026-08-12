@@ -15,6 +15,8 @@ function createCanonicalFsPaths(root) {
         reviewDir,
         reviewProgress: path.join(reviewDir, 'progress.json'),
         reviewSessionsDir: path.join(reviewDir, 'sessions'),
+        answersDir: path.join(reviewDir, 'answers'),
+        answerArchiveDir: path.join(reviewDir, 'archive', 'answers'),
         transactionDir,
         journal: path.join(transactionDir, 'active.json'),
         lock: path.join(transactionDir, 'mutation.lock'),
