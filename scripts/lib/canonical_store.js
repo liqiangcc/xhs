@@ -3,6 +3,10 @@
 const crypto = require('crypto');
 const path = require('path');
 const { readJsonl, writeJsonl } = require('./io');
+const {
+    makeCanonicalFromCandidate,
+    extendCanonicalWithCandidate,
+} = require('../../src/domain/canonical/accept-policy');
 
 const DEFAULT_CANONICAL_PATH = path.resolve(__dirname, '..', '..', 'data', 'questions', 'canonical_questions.jsonl');
 
@@ -41,40 +45,11 @@ function suggestCanonicalId(seed, questionIds = []) {
 }
 
 function makeCanonicalRecord(candidate, canonicalId, overrides = {}) {
-    const questionIds = [...new Set(candidate.question_ids || [])].sort();
-    const companies = [...new Set(candidate.companies || [])].sort((a, b) => a.localeCompare(b, 'zh'));
-    const aliases = [...new Set(candidate.aliases || [candidate.canonical_title].filter(Boolean))]
-        .sort((a, b) => a.length - b.length || a.localeCompare(b, 'zh'));
-    return {
-        canonical_id: canonicalId,
-        canonical_title: overrides.title || candidate.canonical_title,
-        aliases,
-        question_ids: questionIds,
-        primary_domain: candidate.primary_domain || { l1: '其他', l2: '其他' },
-        primary_entities: [...new Set(candidate.primary_entities || [])].sort((a, b) => a.localeCompare(b, 'zh')),
-        companies,
-        frequency: Number(candidate.frequency || questionIds.length),
-        review_priority: candidate.review_priority || 'P2',
-        answer_status: 'missing',
-        schema_version: 'canonical_question.v1',
-    };
+    return makeCanonicalFromCandidate(candidate, canonicalId, overrides);
 }
 
 function mergeCanonicalRecord(existing, incoming) {
-    return {
-        ...existing,
-        canonical_title: existing.canonical_title || incoming.canonical_title,
-        aliases: [...new Set([...(existing.aliases || []), ...(incoming.aliases || [])])]
-            .sort((a, b) => a.length - b.length || a.localeCompare(b, 'zh')),
-        question_ids: [...new Set([...(existing.question_ids || []), ...(incoming.question_ids || [])])].sort(),
-        primary_entities: [...new Set([...(existing.primary_entities || []), ...(incoming.primary_entities || [])])]
-            .sort((a, b) => a.localeCompare(b, 'zh')),
-        companies: [...new Set([...(existing.companies || []), ...(incoming.companies || [])])]
-            .sort((a, b) => a.localeCompare(b, 'zh')),
-        frequency: Math.max(Number(existing.frequency || 0), Number(incoming.frequency || 0)),
-        answer_status: existing.answer_status || incoming.answer_status || 'missing',
-        schema_version: 'canonical_question.v1',
-    };
+    return extendCanonicalWithCandidate(existing, incoming);
 }
 
 function buildQuestionToCanonicalMap(records) {
