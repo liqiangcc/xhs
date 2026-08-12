@@ -88,11 +88,16 @@ function assertReviewConcurrencyCoverage(plan) {
 
 function assertAnswerConcurrencyCoverage(plan) {
     const changes = plan.changes || {};
-    if (!(changes.answer_invalidations || []).length && !(changes.answer_archives || []).length) return;
+    const invalidations = changes.answer_invalidations || [];
+    const archives = changes.answer_archives || [];
+    if (!invalidations.length && !archives.length) return;
     const covered = (plan.expected_revisions || [])
         .some((item) => String(item.resource || '').startsWith('answer-merge:'));
     if (!covered) {
-        throw new Error('Filesystem answer mutation requires an opaque answer-merge revision');
+        const effect = invalidations.length ? 'answer_invalidations' : 'answer_archives';
+        throw new Error(
+            `Filesystem answer mutation requires an opaque answer-merge revision; FsCanonicalMutationStore does not yet materialize ${effect} without concurrency coverage`,
+        );
     }
 }
 
