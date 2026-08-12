@@ -6,6 +6,7 @@ const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const { createApplication } = require('../src/bootstrap/create-application');
 const { createAcceptCanonicalUseCase } = require('../src/application/canonical/accept-canonical');
 const { loadTaxonomy } = require('../src/infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../src/infrastructure/filesystem/canonical-paths');
@@ -153,11 +154,11 @@ test('filesystem candidate and ownership snapshots change only when their semant
     }
 });
 
-test('accept application commits through real filesystem adapters and rebuilds indexes', async () => {
+test('composition root runs accept through real filesystem adapters and rebuilds indexes', async () => {
     const fixture = createFixture();
     try {
-        const accept = createFilesystemUseCase(fixture);
-        const result = await accept({
+        const app = createApplication({ root: fixture.root });
+        const result = await app.canonical.accept({
             candidate_id: 'cand_accept',
             canonical_id: 'cq_redis_fast',
         });
