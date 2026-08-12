@@ -4,6 +4,7 @@ const path = require('path');
 
 function createCanonicalFsPaths(root) {
     const resolvedRoot = path.resolve(root);
+    const reviewDir = path.join(resolvedRoot, 'review');
     const transactionDir = path.join(resolvedRoot, '.xhs', 'canonical-mutations');
     return Object.freeze({
         root: resolvedRoot,
@@ -11,6 +12,9 @@ function createCanonicalFsPaths(root) {
         questions: path.join(resolvedRoot, 'data', 'questions', 'questions.jsonl'),
         indexDir: path.join(resolvedRoot, 'data', 'indexes'),
         mergeHistory: path.join(resolvedRoot, 'data', 'manifests', 'canonical', 'canonical_merge_history.json'),
+        reviewDir,
+        reviewProgress: path.join(reviewDir, 'progress.json'),
+        reviewSessionsDir: path.join(reviewDir, 'sessions'),
         transactionDir,
         journal: path.join(transactionDir, 'active.json'),
         lock: path.join(transactionDir, 'mutation.lock'),
