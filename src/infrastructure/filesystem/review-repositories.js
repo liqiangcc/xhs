@@ -56,6 +56,7 @@ function createFsReviewRepository(options = {}) {
     return {
         async loadMergeState(targetCanonicalId, sourceCanonicalId) {
             const progress = readProgress(paths);
+            const sessions = readSessions(paths);
             const resource = reviewMergeResource(targetCanonicalId, sourceCanonicalId);
             return {
                 target_items: (progress.items || [])
@@ -64,6 +65,11 @@ function createFsReviewRepository(options = {}) {
                 source_items: (progress.items || [])
                     .filter((item) => item.canonical_id === sourceCanonicalId)
                     .map(clone),
+                source_session_event_count: sessions.reduce(
+                    (count, session) => count + (session.value.events || [])
+                        .filter((event) => event.canonical_id === sourceCanonicalId).length,
+                    0,
+                ),
                 resource,
                 revision: revisionForReviewResource(paths, resource),
             };
