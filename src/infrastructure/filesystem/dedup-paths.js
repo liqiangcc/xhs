@@ -16,6 +16,19 @@ function createDedupFsPaths(root) {
             'dedup',
             'relation_candidate_queues.json',
         ),
+        relationDecisions: path.join(
+            resolvedRoot,
+            'data',
+            'manifests',
+            'dedup',
+            'relation_decisions.jsonl',
+        ),
+        relationDecisionLock: path.join(
+            resolvedRoot,
+            '.xhs',
+            'dedup-decisions',
+            'record.lock',
+        ),
     });
 }
 
