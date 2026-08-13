@@ -4,6 +4,9 @@ const { createAcceptCanonicalUseCase } = require('../application/canonical/accep
 const { createMergeCanonicalUseCase } = require('../application/canonical/merge-canonical');
 const { createSplitCanonicalUseCase } = require('../application/canonical/split-canonical');
 const {
+    createPlanCanonicalizeQuestionGroupUseCase,
+} = require('../application/canonical/plan-canonicalize-question-group');
+const {
     createSuggestCanonicalRelationsUseCase,
 } = require('../application/dedup/suggest-canonical-relations');
 const {
@@ -77,6 +80,9 @@ function createApplication(options = {}) {
         mutationStore,
         taxonomy,
     });
+    const planQuestionGroup = createPlanCanonicalizeQuestionGroupUseCase({
+        canonicalIdentityRepository: canonicalRepository,
+    });
 
     const dedupPaths = createDedupFsPaths(options.root);
     const {
@@ -113,6 +119,7 @@ function createApplication(options = {}) {
             merge,
             split,
             accept,
+            planQuestionGroup,
         }),
         dedup: Object.freeze({
             suggest,
