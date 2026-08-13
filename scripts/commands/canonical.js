@@ -2,7 +2,6 @@
 'use strict';
 
 const path = require('path');
-const { normalizeQuestion } = require('../lib/hash');
 const { writeJson } = require('../lib/io');
 const {
     loadQuestions,
@@ -116,34 +115,6 @@ function normalizedDomain(question) {
     return result.valid ? result.normalized_domain : (question.domain || { l1: '其他', l2: '其他' });
 }
 
-function domainKey(question) {
-    const domain = normalizedDomain(question);
-    return `${domain.l1}/${domain.l2}`;
-}
-
-function tokenizeQuestion(text) {
-    const normalized = normalizeQuestion(text);
-    const tokens = new Set();
-    for (const word of normalized.match(/[a-z0-9_]+/g) || []) {
-        if (word.length >= 2) tokens.add(word);
-    }
-    const chinese = normalized.match(/[\u4e00-\u9fa5]+/g) || [];
-    for (const chunk of chinese) {
-        if (chunk.length === 1) tokens.add(chunk);
-        for (let index = 0; index < chunk.length - 1; index++) {
-            tokens.add(chunk.slice(index, index + 2));
-        }
-    }
-    return tokens;
-}
-
-function jaccard(a, b) {
-    if (!a.size || !b.size) return 0;
-    let intersection = 0;
-    for (const item of a) if (b.has(item)) intersection++;
-    return intersection / (a.size + b.size - intersection);
-}
-
 function sortedQuestions(questions) {
     return [...questions].sort((a, b) =>
         a.question_id.localeCompare(b.question_id)
@@ -210,61 +181,6 @@ function buildCandidate(mode, seed, questions) {
     };
 }
 
-function groupEntityCandidates(questions, seed, limit) {
-    const clusters = [];
-    for (const question of sortedQuestions(questions.filter((item) => item.is_valid_for_library && !item.canonical_id))) {
-        const tokens = tokenizeQuestion(question.original_question);
-        const dKey = domainKey(question);
-        let target = null;
-        for (const cluster of clusters) {
-            if (cluster.domain_key !== dKey && question.question_id !== cluster.question_ids[0]) continue;
-            if (question.question_id === cluster.question_ids[0] || jaccard(tokens, cluster.tokens) >= 0.38) {
-                target = cluster;
-                break;
-            }
-        }
-        if (!target) {
-            target = {
-                domain_key: dKey,
-                tokens,
-                question_ids: [question.question_id],
-                questions: [],
-            };
-            clusters.push(target);
-        }
-        target.questions.push(question);
-        if (!target.question_ids.includes(question.question_id)) target.question_ids.push(question.question_id);
-    }
-    return clusters
-        .filter((cluster) => {
-            const sourceCount = new Set(cluster.questions.map((question) => question.source_note_id)).size;
-            return cluster.questions.length >= 2 && (cluster.question_ids.length >= 2 || sourceCount >= 2);
-        })
-        .map((cluster) => buildCandidate('entity', seed, cluster.questions))
-        .sort((a, b) =>
-            b.frequency - a.frequency
-            || b.companies.length - a.companies.length
-            || a.candidate_id.localeCompare(b.candidate_id)
-        )
-        .slice(0, limit);
-}
-
-function suggestFromEntity(options, paths) {
-    const entity = options.entity || options._[0];
-    if (!entity) throw new Error('Usage: canonical suggest --entity <value>');
-    const limit = Number(options.limit || 50);
-    const questions = loadQuestions({ filePath: paths.questions });
-    const questionMap = buildQuestionMap(questions);
-    const indexes = loadIndexes(paths.indexDir);
-    const normalized = normalizeEntity(entity);
-    const lower = String(entity).toLowerCase();
-    const refs = [];
-    for (const [key, bucket] of Object.entries(indexes.entity.entries || {})) {
-        if (key === normalized || key.toLowerCase().includes(lower)) refs.push(...bucket.refs);
-    }
-    return groupEntityCandidates(rowsFromRefs(refs, questionMap), normalized || entity, limit);
-}
-
 function suggestFromHotspot(options, paths) {
     const limit = Number(options.limit || 100);
     const questions = loadQuestions({ filePath: paths.questions });
@@ -299,11 +215,19 @@ function writeCandidateManifest(candidates, options, paths) {
 
 function runSuggest(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const paths = defaultPaths(root);
-    const candidates = options.hotspot
-        ? suggestFromHotspot(options, paths)
-        : suggestFromEntity(options, paths);
-    return writeCandidateManifest(candidates, options, paths);
+    if (options.hotspot) {
+        const paths = defaultPaths(root);
+        return writeCandidateManifest(suggestFromHotspot(options, paths), options, paths);
+    }
+
+    const entity = options.entity || options._?.[0];
+    if (!entity) throw new Error('Usage: canonical suggest --entity <value>');
+    const application = createApplication({ root });
+    return application.dedup.suggest({
+        mode: 'entity',
+        seed: entity,
+        limit: Number(options.limit ?? 50),
+    });
 }
 
 async function runAccept(options = {}) {
@@ -494,7 +418,6 @@ module.exports = {
     runMerge,
     runSplit,
     runStats,
-    groupEntityCandidates,
     buildCandidate,
     main,
 };
