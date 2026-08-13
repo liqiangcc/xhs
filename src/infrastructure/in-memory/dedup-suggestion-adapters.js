@@ -20,12 +20,17 @@ function queueResource(mode, seed) {
     return `dedup-relation-queue:${String(mode)}:${String(seed)}`;
 }
 
+function decisionLogResource() {
+    return 'dedup-relation-decisions';
+}
+
 function createInMemoryDedupSuggestionAdapters(seed = {}) {
     let questions = (seed.questions || []).map(clone);
     const entityRefs = new Map(
         Object.entries(seed.entity_refs || {}).map(([key, refs]) => [key, (refs || []).map(clone)]),
     );
     const queues = new Map();
+    const decisions = [];
     let revisionSequence = 0;
     const revisions = new Map();
 
@@ -37,6 +42,23 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
     function bump(resource) {
         revisionSequence += 1;
         revisions.set(resource, `rev-${revisionSequence}`);
+    }
+
+    function assertExpectedRevisions(expectedRevisions) {
+        if (!Array.isArray(expectedRevisions) || expectedRevisions.length === 0) {
+            throw new Error('Dedup decision expected_revisions are required');
+        }
+        for (const expected of expectedRevisions) {
+            if (!expected?.resource || !expected?.revision) {
+                throw new Error('Dedup decision expected revision resource and revision are required');
+            }
+            const actual = revision(expected.resource);
+            if (actual !== expected.revision) {
+                throw new Error(
+                    `Revision mismatch for ${expected.resource}: expected ${expected.revision}, got ${actual}`,
+                );
+            }
+        }
     }
 
     const indexRepository = {
@@ -89,6 +111,41 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         },
     };
 
+    const relationCandidateRepository = {
+        async get(relationCandidateKey) {
+            for (const [resource, queue] of queues.entries()) {
+                const candidate = (queue.relation_candidates || []).find(
+                    (item) => item.relation_candidate_key === relationCandidateKey,
+                );
+                if (!candidate) continue;
+                return {
+                    candidate: clone(candidate),
+                    source_revisions: clone(queue.source_revisions || []),
+                    resource,
+                    revision: revision(resource),
+                };
+            }
+            return null;
+        },
+    };
+
+    const relationDecisionStore = {
+        async record(decision, options = {}) {
+            if (!decision || typeof decision !== 'object' || Array.isArray(decision)) {
+                throw new Error('relation decision is required');
+            }
+            assertExpectedRevisions(options.expected_revisions);
+            decisions.push(clone(decision));
+            const resource = decisionLogResource();
+            bump(resource);
+            return {
+                recorded: true,
+                resource,
+                revision: revision(resource),
+            };
+        },
+    };
+
     const testSupport = Object.freeze({
         replaceEntityRefs(entitySeed, refs) {
             const key = String(entitySeed);
@@ -111,6 +168,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
             queues: Object.fromEntries(
                 [...queues.entries()].map(([resource, queue]) => [resource, clone(queue)]),
             ),
+            decisions: decisions.map(clone),
         };
     }
 
@@ -118,6 +176,8 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         indexRepository,
         questionRepository,
         relationCandidateStore,
+        relationCandidateRepository,
+        relationDecisionStore,
         testSupport,
         snapshot,
     };
