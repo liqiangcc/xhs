@@ -21,6 +21,9 @@ const {
 const {
     createPrepareRelationApplyUseCase,
 } = require('../application/dedup/prepare-relation-apply');
+const {
+    createApplyRelationDecisionUseCase,
+} = require('../application/dedup/apply-relation-decision');
 const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
@@ -132,6 +135,11 @@ function createApplication(options = {}) {
         indexRepository: dedupIndexRepository,
         questionRepository: dedupQuestionRepository,
     });
+    const applyDecision = createApplyRelationDecisionUseCase({
+        prepareRelationApply: prepareApply,
+        planCanonicalizeQuestionGroup: planQuestionGroup,
+        canonicalizeQuestionGroup,
+    });
 
     return Object.freeze({
         canonical: Object.freeze({
@@ -146,6 +154,7 @@ function createApplication(options = {}) {
             suggest,
             recordDecision,
             prepareApply,
+            applyDecision,
         }),
     });
 }
