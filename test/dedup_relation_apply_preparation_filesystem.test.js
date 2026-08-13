@@ -9,15 +9,6 @@ const assert = require('node:assert/strict');
 const { writeJsonl } = require('../scripts/lib/io');
 const { buildIndexes, writeIndexes } = require('../scripts/lib/index_store');
 const { createApplication } = require('../src/bootstrap/create-application');
-const {
-    createPrepareRelationApplyUseCase,
-} = require('../src/application/dedup/prepare-relation-apply');
-const {
-    createFsDedupSuggestionRepositories,
-} = require('../src/infrastructure/filesystem/dedup-suggestion-repositories');
-const {
-    createFsDedupDecisionRepositories,
-} = require('../src/infrastructure/filesystem/dedup-decision-repositories');
 const { createDedupFsPaths } = require('../src/infrastructure/filesystem/dedup-paths');
 
 function question(overrides = {}) {
@@ -67,18 +58,7 @@ function writeFixture(root) {
     return { paths, q1, q2 };
 }
 
-function prepareUseCase(root) {
-    const suggestionRepositories = createFsDedupSuggestionRepositories({ root });
-    const decisionRepositories = createFsDedupDecisionRepositories({ root });
-    return createPrepareRelationApplyUseCase({
-        relationDecisionRepository: decisionRepositories.relationDecisionRepository,
-        indexRepository: suggestionRepositories.indexRepository,
-        questionRepository: suggestionRepositories.questionRepository,
-    });
-}
-
-async function seedDecision(root) {
-    const app = createApplication({ root });
+async function seedDecision(app) {
     const suggestions = await app.dedup.suggest({ mode: 'entity', seed: 'redis', limit: 10 });
     const relationCandidateKey = suggestions.relation_candidates[0].relation_candidate_key;
     await app.dedup.recordDecision({
@@ -91,12 +71,13 @@ async function seedDecision(root) {
     return relationCandidateKey;
 }
 
-test('filesystem prepare reloads the persisted Decision and returns a side-effect-free ready intent', async () => {
+test('production composition root reloads the persisted Decision and prepares a side-effect-free ready intent', async () => {
     const root = makeRoot('xhs-dedup-prepare-fs-');
     try {
         const { paths } = writeFixture(root);
-        const relationCandidateKey = await seedDecision(root);
-        const result = await prepareUseCase(root)({
+        const app = createApplication({ root });
+        const relationCandidateKey = await seedDecision(app);
+        const result = await app.dedup.prepareApply({
             relation_candidate_key: relationCandidateKey,
             canonical_id: 'cq_redis_performance',
             canonical_title: 'Redis 为什么快？',
@@ -126,12 +107,12 @@ test('filesystem prepare reloads the persisted Decision and returns a side-effec
     }
 });
 
-test('filesystem prepare ignores unrelated Question changes but rejects relevant source drift', async () => {
+test('production prepare ignores unrelated Question changes but rejects relevant source drift', async () => {
     const root = makeRoot('xhs-dedup-prepare-stale-fs-');
     try {
         const { paths, q1, q2 } = writeFixture(root);
-        const relationCandidateKey = await seedDecision(root);
-        const prepare = prepareUseCase(root);
+        const app = createApplication({ root });
+        const relationCandidateKey = await seedDecision(app);
 
         const unrelated = question({
             question_id: 'q_mysql',
@@ -141,7 +122,9 @@ test('filesystem prepare ignores unrelated Question changes but rejects relevant
             tech_entities: ['MySQL'],
         });
         writeJsonl(paths.questions, [q1, q2, unrelated]);
-        const stillFresh = await prepare({ relation_candidate_key: relationCandidateKey });
+        const stillFresh = await app.dedup.prepareApply({
+            relation_candidate_key: relationCandidateKey,
+        });
         assert.equal(stillFresh.intent.intent_state, 'requires_input');
 
         writeJsonl(paths.questions, [
@@ -150,7 +133,7 @@ test('filesystem prepare ignores unrelated Question changes but rejects relevant
             unrelated,
         ]);
         await assert.rejects(
-            prepare({
+            app.dedup.prepareApply({
                 relation_candidate_key: relationCandidateKey,
                 canonical_id: 'cq_redis_performance',
                 canonical_title: 'Redis 为什么快？',
