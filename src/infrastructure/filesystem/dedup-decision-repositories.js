@@ -27,6 +27,10 @@ function decisionLogResource() {
     return 'dedup-relation-decisions';
 }
 
+function decisionSnapshotResource(relationCandidateKey) {
+    return `dedup-relation-decision:${String(relationCandidateKey)}`;
+}
+
 function findRelationCandidateSnapshot(paths, relationCandidateKey) {
     const manifest = readQueueManifest(paths);
     for (const queue of Object.values(manifest.queues || {})) {
@@ -42,6 +46,20 @@ function findRelationCandidateSnapshot(paths, relationCandidateKey) {
             source_revisions: clone(queue.source_revisions || []),
             resource: relationQueueResource(mode, seed),
             revision: hashValue(queue),
+        };
+    }
+    return null;
+}
+
+function findLatestRelationDecisionSnapshot(paths, relationCandidateKey) {
+    const decisions = readJsonl(paths.relationDecisions, []);
+    for (let index = decisions.length - 1; index >= 0; index--) {
+        const decision = decisions[index];
+        if (decision.relation_candidate_key !== relationCandidateKey) continue;
+        return {
+            decision: clone(decision),
+            resource: decisionSnapshotResource(relationCandidateKey),
+            revision: hashValue(decision),
         };
     }
     return null;
@@ -156,6 +174,14 @@ function createFsDedupDecisionRepositories(options = {}) {
         },
     };
 
+    const relationDecisionRepository = {
+        async get(relationCandidateKey) {
+            const key = String(relationCandidateKey || '').trim();
+            if (!key) throw new Error('relationCandidateKey is required');
+            return findLatestRelationDecisionSnapshot(paths, key);
+        },
+    };
+
     const relationDecisionStore = {
         async record(decision, options = {}) {
             if (!decision || typeof decision !== 'object' || Array.isArray(decision)) {
@@ -182,13 +208,16 @@ function createFsDedupDecisionRepositories(options = {}) {
 
     return {
         relationCandidateRepository,
+        relationDecisionRepository,
         relationDecisionStore,
     };
 }
 
 module.exports = {
     decisionLogResource,
+    decisionSnapshotResource,
     findRelationCandidateSnapshot,
+    findLatestRelationDecisionSnapshot,
     currentDecisionRevisions,
     assertExpectedRevisions,
     createFsDedupDecisionRepositories,
