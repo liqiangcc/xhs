@@ -18,6 +18,15 @@ function uniqueSorted(values) {
     return [...new Set(values || [])].sort((left, right) => String(left).localeCompare(String(right)));
 }
 
+function sortedCanonicalIds(values) {
+    return [...new Set(values || [])].sort((left, right) => {
+        if (left == null && right == null) return 0;
+        if (left == null) return -1;
+        if (right == null) return 1;
+        return String(left).localeCompare(String(right));
+    });
+}
+
 function assertSnapshot(snapshot, label, valueKey) {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
         throw new Error(`${label} snapshot is required`);
@@ -113,6 +122,22 @@ function assertQuestionMembershipConsistency({
     }
 }
 
+function plannedBindingStates(plan, resultingQuestionIds, questionSnapshots) {
+    const snapshotsByQuestionId = new Map(
+        resultingQuestionIds.map((questionId, index) => [questionId, questionSnapshots[index]]),
+    );
+    return uniqueSorted(plan.question_ids).map((questionId) => {
+        const snapshot = snapshotsByQuestionId.get(questionId);
+        if (!snapshot) throw new Error(`Question snapshot missing for planned question ${questionId}`);
+        return {
+            question_id: questionId,
+            from_canonical_ids: sortedCanonicalIds(
+                snapshot.bindings.map((binding) => binding.canonical_id ?? null),
+            ),
+        };
+    });
+}
+
 /**
  * Load all current Canonical facts required to project a previously resolved
  * CanonicalizationPlan. This is still a read/prepare use case: it validates
@@ -142,6 +167,7 @@ function createPrepareCanonicalizeQuestionGroupUseCase(dependencies = {}) {
             'ownership_snapshots',
             'expected_revisions',
             'projected_record',
+            'planned_question_binding_states',
         ]) {
             if (Object.hasOwn(input, forbidden)) {
                 throw new Error('Canonical preparation state is controlled by Application');
@@ -214,6 +240,11 @@ function createPrepareCanonicalizeQuestionGroupUseCase(dependencies = {}) {
             projected_record: projectedRecord,
             expected_revisions: expectedRevisions,
             question_ids: resultingQuestionIds,
+            planned_question_binding_states: plannedBindingStates(
+                plan,
+                resultingQuestionIds,
+                questionSnapshots,
+            ),
         };
     };
 }
@@ -221,4 +252,5 @@ function createPrepareCanonicalizeQuestionGroupUseCase(dependencies = {}) {
 module.exports = {
     createPrepareCanonicalizeQuestionGroupUseCase,
     assertQuestionMembershipConsistency,
+    plannedBindingStates,
 };
