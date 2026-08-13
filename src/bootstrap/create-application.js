@@ -9,6 +9,9 @@ const {
 const {
     createRecordRelationDecisionUseCase,
 } = require('../application/dedup/record-relation-decision');
+const {
+    createPrepareRelationApplyUseCase,
+} = require('../application/dedup/prepare-relation-apply');
 const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
@@ -84,6 +87,7 @@ function createApplication(options = {}) {
     const {
         relationCandidateRepository,
         relationDecisionStore,
+        relationDecisionRepository,
     } = createFsDedupDecisionRepositories({ root: options.root, paths: dedupPaths });
 
     const suggest = createSuggestCanonicalRelationsUseCase({
@@ -98,6 +102,11 @@ function createApplication(options = {}) {
         questionRepository: dedupQuestionRepository,
         relationDecisionStore,
     });
+    const prepareApply = createPrepareRelationApplyUseCase({
+        relationDecisionRepository,
+        indexRepository: dedupIndexRepository,
+        questionRepository: dedupQuestionRepository,
+    });
 
     return Object.freeze({
         canonical: Object.freeze({
@@ -108,6 +117,7 @@ function createApplication(options = {}) {
         dedup: Object.freeze({
             suggest,
             recordDecision,
+            prepareApply,
         }),
     });
 }
