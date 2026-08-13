@@ -101,6 +101,17 @@ function readQueueManifest(paths) {
     });
 }
 
+function relationQueueSnapshot(paths, mode, seed) {
+    const resource = relationQueueResource(mode, seed);
+    const manifest = readQueueManifest(paths);
+    const queue = manifest.queues?.[relationQueueKey(mode, seed)] || null;
+    return {
+        queue: queue ? clone(queue) : null,
+        resource,
+        revision: hashValue(queue),
+    };
+}
+
 function createFsDedupSuggestionRepositories(options = {}) {
     if (!options.root) throw new Error('Filesystem dedup suggestion repository root is required');
     const paths = options.paths || createDedupFsPaths(options.root);
@@ -165,6 +176,7 @@ function createFsDedupSuggestionRepositories(options = {}) {
 }
 
 module.exports = {
+    hashValue,
     entityIndexResource,
     questionSnapshotResource,
     relationQueueKey,
@@ -172,5 +184,7 @@ module.exports = {
     normalizeRefs,
     matchingEntityRefs,
     resolveQuestionsByRefs,
+    readQueueManifest,
+    relationQueueSnapshot,
     createFsDedupSuggestionRepositories,
 };
