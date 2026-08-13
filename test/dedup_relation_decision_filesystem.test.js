@@ -6,7 +6,6 @@ const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const taxonomy = require('../config/taxonomy.json');
 const {
     readJson,
     readJsonl,
@@ -14,9 +13,7 @@ const {
     writeJsonl,
 } = require('../scripts/lib/io');
 const { buildIndexes, writeIndexes } = require('../scripts/lib/index_store');
-const {
-    createSuggestCanonicalRelationsUseCase,
-} = require('../src/application/dedup/suggest-canonical-relations');
+const { createApplication } = require('../src/bootstrap/create-application');
 const {
     createRecordRelationDecisionUseCase,
 } = require('../src/application/dedup/record-relation-decision');
@@ -77,12 +74,8 @@ function writeFixture(root) {
 }
 
 async function suggest(root) {
-    const repositories = createFsDedupSuggestionRepositories({ root });
-    const useCase = createSuggestCanonicalRelationsUseCase({
-        taxonomy,
-        ...repositories,
-    });
-    return useCase({ mode: 'entity', seed: 'redis', limit: 10 });
+    const app = createApplication({ root });
+    return app.dedup.suggest({ mode: 'entity', seed: 'redis', limit: 10 });
 }
 
 function decisionUseCase(root, relationDecisionStoreOverride = null) {
@@ -96,14 +89,15 @@ function decisionUseCase(root, relationDecisionStoreOverride = null) {
     });
 }
 
-test('filesystem dedup review records an explicit decision in a separate audit log', async () => {
+test('production composition root records an explicit dedup decision in a separate audit log', async () => {
     const root = makeRoot('xhs-dedup-decision-fs-');
     try {
         const { paths } = writeFixture(root);
         const suggestions = await suggest(root);
         const relationCandidateKey = suggestions.relation_candidates[0].relation_candidate_key;
+        const app = createApplication({ root });
 
-        const result = await decisionUseCase(root)({
+        const result = await app.dedup.recordDecision({
             relation_candidate_key: relationCandidateKey,
             relation: 'same',
             actor: { type: 'human', id: 'reviewer-1' },
