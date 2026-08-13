@@ -94,7 +94,7 @@ function selectQuestionRows(questionRows, questionIds) {
 
     for (const questionId of requiredIds) {
         if (!presentIds.has(questionId)) {
-            throw new Error(`Question rows are missing planned question_id: ${questionId}`);
+            throw new Error(`Question rows are missing required question_id: ${questionId}`);
         }
     }
     for (const row of rows) {
@@ -118,7 +118,8 @@ function questionAliases(questionRows) {
  *
  * This policy intentionally does not build or execute a MutationPlan. It
  * reuses Canonical accept/refresh rules as the SSOT for extending an existing
- * record and for recomputing aggregate fields from the current Question rows.
+ * record and for recomputing aggregate fields from the full current Question
+ * row set that will belong to the resulting Canonical.
  */
 function projectCanonicalQuestionGroup(input = {}) {
     const plan = assertCanonicalizationPlan(input.plan);
@@ -128,19 +129,27 @@ function projectCanonicalQuestionGroup(input = {}) {
         throw new Error('taxonomy is required');
     }
 
-    const rows = selectQuestionRows(input.question_rows, plan.question_ids);
+    const plannedQuestionIds = uniqueSorted(plan.question_ids);
+    const resultingQuestionIds = uniqueSorted([
+        ...(snapshot.record?.question_ids || []),
+        ...plannedQuestionIds,
+    ]);
+    const fullRows = selectQuestionRows(input.question_rows, resultingQuestionIds);
+    const planned = new Set(plannedQuestionIds);
+    const plannedRows = fullRows.filter((row) => planned.has(row.question_id));
+
     const canonicalId = String(plan.canonical_target.canonical_id).trim();
     const effectiveTitle = String(plan.canonical_target.effective_title).trim();
-    const aliases = questionAliases(rows);
+    const aliases = questionAliases(plannedRows);
 
     const projectionSeed = {
         canonical_title: effectiveTitle,
         aliases,
-        question_ids: uniqueSorted(plan.question_ids),
+        question_ids: plannedQuestionIds,
         primary_domain: { l1: '其他', l2: '其他' },
         primary_entities: [],
         companies: [],
-        frequency: rows.length,
+        frequency: plannedRows.length,
         review_priority: 'P2',
     };
 
@@ -150,7 +159,7 @@ function projectCanonicalQuestionGroup(input = {}) {
         canonicalId,
         { title: effectiveTitle },
     );
-    return refreshCanonicalFromQuestions(accepted, rows, taxonomy);
+    return refreshCanonicalFromQuestions(accepted, fullRows, taxonomy);
 }
 
 module.exports = {
