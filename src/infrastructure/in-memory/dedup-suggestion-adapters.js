@@ -24,6 +24,10 @@ function decisionLogResource() {
     return 'dedup-relation-decisions';
 }
 
+function decisionSnapshotResource(relationCandidateKey) {
+    return `dedup-relation-decision:${String(relationCandidateKey)}`;
+}
+
 function createInMemoryDedupSuggestionAdapters(seed = {}) {
     let questions = (seed.questions || []).map(clone);
     const entityRefs = new Map(
@@ -129,6 +133,24 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         },
     };
 
+    const relationDecisionRepository = {
+        async get(relationCandidateKey) {
+            const key = String(relationCandidateKey || '').trim();
+            if (!key) throw new Error('relationCandidateKey is required');
+            for (let index = decisions.length - 1; index >= 0; index--) {
+                const decision = decisions[index];
+                if (decision.relation_candidate_key !== key) continue;
+                const resource = decisionSnapshotResource(key);
+                return {
+                    decision: clone(decision),
+                    resource,
+                    revision: revision(resource),
+                };
+            }
+            return null;
+        },
+    };
+
     const relationDecisionStore = {
         async record(decision, options = {}) {
             if (!decision || typeof decision !== 'object' || Array.isArray(decision)) {
@@ -136,6 +158,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
             }
             assertExpectedRevisions(options.expected_revisions);
             decisions.push(clone(decision));
+            bump(decisionSnapshotResource(decision.relation_candidate_key));
             const resource = decisionLogResource();
             bump(resource);
             return {
@@ -177,6 +200,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         questionRepository,
         relationCandidateStore,
         relationCandidateRepository,
+        relationDecisionRepository,
         relationDecisionStore,
         testSupport,
         snapshot,
