@@ -129,10 +129,12 @@ test('preserves an editorial domain override when accepting more questions', asy
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('suggests entity candidates by normalized entity and question overlap', () => {
+test('delegates entity suggestions to the Dedup Application review queue', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-entity-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const indexDir = path.join(root, 'data', 'indexes');
+    const candidateManifestPath = path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json');
+    const relationQueuePath = path.join(root, 'data', 'manifests', 'dedup', 'relation_candidate_queues.json');
     const questions = [
         makeQuestion('Redis 为什么快？', 'note-a', 0, '美团'),
         makeQuestion('Redis 为什么这么快？', 'note-b', 0, '字节'),
@@ -141,14 +143,17 @@ test('suggests entity candidates by normalized entity and question overlap', () 
     writeJsonl(questionsPath, questions);
     writeIndexes(buildIndexes(questions, { canonicalQuestions: [] }), indexDir);
 
-    const manifest = runSuggest({ root, entity: 'redis', limit: 5 });
-    assert.equal(manifest.mode, 'entity');
-    assert.equal(manifest.candidate_count, 1);
-    assert.equal(manifest.candidates[0].question_ids.length, 2);
-    assert.deepEqual(
-        manifest.candidates[0].aliases,
-        ['Redis 为什么快？', 'Redis 为什么这么快？'],
-    );
+    const suggestions = await runSuggest({ root, entity: 'redis', limit: 5 });
+    assert.equal(suggestions.schema_version, 'dedup_relation_suggestions.v1');
+    assert.equal(suggestions.mode, 'entity');
+    assert.equal(suggestions.seed, 'Redis');
+    assert.equal(suggestions.candidate_count, 1);
+    assert.equal(suggestions.relation_candidates[0].question_ids.length, 2);
+    assert.deepEqual(suggestions.relation_candidates[0].allowed_relations, [
+        'same', 'alias', 'parent_child', 'followup', 'related', 'unrelated',
+    ]);
+    assert.equal(fs.existsSync(relationQueuePath), true);
+    assert.equal(fs.existsSync(candidateManifestPath), false);
 
     fs.rmSync(root, { recursive: true, force: true });
 });
