@@ -6,12 +6,9 @@ const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const taxonomy = require('../config/taxonomy.json');
 const { writeJsonl, readJson, writeJson } = require('../scripts/lib/io');
 const { buildIndexes, writeIndexes } = require('../scripts/lib/index_store');
-const {
-    createSuggestCanonicalRelationsUseCase,
-} = require('../src/application/dedup/suggest-canonical-relations');
+const { createApplication } = require('../src/bootstrap/create-application');
 const {
     createFsDedupSuggestionRepositories,
 } = require('../src/infrastructure/filesystem/dedup-suggestion-repositories');
@@ -53,7 +50,7 @@ function writeFixture(root, questions) {
     return paths;
 }
 
-test('dedup relation suggestions persist a separate filesystem review queue', async () => {
+test('production composition root persists dedup relation suggestions in a separate filesystem review queue', async () => {
     const root = makeRoot('xhs-dedup-fs-');
     try {
         const questions = [
@@ -78,13 +75,9 @@ test('dedup relation suggestions persist a separate filesystem review queue', as
             }),
         ];
         const paths = writeFixture(root, questions);
-        const repositories = createFsDedupSuggestionRepositories({ root });
-        const useCase = createSuggestCanonicalRelationsUseCase({
-            taxonomy,
-            ...repositories,
-        });
+        const app = createApplication({ root });
 
-        const result = await useCase({
+        const result = await app.dedup.suggest({
             mode: 'entity',
             seed: 'redis',
             limit: 10,
