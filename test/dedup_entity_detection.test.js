@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { detectEntityQuestionClusters } = require('../src/domain/dedup/entity-cluster-detection');
-const { groupEntityCandidates } = require('../scripts/commands/canonical');
 
 function question(overrides = {}) {
     return {
@@ -88,7 +87,7 @@ test('same question id from only one source does not become a duplicate cluster'
     assert.deepEqual(clusters, []);
 });
 
-test('new detector characterizes the legacy entity grouping boundary without replacing production', () => {
+test('detector preserves the frozen legacy entity grouping behavior after production migration', () => {
     const legacyQuestions = [
         {
             question_id: 'q_redis_fast',
@@ -124,9 +123,8 @@ test('new detector characterizes the legacy entity grouping boundary without rep
             canonical_id: null,
         },
     ];
+    const frozenLegacyQuestionGroups = [['q_redis_fast', 'q_redis_faster']];
 
-    const legacyQuestionGroups = groupEntityCandidates(legacyQuestions, 'redis', 10)
-        .map((candidate) => candidate.question_ids);
     const detectedQuestionGroups = detectEntityQuestionClusters(
         legacyQuestions.map((item) => ({
             ...item,
@@ -134,5 +132,5 @@ test('new detector characterizes the legacy entity grouping boundary without rep
         })),
     ).map((cluster) => cluster.question_ids);
 
-    assert.deepEqual(detectedQuestionGroups, legacyQuestionGroups);
+    assert.deepEqual(detectedQuestionGroups, frozenLegacyQuestionGroups);
 });
