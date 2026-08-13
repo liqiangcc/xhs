@@ -3,6 +3,12 @@
 const { createAcceptCanonicalUseCase } = require('../application/canonical/accept-canonical');
 const { createMergeCanonicalUseCase } = require('../application/canonical/merge-canonical');
 const { createSplitCanonicalUseCase } = require('../application/canonical/split-canonical');
+const {
+    createSuggestCanonicalRelationsUseCase,
+} = require('../application/dedup/suggest-canonical-relations');
+const {
+    createRecordRelationDecisionUseCase,
+} = require('../application/dedup/record-relation-decision');
 const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
@@ -11,6 +17,13 @@ const { createFsReviewRepository } = require('../infrastructure/filesystem/revie
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
 const { createFsCanonicalMutationStore } = require('../infrastructure/filesystem/fs-canonical-mutation-store');
+const { createDedupFsPaths } = require('../infrastructure/filesystem/dedup-paths');
+const {
+    createFsDedupSuggestionRepositories,
+} = require('../infrastructure/filesystem/dedup-suggestion-repositories');
+const {
+    createFsDedupDecisionRepositories,
+} = require('../infrastructure/filesystem/dedup-decision-repositories');
 
 /**
  * Production composition root for migrated application slices.
@@ -62,11 +75,39 @@ function createApplication(options = {}) {
         taxonomy,
     });
 
+    const dedupPaths = createDedupFsPaths(options.root);
+    const {
+        indexRepository: dedupIndexRepository,
+        questionRepository: dedupQuestionRepository,
+        relationCandidateStore,
+    } = createFsDedupSuggestionRepositories({ root: options.root, paths: dedupPaths });
+    const {
+        relationCandidateRepository,
+        relationDecisionStore,
+    } = createFsDedupDecisionRepositories({ root: options.root, paths: dedupPaths });
+
+    const suggest = createSuggestCanonicalRelationsUseCase({
+        taxonomy,
+        indexRepository: dedupIndexRepository,
+        questionRepository: dedupQuestionRepository,
+        relationCandidateStore,
+    });
+    const recordDecision = createRecordRelationDecisionUseCase({
+        relationCandidateRepository,
+        indexRepository: dedupIndexRepository,
+        questionRepository: dedupQuestionRepository,
+        relationDecisionStore,
+    });
+
     return Object.freeze({
         canonical: Object.freeze({
             merge,
             split,
             accept,
+        }),
+        dedup: Object.freeze({
+            suggest,
+            recordDecision,
         }),
     });
 }
