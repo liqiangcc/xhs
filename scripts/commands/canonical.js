@@ -2,26 +2,14 @@
 'use strict';
 
 const path = require('path');
-const { writeJson } = require('../lib/io');
-const { loadQuestions } = require('../lib/question_store');
 const { writeRunManifest } = require('../lib/run_manifest');
-const { applyGlobalBooleanOption, shouldWriteReports } = require('../lib/cli_options');
+const { applyGlobalBooleanOption } = require('../lib/cli_options');
 const { defaultDate } = require('../lib/date');
-const { loadCanonicalQuestions } = require('../lib/canonical_store');
-const { evaluateCanonicalIntegrity } = require('../../src/domain/canonical/integrity-policy');
 const { createApplication } = require('../../src/bootstrap/create-application');
 const { presentCanonicalMergeResult } = require('../../src/interfaces/cli/canonical-merge-presenter');
 const { presentCanonicalSplitResult } = require('../../src/interfaces/cli/canonical-split-presenter');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
-
-function defaultPaths(root) {
-    return {
-        questions: path.join(root, 'data', 'questions', 'questions.jsonl'),
-        canonicalQuestions: path.join(root, 'data', 'questions', 'canonical_questions.jsonl'),
-        qualityReport: path.join(root, 'data', 'manifests', 'canonical', 'canonical_quality_report.json'),
-    };
-}
 
 function parseArgs(argv) {
     const args = argv.slice(2);
@@ -101,14 +89,10 @@ function runList(options = {}) {
 
 function runCheck(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const paths = defaultPaths(root);
-    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
-    const questions = loadQuestions({ filePath: paths.questions });
-    const report = evaluateCanonicalIntegrity(records, questions);
-    if (shouldWriteReports(options)) {
-        writeJson(paths.qualityReport, report);
-    }
-    return report;
+    const application = createApplication({ root });
+    return application.canonical.check({
+        write_report: !options.noWrite,
+    });
 }
 
 async function runMerge(options = {}) {
