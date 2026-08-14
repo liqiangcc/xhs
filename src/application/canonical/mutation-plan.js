@@ -1,7 +1,7 @@
 'use strict';
 
 const SCHEMA_VERSION = 'canonical_mutation_plan.v1';
-const SUPPORTED_OPERATIONS = new Set(['merge', 'split', 'accept', 'canonicalize']);
+const SUPPORTED_OPERATIONS = new Set(['merge', 'split', 'canonicalize']);
 
 function assertObject(value, label) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
