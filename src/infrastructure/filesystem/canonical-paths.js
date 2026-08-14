@@ -6,21 +6,11 @@ function createCanonicalFsPaths(root) {
     const resolvedRoot = path.resolve(root);
     const reviewDir = path.join(resolvedRoot, 'review');
     const transactionDir = path.join(resolvedRoot, '.xhs', 'canonical-mutations');
-    const legacyCandidateManifest = path.join(
-        resolvedRoot,
-        'data',
-        'manifests',
-        'canonical',
-        'canonical_candidates.json',
-    );
     return Object.freeze({
         root: resolvedRoot,
         canonicalQuestions: path.join(resolvedRoot, 'data', 'questions', 'canonical_questions.jsonl'),
         questions: path.join(resolvedRoot, 'data', 'questions', 'questions.jsonl'),
         indexDir: path.join(resolvedRoot, 'data', 'indexes'),
-        legacyCandidateManifest,
-        // Deprecated alias retained for existing compatibility tests/adapters.
-        candidateManifest: legacyCandidateManifest,
         mergeHistory: path.join(resolvedRoot, 'data', 'manifests', 'canonical', 'canonical_merge_history.json'),
         reviewDir,
         reviewProgress: path.join(reviewDir, 'progress.json'),
