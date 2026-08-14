@@ -51,10 +51,11 @@ test('canonical accept is no longer exposed by the Interface layer', () => {
     assert.equal(fs.existsSync(path.join(ROOT, 'src', 'interfaces', 'cli', 'canonical-accept-presenter.js')), false);
 });
 
-test('legacy Accept runtime and accept MutationPlan operation are removed while legacy path cleanup remains separate', () => {
+test('legacy Accept execution and mutation layers are fully removed', () => {
     const bootstrap = source('src/bootstrap/create-application.js');
     const canonicalRepositories = source('src/infrastructure/filesystem/canonical-repositories.js');
     const mutationPlan = source('src/application/canonical/mutation-plan.js');
+    const canonicalPaths = source('src/infrastructure/filesystem/canonical-paths.js');
 
     assert.doesNotMatch(bootstrap, /createAcceptCanonicalUseCase/);
     assert.doesNotMatch(bootstrap, /legacy-canonical-candidate-repositories/);
@@ -69,6 +70,7 @@ test('legacy Accept runtime and accept MutationPlan operation are removed while 
         'src/ports/repositories/canonical-candidate-repository.js',
         'src/infrastructure/filesystem/canonical-candidate-repositories.js',
         'src/infrastructure/filesystem/legacy-canonical-candidate-revision.js',
+        'data/manifests/canonical/canonical_candidates.json',
     ]) {
         assert.equal(fs.existsSync(path.join(ROOT, relativePath)), false, relativePath);
     }
@@ -80,6 +82,9 @@ test('legacy Accept runtime and accept MutationPlan operation are removed while 
     assert.match(mutationPlan, /['"]merge['"]/);
     assert.match(mutationPlan, /['"]split['"]/);
     assert.match(mutationPlan, /['"]canonicalize['"]/);
+    assert.doesNotMatch(canonicalPaths, /legacyCandidateManifest/);
+    assert.doesNotMatch(canonicalPaths, /candidateManifest/);
+    assert.doesNotMatch(canonicalPaths, /canonical_candidates\.json/);
 });
 
 test('canonical_candidates.v1 knowledge is absent from active src JavaScript runtime', () => {
@@ -92,12 +97,4 @@ test('canonical_candidates.v1 knowledge is absent from active src JavaScript run
     }
 
     assert.deepEqual(offenders, []);
-});
-
-test('legacy filesystem path remains explicit while the old candidateManifest name stays alias-only', () => {
-    const { createCanonicalFsPaths } = require('../src/infrastructure/filesystem/canonical-paths');
-    const paths = createCanonicalFsPaths('/tmp/xhs-legacy-boundary');
-
-    assert.equal(paths.legacyCandidateManifest, paths.candidateManifest);
-    assert.match(paths.legacyCandidateManifest, /canonical_candidates\.json$/);
 });
