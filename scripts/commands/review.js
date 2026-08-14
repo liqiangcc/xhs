@@ -302,17 +302,17 @@ function runWeak(options = {}) {
 
 function runNext(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const { records, questions, progress, issueLinks, strategy } = loadReviewState(root, options);
-    const limit = Number(options.limit || 20);
-    const rowOptions = { ...options, issueLinks, questions, strategy };
-    const rows = upcomingRows(records, progress, rowOptions).slice(0, limit);
-    return {
-        schema_version: 'review_next.v1',
-        date: todayString(options),
-        days: Number(options.days || 7),
-        returned_count: rows.length,
-        rows,
-    };
+    const application = createApplication({
+        root,
+        ...(options.strategyPath ? { reviewStrategyPath: options.strategyPath } : {}),
+    });
+    return application.review.next({
+        date: defaultDate(options),
+        days: options.days,
+        limit: options.limit,
+        with_issues: Boolean(options['with-issues']),
+        write_progress: !options.noWrite,
+    });
 }
 
 function runIntegrity(options = {}) {
