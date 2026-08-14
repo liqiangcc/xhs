@@ -21,6 +21,7 @@ const {
 const { loadReviewStrategy, rankReviewRows } = require('../lib/review_scheduler');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
+const { defaultDate } = require('../lib/date');
 const { createApplication } = require('../../src/bootstrap/create-application');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
@@ -153,17 +154,16 @@ function loadReviewState(root, options = {}) {
 
 function runToday(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const { records, questions, progress, issueLinks, strategy } = loadReviewState(root, options);
-    const limit = Number(options.limit || 20);
-    const rowOptions = { ...options, issueLinks, questions, strategy };
-    const rows = dueRows(records, progress, rowOptions).slice(0, limit);
-    return {
-        schema_version: 'review_today.v1',
-        date: todayString(options),
-        total_due_count: dueRows(records, progress, rowOptions).length,
-        returned_count: rows.length,
-        rows,
-    };
+    const application = createApplication({
+        root,
+        ...(options.strategyPath ? { reviewStrategyPath: options.strategyPath } : {}),
+    });
+    return application.review.today({
+        date: defaultDate(options),
+        limit: options.limit,
+        with_issues: Boolean(options['with-issues']),
+        write_progress: !options.noWrite,
+    });
 }
 
 function safeName(value) {
