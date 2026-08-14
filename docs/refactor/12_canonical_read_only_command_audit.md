@@ -1,12 +1,10 @@
 # 12 Canonical Read-only Command Audit
 
-> Scope: audit the remaining legacy `canonical list / check / stats` read-only command responsibilities before production migration. This document does not migrate runtime behavior.
+> Scope: audit and track the staged migration of `canonical list / stats / check` from the legacy CLI boundary. `canonical list` has completed its vertical migration; `stats / check` remain pending.
 
 ## 1. Goal
 
-The remaining Canonical read-only commands still live in `scripts/commands/canonical.js`. The purpose of this audit is to identify stable separation points before another vertical migration slice.
-
-Target architecture remains:
+The remaining Canonical read-side work follows one dependency direction:
 
 ```text
 CLI / Interface
@@ -22,65 +20,61 @@ Infrastructure owns persistence.
 Interface owns argv / transport / presentation only.
 ```
 
-No new business rule should be added to the legacy read-only command bodies while they wait for migration.
+No new business rule should be added to the legacy `stats / check` command bodies while they wait for migration.
 
-## 2. Current shared legacy boundary
+## 2. Migration order and current status
 
-`canonical.js` still directly imports and uses:
+The migration order remains:
 
 ```text
-scripts/lib/canonical_store.js::loadCanonicalQuestions
-scripts/lib/question_store.js::loadQuestions
-src/domain/canonical/priority-policy.js::priorityRank
-src/domain/canonical/integrity-policy.js::evaluateCanonicalIntegrity
-scripts/lib/io.js::writeJson
+1. canonical list   ✅ completed
+2. canonical stats  ← next
+3. canonical check
 ```
 
-This means the Interface currently knows:
+`canonical list` 已完成第一条 read-side vertical slice. It now proves the intended pattern before the two broader queries migrate.
 
-- filesystem-oriented stores and paths;
-- Canonical filtering and ordering semantics;
-- cross-Question/Canonical aggregation rules;
-- global integrity evaluation;
-- report persistence.
+## 3. `canonical list` — completed
 
-`merge`, `split`, and `suggest` no longer have this problem because they delegate to `createApplication()`.
-
-## 3. `canonical list` audit
-
-Current flow:
+Previous flow:
 
 ```text
 CLI options
   ↓
 load canonical_questions.jsonl
   ↓
-filter review_priority
-  ↓
-filter answer_status
-  ↓
-sort priorityRank ASC
-     frequency DESC
-     canonical_id ASC
-  ↓
-limit
-  ↓
-project canonical_list.v1 DTO
+filter / sort / limit / DTO projection in CLI
 ```
 
-Current responsibilities mixed in `runList()`:
+Current flow:
 
-| Responsibility | Current owner | Target owner |
-|---|---|---|
-| root / argv / option parsing | Interface | Interface |
-| JSONL loading | Interface via legacy store | Infrastructure adapter |
-| priority + answer-status filtering | Interface | Application read use case |
-| priority ordering | Interface calls Domain policy | Application using Domain SSOT |
-| frequency / id tie-break ordering | Interface | Application query semantics |
-| limit | Interface | Application query semantics |
-| `canonical_list.v1` projection | Interface | Application result DTO or thin presenter |
+```text
+scripts/commands/canonical.js::runList
+        ↓
+app.canonical.list
+        ↓
+ListCanonicals
+        ↓
+CanonicalCatalogRepository.list()
+        ↑
+Filesystem Canonical catalog adapter
+```
 
-Frozen compatibility behavior:
+Current responsibility split:
+
+| Responsibility | Current owner |
+|---|---|
+| root / argv option mapping | Interface |
+| Canonical record loading | Infrastructure adapter |
+| priority + answer-status filtering | Application |
+| priority ordering | Application using Domain `priorityRank()` SSOT |
+| frequency / id tie-break ordering | Application |
+| limit semantics | Application |
+| `canonical_list.v1` DTO projection | Application |
+
+The CLI no longer imports or calls `priorityRank()` for `list`, and `runList()` no longer reads `canonical_questions.jsonl` directly.
+
+Frozen compatibility behavior remains:
 
 ```text
 schema_version = canonical_list.v1
@@ -91,7 +85,7 @@ ordering = priorityRank ASC, frequency DESC, canonical_id ASC
 filters = exact review_priority / answer_status equality
 ```
 
-Output record fields must remain:
+Output record fields remain:
 
 ```text
 canonical_id
@@ -105,23 +99,11 @@ primary_domain
 primary_entities
 ```
 
-Risk/complexity: **low**.
+The migration intentionally preserves the existing synchronous `runList()` call timing for local JSONL reads; separation of concerns did not require changing the command's calling convention.
 
-Recommended target slice:
+## 4. `canonical stats` — next
 
-```text
-CanonicalCatalogRepository.list()
-        ↓
-ListCanonicals Application
-        ↓
-canonical list CLI delegate
-```
-
-Do not make the CLI call `priorityRank()` after migration.
-
-## 4. `canonical stats` audit
-
-Current flow:
+Current flow remains legacy:
 
 ```text
 load Canonical records
@@ -147,7 +129,7 @@ Current responsibilities mixed in `runStats()`:
 | unique question-id aggregation | Interface | Application query semantics |
 | assigned row aggregation | Interface | Application query semantics |
 | top-Canonical ranking | Interface | Application query semantics |
-| DTO projection | Interface | Application result DTO / presenter |
+| DTO projection | Interface | Application result DTO |
 
 Frozen compatibility behavior:
 
@@ -170,11 +152,27 @@ companies
 primary_entities
 ```
 
-Risk/complexity: **medium** because it joins two logical read sources.
+Risk/complexity: **medium**, because it composes two logical read sources.
 
-Do not push aggregation into the filesystem adapter merely because the current implementation uses JSONL. The aggregation is storage-independent query semantics.
+Do not push these aggregations into a filesystem adapter merely because the current implementation uses JSONL. They are storage-independent query semantics.
 
-## 5. `canonical check` audit
+Recommended next dependency shape:
+
+```text
+canonical stats CLI
+        ↓
+app.canonical.stats
+        ↓
+CanonicalStats Application
+        ↓
+Canonical catalog Port + Question read Port
+        ↑
+Filesystem adapters
+```
+
+Prefer reusing the newly established Canonical catalog read boundary rather than creating another Canonical loader with overlapping responsibility.
+
+## 5. `canonical check` — last
 
 Current flow:
 
@@ -208,8 +206,8 @@ Current responsibilities mixed in `runCheck()`:
 | root / noWrite option | Interface | Interface DTO |
 | JSONL loading | Interface via legacy stores | existing FS integrity checker |
 | integrity rules | Domain | Domain — keep |
-| optional quality report persistence | Interface | explicit outbound report writer / application side-effect boundary |
-| response | Interface | Application result / presenter |
+| optional quality report persistence | Interface | explicit outbound report writer / Application side-effect boundary |
+| response | Interface | Application result |
 
 Frozen compatibility behavior:
 
@@ -224,76 +222,44 @@ The last rule intentionally differs from `review integrity`, whose CLI returns a
 
 Risk/complexity: **medium-high** despite the existing checker, because report persistence is an explicit optional side effect.
 
-## 6. Migration order
+## 6. Why `list` was first
 
-Recommended order:
-
-```text
-1. canonical list
-2. canonical stats
-3. canonical check
-```
-
-Rationale:
-
-### 1. `list` first
+`list` was selected first because it had:
 
 - one data source;
 - no write behavior;
 - no cross-context aggregation;
-- existing Domain priority SSOT can be reused;
-- smallest failure surface for proving the read-side vertical migration pattern.
+- an existing Domain priority SSOT;
+- the smallest failure surface for proving the read-side pattern.
 
-### 2. `stats` second
+That pattern is now established without expanding the mutation architecture or changing `stats/check` behavior.
 
-- still pure read-only;
-- exercises composition of Canonical + Question read state;
-- establishes where storage-independent aggregation belongs.
+## 7. Next vertical slice: `canonical stats`
 
-### 3. `check` last
-
-- can reuse the existing `CanonicalIntegrityChecker`;
-- but must explicitly model optional report persistence;
-- has unusual compatibility exit semantics that need preservation.
-
-## 7. Next vertical slice: `canonical list`
-
-The next implementation slice should be limited to `canonical list`.
-
-Proposed dependency shape:
-
-```text
-scripts/commands/canonical.js::runList
-        ↓
-app.canonical.list
-        ↓
-ListCanonicals
-        ↓
-CanonicalCatalogRepository
-        ↑
-Filesystem Canonical catalog adapter
-```
+The next implementation slice should be limited to `canonical stats`.
 
 Rules:
 
-1. CLI parses `priority`, `answer-status`, and `limit`, delegates, and prints only.
-2. Application owns filtering, ordering, limiting, and output DTO semantics.
-3. Domain `priorityRank()` remains the priority ordering SSOT.
-4. Infrastructure only returns Canonical records; it does not know CLI flags or `canonical_list.v1`.
-5. Preserve exact current JSON behavior before removing legacy code.
-6. Do not migrate `stats` or `check` in the same slice.
+1. CLI parses `limit`, delegates, and prints only.
+2. Application owns aggregation, ranking, limiting, and `canonical_stats.v1` DTO semantics.
+3. Infrastructure returns raw read state and does not know `canonical_stats.v1`.
+4. Reuse `CanonicalCatalogRepository` for Canonical rows where practical.
+5. Introduce only the narrow Question read capability needed by stats.
+6. Preserve exact current counts, ranking, top row fields, and default limit.
+7. Do not migrate `canonical check` in the same slice.
 
 ## 8. Read-only migration completion criteria
 
-After all three commands migrate, `scripts/commands/canonical.js` should no longer import:
+After `stats` and `check` also migrate, `scripts/commands/canonical.js` should no longer import:
 
 ```text
 loadCanonicalQuestions
 loadQuestions
-priorityRank
 evaluateCanonicalIntegrity
 writeJson   # for Canonical read report persistence
 ```
+
+`priorityRank` has already left the CLI as part of the completed `list` slice.
 
 The Canonical CLI should then be uniformly thin:
 
@@ -307,7 +273,7 @@ parse syntax
 
 ## 9. Non-targets
 
-This audit does not change:
+This migration line does not change:
 
 - Merge/Split/Canonicalize runtime;
 - Dedup Suggest/Decide/Apply;
@@ -316,4 +282,4 @@ This audit does not change:
 - `src/domain/canonical/accept-policy.js`;
 - historical ADR/review-plan wording.
 
-Historical documents may retain old command snapshots. Current behavior is governed by current code/tests, `10_current_dedup_canonical_operations.md`, and this migration audit for the remaining read-only commands.
+Historical documents may retain old command snapshots. Current behavior is governed by current code/tests, `10_current_dedup_canonical_operations.md`, and this read-side migration audit.
