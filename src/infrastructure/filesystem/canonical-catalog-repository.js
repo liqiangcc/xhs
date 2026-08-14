@@ -12,7 +12,7 @@ function createFsCanonicalCatalogRepository(options = {}) {
     const paths = options.paths || createCanonicalFsPaths(options.root);
 
     return {
-        async list() {
+        list() {
             return readJsonl(paths.canonicalQuestions, []).map(clone);
         },
     };
