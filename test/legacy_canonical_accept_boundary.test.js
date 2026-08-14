@@ -51,10 +51,9 @@ test('canonical accept is no longer exposed by the Interface layer', () => {
     assert.equal(fs.existsSync(path.join(ROOT, 'src', 'interfaces', 'cli', 'canonical-accept-presenter.js')), false);
 });
 
-test('legacy Accept Application and candidate repository layer are removed while CAS compatibility remains explicit', () => {
+test('legacy Accept application, repository layer, and filesystem candidate CAS bridge are removed', () => {
     const bootstrap = source('src/bootstrap/create-application.js');
     const canonicalRepositories = source('src/infrastructure/filesystem/canonical-repositories.js');
-    const casHelper = source('src/infrastructure/filesystem/legacy-canonical-candidate-revision.js');
     const mutationPlan = source('src/application/canonical/mutation-plan.js');
 
     assert.doesNotMatch(bootstrap, /createAcceptCanonicalUseCase/);
@@ -69,36 +68,30 @@ test('legacy Accept Application and candidate repository layer are removed while
         'src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js',
         'src/ports/repositories/canonical-candidate-repository.js',
         'src/infrastructure/filesystem/canonical-candidate-repositories.js',
+        'src/infrastructure/filesystem/legacy-canonical-candidate-revision.js',
     ]) {
         assert.equal(fs.existsSync(path.join(ROOT, relativePath)), false, relativePath);
     }
 
-    assert.match(canonicalRepositories, /legacy-canonical-candidate-revision/);
+    assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-revision/);
     assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-repositories/);
-    assert.match(canonicalRepositories, /canonical-candidate:/);
-    assert.match(casHelper, /revisionForLegacyCandidateResource/);
-    assert.doesNotMatch(casHelper, /createFsLegacyCanonicalCandidateRepository/);
+    assert.doesNotMatch(canonicalRepositories, /canonical-candidate:/);
     assert.match(mutationPlan, /['"]accept['"]/);
 });
 
-test('canonical_candidates.v1 knowledge is confined to the remaining CAS compatibility helper', () => {
-    const srcRoot = path.join(ROOT, 'src');
-    const allowed = new Set([
-        'src/infrastructure/filesystem/legacy-canonical-candidate-revision.js',
-    ]);
+test('canonical_candidates.v1 knowledge is absent from active src JavaScript runtime', () => {
     const offenders = [];
 
-    for (const filePath of listJavaScriptFiles(srcRoot)) {
+    for (const filePath of listJavaScriptFiles(path.join(ROOT, 'src'))) {
         const body = fs.readFileSync(filePath, 'utf8');
         if (!body.includes('canonical_candidates.v1')) continue;
-        const relative = path.relative(ROOT, filePath).split(path.sep).join('/');
-        if (!allowed.has(relative)) offenders.push(relative);
+        offenders.push(path.relative(ROOT, filePath).split(path.sep).join('/'));
     }
 
     assert.deepEqual(offenders, []);
 });
 
-test('legacy filesystem path is explicit while the old candidateManifest name remains alias-only', () => {
+test('legacy filesystem path remains explicit while the old candidateManifest name stays alias-only', () => {
     const { createCanonicalFsPaths } = require('../src/infrastructure/filesystem/canonical-paths');
     const paths = createCanonicalFsPaths('/tmp/xhs-legacy-boundary');
 
