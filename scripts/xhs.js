@@ -22,7 +22,6 @@ function printHelp() {
         '  query domain --l1 <v>     Query by domain l1 or l2',
         '  query hotspot             Show repeated question_id hotspots',
         '  canonical suggest         Generate entity or hotspot relation suggestions',
-        '  canonical accept          Confirm a legacy canonical candidate',
         '  canonical list|check      Inspect canonical coverage and quality',
         '  canonical merge|split     Maintain canonical question groups',
         '  canonical stats           Show canonical coverage',
