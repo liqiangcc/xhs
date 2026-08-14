@@ -17,6 +17,7 @@ const {
     createCanonicalizeQuestionGroupUseCase,
 } = require('../application/canonical/canonicalize-question-group');
 const { createReviewIntegrityUseCase } = require('../application/review/review-integrity');
+const { createReviewTodayUseCase } = require('../application/review/review-today');
 const {
     createSuggestCanonicalRelationsUseCase,
 } = require('../application/dedup/suggest-canonical-relations');
@@ -30,6 +31,7 @@ const {
     createApplyRelationDecisionUseCase,
 } = require('../application/dedup/apply-relation-decision');
 const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
+const { createReviewStrategyProvider } = require('../infrastructure/config/review-strategy-provider');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
 const {
@@ -40,7 +42,9 @@ const {
 } = require('../infrastructure/filesystem/question-catalog-repository');
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
 const { createFsReviewProgressReader } = require('../infrastructure/filesystem/review-progress-reader');
+const { createFsReviewProgressWriter } = require('../infrastructure/filesystem/review-progress-writer');
 const { createFsReviewSessionReader } = require('../infrastructure/filesystem/review-session-reader');
+const { createFsReviewIssueLinkReader } = require('../infrastructure/filesystem/review-issue-link-reader');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
 const {
@@ -76,7 +80,12 @@ function createApplication(options = {}) {
     const questionCatalogRepository = createFsQuestionCatalogRepository({ root: options.root, paths });
     const reviewRepository = createFsReviewRepository({ root: options.root, paths });
     const reviewProgressReader = createFsReviewProgressReader({ root: options.root, paths });
+    const reviewProgressWriter = createFsReviewProgressWriter({ root: options.root, paths });
     const reviewSessionReader = createFsReviewSessionReader({ root: options.root, paths });
+    const reviewIssueLinkReader = createFsReviewIssueLinkReader({ root: options.root });
+    const reviewStrategyProvider = createReviewStrategyProvider({
+        ...(options.reviewStrategyPath ? { strategyPath: options.reviewStrategyPath } : {}),
+    });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
     const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
     const qualityReportWriter = createFsCanonicalQualityReportWriter({ root: options.root, paths });
@@ -129,6 +138,14 @@ function createApplication(options = {}) {
         canonicalCatalogRepository: catalogRepository,
         progressReader: reviewProgressReader,
         sessionReader: reviewSessionReader,
+    });
+    const reviewToday = createReviewTodayUseCase({
+        canonicalCatalogRepository: catalogRepository,
+        questionCatalogRepository,
+        progressReader: reviewProgressReader,
+        progressWriter: reviewProgressWriter,
+        strategyProvider: reviewStrategyProvider,
+        issueLinkReader: reviewIssueLinkReader,
     });
 
     const dedupPaths = createDedupFsPaths(options.root);
@@ -189,6 +206,7 @@ function createApplication(options = {}) {
         }),
         review: Object.freeze({
             integrity: reviewIntegrity,
+            today: reviewToday,
         }),
     });
 }
