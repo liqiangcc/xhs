@@ -1,12 +1,8 @@
 # 13 Review Command SoC / SRP Audit
 
-> Scope: audit the current `review prepare / today / next / weak / mark / integrity` command responsibilities before Production migration. This document does not change runtime behavior.
+> Scope: audit and track the staged migration of `review integrity / today / next / weak / prepare / mark`. `review integrity` has completed its vertical migration; the remaining Review commands are still legacy.
 
-## 1. Goal
-
-The Review namespace is still implemented primarily in `scripts/commands/review.js` plus legacy helpers in `scripts/lib/review_store.js` and `scripts/lib/review_scheduler.js`.
-
-The target dependency direction is:
+## 1. Target dependency direction
 
 ```text
 CLI / Interface
@@ -18,13 +14,26 @@ Domain policies + outbound Ports
              Infrastructure
 ```
 
-The migration must preserve current behavior first. In particular, commands that look read-only today are not necessarily side-effect free.
+The migration preserves current behavior before redesigning Review business rules. Commands that look read-only today are not necessarily side-effect free.
 
-No new Review business rule should be added to `scripts/commands/review.js`, `scripts/lib/review_store.js`, or `scripts/lib/review_scheduler.js` while these commands wait for migration.
+No new Review business rule should be added to `scripts/commands/review.js`, `scripts/lib/review_store.js`, or `scripts/lib/review_scheduler.js` while the remaining commands wait for migration.
 
-## 2. Current mixed responsibilities
+## 2. Migration order and current status
 
-`scripts/commands/review.js` currently owns or directly coordinates all of the following:
+```text
+1. review integrity  ✅ completed
+2. review today      ← next
+3. review next
+4. review weak
+5. review prepare
+6. review mark
+```
+
+`integrity` established the first `app.review` capability with a genuinely read-only vertical slice. The next slice should establish the shared Review queue state model through `review today` without pulling `next / weak / prepare / mark` into the same change.
+
+## 3. Current mixed responsibilities outside migrated integrity
+
+`scripts/commands/review.js` still directly coordinates:
 
 ```text
 argv parsing / aliases / syntax validation
@@ -43,22 +52,20 @@ Markdown plan rendering and filesystem writing
 Review result input validation
 ReviewProgress state transition
 session-event construction and append
-review integrity scanning
-filesystem session enumeration / JSON parsing
 result DTOs
 CLI exit semantics
 run manifest writing
 ```
 
-This is not one stable reason to change. It combines Interface, Application, Domain and Infrastructure responsibilities.
+`review integrity` is no longer part of this list: its state loading, session parsing and integrity evaluation have moved behind Application / Domain / Ports.
 
-## 3. Legacy helper split points
+## 4. Legacy helper split points
 
-### 3.1 `scripts/lib/review_store.js`
+### 4.1 `scripts/lib/review_store.js`
 
-This file mixes persistence with business rules.
+This file still mixes persistence with business rules.
 
-Infrastructure responsibilities currently inside it:
+Infrastructure responsibilities:
 
 ```text
 loadProgress()
@@ -67,7 +74,7 @@ appendSessionEvent()
 filesystem paths / JSON read-write
 ```
 
-Storage-independent Review rules currently inside the same file:
+Storage-independent Review rules:
 
 ```text
 defaultProgressItem()
@@ -77,7 +84,7 @@ applyReviewResult()
 addDays()
 ```
 
-`applyReviewResult()` contains current Review scheduling semantics, including:
+`applyReviewResult()` contains current Review scheduling semantics:
 
 ```text
 again / hard / good / easy transitions
@@ -89,11 +96,11 @@ next-review intervals
 mastered / weak / learning status derivation
 ```
 
-These semantics must move to the Domain unchanged before the legacy helper is retired. Do not duplicate them in Application or CLI.
+These semantics must move to Domain unchanged before the legacy helper is retired. Do not duplicate them in Application or CLI.
 
-### 3.2 `scripts/lib/review_scheduler.js`
+### 4.2 `scripts/lib/review_scheduler.js`
 
-This file also mixes I/O and pure policy.
+This file still mixes I/O and pure policy:
 
 ```text
 loadReviewStrategy()   → config I/O
@@ -101,81 +108,67 @@ scoreReviewRow()       → scoring policy
 rankReviewRows()       → ordering policy
 ```
 
-`config/review_strategy.json` remains the declarative weight SSOT. Infrastructure should load/provide the strategy; pure Domain code should interpret it. A model/config change must not require CLI changes.
+`config/review_strategy.json` remains the declarative weight SSOT. Infrastructure should provide the strategy; pure Domain code should interpret it.
 
-## 4. Shared review-state behavior that must be explicit
+## 5. `review integrity` — completed
 
-`loadReviewState()` currently performs:
-
-```text
-load Canonical records
-load Question rows
-load ReviewProgress
-ensure missing progress items in memory
-if !noWrite:
-    save the initialized progress store
-optionally load issue links
-load review strategy
-```
-
-This produces an important compatibility rule:
-
-> `review today`, `review next`, `review weak`, and `review prepare` are not pure reads by default.
-
-If a Canonical lacks ReviewProgress, these commands synthesize a default progress item and persist it unless `--noWrite` is present.
-
-Even with `--noWrite`, missing progress is still synthesized **in memory** and participates in the returned rows; only persistence is suppressed.
-
-Migration must model this side effect explicitly in Application. It must not silently turn the commands into pure reads or, conversely, hide initialization inside a read repository.
-
-## 5. Shared row projection and ranking
-
-Current `questionMetadata()` + `canonicalRows()` join facts from:
+Previous legacy flow:
 
 ```text
-CanonicalQuestion
-Question
-ReviewProgress
-optional IssueLink
+CLI loads Canonical records
+CLI loads ReviewProgress
+CLI enumerates and parses review/sessions/*.json
+  ↓
+CLI computes duplicate / stale / malformed / missing state
+  ↓
+review_integrity.v1
 ```
-
-They produce Review queue rows containing:
-
-```text
-canonical_id
-canonical_title
-review_priority
-answer_status
-frequency
-primary_domain
-primary_entities
-companies
-levels
-question_ids
-progress
-optional issue_url
-```
-
-This join/projection is storage-independent query semantics. It belongs in Application or a pure Review query policy, not in Filesystem adapters.
-
-Current due/upcoming/weak ranking eventually uses `rankReviewRows()` and the strategy weights from `config/review_strategy.json`.
-
-## 6. `review integrity` audit
 
 Current flow:
 
 ```text
-load Canonical records
-load ReviewProgress
-enumerate review/sessions/*.json
-parse session JSON
-    ↓
-collect malformed / duplicate / stale references
-    ↓
-review_integrity.v1
+review integrity CLI
+        ↓
+app.review.integrity
+        ↓
+ReviewIntegrity Application
+        ↓
+Review integrity Domain policy
+        ↓
+CanonicalCatalogRepository
+ReviewProgressReader
+ReviewSessionReader
+        ↑
+Filesystem adapters
 ```
 
-Current report semantics:
+### Responsibility split
+
+```text
+CanonicalCatalogRepository
+  → raw Canonical records
+
+ReviewProgressReader
+  → current ReviewProgress facts
+
+ReviewSessionReader
+  → parsed session facts or parse_error with an opaque source label
+
+Review integrity Domain policy
+  → duplicate / stale / malformed / missing classification
+  → hard-failure semantics
+
+ReviewIntegrity Application
+  → review_integrity.v1 DTO
+  → maps opaque session source to the historical `file` output field
+
+CLI
+  → delegates and preserves process exit semantics
+```
+
+The existing Canonical-merge-specific `ReviewRepository.loadMergeState()` was intentionally not broadened or reused.
+
+### Frozen integrity semantics
 
 ```text
 hard failures =
@@ -188,7 +181,7 @@ missing progress is reported
 but does NOT count as a hard failure
 ```
 
-Current output fields include:
+Output remains:
 
 ```text
 schema_version = review_integrity.v1
@@ -205,38 +198,77 @@ stale_session_events
 hard_failure_count
 ```
 
-Compatibility rule:
+Filesystem session enumeration remains `.json` only and sorted. Invalid session JSON is converted by Infrastructure into `parse_error = invalid_json`; Domain decides that this is a hard integrity failure.
+
+Compatibility rule remains:
 
 ```text
 review integrity result.ok=false
 → review CLI exits 1
 ```
 
-This differs from `canonical check`, whose `ok=false` intentionally exits 0.
+This intentionally differs from `canonical check`, whose `ok=false` exits 0.
 
-`review integrity` does not initialize or persist progress and does not mutate formal Review state. It is therefore the recommended **first Review vertical migration**.
+`review integrity` remains genuinely read-only: it does not initialize missing ReviewProgress and does not write progress/session state.
 
-Recommended shape:
+## 6. Shared queue-state behavior — still pending
+
+`loadReviewState()` currently performs:
 
 ```text
-review integrity CLI
-        ↓
-app.review.integrity
-        ↓
-ReviewIntegrity Application / pure evaluator
-        ↓
-Canonical catalog read capability
-ReviewProgress read capability
-ReviewSession read capability
-        ↑
-Filesystem adapters
+load Canonical records
+load Question rows
+load ReviewProgress
+ensure missing progress items in memory
+if !noWrite:
+    save the initialized progress store
+optionally load issue links
+load review strategy
 ```
 
-Filesystem adapters may report invalid JSON/parsing facts, but the meaning of duplicate/stale/missing Review references should remain storage-independent policy.
+This produces a compatibility rule that must survive migration:
 
-Do not reuse the existing `ReviewRepository.loadMergeState()` as a generic Review query repository. That Port is intentionally Canonical-merge-specific and carries merge concurrency evidence.
+> `review today`, `review next`, `review weak`, and `review prepare` are not pure reads by default.
 
-## 7. `review today` audit
+If a Canonical lacks ReviewProgress, these commands synthesize a default progress item and persist it unless `--noWrite` is present.
+
+Even with `--noWrite`, missing progress is still synthesized in memory and participates in returned rows; only persistence is suppressed.
+
+This side effect must become explicit Application orchestration. It must not be hidden inside a read repository.
+
+## 7. Shared row projection and ranking
+
+Current `questionMetadata()` + `canonicalRows()` join:
+
+```text
+CanonicalQuestion
+Question
+ReviewProgress
+optional IssueLink
+```
+
+Review queue rows contain:
+
+```text
+canonical_id
+canonical_title
+review_priority
+answer_status
+frequency
+primary_domain
+primary_entities
+companies
+levels
+question_ids
+progress
+optional issue_url
+```
+
+This join/projection is storage-independent query semantics. It belongs in Application or pure Review query policy, not Filesystem adapters.
+
+Current due/upcoming/weak ranking uses `rankReviewRows()` and `config/review_strategy.json`.
+
+## 8. `review today` — next
 
 Current flow:
 
@@ -268,11 +300,9 @@ missing progress is persisted unless --noWrite
 
 Target Application owns initialization orchestration, due selection, ranking, limiting and DTO semantics. Repositories must not know `--noWrite`, `review_today.v1`, or scoring rules.
 
-`today` is the recommended first queue command after `integrity` because it establishes the shared Review state/query pattern with the smallest selector surface.
+Before or in this slice, extract only the pure Review rules that `today` actually needs. Do not redesign intervals or ranking weights.
 
-## 8. `review next` audit
-
-Current flow reuses the same Review state and enriched rows, then selects rows whose `next_review_at` is absent or no later than `date + days`.
+## 9. `review next` — pending
 
 Frozen behavior:
 
@@ -285,19 +315,17 @@ rows include current due rows as well as upcoming rows inside the horizon
 ranking = shared review strategy
 ```
 
-`next` should reuse the state/query boundaries proven by `today`; it should not create another filesystem loader.
+`next` should reuse the Review state/query boundaries established by `today`.
 
-## 9. `review weak` audit
+## 10. `review weak` — pending
 
-Current weak selector is:
+Current weak selector:
 
 ```text
 progress.status === 'weak'
 OR mistake_count > 0
 OR (review_count > 0 AND confidence < 0.5)
 ```
-
-Then rows are ranked with the same Review strategy and limited to 20 by default.
 
 Frozen behavior:
 
@@ -309,11 +337,9 @@ optional --with-issues
 missing progress initialization behavior = same as today/next
 ```
 
-The weak predicate is business/query policy and must not live in CLI or Infrastructure after migration.
+The weak predicate is business/query policy and must not remain in CLI or Infrastructure.
 
-## 10. `review prepare` audit
-
-`prepare` composes due/upcoming selection with additional filters and an optional Markdown plan write.
+## 11. `review prepare` — pending
 
 Selection:
 
@@ -332,11 +358,7 @@ status         exact progress.status equality
 domain         exact primary_domain.l1 equality
 company        substring match against enriched companies
 level          substring match against enriched levels
-topic          case-insensitive substring across:
-               canonical_title
-               primary_entities
-               primary_domain.l1
-               primary_domain.l2
+topic          case-insensitive substring across canonical title/entities/domain
 ```
 
 Side effects:
@@ -346,16 +368,7 @@ missing progress may be initialized/persisted
 Markdown review/plans/<safe target>.md is written unless --noWrite
 ```
 
-Output:
-
-```text
-schema_version = review_prepare_result.v1
-ok = true
-dry_run
-plan_path
-item_count
-rows
-```
+Output remains `review_prepare_result.v1`.
 
 Target separation:
 
@@ -368,13 +381,9 @@ ReviewPlanWriter Port / Infrastructure
   → safe path + Markdown/file publication
 ```
 
-The writer must not decide which cards belong in the plan.
+Migrate `prepare` only after `today/next/weak` establish the shared Review query model.
 
-Migrate `prepare` only after `today/next/weak` have established the shared Review query model.
-
-## 11. `review mark` audit
-
-`mark` is the highest-risk Review command because it is a formal mutation.
+## 12. `review mark` — last / highest risk
 
 Current responsibilities include:
 
@@ -393,19 +402,19 @@ session append
 review_mark_result.v1 projection
 ```
 
-Frozen mutation behavior includes:
+Frozen behavior includes:
 
 ```text
 result alias: --result or --status
 allowed oral-version: one_minute
 feedback-closed-at requires YYYY-MM-DD
 feedback-closed-at requires at least one quality-defect
---noWrite returns proposed progress/session event but writes neither progress nor session
+--noWrite returns proposed progress/session event but writes neither
 ```
 
 ### Current consistency risk
 
-The current write order is:
+The current write order remains:
 
 ```text
 saveProgress(...)
@@ -413,11 +422,11 @@ saveProgress(...)
 appendSessionEvent(...)
 ```
 
-These are separate filesystem writes. If the second write fails after the first succeeds, ReviewProgress and ReviewSession can diverge.
+These are separate filesystem writes. If session append fails after progress persistence, ReviewProgress and ReviewSession diverge.
 
-This is a mutation consistency boundary and must be addressed during migration. Do not merely wrap the two legacy functions in an Application use case.
+Do not simply wrap those two calls in an Application use case.
 
-Recommended target:
+Required target:
 
 ```text
 MarkReview Application
@@ -429,45 +438,24 @@ ReviewMutationPlan / ReviewMutationStore
 preflight + atomic/recoverable progress/session commit
 ```
 
-`mark` should therefore migrate last among the current Review commands.
-
-## 12. Recommended migration order
-
-```text
-1. review integrity
-2. review today
-3. review next
-4. review weak
-5. review prepare
-6. review mark
-```
-
-Rationale:
-
-- `integrity` is genuinely read-only and has no initialization side effect;
-- `today` establishes the shared Review state + implicit initialization boundary;
-- `next` and `weak` reuse that query model with different selectors;
-- `prepare` adds plan publication after query semantics are stable;
-- `mark` is a cross-file formal mutation and needs an explicit consistency boundary.
-
-Before or as part of the first queue migration, extract the current pure scheduling/progress semantics from the legacy helpers into Domain without changing behavior. Do not redesign intervals, thresholds or strategy weights in the same slice.
+`mark` therefore remains last.
 
 ## 13. Port / responsibility guidance
 
-Potential narrow capabilities should follow caller needs rather than generic CRUD:
+Current/new narrow capabilities should follow caller needs:
 
 ```text
-CanonicalCatalogRepository          # may reuse the current generic read-side Port
-QuestionCatalogRepository           # may reuse current raw Question catalog reads
-ReviewProgressReader / Store        # Review progress facts; write capability kept explicit
-ReviewSessionReader                  # session facts for integrity/query evidence
-ReviewStrategyProvider              # provides review_strategy.v1
-ReviewIssueLinkReader               # optional issue URLs
-ReviewPlanWriter                    # publishes an already-selected plan
-ReviewMutationStore                 # atomic/recoverable formal Review mutation
+CanonicalCatalogRepository      # already reused by review integrity
+QuestionCatalogRepository       # reusable for queue enrichment
+ReviewProgressReader            # now exists for integrity; future write kept separate
+ReviewSessionReader             # now exists for integrity/session facts
+ReviewStrategyProvider          # future provider for review_strategy.v1
+ReviewIssueLinkReader           # optional issue URLs
+ReviewPlanWriter                # publishes selected plans
+ReviewMutationStore             # atomic/recoverable formal Review mutation
 ```
 
-Do not broaden the existing Canonical-merge `ReviewRepository` just to avoid creating Review-specific read/mutation Ports.
+Do not broaden the Canonical-merge `ReviewRepository` just to avoid Review-specific Ports.
 
 ## 14. Domain SSOT guidance
 
@@ -489,11 +477,11 @@ config/review_strategy.json
 
 `loadReviewStrategy()` belongs to Infrastructure/config provision, not Domain.
 
-A later business-rule change should have one obvious place to edit and test.
+`src/domain/review/integrity-policy.js` is now the SSOT for Review integrity classification only; it must not absorb queue scheduling or mutation rules.
 
 ## 15. Completion criteria
 
-After the Review namespace is fully migrated, `scripts/commands/review.js` should no longer directly import or use:
+After the whole Review namespace migrates, `scripts/commands/review.js` should no longer directly import or use:
 
 ```text
 node:fs
@@ -504,7 +492,7 @@ review_scheduler config loader
 ensureDir
 ```
 
-The final Interface responsibility should be:
+Final Interface responsibility:
 
 ```text
 parse syntax/options
@@ -516,13 +504,12 @@ parse syntax/options
 
 The Review Domain must not depend on filesystem paths, `process.argv`, config-file loading or Markdown rendering.
 
-## 16. Non-targets of this audit slice
+## 16. Non-targets
 
-This audit does not change:
+This migration line does not change:
 
-- any Review command runtime behavior;
-- Review scheduling intervals or thresholds;
-- `config/review_strategy.json` values;
 - Canonical/Dedup runtime;
 - Canonical merge Review migration behavior;
-- current Review files or session data.
+- current Review interval or ranking values;
+- `today/next/weak/prepare/mark` runtime until their own slices;
+- current Review files or session data except when a later explicitly authorized mutation slice does so.
