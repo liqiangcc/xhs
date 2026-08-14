@@ -93,7 +93,7 @@ function runSuggest(options = {}) {
 }
 
 /**
- * @deprecated Legacy compatibility for historical/manual canonical_candidates.v1 only.
+ * @deprecated Legacy compatibility for historical/manual candidate manifests only.
  * New relationships must use canonical suggest -> dedup decide -> dedup apply.
  */
 async function runAccept(options = {}) {
