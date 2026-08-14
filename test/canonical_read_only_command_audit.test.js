@@ -27,21 +27,21 @@ test('canonical read-only audit freezes behavior and migration order', () => {
     assert.match(audit, /canonical_quality_report\.v1/);
     assert.match(audit, /report\.ok=false[\s\S]*exit remains 0/);
     assert.match(audit, /CanonicalCatalogRepository\.list\(\)/);
-    assert.match(audit, /Do not make the CLI call `priorityRank\(\)` after migration/);
+    assert.match(audit, /canonical list[\s\S]*已完成|canonical list[\s\S]*completed/i);
 });
 
-test('legacy list and stats remain read-only while awaiting vertical migration', () => {
+test('canonical list delegates to Application while stats remains legacy read-only', () => {
     const listSource = runList.toString();
     const statsSource = runStats.toString();
 
-    assert.match(listSource, /loadCanonicalQuestions/);
-    assert.match(listSource, /priorityRank/);
+    assert.match(listSource, /createApplication/);
+    assert.match(listSource, /application\.canonical\.list/);
+    assert.match(listSource, /answer_status:\s*options\[['"]answer-status['"]\]/);
+    assert.doesNotMatch(listSource, /loadCanonicalQuestions|priorityRank|writeJson|writeJsonl/);
+
     assert.match(statsSource, /loadCanonicalQuestions/);
     assert.match(statsSource, /loadQuestions/);
-
-    for (const source of [listSource, statsSource]) {
-        assert.doesNotMatch(source, /writeJson|writeJsonl|saveCanonicalQuestions|saveQuestions/);
-    }
+    assert.doesNotMatch(statsSource, /writeJson|writeJsonl|saveCanonicalQuestions|saveQuestions/);
 });
 
 test('legacy check has only its characterized quality-report write boundary', () => {
@@ -55,10 +55,10 @@ test('legacy check has only its characterized quality-report write boundary', ()
     assert.doesNotMatch(checkSource, /writeJsonl|saveCanonicalQuestions|saveQuestions/);
 });
 
-test('Production Application does not expose read-only canonical use cases before migration', () => {
+test('Production Application exposes list but not stats/check after the first read migration', () => {
     const app = createApplication({ root: ROOT });
 
-    assert.equal('list' in app.canonical, false);
+    assert.equal(typeof app.canonical.list, 'function');
     assert.equal('stats' in app.canonical, false);
     assert.equal('check' in app.canonical, false);
     assert.equal(typeof app.canonical.merge, 'function');
