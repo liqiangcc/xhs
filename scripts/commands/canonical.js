@@ -11,7 +11,6 @@ const { loadCanonicalQuestions } = require('../lib/canonical_store');
 const { priorityRank } = require('../../src/domain/canonical/priority-policy');
 const { evaluateCanonicalIntegrity } = require('../../src/domain/canonical/integrity-policy');
 const { createApplication } = require('../../src/bootstrap/create-application');
-const { presentCanonicalAcceptResult } = require('../../src/interfaces/cli/canonical-accept-presenter');
 const { presentCanonicalMergeResult } = require('../../src/interfaces/cli/canonical-merge-presenter');
 const { presentCanonicalSplitResult } = require('../../src/interfaces/cli/canonical-split-presenter');
 
@@ -47,12 +46,11 @@ function parseArgs(argv) {
 
 function printHelp() {
     console.log([
-        'Usage: node scripts/xhs.js canonical <suggest|accept|stats> [options]',
+        'Usage: node scripts/xhs.js canonical <suggest|list|check|merge|split|stats> [options]',
         '',
         'Commands:',
         '  suggest --entity <value> [--limit <n>]',
         '  suggest --hotspot [--limit <n>]',
-        '  accept --candidate-id <id> --canonical-id <cq_id>  (legacy candidate manifest)',
         '  list [--priority <P0|P1|P2|P3>] [--answer-status <status>] [--limit <n>]',
         '  check',
         '  merge --target <canonical_id> --source <canonical_id> --reason <text>',
@@ -90,28 +88,6 @@ function runSuggest(options = {}) {
         seed: entity,
         limit: Number(options.limit ?? 50),
     });
-}
-
-/**
- * @deprecated Legacy compatibility for historical/manual candidate manifests only.
- * New relationships must use canonical suggest -> dedup decide -> dedup apply.
- */
-async function runAccept(options = {}) {
-    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const candidateId = options['candidate-id'];
-    const canonicalId = options['canonical-id'];
-    if (!candidateId || !canonicalId) {
-        throw new Error('Usage: canonical accept --candidate-id <id> --canonical-id <cq_id>');
-    }
-    assertCanonicalId(canonicalId);
-
-    const application = createApplication({ root });
-    const result = await application.canonical.accept({
-        candidate_id: candidateId,
-        canonical_id: canonicalId,
-        ...(options.title ? { title: options.title } : {}),
-    });
-    return presentCanonicalAcceptResult(result);
 }
 
 function runList(options = {}) {
@@ -246,7 +222,6 @@ function main(argv = process.argv) {
     try {
         let result;
         if (command === 'suggest') result = runSuggest(options);
-        else if (command === 'accept') result = runAccept(options);
         else if (command === 'list') result = runList(options);
         else if (command === 'check') result = runCheck(options);
         else if (command === 'merge') result = runMerge(options);
@@ -278,7 +253,6 @@ if (require.main === module) {
 
 module.exports = {
     runSuggest,
-    runAccept,
     runList,
     runCheck,
     runMerge,
