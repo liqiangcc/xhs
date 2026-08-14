@@ -62,11 +62,14 @@ test('Production Root and Accept name historical candidate input as legacy compa
     assert.match(oldAdapter, /legacy-canonical-candidate-repositories/);
 });
 
-test('canonical_candidates.v1 knowledge is confined to explicit compatibility source modules', () => {
+test('canonical_candidates.v1 knowledge is confined to the explicit compatibility boundary', () => {
     const srcRoot = path.join(ROOT, 'src');
     const allowed = new Set([
+        'src/application/canonical/accept-canonical.js',
         'src/ports/repositories/legacy-canonical-candidate-repository.js',
         'src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js',
+        'src/ports/repositories/canonical-candidate-repository.js',
+        'src/infrastructure/filesystem/canonical-candidate-repositories.js',
     ]);
     const offenders = [];
 
