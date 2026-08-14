@@ -88,20 +88,19 @@ test('MutationPlan is storage agnostic, immutable, and carries opaque revisions'
     assert.doesNotMatch(serialized, /questions\.jsonl|canonical_questions\.jsonl|review\/answers|filePath|temp file/i);
 });
 
-test('MutationPlan supports accept assignment from an explicitly unbound Question state', () => {
-    const plan = createCanonicalMutationPlan({
-        operation: 'accept',
-        expected_revisions: [{ resource: 'question:q1', revision: 'opaque-q1' }],
-        changes: {
-            canonical_upserts: [{ canonical_id: 'cq_target', question_ids: ['q1'] }],
-            question_rebindings: [
-                { question_id: 'q1', from_canonical_id: null, to_canonical_id: 'cq_target' },
-            ],
-        },
-    });
-
-    assert.equal(plan.operation, 'accept');
-    assert.equal(plan.changes.question_rebindings[0].from_canonical_id, null);
+test('MutationPlan rejects the retired accept operation', () => {
+    assert.throws(
+        () => createCanonicalMutationPlan({
+            operation: 'accept',
+            changes: {
+                canonical_upserts: [{ canonical_id: 'cq_target', question_ids: ['q1'] }],
+                question_rebindings: [
+                    { question_id: 'q1', from_canonical_id: null, to_canonical_id: 'cq_target' },
+                ],
+            },
+        }),
+        /Unsupported canonical mutation operation: accept/,
+    );
 });
 
 test('MutationPlan rejects contradictory or ineffective semantic changes', () => {
@@ -130,7 +129,7 @@ test('MutationPlan rejects contradictory or ineffective semantic changes', () =>
 
     assert.throws(
         () => createCanonicalMutationPlan({
-            operation: 'accept',
+            operation: 'canonicalize',
             changes: {
                 canonical_upserts: [{ canonical_id: 'cq_target' }],
                 question_rebindings: [
