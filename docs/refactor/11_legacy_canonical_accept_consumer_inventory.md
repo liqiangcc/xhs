@@ -19,10 +19,12 @@ canonical suggest
 
 这条正式链路已经完全不生成或消费 `canonical_candidates.v1`。
 
-真正剩余的是两类内容：
+真正剩余的是：
 
 1. 一整条显式的 runtime compatibility chain，用于执行历史/手工 `canonical_candidates.v1`；
-2. `docs/refactor/08_content_building_goals.md` 仍有一处当前内容建设步骤写着 `canonical accept / merge / split`，因此仓库内仍存在一个会指导人继续使用 Accept 的活跃文档残留。
+2. 一套仅服务 legacy Accept characterization 的 in-memory test support；
+3. 当前架构/Agent 文档中用于**禁止新流程回退到 Accept**的 policy reference；
+4. `docs/refactor/08_content_building_goals.md` 仍有一处当前内容建设步骤写着 `canonical accept / merge / split`，因此仓库内仍存在一个会指导人继续使用 Accept 的活跃文档残留。
 
 所以当前 retirement 状态是：
 
@@ -73,7 +75,21 @@ src/interfaces/cli/canonical-accept-presenter.js
 
 其中 `canonical-repositories.js` 还有一个容易漏掉的兼容点：MutationStore preflight 需要重新计算 `canonical-candidate:<id>` revision，所以通用 Canonical revision router 仍保留 legacy candidate 分支。该 import 已改为显式 `legacy-canonical-candidate-repositories`，不再通过旧 generic alias 隐藏依赖。
 
-## 3. Compatibility aliases
+## 3. Test-support compatibility
+
+`src/infrastructure/in-memory/canonical-adapters.js` 仍包含：
+
+```text
+canonicalCandidateRepository
+canonical-candidate:<id> revision
+candidate fixtures / revision bumps
+```
+
+它用于 Accept 的纯 Application/事务 characterization，但 Production Composition Root 不会创建这个 adapter。
+
+因此它属于**测试兼容消费者**，不是线上 runtime dependency；真正删除 Accept 时应随 legacy-only characterization 一起清理。
+
+## 4. Compatibility aliases
 
 为了不突然破坏旧测试或外部调用者，以下模块只保留 deprecated re-export：
 
@@ -86,7 +102,7 @@ src/infrastructure/filesystem/canonical-candidate-repositories.js
 
 真正删除 Accept 时，这两个 alias 应与 legacy Port/adapter 一起删除，而不是长期保留成为第二个入口。
 
-## 4. Checked-in legacy data
+## 5. Checked-in legacy data
 
 当前仓库中的：
 
@@ -108,7 +124,7 @@ candidates = []
 
 但它只能证明仓库内状态，不能证明仓库外没有人工脚本或旧调用者。
 
-## 5. Active documentation blocker
+## 6. Active documentation blocker
 
 `docs/refactor/08_content_building_goals.md` 是当前内容建设目标与 DoD 文档，但它的一段批次闭环仍写着：
 
@@ -135,7 +151,24 @@ candidates = []
 
 在这处活跃说明被清理前，不能声称仓库已经没有人工 `canonical accept` 使用路径。
 
-## 6. Historical references are not consumers
+## 7. Current policy references are not active consumers
+
+以下当前文档/Agent 文件会提到 `canonical accept`，但目的都是**明确禁止它成为新流程**或描述兼容边界：
+
+```text
+README.md
+AGENTS.md
+.agents/skills/xhs-answer-curator/SKILL.md
+.agents/skills/xhs-answer-curator/references/repo-map.md
+docs/refactor/06_github_actions_ai_management.md
+docs/refactor/09_legacy_canonical_accept_boundary.md
+docs/refactor/10_current_dedup_canonical_operations.md
+docs/refactor/10_soc_srp_architecture.md
+```
+
+这些引用不能因为字符串扫描命中就被当成 blocker；它们属于 anti-regression policy。
+
+## 8. Historical references are not consumers
 
 以下文件可以保留旧术语，因为它们是历史设计/验收证据，而不是当前命令 SSOT：
 
@@ -150,7 +183,7 @@ review/plans/c6_scale_and_entry_delivery.md
 
 历史文件只需要确保不会被当前 README / AGENTS / Skill 当作操作依据。
 
-## 7. `candidate_id` 不是可靠的 legacy 搜索条件
+## 9. `candidate_id` 不是可靠的 legacy 搜索条件
 
 仓库还有另一套完全不同的 candidate：
 
@@ -186,7 +219,7 @@ canonical-candidate:<id> revision
 operation=accept
 ```
 
-## 8. Tests
+## 10. Tests
 
 legacy Accept 行为仍由 characterization 保护，主要包括：
 
@@ -199,16 +232,17 @@ test/canonical.test.js
 test/canonical_mutation_contracts.test.js
 ```
 
-还有两类 anti-regression guard：
+anti-regression / inventory guards 包括：
 
 ```text
 test/legacy_canonical_accept_boundary.test.js
 test/current_dedup_operational_docs.test.js
+test/legacy_canonical_accept_consumer_inventory.test.js
 ```
 
-前一类在真正删除 Accept 时应删除或改写；后一类应先改成“legacy 已不存在”的永久 guard，而不是一起丢掉。
+前一类在真正删除 Accept 时应删除或改写；后一类应改成“legacy 已不存在”的永久 guard，而不是一起丢掉。
 
-## 9. Repository-local retirement criteria
+## 11. Repository-local retirement criteria
 
 下一阶段只有在以下条件满足后，才适合真正删除 runtime compatibility chain：
 
@@ -218,9 +252,9 @@ test/current_dedup_operational_docs.test.js
 4. checked-in legacy manifest 继续为空，或者已有明确迁移方案；
 5. 没有仓库内脚本/自动化重新生成 legacy manifest；
 6. 已确认是否存在仓库外人工调用者；这一点仅靠 GitHub repository search 无法证明；
-7. 删除 legacy Port/adapter/CLI/operation/tests/data 后完整 CI 仍能通过。
+7. 删除 legacy runtime、test-support、alias、operation/tests/data 后完整 CI 仍能通过。
 
-## 10. 建议的真正删除顺序
+## 12. 建议的真正删除顺序
 
 当上述 blocker 清零后，建议按依赖方向删除：
 
@@ -231,10 +265,11 @@ test/current_dedup_operational_docs.test.js
 4. 删除 LegacyCanonicalCandidateRepository + FS adapter
 5. 删除 canonical-candidate revision bridge
 6. 从 MutationPlan supported operations 删除 accept
-7. 删除 deprecated compatibility aliases
-8. 删除 legacy-only characterization
-9. 删除空 canonical_candidates.json（若确认无需恢复入口）
-10. 将 anti-legacy guard 改成“legacy runtime 不得重新出现”
+7. 删除 in-memory candidate test support
+8. 删除 deprecated compatibility aliases
+9. 删除 legacy-only characterization
+10. 删除空 canonical_candidates.json（若确认无需恢复入口）
+11. 将 anti-legacy guard 改成“legacy runtime 不得重新出现”
 ```
 
 不要先删底层 adapter 再留下半可用 CLI；从 Interface 向内收缩，能让每一步的失败面最清楚。
