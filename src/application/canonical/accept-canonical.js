@@ -61,6 +61,10 @@ function assertCandidateConflicts(
     }
 }
 
+/**
+ * @deprecated Legacy compatibility use case for historical/manual canonical_candidates.v1.
+ * Current new-relation flow is Dedup Suggest -> explicit Decision -> ApplyDecision.
+ */
 function createAcceptCanonicalUseCase(dependencies = {}) {
     // Preferred dependency name is explicit: this use case exists only to keep
     // historical canonical_candidates.v1 input executable during migration.
