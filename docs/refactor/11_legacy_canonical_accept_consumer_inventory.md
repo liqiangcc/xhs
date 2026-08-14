@@ -17,7 +17,7 @@ canonical suggest
 
 Repository-local blocker 已清零，GitHub 可观察的项目特异外部消费者为 0；同时仍保留“本地脚本、未提交自动化、不可见/未索引私有调用无法证明不存在”的残余风险。
 
-前两层 runtime removal 已完成：
+前三层 runtime removal 已完成：
 
 ```text
 Interface layer
@@ -26,15 +26,19 @@ Interface layer
 Production Composition Root
   canonical.accept capability                           removed
   Legacy Candidate adapter construction/injection       removed
+
+Application layer
+  src/application/canonical/accept-canonical.js         removed
+  canonical_accept_application characterization         removed
 ```
 
 当前状态：
 
 ```text
-runtime_removal_in_progress_composition_root_removed
+runtime_removal_in_progress_application_removed
 ```
 
-因此 Production `createApplication()` 已经无法到达 legacy Accept。剩余代码只能通过测试或手工显式组装调用，下一刀可以删除 Accept Application 本身。
+因此当前代码中已经没有 Accept Application orchestration。剩余 legacy 内容只存在于 Port / filesystem adapter / revision CAS / MutationPlan operation 等更低层兼容契约。
 
 ## 2. 外部消费者搜索证据
 
@@ -106,27 +110,35 @@ planQuestionGroupMutation
 canonicalizeQuestionGroup
 ```
 
-架构测试同时要求：
+架构测试要求：
 
 ```text
 'accept' in app.canonical === false
 ```
 
-所以 legacy Accept 已经不只是“没有 CLI”，而是**生产 Composition Root 本身不可达**。
+## 5. Accept Application removal 已完成
 
-## 5. Remaining internal compatibility
+已经删除：
+
+```text
+src/application/canonical/accept-canonical.js
+test/canonical_accept_application.test.js
+```
+
+原 Application characterization 中关于 create / extend / conflict / race / commit failure 的测试随已删除 orchestration 一起退役，不下沉复制到 Port/Infrastructure。
+
+`canonical_accept_filesystem_integration.test.js` 现在只验证更低层的 Legacy Candidate repository 与 Canonical ownership opaque revision 语义，不再显式组装一个替代 Accept Application。
+
+## 6. Remaining lower-level compatibility
 
 仍待删除：
 
 ```text
-src/application/canonical/accept-canonical.js
-  -> deprecated Accept use case，已无 Production wiring
-
 src/ports/repositories/legacy-canonical-candidate-repository.js
   -> deprecated legacy read Port
 
 src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js
-  -> legacy filesystem adapter，只能显式组装
+  -> legacy filesystem adapter
 
 src/infrastructure/filesystem/canonical-paths.js
   -> legacyCandidateManifest path
@@ -138,15 +150,15 @@ src/application/canonical/mutation-plan.js
   -> operation=accept support
 ```
 
-`canonical_accept_filesystem_integration.test.js` 现在显式组装 `createAcceptCanonicalUseCase + Legacy FS adapter + MutationStore`，继续保护兼容语义，但不再通过 Production Root 调用。
+这些已经不构成可调用的业务 use case，只是分阶段删除尚未完成的低层兼容代码。
 
-## 6. Test-support compatibility
+## 7. Test-support compatibility
 
-`src/infrastructure/in-memory/canonical-adapters.js` 仍包含 candidate-specific state/revision support，只服务 legacy Accept characterization。
+`src/infrastructure/in-memory/canonical-adapters.js` 仍包含 candidate-specific state/revision support。Accept Application 删除后它已不再由该 Application characterization 使用，但本刀不顺带删除，留给后续 test-support cleanup slice。
 
-真正删除时只清理 candidate-specific members，不能删除整个 in-memory Canonical adapter，因为 Merge/Split/Canonicalize 测试仍复用它。
+不能删除整个 in-memory Canonical adapter，因为 Merge/Split/Canonicalize 测试仍复用其中其它能力。
 
-## 7. Shared current code that must survive
+## 8. Shared current code that must survive
 
 不要把：
 
@@ -166,7 +178,7 @@ src/infrastructure/filesystem/fs-canonical-mutation-store.js
 
 它仍是 Merge/Split/Canonicalize 的正式事务边界。只应逐步删除 legacy candidate revision evidence。
 
-## 8. Checked-in legacy data
+## 9. Checked-in legacy data
 
 `data/manifests/canonical/canonical_candidates.json` 当前仍为空：
 
@@ -177,7 +189,7 @@ candidates = []
 
 没有待执行 legacy candidate 阻止继续退役。
 
-## 9. Policy / historical references
+## 10. Policy / historical references
 
 README、AGENTS、Skill、Actions/架构文档中出现 legacy 术语时，只能用于：
 
@@ -193,7 +205,7 @@ README、AGENTS、Skill、Actions/架构文档中出现 legacy 术语时，只�
 docs/refactor/10_current_dedup_canonical_operations.md
 ```
 
-## 10. `candidate_id` 不是删除条件
+## 11. `candidate_id` 不是删除条件
 
 `canonical_boundary_candidate.v1` 等其它模型也使用 `candidate_id`，与 legacy Accept 无关。
 
@@ -207,21 +219,21 @@ canonical-candidate:<id> revision
 operation=accept
 ```
 
-## 11. 下一步
+## 12. 下一步
 
-下一刀只删除：
+下一刀建议只删除：
 
 ```text
-src/application/canonical/accept-canonical.js
+src/ports/repositories/legacy-canonical-candidate-repository.js
+src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js
 ```
 
-并把 Application characterization 中仍需要保留的 Canonical aggregate 语义与 legacy orchestration 区分开。
+并删除/改写当前直接验证 legacy filesystem repository 的 characterization。
 
-先不删除 Port / FS adapter / `operation=accept`，这样依赖仍按层向内收缩：
+先不删除 `canonical-candidate:<id>` CAS bridge、`operation=accept`、in-memory candidate support、deprecated aliases 或空 manifest，继续按层向内收缩：
 
 ```text
-Accept Application
-→ Legacy Port / filesystem adapter
+Legacy Port / filesystem adapter
 → canonical-candidate CAS bridge
 → operation=accept
 → in-memory candidate test support
