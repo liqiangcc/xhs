@@ -109,6 +109,7 @@ function createApplication(options = {}) {
     const dedupPaths = createDedupFsPaths(options.root);
     const {
         indexRepository: dedupIndexRepository,
+        hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
         relationCandidateStore,
     } = createFsDedupSuggestionRepositories({ root: options.root, paths: dedupPaths });
@@ -121,18 +122,21 @@ function createApplication(options = {}) {
     const suggest = createSuggestCanonicalRelationsUseCase({
         taxonomy,
         indexRepository: dedupIndexRepository,
+        hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
         relationCandidateStore,
     });
     const recordDecision = createRecordRelationDecisionUseCase({
         relationCandidateRepository,
         indexRepository: dedupIndexRepository,
+        hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
         relationDecisionStore,
     });
     const prepareApply = createPrepareRelationApplyUseCase({
         relationDecisionRepository,
         indexRepository: dedupIndexRepository,
+        hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
     });
     const applyDecision = createApplyRelationDecisionUseCase({
