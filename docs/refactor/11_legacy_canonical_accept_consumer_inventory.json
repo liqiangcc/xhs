@@ -1,7 +1,7 @@
 {
   "schema_version": "legacy_canonical_accept_consumer_inventory.v1",
   "scope": "repository-local-plus-observable-github",
-  "retirement_status": "runtime_removal_in_progress_interface_removed",
+  "retirement_status": "runtime_removal_in_progress_composition_root_removed",
   "summary": {
     "current_suggest_generates_legacy_manifest": false,
     "github_actions_generates_legacy_manifest": false,
@@ -13,7 +13,8 @@
     "observable_github_external_consumer_count": 0,
     "external_consumers_fully_observable": false,
     "source_deprecation_marked": true,
-    "interface_runtime_removed": true
+    "interface_runtime_removed": true,
+    "production_composition_root_accept_removed": true
   },
   "active_blockers": [],
   "external_consumer_search": {
@@ -59,12 +60,8 @@
   },
   "runtime_compatibility": [
     {
-      "path": "src/bootstrap/create-application.js",
-      "role": "still wires the legacy candidate adapter into internal canonical.accept"
-    },
-    {
       "path": "src/application/canonical/accept-canonical.js",
-      "role": "legacy Accept orchestration and MutationPlan construction",
+      "role": "legacy Accept orchestration and MutationPlan construction; no longer wired by Production createApplication",
       "deprecated": true
     },
     {
@@ -78,7 +75,7 @@
     },
     {
       "path": "src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js",
-      "role": "reads canonical_candidates.v1 and produces candidate revisions"
+      "role": "reads canonical_candidates.v1 and produces candidate revisions for explicit compatibility wiring"
     },
     {
       "path": "src/infrastructure/filesystem/canonical-paths.js",
@@ -101,6 +98,12 @@
     {
       "path": "src/interfaces/cli/canonical-accept-presenter.js",
       "removed": true
+    }
+  ],
+  "removed_production_wiring": [
+    {
+      "path": "src/bootstrap/create-application.js",
+      "removed_capability": "createAcceptCanonicalUseCase import, Legacy Candidate adapter construction, canonical.accept exposure"
     }
   ],
   "test_support_compatibility": [
@@ -167,7 +170,8 @@
     "test/legacy_canonical_accept_boundary.test.js",
     "test/current_dedup_operational_docs.test.js",
     "test/legacy_canonical_accept_consumer_inventory.test.js",
-    "test/canonical_characterization.test.js"
+    "test/canonical_characterization.test.js",
+    "test/architecture_boundaries.test.js"
   ],
   "unrelated_candidate_id_models": [
     {
@@ -186,8 +190,8 @@
   ],
   "retirement_preconditions": [
     "accept the residual risk that local/uncommitted/unindexed private callers cannot be proven absent by GitHub search",
-    "remove canonical.accept from the production Composition Root before deleting its Application/Port/adapter dependencies",
+    "delete the now-unwired Accept Application before removing its Legacy Port/adapter dependencies",
     "preserve src/domain/canonical/accept-policy.js or first replace its current canonicalize projection responsibility with equivalent SSOT coverage",
-    "keep full CI green while deleting the remaining internal runtime compatibility chain, test-support compatibility, aliases, accept operation support, legacy-only tests, and empty checked-in manifest"
+    "keep full CI green while deleting the remaining internal compatibility chain, test-support compatibility, aliases, accept operation support, legacy-only tests, and empty checked-in manifest"
   ]
 }
