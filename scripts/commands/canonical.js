@@ -8,7 +8,6 @@ const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption, shouldWriteReports } = require('../lib/cli_options');
 const { defaultDate } = require('../lib/date');
 const { loadCanonicalQuestions } = require('../lib/canonical_store');
-const { priorityRank } = require('../../src/domain/canonical/priority-policy');
 const { evaluateCanonicalIntegrity } = require('../../src/domain/canonical/integrity-policy');
 const { createApplication } = require('../../src/bootstrap/create-application');
 const { presentCanonicalMergeResult } = require('../../src/interfaces/cli/canonical-merge-presenter');
@@ -92,32 +91,12 @@ function runSuggest(options = {}) {
 
 function runList(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const paths = defaultPaths(root);
-    const limit = Number(options.limit || 50);
-    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions })
-        .filter((record) => !options.priority || record.review_priority === options.priority)
-        .filter((record) => !options['answer-status'] || record.answer_status === options['answer-status'])
-        .sort((a, b) =>
-            priorityRank(a.review_priority) - priorityRank(b.review_priority)
-            || b.frequency - a.frequency
-            || a.canonical_id.localeCompare(b.canonical_id)
-        );
-    return {
-        schema_version: 'canonical_list.v1',
-        total_count: records.length,
-        returned_count: Math.min(records.length, limit),
-        records: records.slice(0, limit).map((record) => ({
-            canonical_id: record.canonical_id,
-            canonical_title: record.canonical_title,
-            review_priority: record.review_priority,
-            answer_status: record.answer_status,
-            frequency: record.frequency,
-            question_ids: record.question_ids,
-            companies: record.companies,
-            primary_domain: record.primary_domain,
-            primary_entities: record.primary_entities,
-        })),
-    };
+    const application = createApplication({ root });
+    return application.canonical.list({
+        priority: options.priority,
+        answer_status: options['answer-status'],
+        limit: options.limit,
+    });
 }
 
 function runCheck(options = {}) {
