@@ -60,7 +60,7 @@ function carriesStrongLegacyMarker(body) {
     return markers.some((marker) => body.includes(marker));
 }
 
-test('legacy canonical accept inventory matches repository-local runtime and documentation references', () => {
+test('legacy canonical accept inventory matches the fully retired repository-local state', () => {
     const inventory = JSON.parse(fs.readFileSync(INVENTORY_PATH, 'utf8'));
     const classified = inventoryPaths(inventory);
     const scanTargets = [
@@ -101,9 +101,12 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
 
     assert.equal(
         inventory.retirement_status,
-        'runtime_removal_in_progress_test_support_removed',
+        'fully_retired_repository_local_with_unobservable_external_risk',
     );
     assert.deepEqual(inventory.active_blockers, []);
+    assert.deepEqual(inventory.runtime_compatibility, []);
+    assert.deepEqual(inventory.test_support_compatibility, []);
+    assert.deepEqual(inventory.checked_in_legacy_data, []);
     assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
     assert.equal(inventory.summary.observable_github_search_completed, true);
     assert.equal(inventory.summary.observable_github_external_consumer_count, 0);
@@ -115,6 +118,9 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
     assert.equal(inventory.summary.legacy_candidate_cas_bridge_removed, true);
     assert.equal(inventory.summary.accept_mutation_operation_removed, true);
     assert.equal(inventory.summary.in_memory_candidate_test_support_removed, true);
+    assert.equal(inventory.summary.legacy_manifest_path_removed, true);
+    assert.equal(inventory.summary.checked_in_legacy_manifest_removed, true);
+    assert.equal(inventory.summary.legacy_accept_repository_local_fully_retired, true);
 });
 
 test('recorded GitHub consumer search distinguishes observable zero matches from unobservable external risk', () => {
@@ -131,7 +137,7 @@ test('recorded GitHub consumer search distinguishes observable zero matches from
     assert.ok(search.limitations.some((item) => /does not prove absolute absence/i.test(item)));
 });
 
-test('legacy Accept runtime and accept MutationPlan operation are removed', () => {
+test('legacy Accept execution and mutation contracts remain removed', () => {
     const canonicalCli = read('scripts/commands/canonical.js');
     const topLevelCli = read('scripts/xhs.js');
     const bootstrap = read('src/bootstrap/create-application.js');
@@ -168,6 +174,21 @@ test('legacy Accept runtime and accept MutationPlan operation are removed', () =
     assert.match(mutationPlan, /['"]canonicalize['"]/);
 });
 
+test('final legacy candidate filesystem path and checked-in manifest are removed', () => {
+    const canonicalPathsSource = read('src/infrastructure/filesystem/canonical-paths.js');
+    const paths = require('../src/infrastructure/filesystem/canonical-paths').createCanonicalFsPaths(ROOT);
+
+    assert.doesNotMatch(canonicalPathsSource, /legacyCandidateManifest/);
+    assert.doesNotMatch(canonicalPathsSource, /candidateManifest/);
+    assert.doesNotMatch(canonicalPathsSource, /canonical_candidates\.json/);
+    assert.equal(Object.prototype.hasOwnProperty.call(paths, 'legacyCandidateManifest'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(paths, 'candidateManifest'), false);
+    assert.equal(
+        fs.existsSync(path.join(ROOT, 'data', 'manifests', 'canonical', 'canonical_candidates.json')),
+        false,
+    );
+});
+
 test('content-building execution no longer routes new relations through legacy Accept', () => {
     const contentGoals = read('docs/refactor/08_content_building_goals.md');
 
@@ -176,21 +197,6 @@ test('content-building execution no longer routes new relations through legacy A
     assert.match(contentGoals, /dedup apply/);
     assert.match(contentGoals, /10_current_dedup_canonical_operations\.md/);
     assert.doesNotMatch(contentGoals, /canonical accept \/ merge \/ split/);
-});
-
-test('checked-in legacy canonical candidate manifest is an empty historical snapshot', () => {
-    const inventory = JSON.parse(fs.readFileSync(INVENTORY_PATH, 'utf8'));
-    const item = inventory.checked_in_legacy_data.find(
-        (entry) => entry.path === 'data/manifests/canonical/canonical_candidates.json',
-    );
-    assert.ok(item);
-
-    const manifest = JSON.parse(read(item.path));
-    assert.equal(manifest.schema_version, 'canonical_candidates.v1');
-    assert.equal(manifest.candidate_count, 0);
-    assert.deepEqual(manifest.candidates, []);
-    assert.equal(item.candidate_count, manifest.candidate_count);
-    assert.equal(item.state, 'empty_historical_snapshot');
 });
 
 test('active package scripts, workflows, and in-progress root task do not depend on legacy Accept', () => {
@@ -221,10 +227,6 @@ test('filesystem Canonical revision router no longer accepts legacy candidate re
 
     assert.doesNotMatch(canonicalRepositories, /canonical-candidate:/);
     assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-revision/);
-    assert.equal(
-        fs.existsSync(path.join(ROOT, 'src', 'infrastructure', 'filesystem', 'legacy-canonical-candidate-revision.js')),
-        false,
-    );
     assert.throws(
         () => revisionForResource(createCanonicalFsPaths(ROOT), 'canonical-candidate:retired'),
         /Unsupported filesystem canonical resource/,
