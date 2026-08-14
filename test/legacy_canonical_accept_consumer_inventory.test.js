@@ -101,7 +101,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
 
     assert.equal(
         inventory.retirement_status,
-        'runtime_removal_in_progress_interface_removed',
+        'runtime_removal_in_progress_composition_root_removed',
     );
     assert.deepEqual(inventory.active_blockers, []);
     assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
@@ -110,6 +110,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
     assert.equal(inventory.summary.external_consumers_fully_observable, false);
     assert.equal(inventory.summary.source_deprecation_marked, true);
     assert.equal(inventory.summary.interface_runtime_removed, true);
+    assert.equal(inventory.summary.production_composition_root_accept_removed, true);
 });
 
 test('recorded GitHub consumer search distinguishes observable zero matches from unobservable external risk', () => {
@@ -126,9 +127,10 @@ test('recorded GitHub consumer search distinguishes observable zero matches from
     assert.ok(search.limitations.some((item) => /does not prove absolute absence/i.test(item)));
 });
 
-test('legacy Accept interface is removed while internal compatibility remains deprecated', () => {
+test('legacy Accept is absent from Interface and Production Root while internal compatibility remains deprecated', () => {
     const canonicalCli = read('scripts/commands/canonical.js');
     const topLevelCli = read('scripts/xhs.js');
+    const bootstrap = read('src/bootstrap/create-application.js');
     const acceptApplication = read('src/application/canonical/accept-canonical.js');
     const legacyPort = read('src/ports/repositories/legacy-canonical-candidate-repository.js');
 
@@ -140,6 +142,13 @@ test('legacy Accept interface is removed while internal compatibility remains de
         fs.existsSync(path.join(ROOT, 'src', 'interfaces', 'cli', 'canonical-accept-presenter.js')),
         false,
     );
+
+    assert.doesNotMatch(bootstrap, /createAcceptCanonicalUseCase/);
+    assert.doesNotMatch(bootstrap, /legacy-canonical-candidate-repositories/);
+    assert.doesNotMatch(bootstrap, /createFsLegacyCanonicalCandidateRepository/);
+    assert.doesNotMatch(bootstrap, /legacyCandidateRepository/);
+    const app = require('../src/bootstrap/create-application').createApplication({ root: ROOT });
+    assert.equal('accept' in app.canonical, false);
 
     assert.match(acceptApplication, /@deprecated[\s\S]*function createAcceptCanonicalUseCase/);
     assert.match(legacyPort, /@deprecated[\s\S]*function assertLegacyCanonicalCandidateRepository/);
