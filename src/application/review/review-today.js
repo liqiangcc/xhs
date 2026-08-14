@@ -2,13 +2,13 @@
 
 const { isDue } = require('../../domain/review/progress-policy');
 const { rankReviewRows } = require('../../domain/review/ranking-policy');
-const { createReviewQueueStateLoader } = require('./review-queue-state');
+const { createReviewQueueStateCoordinator } = require('./review-queue-state-coordinator');
 
 function createReviewTodayUseCase(dependencies = {}) {
-    const loadReviewQueueState = createReviewQueueStateLoader(dependencies);
+    const buildReviewQueueState = createReviewQueueStateCoordinator(dependencies);
 
     return function reviewToday(input = {}) {
-        const state = loadReviewQueueState(input);
+        const state = buildReviewQueueState(input);
         const dueRows = rankReviewRows(
             state.rows.filter((row) => isDue(row.progress, input.date)),
             { strategy: state.strategy, date: input.date },

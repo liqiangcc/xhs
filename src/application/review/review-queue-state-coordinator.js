@@ -21,7 +21,7 @@ const {
 const { ensureProgressItems } = require('../../domain/review/progress-policy');
 const { createReviewQueueRows } = require('./review-queue-rows');
 
-function createReviewQueueStateLoader(dependencies = {}) {
+function createReviewQueueStateCoordinator(dependencies = {}) {
     const canonicalCatalogRepository = assertCanonicalCatalogRepository(
         dependencies.canonicalCatalogRepository,
     );
@@ -33,7 +33,7 @@ function createReviewQueueStateLoader(dependencies = {}) {
     const issueLinkReader = assertReviewIssueLinkReader(dependencies.issueLinkReader);
     const strategyReader = assertReviewStrategyReader(dependencies.strategyReader);
 
-    return function loadReviewQueueState(input = {}) {
+    return function buildReviewQueueState(input = {}) {
         if (!input.date || typeof input.date !== 'string') {
             throw new Error('review date is required');
         }
@@ -66,5 +66,5 @@ function createReviewQueueStateLoader(dependencies = {}) {
 }
 
 module.exports = {
-    createReviewQueueStateLoader,
+    createReviewQueueStateCoordinator,
 };

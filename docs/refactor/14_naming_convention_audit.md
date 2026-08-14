@@ -1,10 +1,10 @@
 # 14 Naming Convention Audit
 
-> Scope: audit the current refactor hotspots against the previously agreed naming convention. This document does **not** invent a shorter naming style. The governing rule remains: a symbol should be understandable even when seen outside its directory.
+> Scope: audit the refactor against the previously agreed naming convention. This document does **not** introduce a shorter naming style. A public symbol should remain understandable even when seen outside its directory.
 
 ## 1. Naming convention to preserve
 
-The agreed naming model is:
+The agreed model is:
 
 ```text
 Business concept        = BusinessNoun
@@ -13,9 +13,9 @@ Business decision       = BusinessObject + Concern + ArchitectureRole
 Infrastructure impl     = Technology + PortName + AdapterRole
 ```
 
-The architecture-role vocabulary is intentionally small and stable.
+Approved role vocabulary remains intentionally small.
 
-### 1.1 Application roles
+### Application
 
 ```text
 UseCase
@@ -27,7 +27,7 @@ Coordinator
 Saga
 ```
 
-### 1.2 Domain roles
+### Domain
 
 ```text
 Rule
@@ -42,7 +42,7 @@ Event
 Exception
 ```
 
-### 1.3 Outbound / persistence roles
+### Outbound / persistence
 
 ```text
 Repository
@@ -53,7 +53,7 @@ Reader
 Generator
 ```
 
-### 1.4 Interface roles
+### Interface
 
 ```text
 Controller
@@ -67,7 +67,7 @@ Request
 Response
 ```
 
-### 1.5 Infrastructure roles
+### Infrastructure
 
 ```text
 Adapter
@@ -79,40 +79,22 @@ Properties
 Configuration
 ```
 
-### 1.6 Core constraints
+Core constraints:
 
-1. A public/exported symbol must remain understandable without relying on its path.
-2. Directory/package location adds context but must not replace responsibility in the symbol name.
-3. The suffix should identify the architectural reason the component changes.
-4. Do not create uncontrolled synonyms such as `Loader`, `Provider`, `Accessor`, `Fetcher`, `Manager`, `Helper`, `Util`, or `Service` when an approved role already describes the responsibility.
-5. `Store` is also **not** an approved outbound role. Existing `*Store` names are migration debt / grandfathered terminology, not precedent for new naming.
-6. Avoid technical mechanism names such as `read/write/load/save` when the business capability has a clearer architecture role.
-7. Avoid names that combine multiple responsibilities or hide the distinguishing lifecycle phase in the middle of a long phrase.
-8. A long name is acceptable when every word adds independent responsibility information. Length alone is not a reason to remove business or role semantics.
+1. Public/exported names must remain understandable without relying on the path.
+2. Directory/package provides bounded-context location, but does not replace responsibility in the symbol name.
+3. Architecture-role suffixes should reveal why the component changes.
+4. Do not introduce uncontrolled synonyms such as `Loader`, `Provider`, `Accessor`, `Fetcher`, `Manager`, `Helper`, `Util`, `Service`, or `Store` when an approved role fits.
+5. `Writer` is also not an approved outbound role; existing write-side names are migration debt until their real persistence/publication responsibility is settled.
+6. Do not shorten names merely to reduce character count. Long names are acceptable when every word contributes independent responsibility information.
 
-The target is not “shortest name”. The target is:
+The target is:
 
 > the shortest name that still lets a reader infer business object, responsibility, and architectural role with minimal ambiguity.
 
-## 2. Audit conclusion
+## 2. Current Review naming status
 
-The current refactor is structurally much clearer than the legacy code, but naming has started to drift in three places:
-
-```text
-A. non-standard role suffixes: Writer / Provider / Loader / Store
-B. lifecycle phases whose names are not symmetric
-C. near-collision names where the distinguishing responsibility is buried
-```
-
-This is primarily a naming-governance problem, not evidence that the current layer boundaries should be collapsed.
-
-The change strategy is deliberately incremental: fix unambiguous read/publication roles first, then settle mutation names together with the final `review mark` consistency design.
-
-## 3. Review namespace audit
-
-### 3.1 Names that remain readable
-
-The current public Application factories preserve business context plus architectural role:
+### 2.1 Application UseCases — keep
 
 ```text
 createReviewIntegrityUseCase
@@ -122,23 +104,11 @@ createReviewWeakUseCase
 createReviewPrepareUseCase
 ```
 
-Their command API is predictable:
+They preserve business context plus Application role and should not be shortened to ambiguous names such as `createPrepare()`.
 
-```text
-app.review.integrity(...)
-app.review.today(...)
-app.review.next(...)
-app.review.weak(...)
-app.review.prepare(...)
-```
+### 2.2 `ReviewPlanPublisher` — completed
 
-These names are not candidates for shortening to ambiguous forms such as `createIntegrity()` or `createPrepare()`.
-
-### 3.2 `ReviewPlanPublisher` — P0 completed
-
-The former `ReviewPlanWriter` name described the filesystem mechanism even though the Port was already a publication boundary.
-
-The active names are now:
+The former `ReviewPlanWriter` described a technical mechanism. The active naming is:
 
 ```text
 ReviewPlanPublisher
@@ -148,22 +118,17 @@ createFileReviewPlanPublisherAdapter()
 publish(plan)
 ```
 
-Responsibility remains unchanged:
+Responsibility split:
 
 ```text
-Application chooses which rows belong in a Review plan
-Application decides whether publication occurs
-ReviewPlanPublisher publishes the selected plan
-FileReviewPlanPublisherAdapter owns safe path + Markdown + filesystem persistence
+Application chooses rows and decides whether publication occurs
+Publisher exposes the outbound publication capability
+File...Adapter owns safe path + Markdown + filesystem persistence
 ```
 
-No `Writer` compatibility alias is retained in the migrated Review architecture.
+### 2.3 `ReviewStrategyReader` — completed
 
-### 3.3 `ReviewStrategyReader` — P0 completed
-
-The former `ReviewStrategyProvider` exposed one read-only capability and used a vague non-standard role word.
-
-The active names are now:
+The former `ReviewStrategyProvider` used the vague non-standard `Provider` role. The active naming is:
 
 ```text
 ReviewStrategyReader
@@ -173,19 +138,11 @@ createFileReviewStrategyReaderAdapter()
 read()
 ```
 
-The responsibility remains intentionally narrow:
+Reader is the outbound capability requested by Application; the Adapter owns config-file mechanics.
 
-```text
-Reader  = outbound capability requested by Application
-Adapter = concrete config-file implementation
-Domain  = interprets strategy values; it does not load files
-```
+### 2.4 `ReviewQueueStateCoordinator` — completed
 
-No `Provider` compatibility alias is retained in the migrated Review architecture.
-
-### 3.4 `ReviewQueueStateLoader` — remaining naming candidate
-
-`createReviewQueueStateLoader` does not merely load one resource. It coordinates:
+The former `ReviewQueueStateLoader` was misleading because the component does more than load one resource. It coordinates:
 
 ```text
 CanonicalCatalogRepository
@@ -199,68 +156,67 @@ optional progress persistence
 queue row projection
 ```
 
-`Loader` therefore both violates the role vocabulary and understates the responsibility.
-
-Preferred direction after implementation review:
+The active Application role is now:
 
 ```text
 ReviewQueueStateCoordinator
-```
-
-with an operation such as:
-
-```text
+createReviewQueueStateCoordinator()
 buildReviewQueueState(input)
 ```
 
-Because this collaborator is shared by all queue use cases and participates in progress persistence, its rename should be done as a separate slice rather than hidden inside the Publisher/Reader rename.
+All queue-backed Review UseCases use the same coordinator:
 
-### 3.5 `ReviewProgressWriter` — defer until `review mark`
+```text
+review today
+review next
+review weak
+review prepare
+```
 
-`Writer` is outside the agreed outbound-role vocabulary, but this port should **not** be mechanically renamed to `Publisher`:
+This is a naming-only responsibility clarification; queue-state behavior is unchanged.
+
+### 2.5 `ReviewProgressWriter` — defer to `review mark`
+
+`Writer` is outside the agreed outbound-role vocabulary, but it must **not** be mechanically renamed to `Publisher`:
 
 ```text
 Review progress = persisted mutable state
-Review plan     = published document/artifact
+Review plan     = published artifact
 ```
 
-Possible approved roles may eventually be:
+The correct final role depends on the mutation consistency design. Likely approved candidates are:
 
 ```text
 ReviewProgressRepository
 ReviewProgressGateway
 ```
 
-but the correct answer depends on the final `review mark` consistency boundary.
-
 Decision:
 
 ```text
 flag now
-settle with review mark
+settle together with review mark
 ```
 
-### 3.6 Review mutation consistency role — not yet named
+### 2.6 Review mutation consistency boundary — role must follow responsibility
 
-Previous architecture notes used `ReviewMutationStore` as a provisional label. `Store` is not an approved outbound role, so that label is no longer treated as a production target.
+Earlier design notes used `ReviewMutationStore` provisionally. `Store` is not an approved outbound role and must not become production naming by inertia.
 
-During `review mark`, determine the capability first:
+During `review mark`, determine the responsibility first:
 
 ```text
-persistence ownership of Review mutation state
-    → consider Repository
+owns Review mutation persistence state
+    → Repository may fit
 
-transactional/consistency boundary over multiple persistence mechanisms
-    → consider Gateway
+coordinates atomic/recoverable consistency across progress + session persistence
+    → Gateway may fit better
 ```
 
-The responsibility determines the suffix. Existing grandfathered `*Store` names elsewhere in the repository are not precedent for new Review naming.
+The suffix must follow the actual boundary.
 
-## 4. Canonical namespace audit
+## 3. Canonical namespace remains the largest readability risk
 
-Canonical currently has the highest naming-readability risk because one business flow is represented by multiple differently named lifecycle stages.
-
-### 4.1 Current stages
+Current related names include:
 
 ```text
 createPlanCanonicalizeQuestionGroupUseCase
@@ -269,7 +225,7 @@ createPlanCanonicalizeQuestionGroupMutationUseCase
 createCanonicalizeQuestionGroupUseCase
 ```
 
-The problem is not simply character count. The lifecycle vocabulary is asymmetric:
+The issue is not only length. Lifecycle vocabulary is asymmetric and the distinguishing responsibility is buried:
 
 ```text
 Plan...
@@ -278,59 +234,18 @@ Plan...Mutation...
 Canonicalize...
 ```
 
-and the distinguishing responsibility often appears late in the symbol.
+Before renaming, first establish the actual lifecycle and then move all related names atomically. Do not fix one symbol in isolation.
 
-### 4.2 Required Canonical naming rule
-
-Before renaming, establish one lifecycle vocabulary for this flow. The responsibilities must be distinguishable near the beginning or role-bearing end of the name.
-
-The next Canonical naming pass must answer:
+The Canonical pass must answer:
 
 ```text
-Is the prepare stage a Coordinator or private implementation detail?
+Is prepare a Coordinator or private implementation detail?
 Is mutation planning externally meaningful enough to remain a UseCase?
-Should execution use Apply/Execute terminology rather than the broad Canonicalize verb?
-Can the phase be obvious without duplicating the entire business phrase?
+Should execution use Apply/Execute terminology?
+Which phase words represent real business concepts rather than implementation mechanics?
 ```
 
-Only after those questions are answered should the related names move together in one atomic rename.
-
-## 5. Port naming consistency
-
-A Port name should answer both:
-
-```text
-What business capability is requested?
-What architectural role does the abstraction play?
-```
-
-Preferred Review examples now include:
-
-```text
-ReviewIssueLinkReader
-ReviewPlanPublisher
-ReviewStrategyReader
-```
-
-Do not introduce new role suffixes merely because they sound convenient:
-
-```text
-Loader
-Provider
-Accessor
-Fetcher
-Manager
-Helper
-Util
-Service
-Store
-```
-
-If an existing component uses one of these words, mark it as a grandfathered exception until its responsibility is reviewed. Do not let the exception expand the vocabulary.
-
-## 6. Path, file, and symbol responsibilities
-
-Path and symbol names have different jobs:
+## 4. Path, file, and symbol responsibilities
 
 ```text
 path/package = location + bounded context
@@ -346,7 +261,7 @@ src/application/review/prepare.js
 createPrepare()
 ```
 
-Over-specified by mechanism:
+Too mechanism-heavy:
 
 ```text
 createFsReviewPlanMarkdownFileWriterService()
@@ -358,6 +273,9 @@ Preferred active style:
 src/application/review/review-prepare.js
 createReviewPrepareUseCase()
 
+src/application/review/review-queue-state-coordinator.js
+createReviewQueueStateCoordinator()
+
 src/ports/services/review-plan-publisher.js
 assertReviewPlanPublisher()
 
@@ -365,73 +283,56 @@ src/infrastructure/filesystem/review-plan-publisher-adapter.js
 createFileReviewPlanPublisherAdapter()
 ```
 
-File-name casing remains repository-consistent (`kebab-case`); semantic predictability matters more than character count.
+## 5. Governance rule
 
-## 7. Naming governance gates
-
-Do not add a broad automated naming gate in the middle of the final Review mutation migration. First stabilize the Review namespace, then add lightweight architecture tests.
-
-Recommended later checks:
+Do not introduce new role suffixes merely because they sound convenient:
 
 ```text
-Application exported component names use approved Application roles
-Domain exported decision components use approved Domain roles
-Ports use approved outbound roles
-named concrete infrastructure implementations use approved Infrastructure roles
-new generic suffixes are rejected unless explicitly allow-listed
-migration-era exceptions are enumerated rather than silently accepted
-```
-
-Initial forbidden/new-use candidates:
-
-```text
+Loader
+Provider
+Accessor
+Fetcher
 Manager
 Helper
 Util
-Provider
-Loader
-Fetcher
-Accessor
 Service
 Store
-Writer   # unless the naming convention is explicitly amended
+Writer
 ```
 
-Do **not** enforce filename length, word count, or arbitrary abbreviation rules.
+Existing migration-era exceptions must be reviewed explicitly; they do not expand the approved vocabulary.
 
-## 8. Priority and change strategy
+After the Review namespace stabilizes, add lightweight architecture/naming gates. Do not enforce filename length or arbitrary word counts.
+
+## 6. Priority
 
 ```text
-P0  Stop introducing new non-standard role words
-P0  ReviewPlanWriter       -> ReviewPlanPublisher ✅
-P0  ReviewStrategyProvider -> ReviewStrategyReader ✅
-P0/P1 ReviewQueueStateLoader -> ReviewQueueStateCoordinator (separate slice)
-P1  Settle ReviewProgressWriter with review mark
-P1  Choose an approved Review mutation consistency role during mark design
-P1  Audit grandfathered CanonicalMutationStore naming
+P0  Stop introducing non-standard role words
+P0  ReviewPlanWriter          -> ReviewPlanPublisher ✅ completed
+P0  ReviewStrategyProvider    -> ReviewStrategyReader ✅ completed
+P0  ReviewQueueStateLoader    -> ReviewQueueStateCoordinator ✅ completed
+P1  Settle ReviewProgressWriter together with review mark
+P1  Name the Review mutation consistency boundary using an approved role
+P1  Audit grandfathered CanonicalMutationStore terminology
 P1  Resolve Canonical lifecycle near-collisions atomically
-P2  Add naming architecture tests after Review migration stabilizes
+P2  Add automated naming architecture tests after Review migration stabilizes
 ```
 
-Sequencing rule:
+## 7. Next step
 
-> fix obvious read-only/publication naming first; settle persistence/mutation naming only once the consistency responsibility is explicit.
+The unambiguous Review naming corrections are complete. The next development slice is `review mark`.
 
-## 9. Next step
-
-The two unambiguous public/outbound naming corrections are complete.
-
-Next, review `ReviewQueueStateLoader` as its own naming/refactoring slice because its responsibility is broader than loading and includes orchestration plus optional persistence.
-
-After that, implement `review mark` with naming as part of the architecture:
+Naming must be designed together with its consistency boundary:
 
 ```text
 MarkReview... Application operation
 Review result transition Domain role
 Review mutation intent/plan value
-approved outbound consistency-boundary role
+approved outbound consistency role
 concrete filesystem Adapter
 ```
+
+Do not introduce `Service`, `Manager`, `Loader`, `Provider`, `Helper`, `Util`, `Store`, or another new role word to resolve uncertainty.
 
 The governing test remains:
 

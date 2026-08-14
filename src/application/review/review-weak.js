@@ -2,13 +2,13 @@
 
 const { isWeakReviewProgress } = require('../../domain/review/weak-policy');
 const { rankReviewRows } = require('../../domain/review/ranking-policy');
-const { createReviewQueueStateLoader } = require('./review-queue-state');
+const { createReviewQueueStateCoordinator } = require('./review-queue-state-coordinator');
 
 function createReviewWeakUseCase(dependencies = {}) {
-    const loadReviewQueueState = createReviewQueueStateLoader(dependencies);
+    const buildReviewQueueState = createReviewQueueStateCoordinator(dependencies);
 
     return function reviewWeak(input = {}) {
-        const state = loadReviewQueueState(input);
+        const state = buildReviewQueueState(input);
         const rows = rankReviewRows(
             state.rows.filter((row) => isWeakReviewProgress(row.progress)),
             { strategy: state.strategy, date: input.date },

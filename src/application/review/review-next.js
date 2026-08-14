@@ -2,13 +2,13 @@
 
 const { addDays } = require('../../domain/review/progress-policy');
 const { rankReviewRows } = require('../../domain/review/ranking-policy');
-const { createReviewQueueStateLoader } = require('./review-queue-state');
+const { createReviewQueueStateCoordinator } = require('./review-queue-state-coordinator');
 
 function createReviewNextUseCase(dependencies = {}) {
-    const loadReviewQueueState = createReviewQueueStateLoader(dependencies);
+    const buildReviewQueueState = createReviewQueueStateCoordinator(dependencies);
 
     return function reviewNext(input = {}) {
-        const state = loadReviewQueueState(input);
+        const state = buildReviewQueueState(input);
         const days = Number(input.days || 7);
         const maxDate = addDays(input.date, days);
         const rows = rankReviewRows(

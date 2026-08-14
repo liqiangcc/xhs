@@ -3,7 +3,7 @@
 const { addDays, isDue } = require('../../domain/review/progress-policy');
 const { rankReviewRows } = require('../../domain/review/ranking-policy');
 const { assertReviewPlanPublisher } = require('../../ports/services/review-plan-publisher');
-const { createReviewQueueStateLoader } = require('./review-queue-state');
+const { createReviewQueueStateCoordinator } = require('./review-queue-state-coordinator');
 
 function selectPrepareRows(rows, strategy, input = {}) {
     const date = input.date;
@@ -54,11 +54,11 @@ function selectPrepareRows(rows, strategy, input = {}) {
 }
 
 function createReviewPrepareUseCase(dependencies = {}) {
-    const loadReviewQueueState = createReviewQueueStateLoader(dependencies);
+    const buildReviewQueueState = createReviewQueueStateCoordinator(dependencies);
     const planPublisher = assertReviewPlanPublisher(dependencies.planPublisher);
 
     return function reviewPrepare(input = {}) {
-        const state = loadReviewQueueState(input);
+        const state = buildReviewQueueState(input);
         const target = input.target;
         if (!target) {
             throw new Error('Usage: review prepare --target <name>');
