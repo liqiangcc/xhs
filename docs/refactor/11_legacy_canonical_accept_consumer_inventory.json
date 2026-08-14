@@ -1,7 +1,7 @@
 {
   "schema_version": "legacy_canonical_accept_consumer_inventory.v1",
   "scope": "repository-local-plus-observable-github",
-  "retirement_status": "runtime_removal_in_progress_composition_root_removed",
+  "retirement_status": "runtime_removal_in_progress_application_removed",
   "summary": {
     "current_suggest_generates_legacy_manifest": false,
     "github_actions_generates_legacy_manifest": false,
@@ -14,7 +14,8 @@
     "external_consumers_fully_observable": false,
     "source_deprecation_marked": true,
     "interface_runtime_removed": true,
-    "production_composition_root_accept_removed": true
+    "production_composition_root_accept_removed": true,
+    "accept_application_removed": true
   },
   "active_blockers": [],
   "external_consumer_search": {
@@ -60,11 +61,6 @@
   },
   "runtime_compatibility": [
     {
-      "path": "src/application/canonical/accept-canonical.js",
-      "role": "legacy Accept orchestration and MutationPlan construction; no longer wired by Production createApplication",
-      "deprecated": true
-    },
-    {
       "path": "src/application/canonical/mutation-plan.js",
       "role": "shared mutation contract still accepts operation=accept"
     },
@@ -75,7 +71,7 @@
     },
     {
       "path": "src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js",
-      "role": "reads canonical_candidates.v1 and produces candidate revisions for explicit compatibility wiring"
+      "role": "reads canonical_candidates.v1 and produces candidate revisions for direct lower-level compatibility characterization"
     },
     {
       "path": "src/infrastructure/filesystem/canonical-paths.js",
@@ -83,7 +79,7 @@
     },
     {
       "path": "src/infrastructure/filesystem/canonical-repositories.js",
-      "role": "legacy canonical-candidate revision bridge used by MutationStore CAS"
+      "role": "legacy canonical-candidate revision bridge retained for later MutationStore CAS cleanup"
     }
   ],
   "removed_interface_runtime": [
@@ -106,10 +102,17 @@
       "removed_capability": "createAcceptCanonicalUseCase import, Legacy Candidate adapter construction, canonical.accept exposure"
     }
   ],
+  "removed_application_runtime": [
+    {
+      "path": "src/application/canonical/accept-canonical.js",
+      "removed": true,
+      "removed_characterization": "test/canonical_accept_application.test.js"
+    }
+  ],
   "test_support_compatibility": [
     {
       "path": "src/infrastructure/in-memory/canonical-adapters.js",
-      "role": "in-memory candidate repository and canonical-candidate revision support used by legacy Accept characterization; not wired by the production Composition Root"
+      "role": "candidate-specific in-memory state/revision support retained for a later cleanup slice; no Production Root or Accept Application depends on it"
     }
   ],
   "compatibility_aliases": [
@@ -125,7 +128,7 @@
   "shared_current_dependencies": [
     {
       "path": "src/domain/canonical/accept-policy.js",
-      "role": "shared Canonical aggregate create/extend policy; the current canonicalize projection reuses acceptCanonicalCandidate and this file must not be deleted merely because the legacy CLI retires"
+      "role": "shared Canonical aggregate create/extend policy; the current canonicalize projection reuses acceptCanonicalCandidate and this file must not be deleted merely because the legacy Application retired"
     },
     {
       "path": "src/domain/canonical/question-group-projection-policy.js",
@@ -162,7 +165,6 @@
     "review/plans/c6_scale_and_entry_delivery.md"
   ],
   "legacy_characterization_tests": [
-    "test/canonical_accept_application.test.js",
     "test/canonical_accept_filesystem_integration.test.js",
     "test/canonical_mutation_contracts.test.js"
   ],
@@ -190,8 +192,8 @@
   ],
   "retirement_preconditions": [
     "accept the residual risk that local/uncommitted/unindexed private callers cannot be proven absent by GitHub search",
-    "delete the now-unwired Accept Application before removing its Legacy Port/adapter dependencies",
+    "remove the LegacyCanonicalCandidateRepository and filesystem adapter only after their direct repository characterization is retired or replaced by the next-layer deletion guard",
     "preserve src/domain/canonical/accept-policy.js or first replace its current canonicalize projection responsibility with equivalent SSOT coverage",
-    "keep full CI green while deleting the remaining internal compatibility chain, test-support compatibility, aliases, accept operation support, legacy-only tests, and empty checked-in manifest"
+    "keep full CI green while deleting the remaining legacy Port/adapter, canonical-candidate CAS bridge, accept operation support, test-support compatibility, aliases, legacy-only tests, and empty checked-in manifest"
   ]
 }
