@@ -92,6 +92,10 @@ function runSuggest(options = {}) {
     });
 }
 
+/**
+ * @deprecated Legacy compatibility for historical/manual canonical_candidates.v1 only.
+ * New relationships must use canonical suggest -> dedup decide -> dedup apply.
+ */
 async function runAccept(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const candidateId = options['candidate-id'];
