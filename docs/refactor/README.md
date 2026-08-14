@@ -11,49 +11,53 @@
 本目录是一套完整的长期重构规划文档，建议按顺序阅读：
 
 ```text
-01_requirements.md                    业务目标与需求定义
-02_domain_model.md                    领域模型与核心对象
-03_technical_design.md                技术方案与架构设计
-04_refactor_plan.md                   分阶段重构路线图
-05_execution_checklist.md             执行清单与验收标准
-06_github_actions_ai_management.md    GitHub Actions + AI 管理层
-07_actions_review_todo.md             Actions 管理层 review 后的修复 TODO
-08_content_building_goals.md          当前内容建设阶段目标与验收门槛
-09_answer_content_standard.md         分题型答案模板与 ready 审查标准
+01_requirements.md                                   业务目标与需求定义
+02_domain_model.md                                   领域模型与核心对象
+03_technical_design.md                               技术方案与架构设计
+04_refactor_plan.md                                  分阶段重构路线图
+05_execution_checklist.md                            执行清单与验收标准
+06_github_actions_ai_management.md                   当前 GitHub Actions + AI 调度规范
+07_actions_review_todo.md                            Actions 管理层历史修复记录
+08_content_building_goals.md                         当前内容建设目标与验收门槛
+09_answer_content_standard.md                        分题型答案模板与 ready 审查标准
+09_legacy_canonical_accept_boundary.md               Legacy Accept 兼容边界与删除条件
+10_current_dedup_canonical_operations.md             当前 Dedup / Canonical 操作 SSOT
+11_legacy_canonical_accept_consumer_inventory.md     Legacy Accept 消费者与退役准备度
+11_legacy_canonical_accept_consumer_inventory.json   上述清单的机器可检查事实源
 ```
 
 这些文档的关系是：
 
 ```text
-业务目标
-  ↓
-核心使用场景
-  ↓
-领域模型
-  ↓
-技术方案
-  ↓
-重构计划
-  ↓
-执行清单
-  ↓
-GitHub Actions 管理层
-  ↓
-Actions Review TODO
-  ↓
-内容建设阶段目标
-  ↓
+业务目标 / 内容 DoD
+        ↓
+领域模型 / 技术方案
+        ↓
+重构计划 / 执行清单
+        ↓
+当前操作规则
+  ├─ 06：Actions / AI 调度
+  ├─ 10：Dedup / Canonical 命令与边界
+  └─ 09 legacy：兼容与退役规则
+        ↓
+11：legacy 消费者清单与退役准备度
+        ↓
 循环迭代
 ```
 
 当前执行优先级：
 
 ```text
-1. 08_content_building_goals.md：当前内容建设 C0-C10 路线与退出条件
-2. README.md：当前数据状态和日常命令入口
-3. 05_execution_checklist.md：工程底座长期验收清单
-4. 06/07：Actions 管理层设计与历史修复记录
+1. 10_current_dedup_canonical_operations.md：Canonical/Dedup 当前命令与操作边界
+2. 08_content_building_goals.md：内容建设 C0-C10 目标、DoD 与退出条件
+3. README.md：当前数据状态和日常入口
+4. 06_github_actions_ai_management.md：Actions / AI 当前调度规范
+5. 11_legacy_canonical_accept_consumer_inventory.md：legacy Accept 退役判断
+6. 05_execution_checklist.md：工程底座长期验收清单
+7. 07 / 历史 ADR / review plans：历史证据，不作为当前命令 SSOT
 ```
+
+如果 `08` 或历史文档中的旧命令示例与 `10_current_dedup_canonical_operations.md` 冲突，**命令语义以 10 和当前代码/测试为准**；08 继续负责业务目标和内容完成定义。
 
 内容建设中的 60/200、100/300、200/600 都是中间门槛；最终目标以 `08_content_building_goals.md` 为准：所有真实面试题绑定 Canonical、拥有 ready 答案和 ReviewProgress，并能从查询或复习入口实际访问。
 
@@ -176,7 +180,7 @@ M7：建立迁移、测试、CI 和 ADR 机制
 M8：建立 GitHub Actions + AI 管理层
 ```
 
-工程重构里程碑见 `04_refactor_plan.md`，当前内容建设阶段见 `08_content_building_goals.md`，Action 管理层历史修复见 `07_actions_review_todo.md`。
+工程重构里程碑见 `04_refactor_plan.md`，当前内容建设目标见 `08_content_building_goals.md`，Canonical/Dedup 当前操作见 `10_current_dedup_canonical_operations.md`，Legacy Accept 退役清单见 `11_legacy_canonical_accept_consumer_inventory.md`。
 
 ---
 
