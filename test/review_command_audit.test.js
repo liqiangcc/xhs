@@ -80,10 +80,7 @@ test('review today next weak and prepare delegate queue semantics to Application
     assert.match(todaySource, /date:\s*defaultDate\(options\)/);
     assert.match(todaySource, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
     assert.match(todaySource, /write_progress:\s*!options\.noWrite/);
-    assert.doesNotMatch(
-        todaySource,
-        /loadReviewState|ensureProgressItems|saveProgress|canonicalRows|dueRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
-    );
+    assert.doesNotMatch(todaySource, /loadReviewState|ensureProgressItems|saveProgress|canonicalRows|dueRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/);
 
     assert.match(nextSource, /createApplication/);
     assert.match(nextSource, /application\.review\.next/);
@@ -91,20 +88,14 @@ test('review today next weak and prepare delegate queue semantics to Application
     assert.match(nextSource, /days:\s*options\.days/);
     assert.match(nextSource, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
     assert.match(nextSource, /write_progress:\s*!options\.noWrite/);
-    assert.doesNotMatch(
-        nextSource,
-        /loadReviewState|upcomingRows|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
-    );
+    assert.doesNotMatch(nextSource, /loadReviewState|upcomingRows|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/);
 
     assert.match(weakSource, /createApplication/);
     assert.match(weakSource, /application\.review\.weak/);
     assert.match(weakSource, /date:\s*defaultDate\(options\)/);
     assert.match(weakSource, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
     assert.match(weakSource, /write_progress:\s*!options\.noWrite/);
-    assert.doesNotMatch(
-        weakSource,
-        /loadReviewState|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
-    );
+    assert.doesNotMatch(weakSource, /loadReviewState|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/);
 
     assert.match(prepareSource, /createApplication/);
     assert.match(prepareSource, /application\.review\.prepare/);
@@ -114,22 +105,20 @@ test('review today next weak and prepare delegate queue semantics to Application
     assert.match(prepareSource, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
     assert.match(prepareSource, /write_progress:\s*!options\.noWrite/);
     assert.match(prepareSource, /write_plan:\s*!options\.noWrite/);
-    assert.doesNotMatch(
-        prepareSource,
-        /loadReviewState|upcomingRows|dueRows|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks|writePlan|fs\.writeFileSync/,
-    );
+    assert.doesNotMatch(prepareSource, /loadReviewState|upcomingRows|dueRows|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks|writePlan|fs\.writeFileSync/);
 });
 
 test('prepare query selection stays in Application while plan publication stays behind a Publisher port', () => {
     const application = read('src/application/review/review-prepare.js');
     const publisherPort = read('src/ports/services/review-plan-publisher.js');
     const publisherAdapter = read('src/infrastructure/filesystem/review-plan-publisher-adapter.js');
-    const queueState = read('src/application/review/review-queue-state.js');
+    const queueState = read('src/application/review/review-queue-state-coordinator.js');
     const strategyPort = read('src/ports/services/review-strategy-reader.js');
     const strategyAdapter = read('src/infrastructure/config/review-strategy-reader-adapter.js');
     const commandModule = read('scripts/commands/review.js');
 
-    assert.match(application, /createReviewQueueStateLoader/);
+    assert.match(application, /createReviewQueueStateCoordinator/);
+    assert.match(application, /buildReviewQueueState/);
     assert.match(application, /input\.priority/);
     assert.match(application, /input\.status/);
     assert.match(application, /input\.domain/);
@@ -148,8 +137,11 @@ test('prepare query selection stays in Application while plan publication stays 
     assert.match(publisherAdapter, /review['"], ['"]plans/);
     assert.match(publisherAdapter, /Generated:/);
 
+    assert.match(queueState, /createReviewQueueStateCoordinator/);
+    assert.match(queueState, /buildReviewQueueState/);
     assert.match(queueState, /assertReviewStrategyReader/);
     assert.match(queueState, /strategyReader\.read/);
+    assert.doesNotMatch(queueState, /createReviewQueueStateLoader|loadReviewQueueState/);
     assert.match(strategyPort, /ReviewStrategyReader/);
     assert.match(strategyPort, /\['read'\]/);
     assert.match(strategyAdapter, /createFileReviewStrategyReaderAdapter/);
