@@ -2,7 +2,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
 const { createReviewTodayUseCase } = require('../src/application/review/review-today');
 
 function canonical(id, overrides = {}) {
@@ -33,6 +32,7 @@ const strategy = {
 
 function createUseCase(overrides = {}) {
     const writes = [];
+    const saveInputs = [];
     let issueLoads = 0;
     const dependencies = {
         canonicalCatalogRepository: {
@@ -52,37 +52,35 @@ function createUseCase(overrides = {}) {
                 ];
             },
         },
-        progressReader: {
-            load() {
+        progressRepository: {
+            snapshot() {
                 return {
-                    schema_version: 'review_progress_store.v1',
-                    updated_at: '2026-06-29',
-                    items: [
-                        {
-                            canonical_id: 'cq_a', status: 'weak', level: 1,
-                            review_count: 2, next_review_at: '2026-06-30',
-                            confidence: 0.4, difficulty: 4, mistake_count: 1,
-                        },
-                        {
-                            canonical_id: 'cq_future', status: 'new', level: 0,
-                            review_count: 0, next_review_at: '2026-07-05',
-                            confidence: 0.5, difficulty: 3, mistake_count: 0,
-                        },
-                    ],
+                    revision: 'progress-rev-1',
+                    progress: {
+                        schema_version: 'review_progress_store.v1',
+                        updated_at: '2026-06-29',
+                        items: [
+                            {
+                                canonical_id: 'cq_a', status: 'weak', level: 1,
+                                review_count: 2, next_review_at: '2026-06-30',
+                                confidence: 0.4, difficulty: 4, mistake_count: 1,
+                            },
+                            {
+                                canonical_id: 'cq_future', status: 'new', level: 0,
+                                review_count: 0, next_review_at: '2026-07-05',
+                                confidence: 0.5, difficulty: 3, mistake_count: 0,
+                            },
+                        ],
+                    },
                 };
             },
-        },
-        progressWriter: {
-            write(progress) {
+            save(progress, input) {
                 writes.push(structuredClone(progress));
+                saveInputs.push(structuredClone(input));
                 return progress;
             },
         },
-        strategyReader: {
-            read() {
-                return structuredClone(strategy);
-            },
-        },
+        strategyReader: { read: () => structuredClone(strategy) },
         issueLinkReader: {
             load() {
                 issueLoads++;
@@ -97,20 +95,16 @@ function createUseCase(overrides = {}) {
     return {
         today: createReviewTodayUseCase(dependencies),
         writes,
+        saveInputs,
         issueLoadCount: () => issueLoads,
     };
 }
 
 test('ReviewToday preserves initialization persistence due ranking enrichment and issue semantics', () => {
     const fixture = createUseCase();
-
     const result = fixture.today({
-        date: '2026-06-30',
-        limit: 10,
-        with_issues: true,
-        write_progress: true,
+        date: '2026-06-30', limit: 10, with_issues: true, write_progress: true,
     });
-
     assert.equal(result.schema_version, 'review_today.v1');
     assert.equal(result.date, '2026-06-30');
     assert.equal(result.total_due_count, 2);
@@ -123,40 +117,31 @@ test('ReviewToday preserves initialization persistence due ranking enrichment an
     assert.equal(result.rows[0].companies.includes('美团'), true);
     assert.equal(result.rows[0].levels.includes('社招'), true);
     assert.equal(typeof result.rows[0].review_score, 'number');
-
     assert.equal(fixture.writes.length, 1);
     assert.equal(fixture.writes[0].updated_at, '2026-06-30');
     assert.equal(fixture.writes[0].items.some((item) => item.canonical_id === 'cq_b'), true);
+    assert.equal(fixture.saveInputs[0].expected_revision, 'progress-rev-1');
     assert.equal(fixture.issueLoadCount(), 1);
 });
 
 test('ReviewToday noWrite suppresses persistence but still returns synthesized progress', () => {
     const fixture = createUseCase({
-        canonicalCatalogRepository: {
-            list() {
-                return [canonical('cq_missing')];
-            },
-        },
+        canonicalCatalogRepository: { list: () => [canonical('cq_missing')] },
         questionCatalogRepository: { list: () => [] },
-        progressReader: {
-            load() {
-                return { schema_version: 'review_progress_store.v1', updated_at: null, items: [] };
-            },
+        progressRepository: {
+            snapshot: () => ({
+                revision: 'empty-rev',
+                progress: { schema_version: 'review_progress_store.v1', updated_at: null, items: [] },
+            }),
+            save() { throw new Error('save must not be called'); },
         },
     });
-
-    const result = fixture.today({
-        date: '2026-07-01',
-        write_progress: false,
-        with_issues: false,
-    });
-
-    assert.equal(fixture.writes.length, 0);
-    assert.equal(fixture.issueLoadCount(), 0);
+    const result = fixture.today({ date: '2026-07-01', write_progress: false, with_issues: false });
     assert.equal(result.returned_count, 1);
     assert.equal(result.rows[0].progress.status, 'new');
     assert.equal(result.rows[0].progress.next_review_at, '2026-07-01');
     assert.equal('issue_url' in result.rows[0], false);
+    assert.equal(fixture.issueLoadCount(), 0);
 });
 
 test('ReviewToday preserves the legacy default limit of 20', () => {
@@ -164,15 +149,15 @@ test('ReviewToday preserves the legacy default limit of 20', () => {
     const fixture = createUseCase({
         canonicalCatalogRepository: { list: () => structuredClone(records) },
         questionCatalogRepository: { list: () => [] },
-        progressReader: {
-            load() {
-                return { schema_version: 'review_progress_store.v1', updated_at: null, items: [] };
-            },
+        progressRepository: {
+            snapshot: () => ({
+                revision: 'empty-rev',
+                progress: { schema_version: 'review_progress_store.v1', updated_at: null, items: [] },
+            }),
+            save() { throw new Error('save must not be called'); },
         },
     });
-
     const result = fixture.today({ date: '2026-07-01', write_progress: false });
-
     assert.equal(result.total_due_count, 21);
     assert.equal(result.returned_count, 20);
     assert.equal(result.rows.length, 20);
@@ -181,8 +166,5 @@ test('ReviewToday preserves the legacy default limit of 20', () => {
 test('ReviewToday requires a resolved review date and narrow outbound capabilities', () => {
     const fixture = createUseCase();
     assert.throws(() => fixture.today({}), /review date is required/);
-    assert.throws(
-        () => createReviewTodayUseCase({}),
-        /CanonicalCatalogRepository is required/,
-    );
+    assert.throws(() => createReviewTodayUseCase({}), /CanonicalCatalogRepository is required/);
 });

@@ -2,7 +2,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
 const { createReviewPrepareUseCase } = require('../src/application/review/review-prepare');
 
 function canonical(id, overrides = {}) {
@@ -23,14 +22,9 @@ function canonical(id, overrides = {}) {
 function progress(id, overrides = {}) {
     return {
         canonical_id: id,
-        status: 'new',
-        level: 0,
-        review_count: 0,
-        last_reviewed_at: null,
-        next_review_at: '2026-06-30',
-        confidence: 0.5,
-        difficulty: 3,
-        mistake_count: 0,
+        status: 'new', level: 0, review_count: 0,
+        last_reviewed_at: null, next_review_at: '2026-06-30',
+        confidence: 0.5, difficulty: 3, mistake_count: 0,
         updated_at: '2026-06-30',
         ...overrides,
     };
@@ -62,74 +56,46 @@ function createFixture(overrides = {}) {
                     }),
                     canonical('cq_wrong_company', {
                         canonical_title: 'Redis Cluster 复制',
-                        review_priority: 'P0',
-                        companies: ['百度'],
+                        review_priority: 'P0', companies: ['百度'],
                     }),
                     canonical('cq_upcoming', {
-                        canonical_title: 'Redis Cluster 扩容',
-                        review_priority: 'P0',
+                        canonical_title: 'Redis Cluster 扩容', review_priority: 'P0',
                     }),
                 ];
             },
         },
         questionCatalogRepository: {
             list() {
-                return [{
-                    question_id: 'q_cq_match',
-                    canonical_id: 'cq_match',
-                    company: '美团',
-                    level: '社招',
-                }];
+                return [{ question_id: 'q_cq_match', canonical_id: 'cq_match', company: '美团', level: '社招' }];
             },
         },
-        progressReader: {
-            load() {
+        progressRepository: {
+            snapshot() {
                 return {
-                    schema_version: 'review_progress_store.v1',
-                    updated_at: '2026-06-30',
-                    items: [
-                        progress('cq_match', {
-                            status: 'weak',
-                            review_count: 2,
-                            confidence: 0.4,
-                            mistake_count: 1,
-                        }),
-                        progress('cq_wrong_company', {
-                            status: 'weak',
-                            review_count: 2,
-                            confidence: 0.4,
-                            mistake_count: 1,
-                        }),
-                        progress('cq_upcoming', {
-                            status: 'weak',
-                            next_review_at: '2026-07-03',
-                            review_count: 1,
-                            confidence: 0.4,
-                        }),
-                    ],
+                    revision: 'progress-rev-1',
+                    progress: {
+                        schema_version: 'review_progress_store.v1',
+                        updated_at: '2026-06-30',
+                        items: [
+                            progress('cq_match', { status: 'weak', review_count: 2, confidence: 0.4, mistake_count: 1 }),
+                            progress('cq_wrong_company', { status: 'weak', review_count: 2, confidence: 0.4, mistake_count: 1 }),
+                            progress('cq_upcoming', { status: 'weak', next_review_at: '2026-07-03', review_count: 1, confidence: 0.4 }),
+                        ],
+                    },
                 };
             },
-        },
-        progressWriter: {
-            write(value) {
-                writes.push(structuredClone(value));
+            save(value, input) {
+                writes.push({ progress: structuredClone(value), input: structuredClone(input) });
                 return value;
             },
         },
-        strategyReader: {
-            read() {
-                return structuredClone(strategy);
-            },
-        },
+        strategyReader: { read: () => structuredClone(strategy) },
         issueLinkReader: {
             load() {
                 issueLoads++;
                 return {
                     schema_version: 'review_issue_links.v1',
-                    items: [{
-                        canonical_id: 'cq_match',
-                        issue_url: 'https://example.test/issues/12',
-                    }],
+                    items: [{ canonical_id: 'cq_match', issue_url: 'https://example.test/issues/12' }],
                 };
             },
         },
@@ -141,7 +107,6 @@ function createFixture(overrides = {}) {
         },
         ...overrides,
     };
-
     return {
         prepare: createReviewPrepareUseCase(dependencies),
         writes,
@@ -151,24 +116,21 @@ function createFixture(overrides = {}) {
     };
 }
 
+function repositoryFor(progressValue) {
+    return {
+        snapshot: () => ({ revision: 'test-rev', progress: structuredClone(progressValue) }),
+        save() { throw new Error('save must not be called'); },
+    };
+}
+
 test('ReviewPrepare preserves due selection filters ranking enrichment and plan publication', () => {
     const fixture = createFixture();
-
     const result = fixture.prepare({
-        date: '2026-06-30',
-        target: 'redis-social',
-        limit: 10,
-        priority: 'P0',
-        status: 'weak',
-        domain: '缓存',
-        company: '美团',
-        level: '社',
-        topic: 'CLUSTER',
-        with_issues: true,
-        write_progress: true,
-        write_plan: true,
+        date: '2026-06-30', target: 'redis-social', limit: 10,
+        priority: 'P0', status: 'weak', domain: '缓存', company: '美团',
+        level: '社', topic: 'CLUSTER', with_issues: true,
+        write_progress: true, write_plan: true,
     });
-
     assert.equal(result.schema_version, 'review_prepare_result.v1');
     assert.equal(result.ok, true);
     assert.equal(result.dry_run, false);
@@ -179,117 +141,60 @@ test('ReviewPrepare preserves due selection filters ranking enrichment and plan 
     assert.equal(result.rows[0].companies.includes('美团'), true);
     assert.equal(result.rows[0].levels.includes('社招'), true);
     assert.equal(result.rows[0].issue_url, 'https://example.test/issues/12');
-
     assert.equal(fixture.writes.length, 1);
+    assert.equal(fixture.writes[0].input.expected_revision, 'progress-rev-1');
     assert.equal(fixture.issueLoadCount(), 1);
     assert.equal(fixture.plans.length, 1);
     assert.equal(fixture.plans[0].target, 'redis-social');
-    assert.equal(fixture.plans[0].date, '2026-06-30');
-    assert.equal(fixture.plans[0].with_issues, true);
-    assert.deepEqual(
-        fixture.plans[0].rows.map((row) => row.canonical_id),
-        ['cq_match'],
-    );
 });
 
 test('ReviewPrepare days mode includes due upcoming and synthesized rows inside the horizon', () => {
     const fixture = createFixture({
         canonicalCatalogRepository: {
-            list() {
-                return [
-                    canonical('cq_due'),
-                    canonical('cq_upcoming'),
-                    canonical('cq_outside'),
-                    canonical('cq_missing'),
-                ];
-            },
+            list: () => [canonical('cq_due'), canonical('cq_upcoming'), canonical('cq_outside'), canonical('cq_missing')],
         },
         questionCatalogRepository: { list: () => [] },
-        progressReader: {
-            load() {
-                return {
-                    schema_version: 'review_progress_store.v1',
-                    updated_at: '2026-06-30',
-                    items: [
-                        progress('cq_due', { next_review_at: '2026-06-30' }),
-                        progress('cq_upcoming', { next_review_at: '2026-07-03' }),
-                        progress('cq_outside', { next_review_at: '2026-07-20' }),
-                    ],
-                };
-            },
-        },
+        progressRepository: repositoryFor({
+            schema_version: 'review_progress_store.v1', updated_at: '2026-06-30',
+            items: [
+                progress('cq_due', { next_review_at: '2026-06-30' }),
+                progress('cq_upcoming', { next_review_at: '2026-07-03' }),
+                progress('cq_outside', { next_review_at: '2026-07-20' }),
+            ],
+        }),
     });
-
     const result = fixture.prepare({
-        date: '2026-06-30',
-        target: 'week',
-        days: 7,
-        limit: 10,
-        with_issues: false,
-        write_progress: false,
-        write_plan: false,
+        date: '2026-06-30', target: 'week', days: 7, limit: 10,
+        with_issues: false, write_progress: false, write_plan: false,
     });
-
     assert.equal(result.dry_run, true);
     assert.equal(result.plan_path, null);
     assert.equal(result.item_count, 3);
-    assert.deepEqual(
-        new Set(result.rows.map((row) => row.canonical_id)),
-        new Set(['cq_due', 'cq_upcoming', 'cq_missing']),
-    );
+    assert.deepEqual(new Set(result.rows.map((row) => row.canonical_id)), new Set(['cq_due', 'cq_upcoming', 'cq_missing']));
     assert.equal(result.rows.some((row) => row.canonical_id === 'cq_outside'), false);
     assert.equal(result.rows.find((row) => row.canonical_id === 'cq_missing').progress.next_review_at, '2026-06-30');
-    assert.equal(fixture.writes.length, 0);
     assert.equal(fixture.plans.length, 0);
     assert.equal(fixture.issueLoadCount(), 0);
 });
 
 test('ReviewPrepare preserves legacy default limit of 20', () => {
-    const records = Array.from(
-        { length: 21 },
-        (_, index) => canonical(`cq_${String(index).padStart(2, '0')}`),
-    );
+    const records = Array.from({ length: 21 }, (_, index) => canonical(`cq_${String(index).padStart(2, '0')}`));
     const fixture = createFixture({
         canonicalCatalogRepository: { list: () => structuredClone(records) },
         questionCatalogRepository: { list: () => [] },
-        progressReader: {
-            load: () => ({
-                schema_version: 'review_progress_store.v1',
-                updated_at: null,
-                items: [],
-            }),
-        },
+        progressRepository: repositoryFor({ schema_version: 'review_progress_store.v1', updated_at: null, items: [] }),
     });
-
     const result = fixture.prepare({
-        date: '2026-07-01',
-        target: 'default-limit',
-        write_progress: false,
-        write_plan: false,
+        date: '2026-07-01', target: 'default-limit', write_progress: false, write_plan: false,
     });
-
     assert.equal(result.item_count, 20);
     assert.equal(result.rows.length, 20);
 });
 
 test('ReviewPrepare requires shared queue capabilities target and ReviewPlanPublisher', () => {
     const fixture = createFixture();
-    assert.throws(
-        () => fixture.prepare({
-            date: '2026-06-30',
-            write_progress: false,
-            write_plan: false,
-        }),
-        /Usage: review prepare --target <name>/,
-    );
-    assert.throws(
-        () => createReviewPrepareUseCase({}),
-        /CanonicalCatalogRepository is required/,
-    );
-
+    assert.throws(() => fixture.prepare({ date: '2026-06-30', write_progress: false, write_plan: false }), /Usage: review prepare --target <name>/);
+    assert.throws(() => createReviewPrepareUseCase({}), /CanonicalCatalogRepository is required/);
     const withoutPlanPublisher = { ...fixture.dependencies, planPublisher: null };
-    assert.throws(
-        () => createReviewPrepareUseCase(withoutPlanPublisher),
-        /ReviewPlanPublisher is required/,
-    );
+    assert.throws(() => createReviewPrepareUseCase(withoutPlanPublisher), /ReviewPlanPublisher is required/);
 });

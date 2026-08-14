@@ -2,7 +2,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
 const { createReviewNextUseCase } = require('../src/application/review/review-next');
 
 function canonical(id, overrides = {}) {
@@ -47,39 +46,38 @@ function createUseCase(overrides = {}) {
         },
         questionCatalogRepository: {
             list() {
-                return [
-                    { question_id: 'q_cq_upcoming', canonical_id: 'cq_upcoming', company: '美团', level: '社招' },
-                ];
+                return [{ question_id: 'q_cq_upcoming', canonical_id: 'cq_upcoming', company: '美团', level: '社招' }];
             },
         },
-        progressReader: {
-            load() {
+        progressRepository: {
+            snapshot() {
                 return {
-                    schema_version: 'review_progress_store.v1',
-                    updated_at: '2026-06-29',
-                    items: [
-                        {
-                            canonical_id: 'cq_due', status: 'weak', level: 1,
-                            review_count: 2, next_review_at: '2026-06-30',
-                            confidence: 0.4, difficulty: 4, mistake_count: 1,
-                        },
-                        {
-                            canonical_id: 'cq_upcoming', status: 'new', level: 0,
-                            review_count: 0, next_review_at: '2026-07-03',
-                            confidence: 0.5, difficulty: 3, mistake_count: 0,
-                        },
-                        {
-                            canonical_id: 'cq_outside', status: 'new', level: 0,
-                            review_count: 0, next_review_at: '2026-07-20',
-                            confidence: 0.5, difficulty: 3, mistake_count: 0,
-                        },
-                    ],
+                    revision: 'progress-rev-1',
+                    progress: {
+                        schema_version: 'review_progress_store.v1',
+                        updated_at: '2026-06-29',
+                        items: [
+                            {
+                                canonical_id: 'cq_due', status: 'weak', level: 1,
+                                review_count: 2, next_review_at: '2026-06-30',
+                                confidence: 0.4, difficulty: 4, mistake_count: 1,
+                            },
+                            {
+                                canonical_id: 'cq_upcoming', status: 'new', level: 0,
+                                review_count: 0, next_review_at: '2026-07-03',
+                                confidence: 0.5, difficulty: 3, mistake_count: 0,
+                            },
+                            {
+                                canonical_id: 'cq_outside', status: 'new', level: 0,
+                                review_count: 0, next_review_at: '2026-07-20',
+                                confidence: 0.5, difficulty: 3, mistake_count: 0,
+                            },
+                        ],
+                    },
                 };
             },
-        },
-        progressWriter: {
-            write(progress) {
-                writes.push(structuredClone(progress));
+            save(progress, input) {
+                writes.push({ progress: structuredClone(progress), input: structuredClone(input) });
                 return progress;
             },
         },
@@ -102,30 +100,31 @@ function createUseCase(overrides = {}) {
     };
 }
 
+function emptyProgressRepository() {
+    return {
+        snapshot: () => ({
+            revision: 'empty-rev',
+            progress: { schema_version: 'review_progress_store.v1', updated_at: null, items: [] },
+        }),
+        save() { throw new Error('save must not be called'); },
+    };
+}
+
 test('ReviewNext preserves horizon selection ranking initialization and issue semantics', () => {
     const fixture = createUseCase();
-
-    const result = fixture.next({
-        date: '2026-06-30',
-        days: 7,
-        limit: 10,
-        with_issues: true,
-        write_progress: true,
-    });
-
+    const result = fixture.next({ date: '2026-06-30', days: 7, limit: 10, with_issues: true, write_progress: true });
     assert.equal(result.schema_version, 'review_next.v1');
     assert.equal(result.date, '2026-06-30');
     assert.equal(result.days, 7);
     assert.equal(result.returned_count, 3);
-    assert.deepEqual(result.rows.map((row) => row.canonical_id), [
-        'cq_due', 'cq_missing', 'cq_upcoming',
-    ]);
+    assert.deepEqual(result.rows.map((row) => row.canonical_id), ['cq_due', 'cq_missing', 'cq_upcoming']);
     assert.equal(result.rows.some((row) => row.canonical_id === 'cq_outside'), false);
     assert.equal(result.rows.find((row) => row.canonical_id === 'cq_upcoming').issue_url, 'https://example.test/issues/3');
     assert.equal(result.rows.find((row) => row.canonical_id === 'cq_missing').progress.next_review_at, '2026-06-30');
     assert.equal(result.rows.find((row) => row.canonical_id === 'cq_upcoming').companies.includes('美团'), true);
     assert.equal(fixture.writes.length, 1);
-    assert.equal(fixture.writes[0].items.some((item) => item.canonical_id === 'cq_missing'), true);
+    assert.equal(fixture.writes[0].progress.items.some((item) => item.canonical_id === 'cq_missing'), true);
+    assert.equal(fixture.writes[0].input.expected_revision, 'progress-rev-1');
     assert.equal(fixture.issueLoadCount(), 1);
 });
 
@@ -133,17 +132,9 @@ test('ReviewNext noWrite suppresses progress persistence but keeps synthesized p
     const fixture = createUseCase({
         canonicalCatalogRepository: { list: () => [canonical('cq_missing')] },
         questionCatalogRepository: { list: () => [] },
-        progressReader: {
-            load: () => ({ schema_version: 'review_progress_store.v1', updated_at: null, items: [] }),
-        },
+        progressRepository: emptyProgressRepository(),
     });
-
-    const result = fixture.next({
-        date: '2026-07-01',
-        write_progress: false,
-        with_issues: false,
-    });
-
+    const result = fixture.next({ date: '2026-07-01', write_progress: false, with_issues: false });
     assert.equal(result.days, 7);
     assert.equal(result.returned_count, 1);
     assert.equal(result.rows[0].progress.status, 'new');
@@ -158,13 +149,9 @@ test('ReviewNext preserves legacy default limit of 20 and default horizon of 7 d
     const fixture = createUseCase({
         canonicalCatalogRepository: { list: () => structuredClone(records) },
         questionCatalogRepository: { list: () => [] },
-        progressReader: {
-            load: () => ({ schema_version: 'review_progress_store.v1', updated_at: null, items: [] }),
-        },
+        progressRepository: emptyProgressRepository(),
     });
-
     const result = fixture.next({ date: '2026-07-01', write_progress: false });
-
     assert.equal(result.days, 7);
     assert.equal(result.returned_count, 20);
     assert.equal(result.rows.length, 20);
@@ -173,8 +160,5 @@ test('ReviewNext preserves legacy default limit of 20 and default horizon of 7 d
 test('ReviewNext requires the shared queue-state outbound capabilities and a date', () => {
     const fixture = createUseCase();
     assert.throws(() => fixture.next({}), /review date is required/);
-    assert.throws(
-        () => createReviewNextUseCase({}),
-        /CanonicalCatalogRepository is required/,
-    );
+    assert.throws(() => createReviewNextUseCase({}), /CanonicalCatalogRepository is required/);
 });

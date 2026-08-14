@@ -2,30 +2,12 @@
 'use strict';
 
 const path = require('path');
-const { loadCanonicalQuestions } = require('../lib/canonical_store');
-const {
-    loadProgress,
-    saveProgress,
-    ensureProgressItems,
-    progressMap,
-    applyReviewResult,
-    appendSessionEvent,
-    todayString,
-} = require('../lib/review_store');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
 const { defaultDate } = require('../lib/date');
 const { createApplication } = require('../../src/bootstrap/create-application');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
-
-function defaultPaths(root) {
-    return {
-        canonicalQuestions: path.join(root, 'data', 'questions', 'canonical_questions.jsonl'),
-        reviewDir: path.join(root, 'review'),
-        progressPath: path.join(root, 'review', 'progress.json'),
-    };
-}
 
 function parseArgs(argv) {
     const args = argv.slice(2);
@@ -60,7 +42,7 @@ function printHelp() {
         '  integrity',
         '',
         'Options:',
-        '  --noWrite     Do not initialize progress, write plans, or write run manifests for read-only commands',
+        '  --noWrite     Do not persist Review state or write plans/manifests',
         '  --noManifest  Do not write the run manifest',
     ].join('\n'));
 }
@@ -104,50 +86,19 @@ function runPrepare(options = {}) {
 
 function runMark(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const canonicalId = options['canonical-id'] || options._[0];
-    const result = options.result || options.status;
-    if (!canonicalId || !result) throw new Error('Usage: review mark --canonical-id <id> --result <again|hard|good|easy>');
-    const paths = defaultPaths(root);
-    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
-    if (!records.some((record) => record.canonical_id === canonicalId)) {
-        throw new Error(`Canonical not found: ${canonicalId}`);
-    }
-    const oralVersion = options['oral-version'] || null;
-    if (oralVersion && oralVersion !== 'one_minute') throw new Error('oral-version must be one_minute');
-    const qualityDefects = [...new Set(options['quality-defect'] || [])].filter(Boolean);
-    const hardFailures = [...new Set(options['hard-failure'] || [])].filter(Boolean);
-    const feedbackClosedAt = options['feedback-closed-at'] || null;
-    if (feedbackClosedAt && !/^\d{4}-\d{2}-\d{2}$/.test(feedbackClosedAt)) throw new Error('feedback-closed-at must use YYYY-MM-DD');
-    if (feedbackClosedAt && qualityDefects.length === 0) throw new Error('feedback-closed-at requires at least one quality-defect');
-    let progress = loadProgress({ progressPath: paths.progressPath, date: options.date });
-    progress = ensureProgressItems(progress, records, { date: options.date });
-    const byId = progressMap(progress);
-    const updated = applyReviewResult(byId.get(canonicalId), result, options);
-    progress.items = progress.items.map((item) => item.canonical_id === canonicalId ? updated : item);
-    const event = {
-        canonical_id: canonicalId,
-        result,
-        notes: options.notes || '',
-        reviewed_at: todayString(options),
-        next_review_at: updated.next_review_at,
-        oral_version: oralVersion,
+    const application = createApplication({ root });
+    return application.review.mark({
+        date: defaultDate(options),
+        canonical_id: options['canonical-id'] || options._[0],
+        result: options.result || options.status,
+        oral_version: options['oral-version'] || null,
         followup_answered: Boolean(options['followup-answered']),
-        quality_defects: qualityDefects,
-        hard_failures: hardFailures,
-        feedback_closed_at: feedbackClosedAt,
-    };
-    if (!options.noWrite) progress = saveProgress(progress, { progressPath: paths.progressPath, date: options.date });
-    const sessionPath = options.noWrite ? null : appendSessionEvent(event, { reviewDir: paths.reviewDir, date: options.date });
-    return {
-        schema_version: 'review_mark_result.v1',
-        ok: true,
-        dry_run: Boolean(options.noWrite),
-        canonical_id: canonicalId,
-        result,
-        progress: updated,
-        session_event: event,
-        session_path: sessionPath ? path.relative(root, sessionPath) : null,
-    };
+        quality_defects: options['quality-defect'] || [],
+        hard_failures: options['hard-failure'] || [],
+        feedback_closed_at: options['feedback-closed-at'] || null,
+        notes: options.notes || '',
+        write_mutation: !options.noWrite,
+    });
 }
 
 function runWeak(options = {}) {

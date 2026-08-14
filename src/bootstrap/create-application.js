@@ -21,6 +21,7 @@ const { createReviewTodayUseCase } = require('../application/review/review-today
 const { createReviewNextUseCase } = require('../application/review/review-next');
 const { createReviewWeakUseCase } = require('../application/review/review-weak');
 const { createReviewPrepareUseCase } = require('../application/review/review-prepare');
+const { createReviewMarkUseCase } = require('../application/review/review-mark');
 const {
     createSuggestCanonicalRelationsUseCase,
 } = require('../application/dedup/suggest-canonical-relations');
@@ -47,7 +48,12 @@ const {
 } = require('../infrastructure/filesystem/question-catalog-repository');
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
 const { createFsReviewProgressReader } = require('../infrastructure/filesystem/review-progress-reader');
-const { createFsReviewProgressWriter } = require('../infrastructure/filesystem/review-progress-writer');
+const {
+    createFileReviewProgressRepositoryAdapter,
+} = require('../infrastructure/filesystem/review-progress-repository-adapter');
+const {
+    createFileReviewMutationGatewayAdapter,
+} = require('../infrastructure/filesystem/review-mutation-gateway-adapter');
 const { createFsReviewSessionReader } = require('../infrastructure/filesystem/review-session-reader');
 const { createFsReviewIssueLinkReader } = require('../infrastructure/filesystem/review-issue-link-reader');
 const {
@@ -88,7 +94,8 @@ function createApplication(options = {}) {
     const questionCatalogRepository = createFsQuestionCatalogRepository({ root: options.root, paths });
     const reviewRepository = createFsReviewRepository({ root: options.root, paths });
     const reviewProgressReader = createFsReviewProgressReader({ root: options.root, paths });
-    const reviewProgressWriter = createFsReviewProgressWriter({ root: options.root, paths });
+    const reviewProgressRepository = createFileReviewProgressRepositoryAdapter({ root: options.root });
+    const reviewMutationGateway = createFileReviewMutationGatewayAdapter({ root: options.root });
     const reviewSessionReader = createFsReviewSessionReader({ root: options.root, paths });
     const reviewIssueLinkReader = createFsReviewIssueLinkReader({ root: options.root });
     const reviewPlanPublisher = createFileReviewPlanPublisherAdapter({ root: options.root });
@@ -146,8 +153,7 @@ function createApplication(options = {}) {
     const reviewQueueDependencies = {
         canonicalCatalogRepository: catalogRepository,
         questionCatalogRepository,
-        progressReader: reviewProgressReader,
-        progressWriter: reviewProgressWriter,
+        progressRepository: reviewProgressRepository,
         strategyReader: reviewStrategyReader,
         issueLinkReader: reviewIssueLinkReader,
     };
@@ -162,6 +168,10 @@ function createApplication(options = {}) {
     const reviewPrepare = createReviewPrepareUseCase({
         ...reviewQueueDependencies,
         planPublisher: reviewPlanPublisher,
+    });
+    const reviewMark = createReviewMarkUseCase({
+        canonicalCatalogRepository: catalogRepository,
+        mutationGateway: reviewMutationGateway,
     });
 
     const dedupPaths = createDedupFsPaths(options.root);
@@ -226,6 +236,7 @@ function createApplication(options = {}) {
             next: reviewNext,
             weak: reviewWeak,
             prepare: reviewPrepare,
+            mark: reviewMark,
         }),
     });
 }

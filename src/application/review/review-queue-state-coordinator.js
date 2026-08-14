@@ -7,11 +7,8 @@ const {
     assertQuestionCatalogRepository,
 } = require('../../ports/repositories/question-catalog-repository');
 const {
-    assertReviewProgressReader,
-} = require('../../ports/repositories/review-progress-reader');
-const {
-    assertReviewProgressWriter,
-} = require('../../ports/repositories/review-progress-writer');
+    assertReviewProgressRepository,
+} = require('../../ports/repositories/review-progress-repository');
 const {
     assertReviewIssueLinkReader,
 } = require('../../ports/repositories/review-issue-link-reader');
@@ -28,8 +25,9 @@ function createReviewQueueStateCoordinator(dependencies = {}) {
     const questionCatalogRepository = assertQuestionCatalogRepository(
         dependencies.questionCatalogRepository,
     );
-    const progressReader = assertReviewProgressReader(dependencies.progressReader);
-    const progressWriter = assertReviewProgressWriter(dependencies.progressWriter);
+    const progressRepository = assertReviewProgressRepository(
+        dependencies.progressRepository,
+    );
     const issueLinkReader = assertReviewIssueLinkReader(dependencies.issueLinkReader);
     const strategyReader = assertReviewStrategyReader(dependencies.strategyReader);
 
@@ -40,11 +38,14 @@ function createReviewQueueStateCoordinator(dependencies = {}) {
 
         const canonicalRecords = canonicalCatalogRepository.list();
         const questionRows = questionCatalogRepository.list();
-        const loadedProgress = progressReader.load();
-        const progress = ensureProgressItems(loadedProgress, canonicalRecords, input.date);
+        const snapshot = progressRepository.snapshot({ date: input.date });
+        const progress = ensureProgressItems(snapshot.progress, canonicalRecords, input.date);
 
         if (input.write_progress !== false) {
-            progressWriter.write(progress);
+            progressRepository.save(progress, {
+                date: input.date,
+                expected_revision: snapshot.revision,
+            });
         }
 
         const issueLinks = input.with_issues

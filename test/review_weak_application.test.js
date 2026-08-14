@@ -2,7 +2,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
 const { createReviewWeakUseCase } = require('../src/application/review/review-weak');
 
 function canonical(id, overrides = {}) {
@@ -48,49 +47,46 @@ function createUseCase(overrides = {}) {
         },
         questionCatalogRepository: {
             list() {
-                return [
-                    {
-                        question_id: 'q_cq_confidence',
-                        canonical_id: 'cq_confidence',
-                        company: '美团',
-                        level: '社招',
-                    },
-                ];
+                return [{
+                    question_id: 'q_cq_confidence', canonical_id: 'cq_confidence',
+                    company: '美团', level: '社招',
+                }];
             },
         },
-        progressReader: {
-            load() {
+        progressRepository: {
+            snapshot() {
                 return {
-                    schema_version: 'review_progress_store.v1',
-                    updated_at: '2026-06-29',
-                    items: [
-                        {
-                            canonical_id: 'cq_status', status: 'weak', level: 1,
-                            review_count: 2, next_review_at: '2026-07-10',
-                            confidence: 0.8, difficulty: 3, mistake_count: 0,
-                        },
-                        {
-                            canonical_id: 'cq_mistake', status: 'learning', level: 1,
-                            review_count: 1, next_review_at: '2026-07-10',
-                            confidence: 0.8, difficulty: 3, mistake_count: 1,
-                        },
-                        {
-                            canonical_id: 'cq_confidence', status: 'learning', level: 1,
-                            review_count: 2, next_review_at: '2026-07-10',
-                            confidence: 0.4, difficulty: 3, mistake_count: 0,
-                        },
-                        {
-                            canonical_id: 'cq_healthy', status: 'learning', level: 1,
-                            review_count: 2, next_review_at: '2026-07-10',
-                            confidence: 0.5, difficulty: 3, mistake_count: 0,
-                        },
-                    ],
+                    revision: 'progress-rev-1',
+                    progress: {
+                        schema_version: 'review_progress_store.v1',
+                        updated_at: '2026-06-29',
+                        items: [
+                            {
+                                canonical_id: 'cq_status', status: 'weak', level: 1,
+                                review_count: 2, next_review_at: '2026-07-10',
+                                confidence: 0.8, difficulty: 3, mistake_count: 0,
+                            },
+                            {
+                                canonical_id: 'cq_mistake', status: 'learning', level: 1,
+                                review_count: 1, next_review_at: '2026-07-10',
+                                confidence: 0.8, difficulty: 3, mistake_count: 1,
+                            },
+                            {
+                                canonical_id: 'cq_confidence', status: 'learning', level: 1,
+                                review_count: 2, next_review_at: '2026-07-10',
+                                confidence: 0.4, difficulty: 3, mistake_count: 0,
+                            },
+                            {
+                                canonical_id: 'cq_healthy', status: 'learning', level: 1,
+                                review_count: 2, next_review_at: '2026-07-10',
+                                confidence: 0.5, difficulty: 3, mistake_count: 0,
+                            },
+                        ],
+                    },
                 };
             },
-        },
-        progressWriter: {
-            write(progress) {
-                writes.push(structuredClone(progress));
+            save(progress, input) {
+                writes.push({ progress: structuredClone(progress), input: structuredClone(input) });
                 return progress;
             },
         },
@@ -100,18 +96,12 @@ function createUseCase(overrides = {}) {
                 issueLoads++;
                 return {
                     schema_version: 'review_issue_links.v1',
-                    items: [
-                        {
-                            canonical_id: 'cq_confidence',
-                            issue_url: 'https://example.test/issues/4',
-                        },
-                    ],
+                    items: [{ canonical_id: 'cq_confidence', issue_url: 'https://example.test/issues/4' }],
                 };
             },
         },
         ...overrides,
     };
-
     return {
         weak: createReviewWeakUseCase(dependencies),
         writes,
@@ -119,37 +109,26 @@ function createUseCase(overrides = {}) {
     };
 }
 
+function progressRepositoryFor(progress) {
+    return {
+        snapshot: () => ({ revision: 'test-rev', progress: structuredClone(progress) }),
+        save() { throw new Error('save must not be called'); },
+    };
+}
+
 test('ReviewWeak preserves selector ranking initialization and issue semantics', () => {
     const fixture = createUseCase();
-
-    const result = fixture.weak({
-        date: '2026-06-30',
-        limit: 10,
-        with_issues: true,
-        write_progress: true,
-    });
-
+    const result = fixture.weak({ date: '2026-06-30', limit: 10, with_issues: true, write_progress: true });
     assert.equal(result.schema_version, 'review_weak.v1');
     assert.equal(result.returned_count, 3);
-    assert.deepEqual(
-        result.rows.map((row) => row.canonical_id).sort(),
-        ['cq_confidence', 'cq_mistake', 'cq_status'],
-    );
+    assert.deepEqual(result.rows.map((row) => row.canonical_id).sort(), ['cq_confidence', 'cq_mistake', 'cq_status']);
     assert.equal(result.rows.some((row) => row.canonical_id === 'cq_healthy'), false);
     assert.equal(result.rows.some((row) => row.canonical_id === 'cq_missing'), false);
-    assert.equal(
-        result.rows.find((row) => row.canonical_id === 'cq_confidence').issue_url,
-        'https://example.test/issues/4',
-    );
-    assert.equal(
-        result.rows.find((row) => row.canonical_id === 'cq_confidence').companies.includes('美团'),
-        true,
-    );
+    assert.equal(result.rows.find((row) => row.canonical_id === 'cq_confidence').issue_url, 'https://example.test/issues/4');
+    assert.equal(result.rows.find((row) => row.canonical_id === 'cq_confidence').companies.includes('美团'), true);
     assert.equal(fixture.writes.length, 1);
-    assert.equal(
-        fixture.writes[0].items.some((item) => item.canonical_id === 'cq_missing'),
-        true,
-    );
+    assert.equal(fixture.writes[0].progress.items.some((item) => item.canonical_id === 'cq_missing'), true);
+    assert.equal(fixture.writes[0].input.expected_revision, 'progress-rev-1');
     assert.equal(fixture.issueLoadCount(), 1);
 });
 
@@ -157,63 +136,35 @@ test('ReviewWeak noWrite suppresses progress persistence and optional issue load
     const fixture = createUseCase({
         canonicalCatalogRepository: { list: () => [canonical('cq_missing')] },
         questionCatalogRepository: { list: () => [] },
-        progressReader: {
-            load: () => ({
-                schema_version: 'review_progress_store.v1', updated_at: null, items: [],
-            }),
-        },
+        progressRepository: progressRepositoryFor({ schema_version: 'review_progress_store.v1', updated_at: null, items: [] }),
     });
-
-    const result = fixture.weak({
-        date: '2026-07-01',
-        write_progress: false,
-        with_issues: false,
-    });
-
+    const result = fixture.weak({ date: '2026-07-01', write_progress: false, with_issues: false });
     assert.equal(result.returned_count, 0);
-    assert.equal(fixture.writes.length, 0);
     assert.equal(fixture.issueLoadCount(), 0);
 });
 
 test('ReviewWeak preserves legacy default limit of 20', () => {
-    const records = Array.from(
-        { length: 21 },
-        (_, index) => canonical(`cq_${String(index).padStart(2, '0')}`),
-    );
+    const records = Array.from({ length: 21 }, (_, index) => canonical(`cq_${String(index).padStart(2, '0')}`));
     const items = records.map((record) => ({
         canonical_id: record.canonical_id,
-        status: 'weak',
-        level: 1,
-        review_count: 1,
-        next_review_at: '2026-07-01',
-        confidence: 0.5,
-        difficulty: 3,
-        mistake_count: 0,
+        status: 'weak', level: 1, review_count: 1,
+        next_review_at: '2026-07-01', confidence: 0.5,
+        difficulty: 3, mistake_count: 0,
     }));
     const fixture = createUseCase({
         canonicalCatalogRepository: { list: () => structuredClone(records) },
         questionCatalogRepository: { list: () => [] },
-        progressReader: {
-            load: () => ({
-                schema_version: 'review_progress_store.v1',
-                updated_at: '2026-07-01',
-                items: structuredClone(items),
-            }),
-        },
+        progressRepository: progressRepositoryFor({
+            schema_version: 'review_progress_store.v1', updated_at: '2026-07-01', items,
+        }),
     });
-
     const result = fixture.weak({ date: '2026-07-01', write_progress: false });
-
     assert.equal(result.returned_count, 20);
     assert.equal(result.rows.length, 20);
 });
 
 test('ReviewWeak requires shared queue-state outbound capabilities and a date', () => {
     const fixture = createUseCase();
-
     assert.throws(() => fixture.weak({}), /review date is required/);
-    assert.throws(
-        () => createReviewWeakUseCase({}),
-        /CanonicalCatalogRepository is required/,
-    );
+    assert.throws(() => createReviewWeakUseCase({}), /CanonicalCatalogRepository is required/);
 });

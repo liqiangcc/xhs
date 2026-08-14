@@ -1,24 +1,22 @@
 # 13 Review Command SoC / SRP Audit
 
-> Scope: audit and track the staged migration of `review integrity / today / next / weak / prepare / mark`. `review integrity`, `review today`, `review next`, `review weak`, and `review prepare` have completed their vertical migrations; only `review mark` remains legacy.
+> Scope: freeze the completed vertical migration of `review integrity / today / next / weak / prepare / mark`. All six Review commands are now Application-backed; the CLI no longer owns Review business or persistence logic.
 
 ## 1. Target dependency direction
 
 ```text
 CLI / Interface
     ↓
-Application use case
+Application UseCase / Coordinator
     ↓
-Domain policies + outbound Ports
+Domain Policy + outbound Port
                     ↑
-             Infrastructure
+             Infrastructure Adapter
 ```
 
-The migration preserves current behavior before redesigning Review business rules. Commands that look read-only are not necessarily side-effect free.
+The migration preserves legacy command behavior while moving ownership to explicit separation points.
 
-No new Review business rule should be added to `scripts/commands/review.js`, `scripts/lib/review_store.js`, or `scripts/lib/review_scheduler.js` while `review mark` waits for migration.
-
-## 2. Migration order and current status
+## 2. Migration order and final status
 
 ```text
 1. review integrity  ✅ completed
@@ -26,41 +24,45 @@ No new Review business rule should be added to `scripts/commands/review.js`, `sc
 3. review next       ✅ completed
 4. review weak       ✅ completed
 5. review prepare    ✅ completed
-6. review mark       ← next
+6. review mark       ✅ completed
 ```
 
-`integrity` established the first genuinely read-only Review slice. `today` established the queue-state initialization boundary. `next` and `weak` proved multiple query policies can reuse that boundary. `prepare` reuses the same queue state while separating query selection from plan publication.
+## 3. Review Application surface
 
-## 3. Current mixed responsibilities outside migrated slices
-
-`scripts/commands/review.js` now directly coordinates only the remaining `mark` concerns:
+Production `app.review` exposes:
 
 ```text
-Canonical existence check
-ReviewProgress loading and persistence
-missing-progress initialization
-Review result input validation
-ReviewProgress state transition
-session-event construction and append
-CLI exit semantics
-run manifest writing
+integrity
+today
+next
+weak
+prepare
+mark
 ```
 
-The CLI no longer owns Review queue loading, Question enrichment, issue-link loading, review strategy loading, prepare filtering, or Markdown plan rendering.
+The CLI is now limited to:
 
-`review integrity`, `review today`, `review next`, `review weak`, and `review prepare` are all Application-backed vertical slices.
+```text
+parse syntax/options
+resolve Interface aliases
+construct Application DTO
+call app.review.<useCase>
+emit result
+preserve command exit semantics
+write the generic run manifest
+```
 
-## 4. Domain SSOT extraction status
+It no longer imports legacy Canonical/Review stores.
 
-### 4.1 Review progress scheduling policy
+## 4. Domain SSOT
 
-Current scheduling/progress rules are in:
+### 4.1 Progress scheduling
 
 ```text
 src/domain/review/progress-policy.js
 ```
 
-It owns:
+Owns:
 
 ```text
 addDays()
@@ -69,47 +71,21 @@ ensureProgressItems()
 isDue()
 ```
 
-The legacy `scripts/lib/review_store.js` keeps compatibility wrappers for `mark`, but migrated queue use cases call Domain policy through Application rather than through the CLI.
-
-`applyReviewResult()` remains pending because it belongs to the final `review mark` mutation slice. Its current rules still cover:
-
-```text
-again / hard / good / easy transitions
-level clamp 0..5
-confidence changes
-difficulty changes
-mistake_count changes
-next-review intervals
-mastered / weak / learning derivation
-```
-
-Those rules must move to Review Domain unchanged before the legacy `mark` path is retired.
-
-### 4.2 Review ranking policy
-
-Scoring and ordering are pure Review Domain policy:
+### 4.2 Ranking
 
 ```text
 src/domain/review/ranking-policy.js
 ```
 
-The declarative weight SSOT remains:
+Owns score interpretation and deterministic queue ordering.
 
-```text
-config/review_strategy.json
-```
-
-Production migrated Review use cases obtain it through `ReviewStrategyReader`. Domain interprets the values; it does not load config files.
-
-### 4.3 Review weak-selection policy
-
-Weak-card classification is a pure Review Domain predicate:
+### 4.3 Weak classification
 
 ```text
 src/domain/review/weak-policy.js
 ```
 
-It preserves the legacy rule exactly:
+Frozen rule:
 
 ```text
 progress.status === 'weak'
@@ -117,27 +93,62 @@ OR mistake_count > 0
 OR (review_count > 0 AND confidence < 0.5)
 ```
 
-The policy does not rank rows, load progress, read strategy configuration, or know about CLI options.
-
-## 5. Shared Review queue state boundary
-
-`review today`, `review next`, `review weak`, and `review prepare` share:
+### 4.4 Review result transition
 
 ```text
-src/application/review/review-queue-state.js
+src/domain/review/review-result-policy.js
 ```
 
-Current flow:
+Owns the former legacy `applyReviewResult()` business rules unchanged:
+
+```text
+again / hard / good / easy
+level clamp 0..5
+confidence updates
+difficulty updates
+mistake_count updates
+next-review intervals
+mastered / weak / learning derivation
+```
+
+`scripts/lib/review_store.js` keeps only a compatibility wrapper that delegates to this Domain SSOT.
+
+### 4.5 Mark metadata/event policy
+
+```text
+src/domain/review/review-mark-policy.js
+```
+
+Owns:
+
+```text
+oral-version = one_minute validation
+quality-defect de-duplication
+hard-failure de-duplication
+feedback-closed-at YYYY-MM-DD validation
+feedback-closed-at requires at least one quality-defect
+ReviewSession event construction
+```
+
+## 5. Shared Review queue state
+
+Queue queries share:
+
+```text
+src/application/review/review-queue-state-coordinator.js
+```
+
+Final flow:
 
 ```text
 CanonicalCatalogRepository.list()
 QuestionCatalogRepository.list()
-ReviewProgressReader.load()
+ReviewProgressRepository.snapshot(date)
         ↓
 ensureProgressItems() Domain policy
         ↓
 if write_progress:
-    ReviewProgressWriter.write()
+    ReviewProgressRepository.save(progress, expected_revision)
         ↓
 optional ReviewIssueLinkReader.load()
 ReviewStrategyReader.read()
@@ -145,33 +156,18 @@ ReviewStrategyReader.read()
 createReviewQueueRows()
 ```
 
-This preserves a critical compatibility rule:
+`ReviewProgressRepository` uses compare-and-set persistence. A queue command holding a stale progress snapshot cannot overwrite a concurrent `review mark`.
 
-> Review queue commands are not pure reads by default when ReviewProgress is missing.
-
-For migrated queue commands:
-
-```text
-missing progress
-→ synthesized in memory
-→ participates in returned queue state
-→ persisted unless --noWrite
-```
-
-`--noWrite` suppresses persistence only; it does not suppress in-memory initialization.
-
-No command-specific queue repository has been introduced.
+`--noWrite` still synthesizes missing progress in memory but does not persist it.
 
 ## 6. `review integrity` — completed
-
-Current flow:
 
 ```text
 review integrity CLI
         ↓
 app.review.integrity
         ↓
-ReviewIntegrity Application
+ReviewIntegrityUseCase
         ↓
 CanonicalCatalogRepository
 ReviewProgressReader
@@ -180,352 +176,143 @@ ReviewSessionReader
 Review integrity Domain policy
 ```
 
-Filesystem adapters own only persistence facts:
-
-- progress JSON loading;
-- session enumeration;
-- session JSON parsing;
-- invalid session JSON becomes `parse_error = invalid_json` evidence.
-
-Domain owns the meaning of duplicate/stale/missing/malformed references.
-
-Frozen output:
+Output remains:
 
 ```text
 schema_version = review_integrity.v1
-ok
-canonical_count
-progress_item_count
-initialized_progress_count
-missing_progress_count
-missing_progress_sample
-duplicate_progress_canonical_ids
-stale_progress_canonical_ids
-malformed_progress_items
-stale_session_events
-hard_failure_count
 ```
 
-Hard failures remain:
-
-```text
-malformed progress items
-+ duplicate progress canonical IDs
-+ stale progress canonical IDs
-+ stale/malformed session events
-```
-
-Missing progress is reported but does **not** count as a hard failure.
-
-CLI compatibility remains:
-
-```text
-review integrity result.ok=false
-→ process exit 1
-```
-
-This intentionally differs from `canonical check`, whose `ok=false` exits 0.
+Missing progress is reported but is not a hard failure. Malformed, duplicate, stale progress/session references remain hard failures. `ok=false` still maps to CLI exit 1.
 
 ## 7. `review today` — completed
 
-Current flow:
-
 ```text
-review today CLI
-        ↓
-app.review.today
-        ↓
-shared ReviewQueueState
-        ↓
-isDue() Domain policy
-        ↓
-rankReviewRows() Domain policy
-        ↓
-review_today.v1
+review today
+→ ReviewQueueStateCoordinator
+→ isDue()
+→ rankReviewRows()
+→ limit
+→ review_today.v1
 ```
 
 Frozen behavior:
 
 ```text
 default limit = 20
-date = current / explicit review date
-total_due_count = due count before limit
-returned_count = limited row count
-optional --with-issues adds issue_url
-missing progress is synthesized
-missing progress is persisted unless --noWrite
+missing progress synthesized
+missing progress persisted unless --noWrite
+optional --with-issues
 ```
-
-CLI no longer owns progress initialization, due selection, ranking, issue-link enrichment, or Review strategy interpretation.
 
 ## 8. `review next` — completed
 
-Current flow:
-
 ```text
-review next CLI
-        ↓
-app.review.next
-        ↓
-shared ReviewQueueState
-        ↓
-maxDate = addDays(date, days)
-        ↓
-next_review_at absent OR <= maxDate
-        ↓
-rankReviewRows() Domain policy
-        ↓
-limit
-        ↓
-review_next.v1
+review next
+→ ReviewQueueStateCoordinator
+→ addDays(date, days)
+→ next_review_at absent OR <= maxDate
+→ rankReviewRows()
+→ limit
+→ review_next.v1
 ```
 
 Frozen behavior:
 
 ```text
-schema_version = review_next.v1
 default days = 7
 default limit = 20
-rows include already-due cards
-rows include upcoming cards inside the horizon
-missing progress initialization behavior = same as today
-optional --with-issues = same as today
+already-due rows remain included
 ```
-
-The migration reuses the exact Review queue Ports and policies established by `today`; no `Next`-specific filesystem repository exists.
 
 ## 9. `review weak` — completed
 
-Current flow:
-
 ```text
-review weak CLI
-        ↓
-app.review.weak
-        ↓
-shared ReviewQueueState
-        ↓
-isWeakReviewProgress() Domain policy
-        ↓
-rankReviewRows() Domain policy
-        ↓
-limit
-        ↓
-review_weak.v1
+review weak
+→ ReviewQueueStateCoordinator
+→ isWeakReviewProgress()
+→ rankReviewRows()
+→ limit
+→ review_weak.v1
 ```
 
-Frozen behavior:
-
-```text
-schema_version = review_weak.v1
-returned_count
-rows
-default limit = 20
-optional --with-issues
-missing progress initialization = same as today / next
-```
-
-The selector remains:
-
-```text
-progress.status === 'weak'
-OR mistake_count > 0
-OR (review_count > 0 AND confidence < 0.5)
-```
-
-The CLI only resolves Interface options and invokes `app.review.weak`.
+No Weak-specific repository or loader exists.
 
 ## 10. `review prepare` — completed
 
-`prepare` separates query selection from plan publication.
-
-Current flow:
-
 ```text
-review prepare CLI
-        ↓
-app.review.prepare
-        ↓
-shared ReviewQueueState
-        ↓
-if days:
-    next_review_at absent OR <= addDays(date, days)
-else:
-    isDue(progress, date)
-        ↓
-rankReviewRows()
-        ↓
-Application filters
-        ↓
-limit
-        ↓
-optional ReviewPlanPublisher.publish()
-        ↓
-review_prepare_result.v1
-```
-
-Selection remains behavior-compatible:
-
-```text
-if --days:
-    upcoming rows
-else:
-    due rows
-```
-
-Additional filters remain:
-
-```text
-priority       exact equality
-status         exact progress.status equality
-domain         exact primary_domain.l1 equality
-company        substring match against enriched companies
-level          substring match against enriched levels
-topic          case-insensitive substring across:
-               canonical_title
-               primary_entities
-               primary_domain.l1
-               primary_domain.l2
-```
-
-The ordering boundary is preserved:
-
-```text
-select due/upcoming
+review prepare
+→ ReviewQueueStateCoordinator
+→ due/upcoming selection
 → rank
-→ apply prepare filters
+→ Application filters
 → limit
+→ optional ReviewPlanPublisher.publish()
+→ review_prepare_result.v1
+```
+
+Filters remain behavior-compatible:
+
+```text
+priority exact
+status exact
+domain exact
+company substring
+level substring
+topic case-insensitive substring across title/entities/domain
+```
+
+`ReviewPlanPublisher` owns only publication. `FileReviewPlanPublisherAdapter` owns safe filename, Markdown format, and filesystem persistence.
+
+## 11. `review mark` — completed
+
+Final flow:
+
+```text
+review mark CLI
+        ↓
+app.review.mark
+        ↓
+ReviewMarkUseCase
+        ↓
+CanonicalCatalogRepository
+ReviewMutationGateway.snapshot(date)
+        ↓
+ensureProgressItems()
+applyReviewResult() Domain policy
+normalizeReviewMarkInput() Domain policy
+createReviewSessionEvent() Domain policy
+        ↓
+if --noWrite:
+    return proposed mutation only
+else:
+    ReviewMutationGateway.commit(review_mutation.v1)
+        ↓
+review_mark_result.v1
+```
+
+Frozen Interface aliases remain:
+
+```text
+canonical id = --canonical-id or positional id
+result       = --result or --status
 ```
 
 Frozen output remains:
 
 ```text
-schema_version = review_prepare_result.v1
+schema_version = review_mark_result.v1
 ok = true
 dry_run
-target
-plan_path
-item_count
-rows
+canonical_id
+result
+progress
+session_event
+session_path
 ```
 
-### 10.1 ReviewPlanPublisher boundary
+## 12. Mark consistency boundary
 
-The outbound Port is:
-
-```text
-src/ports/services/review-plan-publisher.js
-```
-
-The production filesystem adapter is:
-
-```text
-src/infrastructure/filesystem/review-plan-publisher-adapter.js
-```
-
-Responsibility split:
-
-```text
-Application
-  → reuse queue state
-  → select due/upcoming rows
-  → apply filters
-  → rank / limit
-  → decide whether a plan is published
-
-ReviewPlanPublisher Port
-  → one narrow publish capability
-
-FileReviewPlanPublisherAdapter
-  → sanitize target into a safe filename
-  → render the historical Markdown table
-  → write review/plans/<safe target>.md
-  → return the relative plan path
-```
-
-The publisher does **not** decide which cards belong in the plan.
-
-### 10.2 `--noWrite` compatibility
-
-`review prepare --noWrite` maps to:
-
-```text
-write_progress = false
-write_plan = false
-```
-
-Therefore:
-
-```text
-missing progress is still synthesized in memory
-progress.json is not written
-the Markdown plan is not published
-plan_path = null
-dry_run = true
-rows are still returned
-```
-
-With normal writes enabled, missing progress is persisted before the plan is published, preserving historical queue-state behavior.
-
-### 10.3 CLI cleanup achieved by prepare migration
-
-The CLI no longer contains:
-
-```text
-loadReviewState()
-questionMetadata()
-canonicalRows()
-dueRows()
-upcomingRows()
-safeName()
-writePlan()
-```
-
-It also no longer imports Review prepare dependencies such as:
-
-```text
-node:fs
-Question store
-issue_store
-review_scheduler
-```
-
-Those concerns now belong to Application, Ports, or Infrastructure.
-
-## 11. `review mark` — next / highest risk
-
-`mark` is the final legacy Review command and a formal mutation.
-
-Current responsibilities include:
-
-```text
-Canonical existence check
-result/status alias handling
-oral-version validation
-quality-defect de-duplication
-hard-failure de-duplication
-feedback-closed-at validation
-progress initialization
-applyReviewResult() state transition
-ReviewProgress persistence
-session-event construction
-session append
-review_mark_result.v1 projection
-```
-
-Frozen behavior includes:
-
-```text
-result alias: --result or --status
-allowed oral-version: one_minute
-feedback-closed-at requires YYYY-MM-DD
-feedback-closed-at requires at least one quality-defect
---noWrite returns proposed progress/session event but writes neither
-```
-
-### Current consistency risk
-
-The legacy write order remains:
+The legacy risk was:
 
 ```text
 saveProgress(...)
@@ -533,105 +320,121 @@ saveProgress(...)
 appendSessionEvent(...)
 ```
 
-If the second write fails after the first succeeds, ReviewProgress and ReviewSession can diverge.
+A second-write failure could leave progress updated without the matching session event.
 
-This must become an explicit consistency boundary rather than two Infrastructure calls hidden behind Application.
-
-Target responsibility shape:
+The migrated boundary is:
 
 ```text
-MarkReview Application operation
-    ↓
-Review Domain transition policy
-    ↓
-ReviewMutationPlan
-    ↓
-approved outbound consistency boundary
-    ↓
-preflight + atomic/recoverable progress/session commit
+ReviewMutationGateway
 ```
 
-The exact outbound role suffix is intentionally not frozen yet. Under the naming convention, `Store` is not an approved role; `Repository` versus `Gateway` must be chosen from the actual `review mark` responsibility.
-
-`mark` remains last because it is the only Review command whose correctness depends on an atomic/recoverable multi-file mutation boundary.
-
-## 12. Recommended migration order
+Its production implementation is:
 
 ```text
-1. review integrity  ✅
-2. review today      ✅
-3. review next       ✅
-4. review weak       ✅
-5. review prepare    ✅
-6. review mark       ← next
+FileReviewMutationGatewayAdapter
 ```
 
-The remaining work is intentionally mutation-focused:
+The Gateway revision covers both:
 
-- move Review result transition semantics to Domain SSOT without changing intervals or thresholds;
-- model proposed progress/session changes as semantic mutation intent;
-- define one approved outbound consistency-boundary role based on responsibility;
-- keep Interface input aliases and output schema compatible.
+```text
+review/progress.json
+review/sessions/<date>.json
+```
 
-## 13. Port / responsibility guidance
+Commit semantics:
 
-Current narrow capabilities:
+```text
+snapshot returns opaque revision
+→ Application builds semantic review_mutation.v1
+→ commit acquires Review mutation lock
+→ recover stale pending journal if needed
+→ compare revision again
+→ stage progress + session
+→ persist prepared journal
+→ publish both files
+→ mark journal committed
+→ cleanup
+```
+
+Normal publish failure rolls already-published files back. A simulated/process crash may leave the prepared journal; the next Review persistence operation recovers it before proceeding.
+
+This is an explicitly recoverable multi-file transaction rather than two hidden filesystem writes.
+
+## 13. Queue/mark concurrency
+
+`ReviewProgressRepository` and `ReviewMutationGateway` share the Review transaction directory/lock/recovery mechanism.
+
+Queue persistence uses a progress-only revision:
+
+```text
+snapshot progress revision
+→ synthesize missing items
+→ save(progress, expected_revision)
+```
+
+Mark persistence uses a progress+session revision:
+
+```text
+snapshot mutation revision
+→ build transition/event
+→ commit(expected_revision)
+```
+
+Therefore:
+
+```text
+stale queue save cannot overwrite a completed mark
+stale mark cannot overwrite a newer queue progress save
+concurrent mark/session edits fail closed on revision mismatch
+```
+
+## 14. Final narrow capabilities
 
 ```text
 CanonicalCatalogRepository
 QuestionCatalogRepository
-ReviewProgressReader
-ReviewProgressWriter       # naming deferred to mark consistency design
-ReviewSessionReader
+ReviewProgressReader          # integrity/read-only inspection
+ReviewProgressRepository      # queue progress CAS persistence
+ReviewSessionReader           # integrity/read-only inspection
 ReviewStrategyReader
 ReviewIssueLinkReader
 ReviewPlanPublisher
+ReviewMutationGateway         # mark consistency boundary
 ```
 
-Pending `review mark` must add a consistency capability only after deciding whether its responsibility is best modeled as an approved `Repository` or `Gateway` role.
+The Canonical-merge-specific `ReviewRepository.loadMergeState()` remains separate and must not become generic Review CRUD.
 
-The existing Canonical-merge `ReviewRepository.loadMergeState()` remains merge-specific and must not be broadened into a generic Review CRUD repository.
+## 15. Completion criteria — satisfied
 
-## 14. Completion criteria
-
-After `review mark` is migrated, `scripts/commands/review.js` should no longer directly import or use:
-
-```text
-legacy Canonical store
-review_store persistence helpers
-```
-
-The following Review prepare/query dependencies have already been removed from the CLI:
+`scripts/commands/review.js` no longer imports or uses:
 
 ```text
 node:fs
+legacy Canonical store
 legacy Question store
 issue_store
-review_scheduler config loader
-Markdown rendering / filesystem plan writes
+review_store
+review_scheduler
+saveProgress
+appendSessionEvent
+applyReviewResult
+Markdown plan rendering
 ```
 
-Final Interface responsibility:
+The Review Domain does not depend on filesystem paths, config-file loading, CLI syntax, or Markdown rendering.
+
+## 16. Non-targets
+
+This migration does not redesign:
 
 ```text
-parse syntax/options
-→ construct Application DTO
-→ call app.review.<useCase>
-→ emit result
-→ preserve command-specific exit semantics
+review interval values
+confidence/difficulty deltas
+status thresholds
+review_strategy.json weights
+Review plan Markdown format
+existing Review data schemas
+Canonical/Dedup business behavior
 ```
 
-The Review Domain must not depend on filesystem paths, `process.argv`, config-file loading, or Markdown rendering.
-
-## 15. Non-targets of this migration line
-
-This line does not redesign:
-
-- Review scheduling intervals or thresholds;
-- `config/review_strategy.json` values;
-- Canonical/Dedup behavior;
-- Canonical merge Review migration behavior;
-- existing Review data;
-- Review plan Markdown format.
-
-Business behavior is frozen first; structural ownership moves one vertical slice at a time.
+Business behavior was frozen first; ownership and consistency boundaries changed without silently changing Review rules.
