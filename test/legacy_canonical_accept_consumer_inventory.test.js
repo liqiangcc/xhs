@@ -99,11 +99,23 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
         `Unclassified legacy canonical accept references: ${unclassified.join(', ')}`,
     );
 
-    assert.equal(inventory.retirement_status, 'blocked_by_active_documentation');
-    assert.deepEqual(
-        inventory.active_blockers.map((item) => item.path),
-        ['docs/refactor/08_content_building_goals.md'],
+    assert.equal(
+        inventory.retirement_status,
+        'repository_local_ready_external_confirmation_required',
     );
+    assert.deepEqual(inventory.active_blockers, []);
+    assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
+    assert.equal(inventory.summary.external_consumers_observable, false);
+});
+
+test('content-building execution no longer routes new relations through legacy Accept', () => {
+    const contentGoals = read('docs/refactor/08_content_building_goals.md');
+
+    assert.match(contentGoals, /canonical suggest/);
+    assert.match(contentGoals, /dedup decide/);
+    assert.match(contentGoals, /dedup apply/);
+    assert.match(contentGoals, /10_current_dedup_canonical_operations\.md/);
+    assert.doesNotMatch(contentGoals, /canonical accept \/ merge \/ split/);
 });
 
 test('checked-in legacy canonical candidate manifest is an empty historical snapshot', () => {
