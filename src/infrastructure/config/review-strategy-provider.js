@@ -3,9 +3,10 @@
 const path = require('path');
 const { readJson } = require('../../../scripts/lib/io');
 
+const DEFAULT_STRATEGY_PATH = path.resolve(__dirname, '..', '..', '..', 'config', 'review_strategy.json');
+
 function createReviewStrategyProvider(options = {}) {
-    if (!options.root) throw new Error('Review strategy provider root is required');
-    const strategyPath = options.strategyPath || path.join(options.root, 'config', 'review_strategy.json');
+    const strategyPath = options.strategyPath || DEFAULT_STRATEGY_PATH;
 
     return {
         load() {
@@ -15,5 +16,6 @@ function createReviewStrategyProvider(options = {}) {
 }
 
 module.exports = {
+    DEFAULT_STRATEGY_PATH,
     createReviewStrategyProvider,
 };
