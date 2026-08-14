@@ -51,7 +51,7 @@ test('canonical accept is no longer exposed by the Interface layer', () => {
     assert.equal(fs.existsSync(path.join(ROOT, 'src', 'interfaces', 'cli', 'canonical-accept-presenter.js')), false);
 });
 
-test('legacy Accept application, repository layer, and filesystem candidate CAS bridge are removed', () => {
+test('legacy Accept runtime and accept MutationPlan operation are removed while legacy path cleanup remains separate', () => {
     const bootstrap = source('src/bootstrap/create-application.js');
     const canonicalRepositories = source('src/infrastructure/filesystem/canonical-repositories.js');
     const mutationPlan = source('src/application/canonical/mutation-plan.js');
@@ -76,7 +76,10 @@ test('legacy Accept application, repository layer, and filesystem candidate CAS 
     assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-revision/);
     assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-repositories/);
     assert.doesNotMatch(canonicalRepositories, /canonical-candidate:/);
-    assert.match(mutationPlan, /['"]accept['"]/);
+    assert.doesNotMatch(mutationPlan, /['"]accept['"]/);
+    assert.match(mutationPlan, /['"]merge['"]/);
+    assert.match(mutationPlan, /['"]split['"]/);
+    assert.match(mutationPlan, /['"]canonicalize['"]/);
 });
 
 test('canonical_candidates.v1 knowledge is absent from active src JavaScript runtime', () => {
