@@ -159,26 +159,10 @@ async function runSplit(options = {}) {
 
 function runStats(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const paths = defaultPaths(root);
-    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
-    const questions = loadQuestions({ filePath: paths.questions });
-    const canonicalQuestionIds = new Set(records.flatMap((record) => record.question_ids || []));
-    return {
-        schema_version: 'canonical_stats.v1',
-        canonical_count: records.length,
-        canonical_question_id_count: canonicalQuestionIds.size,
-        assigned_question_rows: questions.filter((question) => question.canonical_id).length,
-        top_canonical: [...records]
-            .sort((a, b) => b.frequency - a.frequency || a.canonical_id.localeCompare(b.canonical_id))
-            .slice(0, Number(options.limit || 20))
-            .map((record) => ({
-                canonical_id: record.canonical_id,
-                canonical_title: record.canonical_title,
-                frequency: record.frequency,
-                companies: record.companies,
-                primary_entities: record.primary_entities,
-            })),
-    };
+    const application = createApplication({ root });
+    return application.canonical.stats({
+        limit: options.limit,
+    });
 }
 
 function emitCommandResult(command, options, result) {
