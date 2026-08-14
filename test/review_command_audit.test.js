@@ -36,6 +36,7 @@ test('review audit freezes migration order and high-risk boundaries', () => {
     assert.match(audit, /review_mark_result\.v1/);
     assert.match(audit, /review integrity[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /review today[\s\S]*(?:completed|已完成)/i);
+    assert.match(audit, /review next[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /saveProgress\([\s\S]*appendSessionEvent/);
     assert.match(audit, /ReviewMutationPlan \/ ReviewMutationStore/);
 });
@@ -44,10 +45,10 @@ test('Production Application exposes only migrated Review capabilities', () => {
     const app = createApplication({ root: ROOT });
 
     assert.equal(Object.isFrozen(app.review), true);
-    assert.deepEqual(Object.keys(app.review), ['integrity', 'today']);
+    assert.deepEqual(Object.keys(app.review), ['integrity', 'today', 'next']);
     assert.equal(typeof app.review.integrity, 'function');
     assert.equal(typeof app.review.today, 'function');
-    assert.equal('next' in app.review, false);
+    assert.equal(typeof app.review.next, 'function');
     assert.equal('weak' in app.review, false);
     assert.equal('prepare' in app.review, false);
     assert.equal('mark' in app.review, false);
@@ -66,21 +67,33 @@ test('review integrity delegates to Application and preserves ok=false exit sema
     assert.match(commandModule, /return result\.ok === false \? 1 : 0/);
 });
 
-test('review today delegates initialization ranking and optional persistence to Application', () => {
-    const source = runToday.toString();
+test('review today and next delegate shared queue-state semantics to Application', () => {
+    const todaySource = runToday.toString();
+    const nextSource = runNext.toString();
 
-    assert.match(source, /createApplication/);
-    assert.match(source, /application\.review\.today/);
-    assert.match(source, /date:\s*defaultDate\(options\)/);
-    assert.match(source, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
-    assert.match(source, /write_progress:\s*!options\.noWrite/);
+    assert.match(todaySource, /createApplication/);
+    assert.match(todaySource, /application\.review\.today/);
+    assert.match(todaySource, /date:\s*defaultDate\(options\)/);
+    assert.match(todaySource, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
+    assert.match(todaySource, /write_progress:\s*!options\.noWrite/);
     assert.doesNotMatch(
-        source,
+        todaySource,
         /loadReviewState|ensureProgressItems|saveProgress|canonicalRows|dueRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
+    );
+
+    assert.match(nextSource, /createApplication/);
+    assert.match(nextSource, /application\.review\.next/);
+    assert.match(nextSource, /date:\s*defaultDate\(options\)/);
+    assert.match(nextSource, /days:\s*options\.days/);
+    assert.match(nextSource, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
+    assert.match(nextSource, /write_progress:\s*!options\.noWrite/);
+    assert.doesNotMatch(
+        nextSource,
+        /loadReviewState|upcomingRows|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
     );
 });
 
-test('next weak and prepare still synthesize progress and persist it unless noWrite', () => {
+test('weak and prepare still synthesize progress and persist it unless noWrite', () => {
     const commandModule = read('scripts/commands/review.js');
 
     assert.match(
@@ -88,7 +101,7 @@ test('next weak and prepare still synthesize progress and persist it unless noWr
         /function loadReviewState[\s\S]*ensureProgressItems\([\s\S]*if \(!options\.noWrite\)[\s\S]*saveProgress\(/,
     );
 
-    for (const source of [runNext.toString(), runWeak.toString(), runPrepare.toString()]) {
+    for (const source of [runWeak.toString(), runPrepare.toString()]) {
         assert.match(source, /loadReviewState/);
     }
 });
@@ -141,5 +154,5 @@ test('existing ReviewRepository remains Canonical-merge-specific rather than bec
     const port = read('src/ports/repositories/review-repository.js');
 
     assert.match(port, /loadMergeState/);
-    assert.doesNotMatch(port, /listProgress|saveProgress|appendSession|today|weak|integrity/);
+    assert.doesNotMatch(port, /listProgress|saveProgress|appendSession|today|next|weak|integrity/);
 });
