@@ -36,6 +36,7 @@ function inventoryPaths(inventory) {
     return new Set([
         ...inventory.active_blockers.map((item) => item.path),
         ...inventory.runtime_compatibility.map((item) => item.path),
+        ...inventory.test_support_compatibility.map((item) => item.path),
         ...inventory.compatibility_aliases.map((item) => item.path),
         ...inventory.checked_in_legacy_data.map((item) => item.path),
         ...inventory.current_policy_references,
@@ -131,6 +132,20 @@ test('legacy runtime concurrency bridge is explicit and current Suggest automati
     assert.doesNotMatch(canonicalCli, /canonical_candidates\.json/);
     assert.doesNotMatch(workflow, /data\/manifests\/canonical\/canonical_candidates\.json/);
     assert.match(workflow, /data\/manifests\/dedup\/relation_candidate_queues\.json/);
+});
+
+test('in-memory canonical candidate support is classified as test compatibility, not production wiring', () => {
+    const inventory = JSON.parse(fs.readFileSync(INVENTORY_PATH, 'utf8'));
+    const item = inventory.test_support_compatibility.find(
+        (entry) => entry.path === 'src/infrastructure/in-memory/canonical-adapters.js',
+    );
+    assert.ok(item);
+
+    const adapter = read(item.path);
+    const bootstrap = read('src/bootstrap/create-application.js');
+    assert.match(adapter, /canonical-candidate:/);
+    assert.match(adapter, /canonicalCandidateRepository/);
+    assert.doesNotMatch(bootstrap, /in-memory\/canonical-adapters/);
 });
 
 test('generic candidate_id in canonical boundary audit is not treated as legacy Accept input', () => {
