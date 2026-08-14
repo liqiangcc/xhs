@@ -91,7 +91,7 @@ function runCheck(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const application = createApplication({ root });
     return application.canonical.check({
-        write_report: !options.noWrite,
+        write_report: !options.noWrite && !options.noReport,
     });
 }
 
