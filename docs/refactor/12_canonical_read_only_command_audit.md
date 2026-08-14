@@ -1,10 +1,10 @@
 # 12 Canonical Read-only Command Audit
 
-> Scope: audit and track the staged migration of `canonical list / stats / check` from the legacy CLI boundary. `canonical list` has completed its vertical migration; `stats / check` remain pending.
+> Scope: audit and track the staged migration of `canonical list / stats / check` from the legacy CLI boundary. `canonical list` and `canonical stats` have completed their vertical migrations; only `canonical check` remains pending.
 
 ## 1. Goal
 
-The remaining Canonical read-side work follows one dependency direction:
+The Canonical read-side migration follows one dependency direction:
 
 ```text
 CLI / Interface
@@ -20,7 +20,7 @@ Infrastructure owns persistence.
 Interface owns argv / transport / presentation only.
 ```
 
-No new business rule should be added to the legacy `stats / check` command bodies while they wait for migration.
+No new business rule should be added to the remaining legacy `check` command body while it waits for migration.
 
 ## 2. Migration order and current status
 
@@ -28,23 +28,13 @@ The migration order remains:
 
 ```text
 1. canonical list   ✅ completed
-2. canonical stats  ← next
-3. canonical check
+2. canonical stats  ✅ completed
+3. canonical check  ← next / final read-side slice
 ```
 
-`canonical list` 已完成第一条 read-side vertical slice. It now proves the intended pattern before the two broader queries migrate.
+`list` proved the one-catalog read pattern. `stats` then proved that storage-independent aggregation across Canonical and Question catalogs can also live in Application without pushing query semantics into Filesystem adapters.
 
 ## 3. `canonical list` — completed
-
-Previous flow:
-
-```text
-CLI options
-  ↓
-load canonical_questions.jsonl
-  ↓
-filter / sort / limit / DTO projection in CLI
-```
 
 Current flow:
 
@@ -101,37 +91,54 @@ primary_entities
 
 The migration intentionally preserves the existing synchronous `runList()` call timing for local JSONL reads; separation of concerns did not require changing the command's calling convention.
 
-## 4. `canonical stats` — next
+## 4. `canonical stats` — completed
 
-Current flow remains legacy:
+Previous flow:
 
 ```text
+CLI
+  ↓
 load Canonical records
 load Question rows
   ↓
-count Canonicals
-count unique Canonical.question_ids
-count Question rows with canonical_id
-rank Canonicals by frequency DESC / canonical_id ASC
-  ↓
-limit top rows
-  ↓
-project canonical_stats.v1
+count / distinct / rank / limit / DTO in CLI
 ```
 
-Current responsibilities mixed in `runStats()`:
+Current flow:
 
-| Responsibility | Current owner | Target owner |
-|---|---|---|
-| root / argv / limit parsing | Interface | Interface |
-| Canonical JSONL loading | Interface via legacy store | Infrastructure |
-| Question JSONL loading | Interface via legacy store | Infrastructure |
-| unique question-id aggregation | Interface | Application query semantics |
-| assigned row aggregation | Interface | Application query semantics |
-| top-Canonical ranking | Interface | Application query semantics |
-| DTO projection | Interface | Application result DTO |
+```text
+scripts/commands/canonical.js::runStats
+        ↓
+app.canonical.stats
+        ↓
+CanonicalStats Application
+        ↓
+CanonicalCatalogRepository.list()
+QuestionCatalogRepository.list()
+        ↑
+Filesystem catalog adapters
+```
 
-Frozen compatibility behavior:
+The two catalog Ports are intentionally separate:
+
+- `CanonicalCatalogRepository.list()` returns storage-agnostic Canonical records;
+- `QuestionCatalogRepository.list()` returns storage-agnostic Question rows;
+- neither adapter knows `canonical_stats.v1`, ranking, counting, or CLI flags.
+
+Current responsibility split:
+
+| Responsibility | Current owner |
+|---|---|
+| root / argv / limit mapping | Interface |
+| Canonical JSONL loading | Canonical catalog Infrastructure adapter |
+| Question JSONL loading | Question catalog Infrastructure adapter |
+| distinct Canonical question-id aggregation | Application |
+| assigned Question row aggregation | Application |
+| top-Canonical ranking | Application |
+| limit semantics | Application |
+| `canonical_stats.v1` DTO projection | Application |
+
+Frozen compatibility behavior remains:
 
 ```text
 schema_version = canonical_stats.v1
@@ -152,29 +159,15 @@ companies
 primary_entities
 ```
 
-Risk/complexity: **medium**, because it composes two logical read sources.
+Important separation point:
 
-Do not push these aggregations into a filesystem adapter merely because the current implementation uses JSONL. They are storage-independent query semantics.
+> Cross-catalog aggregation is storage-independent query semantics. It belongs to Application, not to JSONL/Filesystem adapters.
 
-Recommended next dependency shape:
+The migration also preserves the existing synchronous `runStats()` calling convention.
 
-```text
-canonical stats CLI
-        ↓
-app.canonical.stats
-        ↓
-CanonicalStats Application
-        ↓
-Canonical catalog Port + Question read Port
-        ↑
-Filesystem adapters
-```
+## 5. `canonical check` — next / last
 
-Prefer reusing the newly established Canonical catalog read boundary rather than creating another Canonical loader with overlapping responsibility.
-
-## 5. `canonical check` — last
-
-Current flow:
+Current flow is still legacy:
 
 ```text
 load Canonical records
@@ -197,7 +190,7 @@ createFsCanonicalIntegrityChecker
 evaluateCanonicalIntegrity Domain SSOT
 ```
 
-Production `createApplication()` already constructs this checker for Merge/Split post-commit validation, but it is not exposed as a standalone read use case.
+Production `createApplication()` already constructs this checker for Merge/Split post-commit validation, but it is not yet exposed as a standalone read use case.
 
 Current responsibilities mixed in `runCheck()`:
 
@@ -220,46 +213,69 @@ canonical CLI process exit remains 0 when check returns ok=false
 
 The last rule intentionally differs from `review integrity`, whose CLI returns a failure exit code when `ok=false`. Do not normalize those exit semantics accidentally during migration.
 
-Risk/complexity: **medium-high** despite the existing checker, because report persistence is an explicit optional side effect.
+Risk/complexity remains **medium-high** despite the existing checker, because report persistence is an explicit optional side effect.
 
-## 6. Why `list` was first
+## 6. Why Stats uses a separate Question catalog Port
 
-`list` was selected first because it had:
+The existing Dedup Question retrieval Port is intentionally not reused:
 
-- one data source;
-- no write behavior;
-- no cross-context aggregation;
-- an existing Domain priority SSOT;
-- the smallest failure surface for proving the read-side pattern.
+```text
+DedupQuestionRetrievalRepository.findByRefs(refs)
+→ Question facts + scoped freshness revision
+```
 
-That pattern is now established without expanding the mutation architecture or changing `stats/check` behavior.
+That Port belongs to Dedup retrieval/freshness semantics. Canonical Stats only needs a read catalog and must not inherit Dedup refs or CAS evidence.
 
-## 7. Next vertical slice: `canonical stats`
+Therefore Stats uses:
 
-The next implementation slice should be limited to `canonical stats`.
+```text
+QuestionCatalogRepository.list()
+```
+
+This keeps bounded-context concerns separated while still avoiding filesystem knowledge in Application.
+
+## 7. Next vertical slice: `canonical check`
+
+The next implementation slice should be limited to `canonical check`.
+
+Required shape:
+
+```text
+canonical check CLI
+        ↓
+app.canonical.check
+        ↓
+CheckCanonicalIntegrity Application
+        ↓
+CanonicalIntegrityChecker
+        +
+optional CanonicalQualityReportWriter
+        ↑
+Filesystem adapters
+```
 
 Rules:
 
-1. CLI parses `limit`, delegates, and prints only.
-2. Application owns aggregation, ranking, limiting, and `canonical_stats.v1` DTO semantics.
-3. Infrastructure returns raw read state and does not know `canonical_stats.v1`.
-4. Reuse `CanonicalCatalogRepository` for Canonical rows where practical.
-5. Introduce only the narrow Question read capability needed by stats.
-6. Preserve exact current counts, ranking, top row fields, and default limit.
-7. Do not migrate `canonical check` in the same slice.
+1. Reuse the existing `CanonicalIntegrityChecker`; do not duplicate integrity rules or JSONL loading.
+2. Model quality-report persistence as an explicit outbound capability rather than writing from CLI.
+3. Preserve `--noWrite` exactly.
+4. Preserve `canonical_quality_report.v1` exactly.
+5. Preserve the unusual `report.ok=false → canonical CLI exit 0` behavior.
+6. Do not change `review integrity` semantics.
+7. Do not modify Merge/Split post-commit integrity checking while exposing standalone `check`.
 
 ## 8. Read-only migration completion criteria
 
-After `stats` and `check` also migrate, `scripts/commands/canonical.js` should no longer import:
+After `check` migrates, `scripts/commands/canonical.js` should no longer import:
 
 ```text
 loadCanonicalQuestions
 loadQuestions
 evaluateCanonicalIntegrity
-writeJson   # for Canonical read report persistence
+writeJson   # Canonical quality report persistence
 ```
 
-`priorityRank` has already left the CLI as part of the completed `list` slice.
+`priorityRank` already left the CLI with `list`; Canonical/Question counting and ranking left with `stats`.
 
 The Canonical CLI should then be uniformly thin:
 
