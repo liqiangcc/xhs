@@ -101,7 +101,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
 
     assert.equal(
         inventory.retirement_status,
-        'runtime_removal_in_progress_accept_operation_removed',
+        'runtime_removal_in_progress_test_support_removed',
     );
     assert.deepEqual(inventory.active_blockers, []);
     assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
@@ -114,6 +114,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
     assert.equal(inventory.summary.legacy_candidate_repository_layer_removed, true);
     assert.equal(inventory.summary.legacy_candidate_cas_bridge_removed, true);
     assert.equal(inventory.summary.accept_mutation_operation_removed, true);
+    assert.equal(inventory.summary.in_memory_candidate_test_support_removed, true);
 });
 
 test('recorded GitHub consumer search distinguishes observable zero matches from unobservable external risk', () => {
@@ -230,18 +231,27 @@ test('filesystem Canonical revision router no longer accepts legacy candidate re
     );
 });
 
-test('in-memory canonical candidate support is classified as later test-support cleanup', () => {
+test('in-memory Canonical adapter no longer carries legacy candidate test support', () => {
     const inventory = JSON.parse(fs.readFileSync(INVENTORY_PATH, 'utf8'));
-    const item = inventory.test_support_compatibility.find(
-        (entry) => entry.path === 'src/infrastructure/in-memory/canonical-adapters.js',
-    );
-    assert.ok(item);
+    assert.deepEqual(inventory.test_support_compatibility, []);
 
-    const adapter = read(item.path);
-    const bootstrap = read('src/bootstrap/create-application.js');
-    assert.match(adapter, /canonical-candidate:/);
-    assert.match(adapter, /canonicalCandidateRepository/);
-    assert.doesNotMatch(bootstrap, /in-memory\/canonical-adapters/);
+    const adapter = read('src/infrastructure/in-memory/canonical-adapters.js');
+    for (const retired of [
+        /canonical-candidate:/,
+        /canonicalCandidateRepository/,
+        /candidateResource/,
+        /upsertCandidate/,
+        /seed\.candidates/,
+        /\bcandidates:\s*\[\.\.\.candidates/,
+    ]) {
+        assert.doesNotMatch(adapter, retired);
+    }
+
+    assert.match(adapter, /canonicalRepository/);
+    assert.match(adapter, /questionBindingRepository/);
+    assert.match(adapter, /mutationStore/);
+    assert.match(adapter, /upsertCanonical/);
+    assert.match(adapter, /replaceQuestionBindings/);
 });
 
 test('shared accept policy remains current Canonicalization SSOT and is not a legacy deletion target', () => {
