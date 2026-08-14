@@ -1,6 +1,5 @@
 'use strict';
 
-const { createAcceptCanonicalUseCase } = require('../application/canonical/accept-canonical');
 const { createMergeCanonicalUseCase } = require('../application/canonical/merge-canonical');
 const { createSplitCanonicalUseCase } = require('../application/canonical/split-canonical');
 const {
@@ -27,9 +26,6 @@ const {
 const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
-const {
-    createFsLegacyCanonicalCandidateRepository,
-} = require('../infrastructure/filesystem/legacy-canonical-candidate-repositories');
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
@@ -59,10 +55,6 @@ function createApplication(options = {}) {
         questionBindingRepository,
         canonicalQuestionOwnershipRepository,
     } = createFsCanonicalRepositories({ root: options.root, paths });
-    const legacyCandidateRepository = createFsLegacyCanonicalCandidateRepository({
-        root: options.root,
-        paths,
-    });
     const reviewRepository = createFsReviewRepository({ root: options.root, paths });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
     const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
@@ -83,14 +75,6 @@ function createApplication(options = {}) {
         canonicalIdentityRepository: canonicalRepository,
         questionBindingRepository,
         integrityChecker,
-        mutationStore,
-        taxonomy,
-    });
-    const accept = createAcceptCanonicalUseCase({
-        legacyCandidateRepository,
-        canonicalIdentityRepository: canonicalRepository,
-        canonicalQuestionOwnershipRepository,
-        questionBindingRepository,
         mutationStore,
         taxonomy,
     });
@@ -154,7 +138,6 @@ function createApplication(options = {}) {
         canonical: Object.freeze({
             merge,
             split,
-            accept,
             planQuestionGroup,
             planQuestionGroupMutation,
             canonicalizeQuestionGroup,
