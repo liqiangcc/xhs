@@ -101,7 +101,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
 
     assert.equal(
         inventory.retirement_status,
-        'ready_for_runtime_removal_with_unobservable_external_risk',
+        'runtime_removal_in_progress_interface_removed',
     );
     assert.deepEqual(inventory.active_blockers, []);
     assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
@@ -109,6 +109,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
     assert.equal(inventory.summary.observable_github_external_consumer_count, 0);
     assert.equal(inventory.summary.external_consumers_fully_observable, false);
     assert.equal(inventory.summary.source_deprecation_marked, true);
+    assert.equal(inventory.summary.interface_runtime_removed, true);
 });
 
 test('recorded GitHub consumer search distinguishes observable zero matches from unobservable external risk', () => {
@@ -125,21 +126,25 @@ test('recorded GitHub consumer search distinguishes observable zero matches from
     assert.ok(search.limitations.some((item) => /does not prove absolute absence/i.test(item)));
 });
 
-test('legacy Accept entry points are source-deprecated without adding runtime warning behavior', () => {
+test('legacy Accept interface is removed while internal compatibility remains deprecated', () => {
     const canonicalCli = read('scripts/commands/canonical.js');
+    const topLevelCli = read('scripts/xhs.js');
     const acceptApplication = read('src/application/canonical/accept-canonical.js');
     const legacyPort = read('src/ports/repositories/legacy-canonical-candidate-repository.js');
-    const presenter = read('src/interfaces/cli/canonical-accept-presenter.js');
 
-    assert.match(canonicalCli, /@deprecated[\s\S]*async function runAccept/);
+    assert.doesNotMatch(canonicalCli, /function runAccept/);
+    assert.doesNotMatch(canonicalCli, /canonical-accept-presenter/);
+    assert.doesNotMatch(canonicalCli, /command === ['"]accept['"]/);
+    assert.doesNotMatch(topLevelCli, /canonical accept/);
+    assert.equal(
+        fs.existsSync(path.join(ROOT, 'src', 'interfaces', 'cli', 'canonical-accept-presenter.js')),
+        false,
+    );
+
     assert.match(acceptApplication, /@deprecated[\s\S]*function createAcceptCanonicalUseCase/);
     assert.match(legacyPort, /@deprecated[\s\S]*function assertLegacyCanonicalCandidateRepository/);
-    assert.match(presenter, /@deprecated[\s\S]*function presentCanonicalAcceptResult/);
-
-    assert.doesNotMatch(canonicalCli, /console\.warn/);
     assert.doesNotMatch(acceptApplication, /console\.warn/);
     assert.doesNotMatch(legacyPort, /console\.warn/);
-    assert.doesNotMatch(presenter, /console\.warn/);
 });
 
 test('content-building execution no longer routes new relations through legacy Accept', () => {
