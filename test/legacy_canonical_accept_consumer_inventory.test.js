@@ -12,6 +12,7 @@ const INVENTORY_PATH = path.join(
     'refactor',
     '11_legacy_canonical_accept_consumer_inventory.json',
 );
+const ACTIVE_ROOT_TASK = 'tasks/TASK-20260711-0313-long-tail-answer-quality.md';
 
 function read(relativePath) {
     return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
@@ -38,6 +39,7 @@ function inventoryPaths(inventory) {
         ...inventory.runtime_compatibility.map((item) => item.path),
         ...inventory.test_support_compatibility.map((item) => item.path),
         ...inventory.compatibility_aliases.map((item) => item.path),
+        ...inventory.shared_current_dependencies.map((item) => item.path),
         ...inventory.checked_in_legacy_data.map((item) => item.path),
         ...inventory.current_policy_references,
         ...inventory.historical_references,
@@ -64,8 +66,10 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
     const scanTargets = [
         'README.md',
         'AGENTS.md',
+        'package.json',
         '.github',
         '.agents',
+        'tasks',
         'scripts',
         'src',
         'docs/refactor',
@@ -117,6 +121,27 @@ test('checked-in legacy canonical candidate manifest is an empty historical snap
     assert.equal(item.state, 'empty_historical_snapshot');
 });
 
+test('active package scripts, workflows, and in-progress root task do not depend on legacy Accept', () => {
+    const inventory = JSON.parse(fs.readFileSync(INVENTORY_PATH, 'utf8'));
+    const packageJson = read('package.json');
+    const rootTask = read(ACTIVE_ROOT_TASK);
+    const workflowDir = path.join(ROOT, '.github', 'workflows');
+
+    assert.doesNotMatch(packageJson, /canonical accept|canonical_candidates(?:\.v1|\.json)/);
+    assert.match(rootTask, /Status:\s*`in_progress`/);
+    assert.doesNotMatch(rootTask, /canonical accept|canonical_candidates(?:\.v1|\.json)/);
+
+    for (const name of fs.readdirSync(workflowDir).filter((item) => /\.ya?ml$/.test(item))) {
+        const workflow = fs.readFileSync(path.join(workflowDir, name), 'utf8');
+        assert.doesNotMatch(workflow, /canonical accept/);
+        assert.doesNotMatch(workflow, /data\/manifests\/canonical\/canonical_candidates\.json/);
+    }
+
+    assert.equal(inventory.summary.package_scripts_invoke_legacy_accept, false);
+    assert.equal(inventory.summary.in_progress_root_task_invokes_legacy_accept, false);
+    assert.equal(inventory.summary.github_actions_generates_legacy_manifest, false);
+});
+
 test('legacy runtime concurrency bridge is explicit and current Suggest automation cannot regenerate it', () => {
     const canonicalRepositories = read('src/infrastructure/filesystem/canonical-repositories.js');
     const canonicalCli = read('scripts/commands/canonical.js');
@@ -146,6 +171,25 @@ test('in-memory canonical candidate support is classified as test compatibility,
     assert.match(adapter, /canonical-candidate:/);
     assert.match(adapter, /canonicalCandidateRepository/);
     assert.doesNotMatch(bootstrap, /in-memory\/canonical-adapters/);
+});
+
+test('shared accept policy remains current Canonicalization SSOT and is not a legacy deletion target', () => {
+    const inventory = JSON.parse(fs.readFileSync(INVENTORY_PATH, 'utf8'));
+    const policy = inventory.shared_current_dependencies.find(
+        (entry) => entry.path === 'src/domain/canonical/accept-policy.js',
+    );
+    const projection = inventory.shared_current_dependencies.find(
+        (entry) => entry.path === 'src/domain/canonical/question-group-projection-policy.js',
+    );
+    assert.ok(policy);
+    assert.ok(projection);
+
+    assert.match(read(policy.path), /function acceptCanonicalCandidate/);
+    assert.match(
+        read(projection.path),
+        /require\(['"]\.\/accept-policy['"]\)/,
+    );
+    assert.match(read(projection.path), /acceptCanonicalCandidate\(/);
 });
 
 test('generic candidate_id in canonical boundary audit is not treated as legacy Accept input', () => {
