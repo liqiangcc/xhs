@@ -40,7 +40,7 @@ test('review audit freezes migration order and high-risk boundaries', () => {
     assert.match(audit, /review weak[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /review prepare[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /saveProgress\([\s\S]*appendSessionEvent/);
-    assert.match(audit, /ReviewMutationPlan \/ ReviewMutationStore/);
+    assert.match(audit, /ReviewMutationPlan/);
 });
 
 test('Production Application exposes only migrated Review capabilities', () => {
@@ -120,10 +120,13 @@ test('review today next weak and prepare delegate queue semantics to Application
     );
 });
 
-test('prepare query selection stays in Application while Markdown publication stays in Infrastructure', () => {
+test('prepare query selection stays in Application while plan publication stays behind a Publisher port', () => {
     const application = read('src/application/review/review-prepare.js');
-    const writerPort = read('src/ports/services/review-plan-writer.js');
-    const writer = read('src/infrastructure/filesystem/review-plan-writer.js');
+    const publisherPort = read('src/ports/services/review-plan-publisher.js');
+    const publisherAdapter = read('src/infrastructure/filesystem/review-plan-publisher-adapter.js');
+    const queueState = read('src/application/review/review-queue-state.js');
+    const strategyPort = read('src/ports/services/review-strategy-reader.js');
+    const strategyAdapter = read('src/infrastructure/config/review-strategy-reader-adapter.js');
     const commandModule = read('scripts/commands/review.js');
 
     assert.match(application, /createReviewQueueStateLoader/);
@@ -133,16 +136,27 @@ test('prepare query selection stays in Application while Markdown publication st
     assert.match(application, /input\.company/);
     assert.match(application, /input\.level/);
     assert.match(application, /input\.topic/);
-    assert.match(application, /assertReviewPlanWriter/);
-    assert.match(application, /planWriter\.write/);
+    assert.match(application, /assertReviewPlanPublisher/);
+    assert.match(application, /planPublisher\.publish/);
 
-    assert.match(writerPort, /ReviewPlanWriter/);
-    assert.match(writerPort, /\['write'\]/);
-    assert.match(writer, /safeName/);
-    assert.match(writer, /fs\.writeFileSync/);
-    assert.match(writer, /review['"], ['"]plans/);
-    assert.match(writer, /Generated:/);
+    assert.match(publisherPort, /ReviewPlanPublisher/);
+    assert.match(publisherPort, /\['publish'\]/);
+    assert.match(publisherAdapter, /createFileReviewPlanPublisherAdapter/);
+    assert.match(publisherAdapter, /publish\(plan/);
+    assert.match(publisherAdapter, /safeName/);
+    assert.match(publisherAdapter, /fs\.writeFileSync/);
+    assert.match(publisherAdapter, /review['"], ['"]plans/);
+    assert.match(publisherAdapter, /Generated:/);
 
+    assert.match(queueState, /assertReviewStrategyReader/);
+    assert.match(queueState, /strategyReader\.read/);
+    assert.match(strategyPort, /ReviewStrategyReader/);
+    assert.match(strategyPort, /\['read'\]/);
+    assert.match(strategyAdapter, /createFileReviewStrategyReaderAdapter/);
+    assert.match(strategyAdapter, /read\(\)/);
+
+    assert.doesNotMatch(application, /ReviewPlanWriter|planWriter\.write/);
+    assert.doesNotMatch(queueState, /ReviewStrategyProvider|strategyProvider\.load/);
     assert.doesNotMatch(commandModule, /function loadReviewState/);
     assert.doesNotMatch(commandModule, /function canonicalRows/);
     assert.doesNotMatch(commandModule, /function dueRows/);

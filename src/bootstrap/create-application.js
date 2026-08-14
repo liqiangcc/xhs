@@ -34,7 +34,9 @@ const {
     createApplyRelationDecisionUseCase,
 } = require('../application/dedup/apply-relation-decision');
 const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
-const { createReviewStrategyProvider } = require('../infrastructure/config/review-strategy-provider');
+const {
+    createFileReviewStrategyReaderAdapter,
+} = require('../infrastructure/config/review-strategy-reader-adapter');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
 const {
@@ -48,7 +50,9 @@ const { createFsReviewProgressReader } = require('../infrastructure/filesystem/r
 const { createFsReviewProgressWriter } = require('../infrastructure/filesystem/review-progress-writer');
 const { createFsReviewSessionReader } = require('../infrastructure/filesystem/review-session-reader');
 const { createFsReviewIssueLinkReader } = require('../infrastructure/filesystem/review-issue-link-reader');
-const { createFsReviewPlanWriter } = require('../infrastructure/filesystem/review-plan-writer');
+const {
+    createFileReviewPlanPublisherAdapter,
+} = require('../infrastructure/filesystem/review-plan-publisher-adapter');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
 const {
@@ -87,8 +91,8 @@ function createApplication(options = {}) {
     const reviewProgressWriter = createFsReviewProgressWriter({ root: options.root, paths });
     const reviewSessionReader = createFsReviewSessionReader({ root: options.root, paths });
     const reviewIssueLinkReader = createFsReviewIssueLinkReader({ root: options.root });
-    const reviewPlanWriter = createFsReviewPlanWriter({ root: options.root });
-    const reviewStrategyProvider = createReviewStrategyProvider({
+    const reviewPlanPublisher = createFileReviewPlanPublisherAdapter({ root: options.root });
+    const reviewStrategyReader = createFileReviewStrategyReaderAdapter({
         ...(options.reviewStrategyPath ? { strategyPath: options.reviewStrategyPath } : {}),
     });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
@@ -144,7 +148,7 @@ function createApplication(options = {}) {
         questionCatalogRepository,
         progressReader: reviewProgressReader,
         progressWriter: reviewProgressWriter,
-        strategyProvider: reviewStrategyProvider,
+        strategyReader: reviewStrategyReader,
         issueLinkReader: reviewIssueLinkReader,
     };
     const reviewIntegrity = createReviewIntegrityUseCase({
@@ -157,7 +161,7 @@ function createApplication(options = {}) {
     const reviewWeak = createReviewWeakUseCase(reviewQueueDependencies);
     const reviewPrepare = createReviewPrepareUseCase({
         ...reviewQueueDependencies,
-        planWriter: reviewPlanWriter,
+        planPublisher: reviewPlanPublisher,
     });
 
     const dedupPaths = createDedupFsPaths(options.root);

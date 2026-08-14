@@ -2,7 +2,7 @@
 
 const { addDays, isDue } = require('../../domain/review/progress-policy');
 const { rankReviewRows } = require('../../domain/review/ranking-policy');
-const { assertReviewPlanWriter } = require('../../ports/services/review-plan-writer');
+const { assertReviewPlanPublisher } = require('../../ports/services/review-plan-publisher');
 const { createReviewQueueStateLoader } = require('./review-queue-state');
 
 function selectPrepareRows(rows, strategy, input = {}) {
@@ -55,7 +55,7 @@ function selectPrepareRows(rows, strategy, input = {}) {
 
 function createReviewPrepareUseCase(dependencies = {}) {
     const loadReviewQueueState = createReviewQueueStateLoader(dependencies);
-    const planWriter = assertReviewPlanWriter(dependencies.planWriter);
+    const planPublisher = assertReviewPlanPublisher(dependencies.planPublisher);
 
     return function reviewPrepare(input = {}) {
         const state = loadReviewQueueState(input);
@@ -68,7 +68,7 @@ function createReviewPrepareUseCase(dependencies = {}) {
         const dryRun = input.write_plan === false;
         const planPath = dryRun
             ? null
-            : planWriter.write({
+            : planPublisher.publish({
                 target,
                 date: input.date,
                 rows,

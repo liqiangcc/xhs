@@ -29,7 +29,7 @@ No new Review business rule should be added to `scripts/commands/review.js`, `sc
 6. review mark       ← next
 ```
 
-`integrity` established the first genuinely read-only Review slice. `today` established the queue-state initialization boundary. `next` and `weak` proved multiple query policies can reuse that boundary. `prepare` now reuses the same queue state while separating query selection from Markdown publication.
+`integrity` established the first genuinely read-only Review slice. `today` established the queue-state initialization boundary. `next` and `weak` proved multiple query policies can reuse that boundary. `prepare` reuses the same queue state while separating query selection from plan publication.
 
 ## 3. Current mixed responsibilities outside migrated slices
 
@@ -99,7 +99,7 @@ The declarative weight SSOT remains:
 config/review_strategy.json
 ```
 
-Production migrated Review use cases obtain it through `ReviewStrategyProvider`. Domain interprets the values; it does not load config files.
+Production migrated Review use cases obtain it through `ReviewStrategyReader`. Domain interprets the values; it does not load config files.
 
 ### 4.3 Review weak-selection policy
 
@@ -140,7 +140,7 @@ if write_progress:
     ReviewProgressWriter.write()
         ↓
 optional ReviewIssueLinkReader.load()
-ReviewStrategyProvider.load()
+ReviewStrategyReader.read()
         ↓
 createReviewQueueRows()
 ```
@@ -337,7 +337,7 @@ The CLI only resolves Interface options and invokes `app.review.weak`.
 
 ## 10. `review prepare` — completed
 
-`prepare` now separates query selection from plan publication.
+`prepare` separates query selection from plan publication.
 
 Current flow:
 
@@ -359,7 +359,7 @@ Application filters
         ↓
 limit
         ↓
-optional ReviewPlanWriter.write()
+optional ReviewPlanPublisher.publish()
         ↓
 review_prepare_result.v1
 ```
@@ -409,18 +409,18 @@ item_count
 rows
 ```
 
-### 10.1 ReviewPlanWriter boundary
+### 10.1 ReviewPlanPublisher boundary
 
 The outbound Port is:
 
 ```text
-src/ports/services/review-plan-writer.js
+src/ports/services/review-plan-publisher.js
 ```
 
 The production filesystem adapter is:
 
 ```text
-src/infrastructure/filesystem/review-plan-writer.js
+src/infrastructure/filesystem/review-plan-publisher-adapter.js
 ```
 
 Responsibility split:
@@ -433,17 +433,17 @@ Application
   → rank / limit
   → decide whether a plan is published
 
-ReviewPlanWriter Port
-  → one narrow write capability
+ReviewPlanPublisher Port
+  → one narrow publish capability
 
-Filesystem ReviewPlanWriter
+FileReviewPlanPublisherAdapter
   → sanitize target into a safe filename
   → render the historical Markdown table
   → write review/plans/<safe target>.md
   → return the relative plan path
 ```
 
-The writer does **not** decide which cards belong in the plan.
+The publisher does **not** decide which cards belong in the plan.
 
 ### 10.2 `--noWrite` compatibility
 
@@ -459,13 +459,13 @@ Therefore:
 ```text
 missing progress is still synthesized in memory
 progress.json is not written
-the Markdown plan is not written
+the Markdown plan is not published
 plan_path = null
 dry_run = true
 rows are still returned
 ```
 
-With normal writes enabled, missing progress is persisted before the plan is published, preserving the historical queue-state behavior.
+With normal writes enabled, missing progress is persisted before the plan is published, preserving historical queue-state behavior.
 
 ### 10.3 CLI cleanup achieved by prepare migration
 
@@ -537,17 +537,21 @@ If the second write fails after the first succeeds, ReviewProgress and ReviewSes
 
 This must become an explicit consistency boundary rather than two Infrastructure calls hidden behind Application.
 
-Recommended target:
+Target responsibility shape:
 
 ```text
-MarkReview Application
+MarkReview Application operation
     ↓
 Review Domain transition policy
     ↓
-ReviewMutationPlan / ReviewMutationStore
+ReviewMutationPlan
+    ↓
+approved outbound consistency boundary
     ↓
 preflight + atomic/recoverable progress/session commit
 ```
+
+The exact outbound role suffix is intentionally not frozen yet. Under the naming convention, `Store` is not an approved role; `Repository` versus `Gateway` must be chosen from the actual `review mark` responsibility.
 
 `mark` remains last because it is the only Review command whose correctness depends on an atomic/recoverable multi-file mutation boundary.
 
@@ -566,24 +570,25 @@ The remaining work is intentionally mutation-focused:
 
 - move Review result transition semantics to Domain SSOT without changing intervals or thresholds;
 - model proposed progress/session changes as semantic mutation intent;
-- add a `ReviewMutationStore` with preflight and recoverable commit semantics;
+- define one approved outbound consistency-boundary role based on responsibility;
 - keep Interface input aliases and output schema compatible.
 
 ## 13. Port / responsibility guidance
 
-Current/recommended narrow capabilities:
+Current narrow capabilities:
 
 ```text
 CanonicalCatalogRepository
 QuestionCatalogRepository
 ReviewProgressReader
-ReviewProgressWriter
+ReviewProgressWriter       # naming deferred to mark consistency design
 ReviewSessionReader
-ReviewStrategyProvider
+ReviewStrategyReader
 ReviewIssueLinkReader
-ReviewPlanWriter          # completed
-ReviewMutationStore       # pending mark
+ReviewPlanPublisher
 ```
+
+Pending `review mark` must add a consistency capability only after deciding whether its responsibility is best modeled as an approved `Repository` or `Gateway` role.
 
 The existing Canonical-merge `ReviewRepository.loadMergeState()` remains merge-specific and must not be broadened into a generic Review CRUD repository.
 

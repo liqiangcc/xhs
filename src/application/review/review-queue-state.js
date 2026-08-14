@@ -16,8 +16,8 @@ const {
     assertReviewIssueLinkReader,
 } = require('../../ports/repositories/review-issue-link-reader');
 const {
-    assertReviewStrategyProvider,
-} = require('../../ports/services/review-strategy-provider');
+    assertReviewStrategyReader,
+} = require('../../ports/services/review-strategy-reader');
 const { ensureProgressItems } = require('../../domain/review/progress-policy');
 const { createReviewQueueRows } = require('./review-queue-rows');
 
@@ -31,7 +31,7 @@ function createReviewQueueStateLoader(dependencies = {}) {
     const progressReader = assertReviewProgressReader(dependencies.progressReader);
     const progressWriter = assertReviewProgressWriter(dependencies.progressWriter);
     const issueLinkReader = assertReviewIssueLinkReader(dependencies.issueLinkReader);
-    const strategyProvider = assertReviewStrategyProvider(dependencies.strategyProvider);
+    const strategyReader = assertReviewStrategyReader(dependencies.strategyReader);
 
     return function loadReviewQueueState(input = {}) {
         if (!input.date || typeof input.date !== 'string') {
@@ -50,7 +50,7 @@ function createReviewQueueStateLoader(dependencies = {}) {
         const issueLinks = input.with_issues
             ? (issueLinkReader.load().items || [])
             : [];
-        const strategy = strategyProvider.load();
+        const strategy = strategyReader.read();
         const rows = createReviewQueueRows(canonicalRecords, progress, {
             questions: questionRows,
             issueLinks,

@@ -116,8 +116,8 @@ function createFixture(overrides = {}) {
                 return value;
             },
         },
-        strategyProvider: {
-            load() {
+        strategyReader: {
+            read() {
                 return structuredClone(strategy);
             },
         },
@@ -133,8 +133,8 @@ function createFixture(overrides = {}) {
                 };
             },
         },
-        planWriter: {
-            write(plan) {
+        planPublisher: {
+            publish(plan) {
                 plans.push(structuredClone(plan));
                 return 'review/plans/redis-social.md';
             },
@@ -272,7 +272,7 @@ test('ReviewPrepare preserves legacy default limit of 20', () => {
     assert.equal(result.rows.length, 20);
 });
 
-test('ReviewPrepare requires shared queue capabilities target and ReviewPlanWriter', () => {
+test('ReviewPrepare requires shared queue capabilities target and ReviewPlanPublisher', () => {
     const fixture = createFixture();
     assert.throws(
         () => fixture.prepare({
@@ -287,9 +287,9 @@ test('ReviewPrepare requires shared queue capabilities target and ReviewPlanWrit
         /CanonicalCatalogRepository is required/,
     );
 
-    const withoutPlanWriter = { ...fixture.dependencies, planWriter: null };
+    const withoutPlanPublisher = { ...fixture.dependencies, planPublisher: null };
     assert.throws(
-        () => createReviewPrepareUseCase(withoutPlanWriter),
-        /ReviewPlanWriter is required/,
+        () => createReviewPrepareUseCase(withoutPlanPublisher),
+        /ReviewPlanPublisher is required/,
     );
 });

@@ -35,14 +35,14 @@ function renderReviewPlan(plan = {}) {
     ].join('\n');
 }
 
-function createFsReviewPlanWriter(options = {}) {
+function createFileReviewPlanPublisherAdapter(options = {}) {
     if (!options.root) {
-        throw new Error('Filesystem review plan writer root is required');
+        throw new Error('File review plan publisher adapter root is required');
     }
     const plansDir = options.plansDir || path.join(options.root, 'review', 'plans');
 
     return {
-        write(plan = {}) {
+        publish(plan = {}) {
             const filePath = path.join(plansDir, `${safeName(plan.target)}.md`);
             fs.mkdirSync(path.dirname(filePath), { recursive: true });
             fs.writeFileSync(filePath, renderReviewPlan(plan), 'utf8');
@@ -54,5 +54,5 @@ function createFsReviewPlanWriter(options = {}) {
 module.exports = {
     safeName,
     renderReviewPlan,
-    createFsReviewPlanWriter,
+    createFileReviewPlanPublisherAdapter,
 };

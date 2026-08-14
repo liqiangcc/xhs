@@ -7,8 +7,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-    createFsReviewPlanWriter,
-} = require('../src/infrastructure/filesystem/review-plan-writer');
+    createFileReviewPlanPublisherAdapter,
+} = require('../src/infrastructure/filesystem/review-plan-publisher-adapter');
 
 function row(id, overrides = {}) {
     return {
@@ -21,11 +21,11 @@ function row(id, overrides = {}) {
     };
 }
 
-test('filesystem ReviewPlanWriter preserves legacy safe path and issue Markdown format', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-review-plan-writer-'));
-    const writer = createFsReviewPlanWriter({ root });
+test('FileReviewPlanPublisherAdapter preserves legacy safe path and issue Markdown format', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-review-plan-publisher-'));
+    const publisher = createFileReviewPlanPublisherAdapter({ root });
 
-    const planPath = writer.write({
+    const planPath = publisher.publish({
         target: 'Redis / 社招 Plan!',
         date: '2026-06-30',
         with_issues: true,
@@ -46,11 +46,11 @@ test('filesystem ReviewPlanWriter preserves legacy safe path and issue Markdown 
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('filesystem ReviewPlanWriter omits issue column unless requested and requires root', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-review-plan-writer-basic-'));
-    const writer = createFsReviewPlanWriter({ root });
+test('FileReviewPlanPublisherAdapter omits issue column unless requested and requires root', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-review-plan-publisher-basic-'));
+    const publisher = createFileReviewPlanPublisherAdapter({ root });
 
-    const planPath = writer.write({
+    const planPath = publisher.publish({
         target: 'redis',
         date: '2026-07-01',
         with_issues: false,
@@ -61,8 +61,8 @@ test('filesystem ReviewPlanWriter omits issue column unless requested and requir
     assert.match(body, /\| canonical_id \| priority \| answer \| due \| title \|/);
     assert.doesNotMatch(body, /\| issue \|/);
     assert.throws(
-        () => createFsReviewPlanWriter({}),
-        /Filesystem review plan writer root is required/,
+        () => createFileReviewPlanPublisherAdapter({}),
+        /File review plan publisher adapter root is required/,
     );
 
     fs.rmSync(root, { recursive: true, force: true });

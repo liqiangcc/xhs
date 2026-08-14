@@ -83,7 +83,7 @@ function createUseCase(overrides = {}) {
                 return progress;
             },
         },
-        strategyProvider: { load: () => structuredClone(strategy) },
+        strategyReader: { read: () => structuredClone(strategy) },
         issueLinkReader: {
             load() {
                 issueLoads++;

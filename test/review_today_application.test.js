@@ -78,8 +78,8 @@ function createUseCase(overrides = {}) {
                 return progress;
             },
         },
-        strategyProvider: {
-            load() {
+        strategyReader: {
+            read() {
                 return structuredClone(strategy);
             },
         },
