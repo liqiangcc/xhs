@@ -127,18 +127,18 @@ node scripts/xhs.js canonical stats
 
 ## 5. Legacy `canonical accept`
 
-`canonical accept` 已从 CLI Interface 移除，当前没有受支持的用户命令可以直接执行 historical/manual `canonical_candidates.v1`。
+`canonical accept` CLI、Production `canonical.accept` capability 和旧 Accept Application 都已移除。当前没有受支持的用户命令、Production Composition Root capability 或 Application use case 可以执行 historical/manual `canonical_candidates.v1`。
 
-内部仍暂时保留：
+底层仍暂时保留：
 
 ```text
-application.canonical.accept
 LegacyCanonicalCandidateRepository
 filesystem legacy candidate adapter
+canonical-candidate:<id> revision compatibility
 operation=accept MutationPlan compatibility
 ```
 
-这些只用于分阶段退役期间的内部兼容与 characterization，不是可调用的日常操作入口。下一阶段会继续从 Composition Root 向内删除这条链路。
+这些只是分阶段退役期间尚未删除的低层兼容契约，不构成可调用的业务流程。下一阶段继续删除 Legacy Port / FS adapter，再单独清理 CAS 与 `operation=accept`。
 
 新 Suggest、GitHub Actions、Agent 或日常人工操作不得生成新的 `canonical_candidates.v1`，也不得绕过 RelationCandidate / RelationDecision / ApplyDecision 边界。
 
@@ -235,4 +235,6 @@ MutationStore preflight/commit CAS 生效
 Canonical post-commit invariants 通过
 GitHub Actions artifact 指向 relation_candidate_queues.json
 canonical accept 不再由 CLI 暴露
+Production Root 不暴露 canonical.accept
+Accept Application 文件不存在
 ```
