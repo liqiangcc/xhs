@@ -5,6 +5,9 @@ const { createSplitCanonicalUseCase } = require('../application/canonical/split-
 const { createListCanonicalsUseCase } = require('../application/canonical/list-canonicals');
 const { createCanonicalStatsUseCase } = require('../application/canonical/canonical-stats');
 const {
+    createCheckCanonicalIntegrityUseCase,
+} = require('../application/canonical/check-canonical-integrity');
+const {
     createPlanCanonicalizeQuestionGroupUseCase,
 } = require('../application/canonical/plan-canonicalize-question-group');
 const {
@@ -37,6 +40,9 @@ const {
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
+const {
+    createFsCanonicalQualityReportWriter,
+} = require('../infrastructure/filesystem/canonical-quality-report-writer');
 const { createFsCanonicalMutationStore } = require('../infrastructure/filesystem/fs-canonical-mutation-store');
 const { createDedupFsPaths } = require('../infrastructure/filesystem/dedup-paths');
 const {
@@ -68,12 +74,17 @@ function createApplication(options = {}) {
     const reviewRepository = createFsReviewRepository({ root: options.root, paths });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
     const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
+    const qualityReportWriter = createFsCanonicalQualityReportWriter({ root: options.root, paths });
     const mutationStore = createFsCanonicalMutationStore({ root: options.root, paths });
 
     const list = createListCanonicalsUseCase({ catalogRepository });
     const stats = createCanonicalStatsUseCase({
         canonicalCatalogRepository: catalogRepository,
         questionCatalogRepository,
+    });
+    const check = createCheckCanonicalIntegrityUseCase({
+        integrityChecker,
+        reportWriter: qualityReportWriter,
     });
     const merge = createMergeCanonicalUseCase({
         canonicalRepository,
@@ -153,6 +164,7 @@ function createApplication(options = {}) {
         canonical: Object.freeze({
             list,
             stats,
+            check,
             merge,
             split,
             planQuestionGroup,
