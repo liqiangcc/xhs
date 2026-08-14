@@ -3,6 +3,7 @@
 const { createMergeCanonicalUseCase } = require('../application/canonical/merge-canonical');
 const { createSplitCanonicalUseCase } = require('../application/canonical/split-canonical');
 const { createListCanonicalsUseCase } = require('../application/canonical/list-canonicals');
+const { createCanonicalStatsUseCase } = require('../application/canonical/canonical-stats');
 const {
     createPlanCanonicalizeQuestionGroupUseCase,
 } = require('../application/canonical/plan-canonicalize-question-group');
@@ -30,6 +31,9 @@ const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/
 const {
     createFsCanonicalCatalogRepository,
 } = require('../infrastructure/filesystem/canonical-catalog-repository');
+const {
+    createFsQuestionCatalogRepository,
+} = require('../infrastructure/filesystem/question-catalog-repository');
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
@@ -60,12 +64,17 @@ function createApplication(options = {}) {
         canonicalQuestionOwnershipRepository,
     } = createFsCanonicalRepositories({ root: options.root, paths });
     const catalogRepository = createFsCanonicalCatalogRepository({ root: options.root, paths });
+    const questionCatalogRepository = createFsQuestionCatalogRepository({ root: options.root, paths });
     const reviewRepository = createFsReviewRepository({ root: options.root, paths });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
     const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
     const mutationStore = createFsCanonicalMutationStore({ root: options.root, paths });
 
     const list = createListCanonicalsUseCase({ catalogRepository });
+    const stats = createCanonicalStatsUseCase({
+        canonicalCatalogRepository: catalogRepository,
+        questionCatalogRepository,
+    });
     const merge = createMergeCanonicalUseCase({
         canonicalRepository,
         questionBindingRepository,
@@ -143,6 +152,7 @@ function createApplication(options = {}) {
     return Object.freeze({
         canonical: Object.freeze({
             list,
+            stats,
             merge,
             split,
             planQuestionGroup,
