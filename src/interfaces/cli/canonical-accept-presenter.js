@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Preserve the legacy canonical accept CLI JSON shape while keeping Application
- * diagnostics (mutation plan and commit metadata) behind the interface boundary.
+ * @deprecated Legacy compatibility presenter for canonical accept.
+ * Preserve the historical CLI JSON shape while keeping Application diagnostics
+ * (mutation plan and commit metadata) behind the interface boundary.
  */
 function presentCanonicalAcceptResult(result) {
     if (!result || typeof result !== 'object') {
