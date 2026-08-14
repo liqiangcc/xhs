@@ -37,6 +37,7 @@ test('review audit freezes migration order and high-risk boundaries', () => {
     assert.match(audit, /review integrity[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /review today[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /review next[\s\S]*(?:completed|已完成)/i);
+    assert.match(audit, /review weak[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /saveProgress\([\s\S]*appendSessionEvent/);
     assert.match(audit, /ReviewMutationPlan \/ ReviewMutationStore/);
 });
@@ -45,11 +46,11 @@ test('Production Application exposes only migrated Review capabilities', () => {
     const app = createApplication({ root: ROOT });
 
     assert.equal(Object.isFrozen(app.review), true);
-    assert.deepEqual(Object.keys(app.review), ['integrity', 'today', 'next']);
+    assert.deepEqual(Object.keys(app.review), ['integrity', 'today', 'next', 'weak']);
     assert.equal(typeof app.review.integrity, 'function');
     assert.equal(typeof app.review.today, 'function');
     assert.equal(typeof app.review.next, 'function');
-    assert.equal('weak' in app.review, false);
+    assert.equal(typeof app.review.weak, 'function');
     assert.equal('prepare' in app.review, false);
     assert.equal('mark' in app.review, false);
 });
@@ -67,9 +68,10 @@ test('review integrity delegates to Application and preserves ok=false exit sema
     assert.match(commandModule, /return result\.ok === false \? 1 : 0/);
 });
 
-test('review today and next delegate shared queue-state semantics to Application', () => {
+test('review today next and weak delegate shared queue-state semantics to Application', () => {
     const todaySource = runToday.toString();
     const nextSource = runNext.toString();
+    const weakSource = runWeak.toString();
 
     assert.match(todaySource, /createApplication/);
     assert.match(todaySource, /application\.review\.today/);
@@ -91,19 +93,26 @@ test('review today and next delegate shared queue-state semantics to Application
         nextSource,
         /loadReviewState|upcomingRows|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
     );
+
+    assert.match(weakSource, /createApplication/);
+    assert.match(weakSource, /application\.review\.weak/);
+    assert.match(weakSource, /date:\s*defaultDate\(options\)/);
+    assert.match(weakSource, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
+    assert.match(weakSource, /write_progress:\s*!options\.noWrite/);
+    assert.doesNotMatch(
+        weakSource,
+        /loadReviewState|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
+    );
 });
 
-test('weak and prepare still synthesize progress and persist it unless noWrite', () => {
+test('prepare still synthesizes progress and persists it unless noWrite', () => {
     const commandModule = read('scripts/commands/review.js');
 
     assert.match(
         commandModule,
         /function loadReviewState[\s\S]*ensureProgressItems\([\s\S]*if \(!options\.noWrite\)[\s\S]*saveProgress\(/,
     );
-
-    for (const source of [runWeak.toString(), runPrepare.toString()]) {
-        assert.match(source, /loadReviewState/);
-    }
+    assert.match(runPrepare.toString(), /loadReviewState/);
 });
 
 test('prepare owns query filters and Markdown plan publication before migration', () => {

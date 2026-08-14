@@ -1,6 +1,6 @@
 # 13 Review Command SoC / SRP Audit
 
-> Scope: audit and track the staged migration of `review integrity / today / next / weak / prepare / mark`. `review integrity`, `review today`, and `review next` have completed their vertical migrations; `weak / prepare / mark` remain legacy.
+> Scope: audit and track the staged migration of `review integrity / today / next / weak / prepare / mark`. `review integrity`, `review today`, `review next`, and `review weak` have completed their vertical migrations; `prepare / mark` remain legacy.
 
 ## 1. Target dependency direction
 
@@ -24,23 +24,22 @@ No new Review business rule should be added to `scripts/commands/review.js`, `sc
 1. review integrity  ✅ completed
 2. review today      ✅ completed
 3. review next       ✅ completed
-4. review weak       ← next
-5. review prepare
+4. review weak       ✅ completed
+5. review prepare    ← next
 6. review mark
 ```
 
-`integrity` established the first genuinely read-only Review slice. `today` established the queue-state initialization boundary. `next` now reuses the same queue state, projection, ranking, strategy and optional issue-link capabilities instead of creating another loader.
+`integrity` established the first genuinely read-only Review slice. `today` established the queue-state initialization boundary. `next` proved horizon selection could reuse that boundary, and `weak` now proves another query slice can reuse the same queue state, projection, ranking, strategy and optional issue-link capabilities without creating another loader.
 
 ## 3. Current mixed responsibilities outside migrated slices
 
 `scripts/commands/review.js` still directly coordinates the pending commands' concerns:
 
 ```text
-ReviewProgress loading and persistence for weak / prepare / mark
-missing-progress initialization for weak / prepare / mark
-Issue-link loading for weak / prepare
-review strategy loading for weak / prepare
-weak-card selection
+ReviewProgress loading and persistence for prepare / mark
+missing-progress initialization for prepare / mark
+Issue-link loading for prepare
+review strategy loading for prepare
 prepare filters
 Markdown plan rendering and filesystem writing
 Review result input validation
@@ -50,7 +49,7 @@ CLI exit semantics
 run manifest writing
 ```
 
-`review integrity`, `review today`, and `review next` are no longer part of those implementation responsibilities in the CLI.
+`review integrity`, `review today`, `review next`, and `review weak` are no longer part of those implementation responsibilities in the CLI.
 
 ## 4. Domain SSOT extraction status
 
@@ -103,9 +102,27 @@ config/review_strategy.json
 
 Production migrated Review use cases obtain it through `ReviewStrategyProvider`. Domain interprets the values; it does not load config files.
 
+### 4.3 Review weak-selection policy
+
+Weak-card classification is now a pure Review Domain predicate:
+
+```text
+src/domain/review/weak-policy.js
+```
+
+It preserves the legacy rule exactly:
+
+```text
+progress.status === 'weak'
+OR mistake_count > 0
+OR (review_count > 0 AND confidence < 0.5)
+```
+
+The policy does not rank rows, load progress, read strategy configuration or know about CLI options.
+
 ## 5. Shared Review queue state boundary
 
-`review today` and `review next` now share:
+`review today`, `review next`, and `review weak` now share:
 
 ```text
 src/application/review/review-queue-state.js
@@ -138,13 +155,13 @@ For migrated queue commands:
 ```text
 missing progress
 → synthesized in memory
-→ participates in returned rows
+→ participates in returned queue state
 → persisted unless --noWrite
 ```
 
 `--noWrite` suppresses persistence only; it does not suppress in-memory initialization.
 
-The same state loader should be reused by `weak` and later by the query side of `prepare`.
+The same state loader should next be reused by the query side of `prepare`.
 
 ## 6. `review integrity` — completed
 
@@ -279,17 +296,25 @@ optional --with-issues = same as today
 
 The migration intentionally reuses the exact Review queue Ports and policies established by `today`; no `Next`-specific filesystem repository was introduced.
 
-## 9. `review weak` — next
+## 9. `review weak` — completed
 
-Current legacy selector is:
+Current flow:
 
 ```text
-progress.status === 'weak'
-OR mistake_count > 0
-OR (review_count > 0 AND confidence < 0.5)
+review weak CLI
+        ↓
+app.review.weak
+        ↓
+shared ReviewQueueState
+        ↓
+isWeakReviewProgress() Domain policy
+        ↓
+rankReviewRows() Domain policy
+        ↓
+limit
+        ↓
+review_weak.v1
 ```
-
-Then rows are ranked with the shared strategy and limited to 20 by default.
 
 Frozen behavior:
 
@@ -302,23 +327,19 @@ optional --with-issues
 missing progress initialization = same as today / next
 ```
 
-Recommended target:
+The selector remains:
 
 ```text
-review weak CLI
-        ↓
-app.review.weak
-        ↓
-shared ReviewQueueState
-        ↓
-weak Review Domain/query predicate
-        ↓
-rankReviewRows()
+progress.status === 'weak'
+OR mistake_count > 0
+OR (review_count > 0 AND confidence < 0.5)
 ```
 
-Do not create another loader or duplicate progress initialization.
+`review weak` now reuses the exact queue-state and ranking boundaries established by `today` / `next`. The CLI only resolves Interface options and invokes `app.review.weak`; it no longer loads Review state, selects weak cards, reads strategy configuration or enriches issue links itself.
 
-## 10. `review prepare` — pending
+No `Weak`-specific filesystem repository or duplicate queue loader was introduced.
+
+## 10. `review prepare` — next
 
 `prepare` composes due/upcoming selection with filters and optional Markdown plan publication.
 
@@ -443,16 +464,15 @@ preflight + atomic/recoverable progress/session commit
 1. review integrity  ✅
 2. review today      ✅
 3. review next       ✅
-4. review weak       ← next
-5. review prepare
+4. review weak       ✅
+5. review prepare    ← next
 6. review mark
 ```
 
 The remaining sequence stays the same because:
 
-- `weak` can now directly reuse proven queue-state/ranking boundaries;
-- `prepare` adds a second output side effect (Markdown plan publication);
-- `mark` requires a formal mutation consistency boundary.
+- `prepare` can now reuse the proven queue-state, selection and ranking boundaries while introducing a separate Markdown publication capability;
+- `mark` requires a formal mutation consistency boundary and therefore remains last.
 
 ## 13. Port / responsibility guidance
 

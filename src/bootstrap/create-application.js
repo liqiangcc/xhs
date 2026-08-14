@@ -19,6 +19,7 @@ const {
 const { createReviewIntegrityUseCase } = require('../application/review/review-integrity');
 const { createReviewTodayUseCase } = require('../application/review/review-today');
 const { createReviewNextUseCase } = require('../application/review/review-next');
+const { createReviewWeakUseCase } = require('../application/review/review-weak');
 const {
     createSuggestCanonicalRelationsUseCase,
 } = require('../application/dedup/suggest-canonical-relations');
@@ -150,6 +151,7 @@ function createApplication(options = {}) {
     });
     const reviewToday = createReviewTodayUseCase(reviewQueueDependencies);
     const reviewNext = createReviewNextUseCase(reviewQueueDependencies);
+    const reviewWeak = createReviewWeakUseCase(reviewQueueDependencies);
 
     const dedupPaths = createDedupFsPaths(options.root);
     const {
@@ -211,6 +213,7 @@ function createApplication(options = {}) {
             integrity: reviewIntegrity,
             today: reviewToday,
             next: reviewNext,
+            weak: reviewWeak,
         }),
     });
 }

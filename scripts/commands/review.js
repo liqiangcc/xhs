@@ -287,17 +287,16 @@ function runMark(options = {}) {
 
 function runWeak(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const { records, questions, progress, issueLinks, strategy } = loadReviewState(root, options);
-    const limit = Number(options.limit || 20);
-    const rows = rankReviewRows(canonicalRows(records, progress, { ...options, issueLinks, questions, strategy })
-        .filter((row) => row.progress.status === 'weak' || row.progress.mistake_count > 0 || (row.progress.review_count > 0 && row.progress.confidence < 0.5))
-        , { ...options, strategy })
-        .slice(0, limit);
-    return {
-        schema_version: 'review_weak.v1',
-        returned_count: rows.length,
-        rows,
-    };
+    const application = createApplication({
+        root,
+        ...(options.strategyPath ? { reviewStrategyPath: options.strategyPath } : {}),
+    });
+    return application.review.weak({
+        date: defaultDate(options),
+        limit: options.limit,
+        with_issues: Boolean(options['with-issues']),
+        write_progress: !options.noWrite,
+    });
 }
 
 function runNext(options = {}) {
