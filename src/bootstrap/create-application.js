@@ -18,6 +18,7 @@ const {
 } = require('../application/canonical/canonicalize-question-group');
 const { createReviewIntegrityUseCase } = require('../application/review/review-integrity');
 const { createReviewTodayUseCase } = require('../application/review/review-today');
+const { createReviewNextUseCase } = require('../application/review/review-next');
 const {
     createSuggestCanonicalRelationsUseCase,
 } = require('../application/dedup/suggest-canonical-relations');
@@ -134,19 +135,21 @@ function createApplication(options = {}) {
         mutationStore,
         taxonomy,
     });
-    const reviewIntegrity = createReviewIntegrityUseCase({
-        canonicalCatalogRepository: catalogRepository,
-        progressReader: reviewProgressReader,
-        sessionReader: reviewSessionReader,
-    });
-    const reviewToday = createReviewTodayUseCase({
+    const reviewQueueDependencies = {
         canonicalCatalogRepository: catalogRepository,
         questionCatalogRepository,
         progressReader: reviewProgressReader,
         progressWriter: reviewProgressWriter,
         strategyProvider: reviewStrategyProvider,
         issueLinkReader: reviewIssueLinkReader,
+    };
+    const reviewIntegrity = createReviewIntegrityUseCase({
+        canonicalCatalogRepository: catalogRepository,
+        progressReader: reviewProgressReader,
+        sessionReader: reviewSessionReader,
     });
+    const reviewToday = createReviewTodayUseCase(reviewQueueDependencies);
+    const reviewNext = createReviewNextUseCase(reviewQueueDependencies);
 
     const dedupPaths = createDedupFsPaths(options.root);
     const {
@@ -207,6 +210,7 @@ function createApplication(options = {}) {
         review: Object.freeze({
             integrity: reviewIntegrity,
             today: reviewToday,
+            next: reviewNext,
         }),
     });
 }
