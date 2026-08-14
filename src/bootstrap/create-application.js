@@ -20,6 +20,7 @@ const { createReviewIntegrityUseCase } = require('../application/review/review-i
 const { createReviewTodayUseCase } = require('../application/review/review-today');
 const { createReviewNextUseCase } = require('../application/review/review-next');
 const { createReviewWeakUseCase } = require('../application/review/review-weak');
+const { createReviewPrepareUseCase } = require('../application/review/review-prepare');
 const {
     createSuggestCanonicalRelationsUseCase,
 } = require('../application/dedup/suggest-canonical-relations');
@@ -47,6 +48,7 @@ const { createFsReviewProgressReader } = require('../infrastructure/filesystem/r
 const { createFsReviewProgressWriter } = require('../infrastructure/filesystem/review-progress-writer');
 const { createFsReviewSessionReader } = require('../infrastructure/filesystem/review-session-reader');
 const { createFsReviewIssueLinkReader } = require('../infrastructure/filesystem/review-issue-link-reader');
+const { createFsReviewPlanWriter } = require('../infrastructure/filesystem/review-plan-writer');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
 const {
@@ -85,6 +87,7 @@ function createApplication(options = {}) {
     const reviewProgressWriter = createFsReviewProgressWriter({ root: options.root, paths });
     const reviewSessionReader = createFsReviewSessionReader({ root: options.root, paths });
     const reviewIssueLinkReader = createFsReviewIssueLinkReader({ root: options.root });
+    const reviewPlanWriter = createFsReviewPlanWriter({ root: options.root });
     const reviewStrategyProvider = createReviewStrategyProvider({
         ...(options.reviewStrategyPath ? { strategyPath: options.reviewStrategyPath } : {}),
     });
@@ -152,6 +155,10 @@ function createApplication(options = {}) {
     const reviewToday = createReviewTodayUseCase(reviewQueueDependencies);
     const reviewNext = createReviewNextUseCase(reviewQueueDependencies);
     const reviewWeak = createReviewWeakUseCase(reviewQueueDependencies);
+    const reviewPrepare = createReviewPrepareUseCase({
+        ...reviewQueueDependencies,
+        planWriter: reviewPlanWriter,
+    });
 
     const dedupPaths = createDedupFsPaths(options.root);
     const {
@@ -214,6 +221,7 @@ function createApplication(options = {}) {
             today: reviewToday,
             next: reviewNext,
             weak: reviewWeak,
+            prepare: reviewPrepare,
         }),
     });
 }

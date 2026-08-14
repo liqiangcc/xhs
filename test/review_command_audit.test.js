@@ -38,6 +38,7 @@ test('review audit freezes migration order and high-risk boundaries', () => {
     assert.match(audit, /review today[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /review next[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /review weak[\s\S]*(?:completed|已完成)/i);
+    assert.match(audit, /review prepare[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /saveProgress\([\s\S]*appendSessionEvent/);
     assert.match(audit, /ReviewMutationPlan \/ ReviewMutationStore/);
 });
@@ -46,12 +47,12 @@ test('Production Application exposes only migrated Review capabilities', () => {
     const app = createApplication({ root: ROOT });
 
     assert.equal(Object.isFrozen(app.review), true);
-    assert.deepEqual(Object.keys(app.review), ['integrity', 'today', 'next', 'weak']);
+    assert.deepEqual(Object.keys(app.review), ['integrity', 'today', 'next', 'weak', 'prepare']);
     assert.equal(typeof app.review.integrity, 'function');
     assert.equal(typeof app.review.today, 'function');
     assert.equal(typeof app.review.next, 'function');
     assert.equal(typeof app.review.weak, 'function');
-    assert.equal('prepare' in app.review, false);
+    assert.equal(typeof app.review.prepare, 'function');
     assert.equal('mark' in app.review, false);
 });
 
@@ -68,10 +69,11 @@ test('review integrity delegates to Application and preserves ok=false exit sema
     assert.match(commandModule, /return result\.ok === false \? 1 : 0/);
 });
 
-test('review today next and weak delegate shared queue-state semantics to Application', () => {
+test('review today next weak and prepare delegate queue semantics to Application', () => {
     const todaySource = runToday.toString();
     const nextSource = runNext.toString();
     const weakSource = runWeak.toString();
+    const prepareSource = runPrepare.toString();
 
     assert.match(todaySource, /createApplication/);
     assert.match(todaySource, /application\.review\.today/);
@@ -103,30 +105,50 @@ test('review today next and weak delegate shared queue-state semantics to Applic
         weakSource,
         /loadReviewState|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
     );
-});
 
-test('prepare still synthesizes progress and persists it unless noWrite', () => {
-    const commandModule = read('scripts/commands/review.js');
-
-    assert.match(
-        commandModule,
-        /function loadReviewState[\s\S]*ensureProgressItems\([\s\S]*if \(!options\.noWrite\)[\s\S]*saveProgress\(/,
+    assert.match(prepareSource, /createApplication/);
+    assert.match(prepareSource, /application\.review\.prepare/);
+    assert.match(prepareSource, /date:\s*defaultDate\(options\)/);
+    assert.match(prepareSource, /target:\s*options\.target/);
+    assert.match(prepareSource, /days:\s*options\.days/);
+    assert.match(prepareSource, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
+    assert.match(prepareSource, /write_progress:\s*!options\.noWrite/);
+    assert.match(prepareSource, /write_plan:\s*!options\.noWrite/);
+    assert.doesNotMatch(
+        prepareSource,
+        /loadReviewState|upcomingRows|dueRows|ensureProgressItems|saveProgress|canonicalRows|rankReviewRows|loadReviewStrategy|loadIssueLinks|writePlan|fs\.writeFileSync/,
     );
-    assert.match(runPrepare.toString(), /loadReviewState/);
 });
 
-test('prepare owns query filters and Markdown plan publication before migration', () => {
-    const source = runPrepare.toString();
+test('prepare query selection stays in Application while Markdown publication stays in Infrastructure', () => {
+    const application = read('src/application/review/review-prepare.js');
+    const writerPort = read('src/ports/services/review-plan-writer.js');
+    const writer = read('src/infrastructure/filesystem/review-plan-writer.js');
     const commandModule = read('scripts/commands/review.js');
 
-    assert.match(source, /options\.priority/);
-    assert.match(source, /options\.status/);
-    assert.match(source, /options\.domain/);
-    assert.match(source, /options\.company/);
-    assert.match(source, /options\.level/);
-    assert.match(source, /options\.topic/);
-    assert.match(source, /writePlan/);
-    assert.match(commandModule, /function writePlan[\s\S]*fs\.writeFileSync/);
+    assert.match(application, /createReviewQueueStateLoader/);
+    assert.match(application, /input\.priority/);
+    assert.match(application, /input\.status/);
+    assert.match(application, /input\.domain/);
+    assert.match(application, /input\.company/);
+    assert.match(application, /input\.level/);
+    assert.match(application, /input\.topic/);
+    assert.match(application, /assertReviewPlanWriter/);
+    assert.match(application, /planWriter\.write/);
+
+    assert.match(writerPort, /ReviewPlanWriter/);
+    assert.match(writerPort, /\['write'\]/);
+    assert.match(writer, /safeName/);
+    assert.match(writer, /fs\.writeFileSync/);
+    assert.match(writer, /review['"], ['"]plans/);
+    assert.match(writer, /Generated:/);
+
+    assert.doesNotMatch(commandModule, /function loadReviewState/);
+    assert.doesNotMatch(commandModule, /function canonicalRows/);
+    assert.doesNotMatch(commandModule, /function dueRows/);
+    assert.doesNotMatch(commandModule, /function upcomingRows/);
+    assert.doesNotMatch(commandModule, /function writePlan/);
+    assert.doesNotMatch(commandModule, /review_scheduler|issue_store|loadQuestions/);
 });
 
 test('mark still combines Review Domain transition with two separate filesystem writes', () => {
@@ -140,7 +162,7 @@ test('mark still combines Review Domain transition with two separate filesystem 
     assert.match(source, /oral-version must be one_minute/);
 });
 
-test('legacy Review helpers delegate migrated pure policies while retaining pending persistence/config compatibility', () => {
+test('legacy Review helpers delegate migrated pure policies while retaining mark compatibility', () => {
     const reviewStore = read('scripts/lib/review_store.js');
     const scheduler = read('scripts/lib/review_scheduler.js');
 
@@ -163,5 +185,5 @@ test('existing ReviewRepository remains Canonical-merge-specific rather than bec
     const port = read('src/ports/repositories/review-repository.js');
 
     assert.match(port, /loadMergeState/);
-    assert.doesNotMatch(port, /listProgress|saveProgress|appendSession|today|next|weak|integrity/);
+    assert.doesNotMatch(port, /listProgress|saveProgress|appendSession|today|next|weak|prepare|integrity/);
 });

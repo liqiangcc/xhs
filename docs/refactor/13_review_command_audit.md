@@ -1,6 +1,6 @@
 # 13 Review Command SoC / SRP Audit
 
-> Scope: audit and track the staged migration of `review integrity / today / next / weak / prepare / mark`. `review integrity`, `review today`, `review next`, and `review weak` have completed their vertical migrations; `prepare / mark` remain legacy.
+> Scope: audit and track the staged migration of `review integrity / today / next / weak / prepare / mark`. `review integrity`, `review today`, `review next`, `review weak`, and `review prepare` have completed their vertical migrations; only `review mark` remains legacy.
 
 ## 1. Target dependency direction
 
@@ -16,7 +16,7 @@ Domain policies + outbound Ports
 
 The migration preserves current behavior before redesigning Review business rules. Commands that look read-only are not necessarily side-effect free.
 
-No new Review business rule should be added to `scripts/commands/review.js`, `scripts/lib/review_store.js`, or `scripts/lib/review_scheduler.js` while the remaining commands wait for migration.
+No new Review business rule should be added to `scripts/commands/review.js`, `scripts/lib/review_store.js`, or `scripts/lib/review_scheduler.js` while `review mark` waits for migration.
 
 ## 2. Migration order and current status
 
@@ -25,23 +25,20 @@ No new Review business rule should be added to `scripts/commands/review.js`, `sc
 2. review today      ✅ completed
 3. review next       ✅ completed
 4. review weak       ✅ completed
-5. review prepare    ← next
-6. review mark
+5. review prepare    ✅ completed
+6. review mark       ← next
 ```
 
-`integrity` established the first genuinely read-only Review slice. `today` established the queue-state initialization boundary. `next` proved horizon selection could reuse that boundary, and `weak` now proves another query slice can reuse the same queue state, projection, ranking, strategy and optional issue-link capabilities without creating another loader.
+`integrity` established the first genuinely read-only Review slice. `today` established the queue-state initialization boundary. `next` and `weak` proved multiple query policies can reuse that boundary. `prepare` now reuses the same queue state while separating query selection from Markdown publication.
 
 ## 3. Current mixed responsibilities outside migrated slices
 
-`scripts/commands/review.js` still directly coordinates the pending commands' concerns:
+`scripts/commands/review.js` now directly coordinates only the remaining `mark` concerns:
 
 ```text
-ReviewProgress loading and persistence for prepare / mark
-missing-progress initialization for prepare / mark
-Issue-link loading for prepare
-review strategy loading for prepare
-prepare filters
-Markdown plan rendering and filesystem writing
+Canonical existence check
+ReviewProgress loading and persistence
+missing-progress initialization
 Review result input validation
 ReviewProgress state transition
 session-event construction and append
@@ -49,7 +46,9 @@ CLI exit semantics
 run manifest writing
 ```
 
-`review integrity`, `review today`, `review next`, and `review weak` are no longer part of those implementation responsibilities in the CLI.
+The CLI no longer owns Review queue loading, Question enrichment, issue-link loading, review strategy loading, prepare filtering, or Markdown plan rendering.
+
+`review integrity`, `review today`, `review next`, `review weak`, and `review prepare` are all Application-backed vertical slices.
 
 ## 4. Domain SSOT extraction status
 
@@ -70,7 +69,7 @@ ensureProgressItems()
 isDue()
 ```
 
-The legacy `scripts/lib/review_store.js` keeps compatibility wrappers for pending commands, but those wrappers delegate migrated scheduling rules to the Domain policy.
+The legacy `scripts/lib/review_store.js` keeps compatibility wrappers for `mark`, but migrated queue use cases call Domain policy through Application rather than through the CLI.
 
 `applyReviewResult()` remains pending because it belongs to the final `review mark` mutation slice. Its current rules still cover:
 
@@ -88,7 +87,7 @@ Those rules must move to Review Domain unchanged before the legacy `mark` path i
 
 ### 4.2 Review ranking policy
 
-Scoring and ordering are now pure Review Domain policy:
+Scoring and ordering are pure Review Domain policy:
 
 ```text
 src/domain/review/ranking-policy.js
@@ -104,7 +103,7 @@ Production migrated Review use cases obtain it through `ReviewStrategyProvider`.
 
 ### 4.3 Review weak-selection policy
 
-Weak-card classification is now a pure Review Domain predicate:
+Weak-card classification is a pure Review Domain predicate:
 
 ```text
 src/domain/review/weak-policy.js
@@ -118,11 +117,11 @@ OR mistake_count > 0
 OR (review_count > 0 AND confidence < 0.5)
 ```
 
-The policy does not rank rows, load progress, read strategy configuration or know about CLI options.
+The policy does not rank rows, load progress, read strategy configuration, or know about CLI options.
 
 ## 5. Shared Review queue state boundary
 
-`review today`, `review next`, and `review weak` now share:
+`review today`, `review next`, `review weak`, and `review prepare` share:
 
 ```text
 src/application/review/review-queue-state.js
@@ -161,7 +160,7 @@ missing progress
 
 `--noWrite` suppresses persistence only; it does not suppress in-memory initialization.
 
-The same state loader should next be reused by the query side of `prepare`.
+No command-specific queue repository has been introduced.
 
 ## 6. `review integrity` — completed
 
@@ -200,7 +199,6 @@ progress_item_count
 initialized_progress_count
 missing_progress_count
 missing_progress_sample
-  # max 20
 duplicate_progress_canonical_ids
 stale_progress_canonical_ids
 malformed_progress_items
@@ -258,7 +256,7 @@ missing progress is synthesized
 missing progress is persisted unless --noWrite
 ```
 
-CLI no longer owns progress initialization, due selection, ranking, issue-link enrichment or Review strategy interpretation.
+CLI no longer owns progress initialization, due selection, ranking, issue-link enrichment, or Review strategy interpretation.
 
 ## 8. `review next` — completed
 
@@ -294,7 +292,7 @@ missing progress initialization behavior = same as today
 optional --with-issues = same as today
 ```
 
-The migration intentionally reuses the exact Review queue Ports and policies established by `today`; no `Next`-specific filesystem repository was introduced.
+The migration reuses the exact Review queue Ports and policies established by `today`; no `Next`-specific filesystem repository exists.
 
 ## 9. `review weak` — completed
 
@@ -335,15 +333,38 @@ OR mistake_count > 0
 OR (review_count > 0 AND confidence < 0.5)
 ```
 
-`review weak` now reuses the exact queue-state and ranking boundaries established by `today` / `next`. The CLI only resolves Interface options and invokes `app.review.weak`; it no longer loads Review state, selects weak cards, reads strategy configuration or enriches issue links itself.
+The CLI only resolves Interface options and invokes `app.review.weak`.
 
-No `Weak`-specific filesystem repository or duplicate queue loader was introduced.
+## 10. `review prepare` — completed
 
-## 10. `review prepare` — next
+`prepare` now separates query selection from plan publication.
 
-`prepare` composes due/upcoming selection with filters and optional Markdown plan publication.
+Current flow:
 
-Selection:
+```text
+review prepare CLI
+        ↓
+app.review.prepare
+        ↓
+shared ReviewQueueState
+        ↓
+if days:
+    next_review_at absent OR <= addDays(date, days)
+else:
+    isDue(progress, date)
+        ↓
+rankReviewRows()
+        ↓
+Application filters
+        ↓
+limit
+        ↓
+optional ReviewPlanWriter.write()
+        ↓
+review_prepare_result.v1
+```
+
+Selection remains behavior-compatible:
 
 ```text
 if --days:
@@ -352,7 +373,7 @@ else:
     due rows
 ```
 
-Additional filters:
+Additional filters remain:
 
 ```text
 priority       exact equality
@@ -367,41 +388,113 @@ topic          case-insensitive substring across:
                primary_domain.l2
 ```
 
-Side effects:
+The ordering boundary is preserved:
 
 ```text
-missing progress may be initialized/persisted
-Markdown review/plans/<safe target>.md is written unless --noWrite
+select due/upcoming
+→ rank
+→ apply prepare filters
+→ limit
 ```
 
-Output:
+Frozen output remains:
 
 ```text
 schema_version = review_prepare_result.v1
 ok = true
 dry_run
+target
 plan_path
 item_count
 rows
 ```
 
-Target separation:
+### 10.1 ReviewPlanWriter boundary
+
+The outbound Port is:
+
+```text
+src/ports/services/review-plan-writer.js
+```
+
+The production filesystem adapter is:
+
+```text
+src/infrastructure/filesystem/review-plan-writer.js
+```
+
+Responsibility split:
 
 ```text
 Application
-  → reuse queue state / due or upcoming selection
-  → filter rows
-  → decide whether plan is published
+  → reuse queue state
+  → select due/upcoming rows
+  → apply filters
+  → rank / limit
+  → decide whether a plan is published
 
-ReviewPlanWriter Port / Infrastructure
-  → path-safe Markdown/file publication
+ReviewPlanWriter Port
+  → one narrow write capability
+
+Filesystem ReviewPlanWriter
+  → sanitize target into a safe filename
+  → render the historical Markdown table
+  → write review/plans/<safe target>.md
+  → return the relative plan path
 ```
 
-The writer must not decide which cards belong in the plan.
+The writer does **not** decide which cards belong in the plan.
 
-## 11. `review mark` — pending / highest risk
+### 10.2 `--noWrite` compatibility
 
-`mark` is a formal mutation.
+`review prepare --noWrite` maps to:
+
+```text
+write_progress = false
+write_plan = false
+```
+
+Therefore:
+
+```text
+missing progress is still synthesized in memory
+progress.json is not written
+the Markdown plan is not written
+plan_path = null
+dry_run = true
+rows are still returned
+```
+
+With normal writes enabled, missing progress is persisted before the plan is published, preserving the historical queue-state behavior.
+
+### 10.3 CLI cleanup achieved by prepare migration
+
+The CLI no longer contains:
+
+```text
+loadReviewState()
+questionMetadata()
+canonicalRows()
+dueRows()
+upcomingRows()
+safeName()
+writePlan()
+```
+
+It also no longer imports Review prepare dependencies such as:
+
+```text
+node:fs
+Question store
+issue_store
+review_scheduler
+```
+
+Those concerns now belong to Application, Ports, or Infrastructure.
+
+## 11. `review mark` — next / highest risk
+
+`mark` is the final legacy Review command and a formal mutation.
 
 Current responsibilities include:
 
@@ -456,7 +549,7 @@ ReviewMutationPlan / ReviewMutationStore
 preflight + atomic/recoverable progress/session commit
 ```
 
-`mark` therefore remains last.
+`mark` remains last because it is the only Review command whose correctness depends on an atomic/recoverable multi-file mutation boundary.
 
 ## 12. Recommended migration order
 
@@ -465,14 +558,16 @@ preflight + atomic/recoverable progress/session commit
 2. review today      ✅
 3. review next       ✅
 4. review weak       ✅
-5. review prepare    ← next
-6. review mark
+5. review prepare    ✅
+6. review mark       ← next
 ```
 
-The remaining sequence stays the same because:
+The remaining work is intentionally mutation-focused:
 
-- `prepare` can now reuse the proven queue-state, selection and ranking boundaries while introducing a separate Markdown publication capability;
-- `mark` requires a formal mutation consistency boundary and therefore remains last.
+- move Review result transition semantics to Domain SSOT without changing intervals or thresholds;
+- model proposed progress/session changes as semantic mutation intent;
+- add a `ReviewMutationStore` with preflight and recoverable commit semantics;
+- keep Interface input aliases and output schema compatible.
 
 ## 13. Port / responsibility guidance
 
@@ -486,7 +581,7 @@ ReviewProgressWriter
 ReviewSessionReader
 ReviewStrategyProvider
 ReviewIssueLinkReader
-ReviewPlanWriter          # pending prepare
+ReviewPlanWriter          # completed
 ReviewMutationStore       # pending mark
 ```
 
@@ -494,15 +589,21 @@ The existing Canonical-merge `ReviewRepository.loadMergeState()` remains merge-s
 
 ## 14. Completion criteria
 
-After the Review namespace is fully migrated, `scripts/commands/review.js` should no longer directly import or use:
+After `review mark` is migrated, `scripts/commands/review.js` should no longer directly import or use:
+
+```text
+legacy Canonical store
+review_store persistence helpers
+```
+
+The following Review prepare/query dependencies have already been removed from the CLI:
 
 ```text
 node:fs
-legacy Canonical / Question stores
+legacy Question store
 issue_store
-review_store persistence helpers
 review_scheduler config loader
-ensureDir
+Markdown rendering / filesystem plan writes
 ```
 
 Final Interface responsibility:
@@ -515,7 +616,7 @@ parse syntax/options
 → preserve command-specific exit semantics
 ```
 
-The Review Domain must not depend on filesystem paths, `process.argv`, config-file loading or Markdown rendering.
+The Review Domain must not depend on filesystem paths, `process.argv`, config-file loading, or Markdown rendering.
 
 ## 15. Non-targets of this migration line
 
@@ -525,6 +626,7 @@ This line does not redesign:
 - `config/review_strategy.json` values;
 - Canonical/Dedup behavior;
 - Canonical merge Review migration behavior;
-- existing Review data.
+- existing Review data;
+- Review plan Markdown format.
 
 Business behavior is frozen first; structural ownership moves one vertical slice at a time.

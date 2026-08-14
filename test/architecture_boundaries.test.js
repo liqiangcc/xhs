@@ -88,7 +88,7 @@ test('Composition Root exposes only migrated application capabilities', () => {
         'prepareApply',
         'applyDecision',
     ]);
-    assert.deepEqual(Object.keys(app.review), ['integrity', 'today', 'next', 'weak']);
+    assert.deepEqual(Object.keys(app.review), ['integrity', 'today', 'next', 'weak', 'prepare']);
     assert.equal(typeof app.canonical.list, 'function');
     assert.equal(typeof app.canonical.stats, 'function');
     assert.equal(typeof app.canonical.check, 'function');
@@ -106,4 +106,5 @@ test('Composition Root exposes only migrated application capabilities', () => {
     assert.equal(typeof app.review.today, 'function');
     assert.equal(typeof app.review.next, 'function');
     assert.equal(typeof app.review.weak, 'function');
+    assert.equal(typeof app.review.prepare, 'function');
 });
