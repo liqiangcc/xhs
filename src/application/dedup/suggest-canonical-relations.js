@@ -1,15 +1,20 @@
 'use strict';
 
 const { detectEntityQuestionClusters } = require('../../domain/dedup/entity-cluster-detection');
+const { detectHotspotQuestionClusters } = require('../../domain/dedup/hotspot-cluster-detection');
 const { createRelationCandidate } = require('../../domain/dedup/relation-candidate');
 const { validateDomain, normalizeEntity } = require('../../domain/question/taxonomy-normalization');
 const {
     assertDedupIndexRetrievalRepository,
 } = require('../../ports/repositories/dedup-index-retrieval-repository');
 const {
+    assertDedupHotspotRetrievalRepository,
+} = require('../../ports/repositories/dedup-hotspot-retrieval-repository');
+const {
     assertDedupQuestionRetrievalRepository,
 } = require('../../ports/repositories/dedup-question-retrieval-repository');
 const { assertRelationCandidateStore } = require('../../ports/relation-candidate-store');
+const { hotspotRefs } = require('./relation-source-retrieval');
 
 function normalizeDetectionQuestion(question, taxonomy) {
     if (!question || typeof question !== 'object' || Array.isArray(question)) {
@@ -58,57 +63,78 @@ function sourceRevision(snapshot) {
 
 function normalizeSuggestionInput(input, taxonomy) {
     const mode = input.mode || 'entity';
-    if (mode !== 'entity') {
-        throw new Error(`Unsupported dedup suggestion mode: ${mode}`);
+    if (mode === 'entity') {
+        const rawSeed = String(input.seed || '').trim();
+        if (!rawSeed) throw new Error('entity suggestion seed is required');
+        const seed = normalizeEntity(rawSeed, taxonomy) || rawSeed;
+        const limit = Number(input.limit ?? 50);
+        if (!Number.isInteger(limit) || limit < 0) {
+            throw new Error(`Invalid suggestion limit: ${input.limit}`);
+        }
+        return { mode, seed, limit };
     }
 
-    const rawSeed = String(input.seed || '').trim();
-    if (!rawSeed) throw new Error('entity suggestion seed is required');
-    const seed = normalizeEntity(rawSeed, taxonomy) || rawSeed;
-
-    const limit = Number(input.limit ?? 50);
-    if (!Number.isInteger(limit) || limit < 0) {
-        throw new Error(`Invalid suggestion limit: ${input.limit}`);
+    if (mode === 'hotspot') {
+        const limit = Number(input.limit ?? 100);
+        if (!Number.isInteger(limit) || limit < 0) {
+            throw new Error(`Invalid suggestion limit: ${input.limit}`);
+        }
+        return { mode, seed: 'hotspot', limit };
     }
 
-    return { mode, seed, limit };
+    throw new Error(`Unsupported dedup suggestion mode: ${mode}`);
 }
 
 /**
- * Pure planning core. It receives already retrieved Question facts and returns
- * pending RelationCandidates only; it performs no persistence or retrieval.
+ * Pure planning core. It receives already retrieved Question/index facts and
+ * returns pending RelationCandidates only; it performs no persistence or
+ * retrieval.
  */
 function planRelationSuggestions(input, dependencies = {}) {
     const taxonomy = dependencies.taxonomy;
-    const detector = dependencies.detectEntityQuestionClusters || detectEntityQuestionClusters;
+    const entityDetector = dependencies.detectEntityQuestionClusters || detectEntityQuestionClusters;
+    const hotspotDetector = dependencies.detectHotspotQuestionClusters || detectHotspotQuestionClusters;
     const { mode, seed, limit } = normalizeSuggestionInput(input, taxonomy);
 
     if (!Array.isArray(input.questions)) {
         throw new Error('suggestion questions must be an array');
     }
-    if (typeof detector !== 'function') {
-        throw new Error('detectEntityQuestionClusters dependency is required');
-    }
-
     const detectionQuestions = input.questions.map(
         (question) => normalizeDetectionQuestion(question, taxonomy),
     );
-    const clusters = detector(detectionQuestions, {
-        ...(input.similarity_threshold == null
-            ? {}
-            : { similarity_threshold: input.similarity_threshold }),
-    });
+
+    let clusters;
+    if (mode === 'entity') {
+        if (typeof entityDetector !== 'function') {
+            throw new Error('detectEntityQuestionClusters dependency is required');
+        }
+        clusters = entityDetector(detectionQuestions, {
+            ...(input.similarity_threshold == null
+                ? {}
+                : { similarity_threshold: input.similarity_threshold }),
+        });
+    } else {
+        if (typeof hotspotDetector !== 'function') {
+            throw new Error('detectHotspotQuestionClusters dependency is required');
+        }
+        if (!Array.isArray(input.hotspots)) {
+            throw new Error('hotspot suggestion facts must be an array');
+        }
+        clusters = hotspotDetector(input.hotspots, detectionQuestions);
+    }
+
     if (!Array.isArray(clusters)) {
         throw new Error('Dedup detector must return an array');
     }
 
-    const allCandidates = clusters
-        .map((cluster) => createRelationCandidate({
-            scope: mode,
-            seed,
-            cluster,
-        }))
-        .sort(compareCandidates);
+    const projectedCandidates = clusters.map((cluster) => createRelationCandidate({
+        scope: mode,
+        seed,
+        cluster,
+    }));
+    const allCandidates = mode === 'entity'
+        ? projectedCandidates.sort(compareCandidates)
+        : projectedCandidates;
     const relationCandidates = allCandidates.slice(0, limit);
 
     return {
@@ -128,27 +154,52 @@ function createSuggestCanonicalRelationsUseCase(dependencies = {}) {
     }
 
     const indexRepository = assertDedupIndexRetrievalRepository(dependencies.indexRepository);
+    const hotspotRepository = dependencies.hotspotRepository == null
+        ? null
+        : assertDedupHotspotRetrievalRepository(dependencies.hotspotRepository);
     const questionRepository = assertDedupQuestionRetrievalRepository(dependencies.questionRepository);
     const relationCandidateStore = assertRelationCandidateStore(dependencies.relationCandidateStore);
-    const detector = dependencies.detectEntityQuestionClusters || detectEntityQuestionClusters;
+    const entityDetector = dependencies.detectEntityQuestionClusters || detectEntityQuestionClusters;
+    const hotspotDetector = dependencies.detectHotspotQuestionClusters || detectHotspotQuestionClusters;
 
     return async function suggestCanonicalRelationsUseCase(input = {}) {
-        if (Object.hasOwn(input, 'questions')) {
-            throw new Error('suggestion questions must be retrieved through DedupQuestionRetrievalRepository');
+        if (Object.hasOwn(input, 'questions') || Object.hasOwn(input, 'hotspots')) {
+            throw new Error('suggestion source facts must be retrieved through Dedup repositories');
         }
 
         const normalized = normalizeSuggestionInput(input, taxonomy);
-        const indexSnapshot = assertSnapshot(
-            await indexRepository.findEntityRefs(normalized.seed),
-            'dedup entity index',
-            'refs',
-        );
-        if (!Array.isArray(indexSnapshot.refs)) {
-            throw new Error('dedup entity index snapshot refs must be an array');
+        let retrievalSnapshot;
+        let refs;
+        let hotspots;
+
+        if (normalized.mode === 'entity') {
+            retrievalSnapshot = assertSnapshot(
+                await indexRepository.findEntityRefs(normalized.seed),
+                'dedup entity index',
+                'refs',
+            );
+            if (!Array.isArray(retrievalSnapshot.refs)) {
+                throw new Error('dedup entity index snapshot refs must be an array');
+            }
+            refs = retrievalSnapshot.refs;
+        } else {
+            if (!hotspotRepository) {
+                throw new Error('DedupHotspotRetrievalRepository is required for hotspot suggestions');
+            }
+            retrievalSnapshot = assertSnapshot(
+                await hotspotRepository.listHotspots(),
+                'dedup hotspot index',
+                'hotspots',
+            );
+            if (!Array.isArray(retrievalSnapshot.hotspots)) {
+                throw new Error('dedup hotspot index snapshot hotspots must be an array');
+            }
+            hotspots = retrievalSnapshot.hotspots;
+            refs = hotspotRefs(hotspots);
         }
 
         const questionSnapshot = assertSnapshot(
-            await questionRepository.findByRefs(indexSnapshot.refs),
+            await questionRepository.findByRefs(refs),
             'dedup questions',
             'questions',
         );
@@ -162,12 +213,14 @@ function createSuggestCanonicalRelationsUseCase(dependencies = {}) {
             seed: normalized.seed,
             limit: normalized.limit,
             questions: questionSnapshot.questions,
+            ...(normalized.mode === 'hotspot' ? { hotspots } : {}),
         }, {
             taxonomy,
-            detectEntityQuestionClusters: detector,
+            detectEntityQuestionClusters: entityDetector,
+            detectHotspotQuestionClusters: hotspotDetector,
         });
         const sourceRevisions = [
-            sourceRevision(indexSnapshot),
+            sourceRevision(retrievalSnapshot),
             sourceRevision(questionSnapshot),
         ];
         const queue = {
@@ -200,5 +253,6 @@ function createSuggestCanonicalRelationsUseCase(dependencies = {}) {
 module.exports = {
     createSuggestCanonicalRelationsUseCase,
     normalizeDetectionQuestion,
+    normalizeSuggestionInput,
     planRelationSuggestions,
 };
