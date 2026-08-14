@@ -18,7 +18,7 @@ function read(relativePath) {
     return fs.readFileSync(path.join(ROOT, relativePath), 'utf8');
 }
 
-test('canonical read-only audit freezes behavior and migration order', () => {
+test('canonical read-only audit records all three completed vertical migrations', () => {
     const audit = read('docs/refactor/12_canonical_read_only_command_audit.md');
 
     assert.match(audit, /1\. canonical list[\s\S]*2\. canonical stats[\s\S]*3\. canonical check/);
@@ -28,12 +28,13 @@ test('canonical read-only audit freezes behavior and migration order', () => {
     assert.match(audit, /report\.ok=false[\s\S]*exit remains 0/);
     assert.match(audit, /CanonicalCatalogRepository\.list\(\)/);
     assert.match(audit, /QuestionCatalogRepository\.list\(\)/);
-    assert.match(audit, /canonical stats[\s\S]*已完成|canonical stats[\s\S]*completed/i);
+    assert.match(audit, /canonical check[\s\S]*已完成|canonical check[\s\S]*completed/i);
 });
 
-test('canonical list and stats delegate to Application without persistence or query semantics in CLI', () => {
+test('canonical list stats and check all delegate to Application without read/query semantics in CLI', () => {
     const listSource = runList.toString();
     const statsSource = runStats.toString();
+    const checkSource = runCheck.toString();
 
     assert.match(listSource, /createApplication/);
     assert.match(listSource, /application\.canonical\.list/);
@@ -46,25 +47,32 @@ test('canonical list and stats delegate to Application without persistence or qu
         statsSource,
         /loadCanonicalQuestions|loadQuestions|canonicalQuestionIds|assigned_question_rows|top_canonical|writeJson|writeJsonl/,
     );
+
+    assert.match(checkSource, /createApplication/);
+    assert.match(checkSource, /application\.canonical\.check/);
+    assert.match(checkSource, /write_report:\s*!options\.noWrite/);
+    assert.doesNotMatch(
+        checkSource,
+        /loadCanonicalQuestions|loadQuestions|evaluateCanonicalIntegrity|shouldWriteReports|writeJson|writeJsonl/,
+    );
 });
 
-test('legacy check has only its characterized quality-report write boundary', () => {
-    const checkSource = runCheck.toString();
+test('canonical command module no longer imports legacy read-side stores policies or report writer', () => {
+    const source = read('scripts/commands/canonical.js');
 
-    assert.match(checkSource, /loadCanonicalQuestions/);
-    assert.match(checkSource, /loadQuestions/);
-    assert.match(checkSource, /evaluateCanonicalIntegrity/);
-    assert.match(checkSource, /shouldWriteReports/);
-    assert.match(checkSource, /writeJson\(paths\.qualityReport, report\)/);
-    assert.doesNotMatch(checkSource, /writeJsonl|saveCanonicalQuestions|saveQuestions/);
+    assert.doesNotMatch(source, /require\(['"]\.\.\/lib\/canonical_store['"]\)/);
+    assert.doesNotMatch(source, /require\(['"]\.\.\/lib\/question_store['"]\)/);
+    assert.doesNotMatch(source, /domain\/canonical\/integrity-policy/);
+    assert.doesNotMatch(source, /\bwriteJson\b/);
+    assert.doesNotMatch(source, /\bshouldWriteReports\b/);
 });
 
-test('Production Application exposes list and stats but not check after the second read migration', () => {
+test('Production Application exposes every migrated Canonical read use case', () => {
     const app = createApplication({ root: ROOT });
 
     assert.equal(typeof app.canonical.list, 'function');
     assert.equal(typeof app.canonical.stats, 'function');
-    assert.equal('check' in app.canonical, false);
+    assert.equal(typeof app.canonical.check, 'function');
     assert.equal(typeof app.canonical.merge, 'function');
     assert.equal(typeof app.canonical.split, 'function');
     assert.equal(typeof app.canonical.canonicalizeQuestionGroup, 'function');
