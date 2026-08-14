@@ -1,7 +1,7 @@
 {
   "schema_version": "legacy_canonical_accept_consumer_inventory.v1",
   "scope": "repository-local-plus-observable-github",
-  "retirement_status": "runtime_removal_in_progress_cas_bridge_removed",
+  "retirement_status": "runtime_removal_in_progress_accept_operation_removed",
   "summary": {
     "current_suggest_generates_legacy_manifest": false,
     "github_actions_generates_legacy_manifest": false,
@@ -17,7 +17,8 @@
     "production_composition_root_accept_removed": true,
     "accept_application_removed": true,
     "legacy_candidate_repository_layer_removed": true,
-    "legacy_candidate_cas_bridge_removed": true
+    "legacy_candidate_cas_bridge_removed": true,
+    "accept_mutation_operation_removed": true
   },
   "active_blockers": [],
   "external_consumer_search": {
@@ -62,10 +63,6 @@
     ]
   },
   "runtime_compatibility": [
-    {
-      "path": "src/application/canonical/mutation-plan.js",
-      "role": "shared mutation contract still accepts operation=accept"
-    },
     {
       "path": "src/infrastructure/filesystem/canonical-paths.js",
       "role": "retains legacyCandidateManifest filesystem path and deprecated candidateManifest path alias"
@@ -132,6 +129,12 @@
       "removed": true
     }
   ],
+  "removed_mutation_operation": [
+    {
+      "path": "src/application/canonical/mutation-plan.js",
+      "removed_capability": "operation=accept; supported operations are merge, split, canonicalize"
+    }
+  ],
   "test_support_compatibility": [
     {
       "path": "src/infrastructure/in-memory/canonical-adapters.js",
@@ -150,7 +153,7 @@
     },
     {
       "path": "src/infrastructure/filesystem/fs-canonical-mutation-store.js",
-      "role": "current transaction boundary shared by merge/split/canonicalize; legacy candidate revision evidence has been removed without removing the store"
+      "role": "current transaction boundary shared by merge/split/canonicalize; legacy candidate revision evidence and accept operation have been removed without removing the store"
     }
   ],
   "checked_in_legacy_data": [
@@ -178,10 +181,9 @@
     "review/plans/c1_asset_calibration.md",
     "review/plans/c6_scale_and_entry_delivery.md"
   ],
-  "legacy_characterization_tests": [
-    "test/canonical_mutation_contracts.test.js"
-  ],
+  "legacy_characterization_tests": [],
   "anti_legacy_regression_tests": [
+    "test/canonical_mutation_contracts.test.js",
     "test/legacy_canonical_accept_boundary.test.js",
     "test/current_dedup_operational_docs.test.js",
     "test/legacy_canonical_accept_consumer_inventory.test.js",
@@ -205,9 +207,9 @@
   ],
   "retirement_preconditions": [
     "accept the residual risk that local/uncommitted/unindexed private callers cannot be proven absent by GitHub search",
-    "remove operation=accept from the MutationPlan contract in its own slice",
-    "remove legacy manifest path aliases and the empty checked-in manifest only after no remaining runtime/test-support contract needs them",
+    "remove candidate-specific in-memory test support before deleting the legacy path/data cleanup guard",
+    "remove legacy manifest path aliases and the empty checked-in manifest only after no remaining test-support contract needs them",
     "preserve src/domain/canonical/accept-policy.js or first replace its current canonicalize projection responsibility with equivalent SSOT coverage",
-    "keep full CI green while deleting accept operation support, in-memory test support, legacy path/data, and obsolete policy wording"
+    "keep full CI green while deleting in-memory test support, legacy path/data, and obsolete policy wording"
   ]
 }
