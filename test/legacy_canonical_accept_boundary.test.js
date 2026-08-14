@@ -51,22 +51,25 @@ test('canonical accept is no longer exposed by the Interface layer', () => {
     assert.equal(fs.existsSync(path.join(ROOT, 'src', 'interfaces', 'cli', 'canonical-accept-presenter.js')), false);
 });
 
-test('Production Root cannot construct or expose legacy Accept while the internal use case remains explicit', () => {
+test('Production Root and Accept Application are removed while lower legacy compatibility remains explicit', () => {
     const bootstrap = source('src/bootstrap/create-application.js');
-    const accept = source('src/application/canonical/accept-canonical.js');
+    const legacyPort = source('src/ports/repositories/legacy-canonical-candidate-repository.js');
+    const legacyAdapter = source('src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js');
     const oldPort = source('src/ports/repositories/canonical-candidate-repository.js');
     const oldAdapter = source('src/infrastructure/filesystem/canonical-candidate-repositories.js');
+    const mutationPlan = source('src/application/canonical/mutation-plan.js');
 
     assert.doesNotMatch(bootstrap, /createAcceptCanonicalUseCase/);
     assert.doesNotMatch(bootstrap, /legacy-canonical-candidate-repositories/);
     assert.doesNotMatch(bootstrap, /createFsLegacyCanonicalCandidateRepository/);
     assert.doesNotMatch(bootstrap, /legacyCandidateRepository/);
     assert.doesNotMatch(bootstrap, /\baccept\s*,/);
+    assert.equal(fs.existsSync(path.join(ROOT, 'src', 'application', 'canonical', 'accept-canonical.js')), false);
 
-    assert.match(accept, /legacy-canonical-candidate-repository/);
-    assert.match(accept, /assertLegacyCanonicalCandidateRepository/);
-    assert.match(accept, /dependencies\.legacyCandidateRepository/);
-    assert.match(accept, /@deprecated/);
+    assert.match(legacyPort, /LegacyCanonicalCandidateRepository/);
+    assert.match(legacyPort, /@deprecated/);
+    assert.match(legacyAdapter, /createFsLegacyCanonicalCandidateRepository/);
+    assert.match(mutationPlan, /['"]accept['"]/);
 
     assert.match(oldPort, /Deprecated compatibility re-export/);
     assert.match(oldPort, /legacy-canonical-candidate-repository/);
@@ -77,7 +80,6 @@ test('Production Root cannot construct or expose legacy Accept while the interna
 test('canonical_candidates.v1 knowledge is confined to the explicit compatibility boundary', () => {
     const srcRoot = path.join(ROOT, 'src');
     const allowed = new Set([
-        'src/application/canonical/accept-canonical.js',
         'src/ports/repositories/legacy-canonical-candidate-repository.js',
         'src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js',
         'src/ports/repositories/canonical-candidate-repository.js',
