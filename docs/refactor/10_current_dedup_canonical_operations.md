@@ -127,23 +127,22 @@ node scripts/xhs.js canonical stats
 
 ## 5. Legacy `canonical accept`
 
-下面的命令仍存在，但只用于历史或人工提供的 legacy manifest：
+`canonical accept` 已从 CLI Interface 移除，当前没有受支持的用户命令可以直接执行 historical/manual `canonical_candidates.v1`。
 
-```bash
-node scripts/xhs.js canonical accept \
-  --candidate-id <legacy-candidate-id> \
-  --canonical-id <cq_id>
-```
-
-它只读取：
+内部仍暂时保留：
 
 ```text
-data/manifests/canonical/canonical_candidates.json
+application.canonical.accept
+LegacyCanonicalCandidateRepository
+filesystem legacy candidate adapter
+operation=accept MutationPlan compatibility
 ```
 
-新 Suggest、GitHub Actions、Agent 或日常人工操作**不得生成新的** `canonical_candidates.v1` 作为正式流程输入。
+这些只用于分阶段退役期间的内部兼容与 characterization，不是可调用的日常操作入口。下一阶段会继续从 Composition Root 向内删除这条链路。
 
-正常工作中看到 `candidate_id` 时先确认它是否来自历史 manifest；当前 Dedup review identity 是 `relation_candidate_key`，两者不是同一个概念。
+新 Suggest、GitHub Actions、Agent 或日常人工操作不得生成新的 `canonical_candidates.v1`，也不得绕过 RelationCandidate / RelationDecision / ApplyDecision 边界。
+
+正常工作中看到 `candidate_id` 时先确认它是否属于其它 review 模型；当前 Dedup review identity 是 `relation_candidate_key`，两者不是同一个概念。
 
 ## 6. GitHub Actions
 
@@ -235,4 +234,5 @@ stale source 在 Decision / Apply 前 fail-closed
 MutationStore preflight/commit CAS 生效
 Canonical post-commit invariants 通过
 GitHub Actions artifact 指向 relation_candidate_queues.json
+canonical accept 不再由 CLI 暴露
 ```
