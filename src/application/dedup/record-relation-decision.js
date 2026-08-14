@@ -4,17 +4,12 @@ const { createRelationDecision } = require('../../domain/dedup/relation-decision
 const {
     assertRelationCandidateRepository,
 } = require('../../ports/repositories/relation-candidate-repository');
-const {
-    assertDedupIndexRetrievalRepository,
-} = require('../../ports/repositories/dedup-index-retrieval-repository');
-const {
-    assertDedupQuestionRetrievalRepository,
-} = require('../../ports/repositories/dedup-question-retrieval-repository');
 const { assertRelationDecisionStore } = require('../../ports/relation-decision-store');
 const {
     revisionOf,
     assertSourcesFresh,
 } = require('./relation-source-freshness');
+const { createRelationSourceLoader } = require('./relation-source-retrieval');
 
 function assertSnapshot(snapshot, label, valueKey) {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
@@ -36,9 +31,8 @@ function createRecordRelationDecisionUseCase(dependencies = {}) {
     const relationCandidateRepository = assertRelationCandidateRepository(
         dependencies.relationCandidateRepository,
     );
-    const indexRepository = assertDedupIndexRetrievalRepository(dependencies.indexRepository);
-    const questionRepository = assertDedupQuestionRetrievalRepository(dependencies.questionRepository);
     const relationDecisionStore = assertRelationDecisionStore(dependencies.relationDecisionStore);
+    const loadRelationSource = createRelationSourceLoader(dependencies);
 
     return async function recordRelationDecisionUseCase(input = {}) {
         const relationCandidateKey = String(input.relation_candidate_key || '').trim();
@@ -63,31 +57,12 @@ function createRecordRelationDecisionUseCase(dependencies = {}) {
                 `Relation candidate snapshot key mismatch: expected ${relationCandidateKey}`,
             );
         }
-        if (candidateSnapshot.candidate.scope !== 'entity') {
-            throw new Error(
-                `Unsupported relation candidate scope: ${candidateSnapshot.candidate.scope}`,
-            );
-        }
 
-        const indexSnapshot = assertSnapshot(
-            await indexRepository.findEntityRefs(candidateSnapshot.candidate.seed),
-            'current dedup entity index',
-            'refs',
+        const currentSource = await loadRelationSource(candidateSnapshot.candidate);
+        assertSourcesFresh(
+            candidateSnapshot.source_revisions,
+            currentSource.current_source_revisions,
         );
-        if (!Array.isArray(indexSnapshot.refs)) {
-            throw new Error('current dedup entity index refs must be an array');
-        }
-        const questionSnapshot = assertSnapshot(
-            await questionRepository.findByRefs(indexSnapshot.refs),
-            'current dedup questions',
-            'questions',
-        );
-        if (!Array.isArray(questionSnapshot.questions)) {
-            throw new Error('current dedup question snapshot questions must be an array');
-        }
-
-        const currentSourceRevisions = [revisionOf(indexSnapshot), revisionOf(questionSnapshot)];
-        assertSourcesFresh(candidateSnapshot.source_revisions, currentSourceRevisions);
 
         const decision = createRelationDecision({
             candidate: candidateSnapshot.candidate,
