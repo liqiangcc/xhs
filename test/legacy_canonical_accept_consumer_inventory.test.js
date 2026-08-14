@@ -101,7 +101,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
 
     assert.equal(
         inventory.retirement_status,
-        'runtime_removal_in_progress_composition_root_removed',
+        'runtime_removal_in_progress_application_removed',
     );
     assert.deepEqual(inventory.active_blockers, []);
     assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
@@ -111,6 +111,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
     assert.equal(inventory.summary.source_deprecation_marked, true);
     assert.equal(inventory.summary.interface_runtime_removed, true);
     assert.equal(inventory.summary.production_composition_root_accept_removed, true);
+    assert.equal(inventory.summary.accept_application_removed, true);
 });
 
 test('recorded GitHub consumer search distinguishes observable zero matches from unobservable external risk', () => {
@@ -127,12 +128,12 @@ test('recorded GitHub consumer search distinguishes observable zero matches from
     assert.ok(search.limitations.some((item) => /does not prove absolute absence/i.test(item)));
 });
 
-test('legacy Accept is absent from Interface and Production Root while internal compatibility remains deprecated', () => {
+test('legacy Accept is absent from Interface, Production Root, and Application while lower compatibility remains', () => {
     const canonicalCli = read('scripts/commands/canonical.js');
     const topLevelCli = read('scripts/xhs.js');
     const bootstrap = read('src/bootstrap/create-application.js');
-    const acceptApplication = read('src/application/canonical/accept-canonical.js');
     const legacyPort = read('src/ports/repositories/legacy-canonical-candidate-repository.js');
+    const legacyAdapter = read('src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js');
 
     assert.doesNotMatch(canonicalCli, /function runAccept/);
     assert.doesNotMatch(canonicalCli, /canonical-accept-presenter/);
@@ -149,10 +150,13 @@ test('legacy Accept is absent from Interface and Production Root while internal 
     assert.doesNotMatch(bootstrap, /legacyCandidateRepository/);
     const app = require('../src/bootstrap/create-application').createApplication({ root: ROOT });
     assert.equal('accept' in app.canonical, false);
+    assert.equal(
+        fs.existsSync(path.join(ROOT, 'src', 'application', 'canonical', 'accept-canonical.js')),
+        false,
+    );
 
-    assert.match(acceptApplication, /@deprecated[\s\S]*function createAcceptCanonicalUseCase/);
     assert.match(legacyPort, /@deprecated[\s\S]*function assertLegacyCanonicalCandidateRepository/);
-    assert.doesNotMatch(acceptApplication, /console\.warn/);
+    assert.match(legacyAdapter, /createFsLegacyCanonicalCandidateRepository/);
     assert.doesNotMatch(legacyPort, /console\.warn/);
 });
 
