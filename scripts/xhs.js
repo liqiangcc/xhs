@@ -21,11 +21,13 @@ function printHelp() {
         '  query company <value>     Query by company',
         '  query domain --l1 <v>     Query by domain l1 or l2',
         '  query hotspot             Show repeated question_id hotspots',
-        '  canonical suggest         Generate canonical candidates',
-        '  canonical accept          Confirm a canonical candidate',
+        '  canonical suggest         Generate entity relation suggestions or legacy hotspot candidates',
+        '  canonical accept          Confirm a legacy canonical candidate',
         '  canonical list|check      Inspect canonical coverage and quality',
         '  canonical merge|split     Maintain canonical question groups',
         '  canonical stats           Show canonical coverage',
+        '  dedup decide              Record an explicit RelationDecision',
+        '  dedup apply               Revalidate and apply a RelationDecision',
         '  answer init|status        Manage canonical answer files',
         '  answer validate|sync      Validate answer metadata and sync statuses',
         '  review prepare|today      Prepare and list due review items',
@@ -48,6 +50,7 @@ function main(argv = process.argv) {
     if (command === 'index') return require('./commands/index').main(forwarded);
     if (command === 'query') return require('./commands/query').main(forwarded);
     if (command === 'canonical') return require('./commands/canonical').main(forwarded);
+    if (command === 'dedup') return require('./commands/dedup').main(forwarded);
     if (command === 'answer') return require('./commands/answer').main(forwarded);
     if (command === 'review') return require('./commands/review').main(forwarded);
     if (command === 'issue') return require('./commands/issue').main(forwarded);
