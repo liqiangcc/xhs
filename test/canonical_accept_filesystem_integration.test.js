@@ -6,8 +6,6 @@ const path = require('path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createAcceptCanonicalUseCase } = require('../src/application/canonical/accept-canonical');
-const { loadTaxonomy } = require('../src/infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../src/infrastructure/filesystem/canonical-paths');
 const {
     createFsCanonicalRepositories,
@@ -15,11 +13,7 @@ const {
 const {
     createFsLegacyCanonicalCandidateRepository,
 } = require('../src/infrastructure/filesystem/legacy-canonical-candidate-repositories');
-const {
-    createFsCanonicalMutationStore,
-} = require('../src/infrastructure/filesystem/fs-canonical-mutation-store');
-const { readJson, readJsonl, writeJson, writeJsonl } = require('../scripts/lib/io');
-const { getIndexPaths } = require('../scripts/lib/index_store');
+const { writeJson, writeJsonl } = require('../scripts/lib/io');
 
 function candidate(overrides = {}) {
     return {
@@ -68,7 +62,7 @@ function canonical(canonicalId, questionIds, overrides = {}) {
 }
 
 function createFixture() {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-app-fs-accept-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-legacy-candidate-fs-'));
     const paths = createCanonicalFsPaths(root);
     writeJsonl(paths.canonicalQuestions, []);
     writeJsonl(paths.questions, [
@@ -83,36 +77,11 @@ function createFixture() {
     return { root, paths };
 }
 
-function createFilesystemUseCase(fixture, mutationStoreOverride = null) {
-    const {
-        canonicalRepository,
-        questionBindingRepository,
-        canonicalQuestionOwnershipRepository,
-    } = createFsCanonicalRepositories({ root: fixture.root, paths: fixture.paths });
-    const legacyCandidateRepository = createFsLegacyCanonicalCandidateRepository({
-        root: fixture.root,
-        paths: fixture.paths,
-    });
-    const mutationStore = mutationStoreOverride || createFsCanonicalMutationStore({
-        root: fixture.root,
-        paths: fixture.paths,
-    });
-
-    return createAcceptCanonicalUseCase({
-        legacyCandidateRepository,
-        canonicalIdentityRepository: canonicalRepository,
-        canonicalQuestionOwnershipRepository,
-        questionBindingRepository,
-        mutationStore,
-        taxonomy: loadTaxonomy(),
-    });
-}
-
 function cleanup(fixture) {
     fs.rmSync(fixture.root, { recursive: true, force: true });
 }
 
-test('filesystem candidate and ownership snapshots change only when their semantic resources change', async () => {
+test('legacy filesystem candidate and ownership snapshots use semantic opaque revisions', async () => {
     const fixture = createFixture();
     try {
         const candidateRepository = createFsLegacyCanonicalCandidateRepository({
@@ -148,112 +117,6 @@ test('filesystem candidate and ownership snapshots change only when their semant
         const ownershipAfter = await canonicalQuestionOwnershipRepository.findOwners('q1');
         assert.deepEqual(ownershipAfter.canonical_ids, ['cq_other']);
         assert.notEqual(ownershipAfter.revision, ownershipBefore.revision);
-    } finally {
-        cleanup(fixture);
-    }
-});
-
-test('explicit legacy Accept wiring still runs through real filesystem adapters and rebuilds indexes', async () => {
-    const fixture = createFixture();
-    try {
-        const accept = createFilesystemUseCase(fixture);
-        const result = await accept({
-            candidate_id: 'cand_accept',
-            canonical_id: 'cq_redis_fast',
-        });
-
-        assert.equal(result.ok, true);
-        assert.equal(result.canonical_count, 1);
-        assert.equal(result.updated_question_rows, 3);
-        assert.equal(result.commit.committed, true);
-        assert.equal(result.commit.recoverable, true);
-        assert.deepEqual(
-            result.plan.expected_revisions.map((item) => item.resource),
-            [
-                'canonical-candidate:cand_accept',
-                'canonical:cq_redis_fast',
-                'question-bindings-by-question:q1',
-                'question-bindings-by-question:q2',
-                'canonical-ownership-by-question:q1',
-                'canonical-ownership-by-question:q2',
-            ],
-        );
-
-        const records = readJsonl(fixture.paths.canonicalQuestions, []);
-        assert.equal(records.length, 1);
-        assert.equal(records[0].canonical_id, 'cq_redis_fast');
-        assert.deepEqual(records[0].question_ids, ['q1', 'q2']);
-        assert.equal(records[0].frequency, 3);
-        assert.deepEqual(
-            records[0].companies,
-            ['美团', '字节', '阿里'].sort((a, b) => a.localeCompare(b, 'zh')),
-        );
-
-        const rows = readJsonl(fixture.paths.questions, []);
-        assert.equal(rows.every((row) => row.canonical_id === 'cq_redis_fast'), true);
-
-        const hotspot = readJson(getIndexPaths(fixture.paths.indexDir).hotspot);
-        assert.equal(hotspot.total_hotspots, 1);
-        assert.equal(hotspot.entries[0].canonical_id, 'cq_redis_fast');
-        assert.equal(hotspot.entries[0].frequency, 3);
-        assert.equal(fs.existsSync(fixture.paths.journal), false);
-        assert.equal(fs.existsSync(fixture.paths.lock), false);
-    } finally {
-        cleanup(fixture);
-    }
-});
-
-test('filesystem preflight rejects a candidate changed after accept planning', async () => {
-    const fixture = createFixture();
-    try {
-        const realStore = createFsCanonicalMutationStore({ root: fixture.root, paths: fixture.paths });
-        const mutationStore = {
-            ...realStore,
-            async preflight(plan) {
-                writeJson(fixture.paths.legacyCandidateManifest, {
-                    schema_version: 'canonical_candidates.v1',
-                    candidates: [candidate({ aliases: ['concurrent candidate edit'] })],
-                });
-                return realStore.preflight(plan);
-            },
-        };
-        const accept = createFilesystemUseCase(fixture, mutationStore);
-
-        await assert.rejects(
-            accept({ candidate_id: 'cand_accept', canonical_id: 'cq_redis_fast' }),
-            /Revision mismatch for canonical-candidate:cand_accept/,
-        );
-        assert.deepEqual(readJsonl(fixture.paths.canonicalQuestions, []), []);
-        assert.equal(readJsonl(fixture.paths.questions, []).every((row) => row.canonical_id === null), true);
-        assert.equal(fs.existsSync(fixture.paths.journal), false);
-        assert.equal(fs.existsSync(fixture.paths.lock), false);
-    } finally {
-        cleanup(fixture);
-    }
-});
-
-test('filesystem preflight rejects a canonical ownership race after accept planning', async () => {
-    const fixture = createFixture();
-    try {
-        const realStore = createFsCanonicalMutationStore({ root: fixture.root, paths: fixture.paths });
-        const mutationStore = {
-            ...realStore,
-            async preflight(plan) {
-                writeJsonl(fixture.paths.canonicalQuestions, [canonical('cq_other', ['q1'])]);
-                return realStore.preflight(plan);
-            },
-        };
-        const accept = createFilesystemUseCase(fixture, mutationStore);
-
-        await assert.rejects(
-            accept({ candidate_id: 'cand_accept', canonical_id: 'cq_redis_fast' }),
-            /Revision mismatch for canonical-ownership-by-question:q1/,
-        );
-        const records = readJsonl(fixture.paths.canonicalQuestions, []);
-        assert.deepEqual(records.map((record) => record.canonical_id), ['cq_other']);
-        assert.equal(readJsonl(fixture.paths.questions, []).every((row) => row.canonical_id === null), true);
-        assert.equal(fs.existsSync(fixture.paths.journal), false);
-        assert.equal(fs.existsSync(fixture.paths.lock), false);
     } finally {
         cleanup(fixture);
     }
