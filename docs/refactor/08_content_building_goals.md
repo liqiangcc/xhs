@@ -61,14 +61,18 @@
 
 ```text
 候选召回
-  -> 去重与边界确认
-  -> canonical accept / merge / split
+  -> canonical suggest
+  -> 显式 dedup decide
+  -> dedup apply（same / alias）
+     或 canonical merge / split（维护已有 Canonical）
   -> 编写或升级答案
   -> answer validate --strict
   -> answer sync
   -> canonical check
   -> 加入复习队列
 ```
+
+Canonical/Dedup 当前命令语义以 `docs/refactor/10_current_dedup_canonical_operations.md` 为准；本文只定义内容建设目标和批次完成标准。
 
 不得只增加 Canonical 而长期保留 missing answer，也不得批量生成答案后跳过内容复核。
 
@@ -237,7 +241,6 @@ Tier D：无效、重复噪声或非面试问题，记录排除原因
 | 算法 | 2 | 只选真实高频或目标公司必需题 |
 
 额度用于控制内容结构，不要求每个候选都新建 Canonical；若命中已有 Canonical，应增加绑定而不是凑新记录数。
-
 ### 每批退出条件
 
 - 完成候选去重和边界确认。
@@ -357,7 +360,6 @@ Kafka / RocketMQ
 在不复制答案的前提下，用同一批 Canonical 组合出多种复习入口。
 
 ### 目标能力
-
 - 专题突破：按 Redis、MySQL、JVM 等连续训练。
 - 综合复习：按 P0/P1 和到期时间训练。
 - 公司模拟：按公司、岗位、轮次组合原题，但答案仍复用 Canonical。
