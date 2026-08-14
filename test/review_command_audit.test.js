@@ -34,32 +34,38 @@ test('review audit freezes migration order and high-risk boundaries', () => {
     assert.match(audit, /review_weak\.v1/);
     assert.match(audit, /review_prepare_result\.v1/);
     assert.match(audit, /review_mark_result\.v1/);
+    assert.match(audit, /review integrity[\s\S]*completed|review integrity[\s\S]*已完成/i);
     assert.match(audit, /saveProgress\([\s\S]*appendSessionEvent/);
     assert.match(audit, /ReviewMutationPlan \/ ReviewMutationStore/);
 });
 
-test('Production Application has no Review namespace before Review migration starts', () => {
+test('Production Application exposes only review integrity after the first Review migration', () => {
     const app = createApplication({ root: ROOT });
 
-    assert.equal('review' in app, false);
-    assert.equal(typeof app.canonical.list, 'function');
-    assert.equal(typeof app.canonical.stats, 'function');
-    assert.equal(typeof app.canonical.check, 'function');
+    assert.equal(Object.isFrozen(app.review), true);
+    assert.deepEqual(Object.keys(app.review), ['integrity']);
+    assert.equal(typeof app.review.integrity, 'function');
+    assert.equal('today' in app.review, false);
+    assert.equal('next' in app.review, false);
+    assert.equal('weak' in app.review, false);
+    assert.equal('prepare' in app.review, false);
+    assert.equal('mark' in app.review, false);
 });
 
-test('review integrity is the only genuinely read-only Review command candidate', () => {
+test('review integrity delegates to Application and preserves ok=false exit semantics in Interface', () => {
     const source = runIntegrity.toString();
     const commandModule = read('scripts/commands/review.js');
 
-    assert.match(source, /loadCanonicalQuestions/);
-    assert.match(source, /loadProgress/);
-    assert.match(source, /fs\.readdirSync/);
-    assert.match(source, /fs\.readFileSync/);
-    assert.doesNotMatch(source, /saveProgress|appendSessionEvent|writePlan|writeJson|writeJsonl/);
+    assert.match(source, /createApplication/);
+    assert.match(source, /application\.review\.integrity/);
+    assert.doesNotMatch(
+        source,
+        /loadCanonicalQuestions|loadProgress|fs\.readdirSync|fs\.readFileSync|saveProgress|appendSessionEvent|writePlan/,
+    );
     assert.match(commandModule, /return result\.ok === false \? 1 : 0/);
 });
 
-test('today next weak and prepare synthesize progress and persist it unless noWrite', () => {
+test('today next weak and prepare still synthesize progress and persist it unless noWrite', () => {
     const commandModule = read('scripts/commands/review.js');
 
     assert.match(
