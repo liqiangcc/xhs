@@ -34,16 +34,18 @@ function ref(item) {
     };
 }
 
-function createUseCase(questions, entitySeed, overrides = {}) {
+function createUseCase(questions, entitySeed, overrides = {}, seed = {}) {
     const adapters = createInMemoryDedupSuggestionAdapters({
         questions,
         entity_refs: {
             [entitySeed]: questions.map(ref),
         },
+        ...seed,
     });
     const useCase = createSuggestCanonicalRelationsUseCase({
         taxonomy,
         indexRepository: adapters.indexRepository,
+        hotspotRepository: adapters.hotspotRepository,
         questionRepository: adapters.questionRepository,
         relationCandidateStore: adapters.relationCandidateStore,
         ...overrides,
@@ -98,6 +100,38 @@ test('suggestion application retrieves facts and persists pending relation revie
     assert.deepEqual(questions, before);
 });
 
+test('hotspot suggestion retrieves hotspot facts and preserves historical repeated-row eligibility', async () => {
+    const questions = [
+        question({ question_id: 'q_hot', source_note_id: 'note-a' }),
+        question({ question_id: 'q_hot', source_note_id: 'note-b', company: '字节' }),
+        question({ question_id: 'q_other', source_note_id: 'note-c', original_question: 'Redis 持久化机制？' }),
+    ];
+    const hotspots = [{
+        canonical_id: null,
+        question_id: 'q_hot',
+        frequency: 2,
+        companies: ['美团', '字节'],
+        refs: questions.slice(0, 2).map(ref),
+    }];
+    const { useCase, adapters } = createUseCase(questions, 'unused', {}, { hotspots });
+
+    const result = await useCase({ mode: 'hotspot', limit: 10 });
+
+    assert.equal(result.mode, 'hotspot');
+    assert.equal(result.seed, 'hotspot');
+    assert.equal(result.candidate_count, 1);
+    assert.equal(result.relation_candidates[0].scope, 'hotspot');
+    assert.deepEqual(result.relation_candidates[0].question_ids, ['q_hot']);
+    assert.equal(result.relation_candidates[0].member_count, 2);
+    assert.equal(result.relation_candidates[0].evidence[0].signal, 'hotspot_question_id');
+    assert.deepEqual(result.source_revisions.map((item) => item.resource), [
+        'dedup-hotspot-index',
+        'dedup-question-catalog',
+    ]);
+    assert.equal(result.queue.resource, 'dedup-relation-queue:hotspot:hotspot');
+    assert.equal(adapters.snapshot().queues[result.queue.resource].candidate_count, 1);
+});
+
 test('suggestion application normalizes domain context after retrieving Questions', async () => {
     let detectorInput = null;
     const detector = (questions) => {
@@ -134,12 +168,16 @@ test('suggestion application normalizes domain context after retrieving Question
     assert.equal(detectorInput[1].domain_key, '缓存/Redis');
 });
 
-test('suggestion application owns retrieval and rejects bypassing Ports with raw Questions', async () => {
+test('suggestion application owns retrieval and rejects bypassing Ports with raw source facts', async () => {
     const { useCase } = createUseCase([], 'Redis');
 
     await assert.rejects(
         useCase({ mode: 'entity', seed: 'Redis', questions: [] }),
-        /must be retrieved through DedupQuestionRetrievalRepository/,
+        /must be retrieved through Dedup repositories/,
+    );
+    await assert.rejects(
+        useCase({ mode: 'hotspot', hotspots: [] }),
+        /must be retrieved through Dedup repositories/,
     );
 });
 
@@ -147,11 +185,15 @@ test('suggestion application rejects unsupported modes and invalid limits before
     const { useCase } = createUseCase([], 'Redis');
 
     await assert.rejects(
-        useCase({ mode: 'hotspot', seed: 'hotspot' }),
+        useCase({ mode: 'company', seed: 'company' }),
         /Unsupported dedup suggestion mode/,
     );
     await assert.rejects(
         useCase({ mode: 'entity', seed: 'Redis', limit: -1 }),
+        /Invalid suggestion limit/,
+    );
+    await assert.rejects(
+        useCase({ mode: 'hotspot', limit: -1 }),
         /Invalid suggestion limit/,
     );
 });
