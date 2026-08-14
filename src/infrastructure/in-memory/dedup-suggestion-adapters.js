@@ -16,6 +16,10 @@ function entityIndexResource(seed) {
     return `dedup-entity-index:${String(seed)}`;
 }
 
+function hotspotIndexResource() {
+    return 'dedup-hotspot-index';
+}
+
 function queueResource(mode, seed) {
     return `dedup-relation-queue:${String(mode)}:${String(seed)}`;
 }
@@ -30,6 +34,7 @@ function decisionSnapshotResource(relationCandidateKey) {
 
 function createInMemoryDedupSuggestionAdapters(seed = {}) {
     let questions = (seed.questions || []).map(clone);
+    let hotspots = (seed.hotspots || []).map(clone);
     const entityRefs = new Map(
         Object.entries(seed.entity_refs || {}).map(([key, refs]) => [key, (refs || []).map(clone)]),
     );
@@ -71,6 +76,17 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
             const resource = entityIndexResource(key);
             return {
                 refs: (entityRefs.get(key) || []).map(clone),
+                resource,
+                revision: revision(resource),
+            };
+        },
+    };
+
+    const hotspotRepository = {
+        async listHotspots() {
+            const resource = hotspotIndexResource();
+            return {
+                hotspots: hotspots.map(clone),
                 resource,
                 revision: revision(resource),
             };
@@ -176,6 +192,11 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
             bump(entityIndexResource(key));
         },
 
+        replaceHotspots(nextHotspots) {
+            hotspots = (nextHotspots || []).map(clone);
+            bump(hotspotIndexResource());
+        },
+
         replaceQuestions(nextQuestions) {
             questions = (nextQuestions || []).map(clone);
             bump('dedup-question-catalog');
@@ -185,6 +206,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
     function snapshot() {
         return {
             questions: questions.map(clone),
+            hotspots: hotspots.map(clone),
             entity_refs: Object.fromEntries(
                 [...entityRefs.entries()].map(([key, refs]) => [key, refs.map(clone)]),
             ),
@@ -197,6 +219,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
 
     return {
         indexRepository,
+        hotspotRepository,
         questionRepository,
         relationCandidateStore,
         relationCandidateRepository,
