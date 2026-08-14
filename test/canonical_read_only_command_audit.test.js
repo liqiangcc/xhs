@@ -67,7 +67,7 @@ test('canonical command module no longer imports legacy read-side stores policie
     assert.doesNotMatch(source, /\bshouldWriteReports\b/);
 });
 
-test('Production Application exposes every migrated Canonical read use case', () => {
+test('Production Application exposes migrated Canonical reads and named Canonicalization lifecycle', () => {
     const app = createApplication({ root: ROOT });
 
     assert.equal(typeof app.canonical.list, 'function');
@@ -75,5 +75,10 @@ test('Production Application exposes every migrated Canonical read use case', ()
     assert.equal(typeof app.canonical.check, 'function');
     assert.equal(typeof app.canonical.merge, 'function');
     assert.equal(typeof app.canonical.split, 'function');
-    assert.equal(typeof app.canonical.canonicalizeQuestionGroup, 'function');
+    assert.equal(typeof app.canonical.resolveQuestionGroupCanonicalization, 'function');
+    assert.equal(typeof app.canonical.planQuestionGroupCanonicalizationMutation, 'function');
+    assert.equal(typeof app.canonical.executeQuestionGroupCanonicalization, 'function');
+    assert.equal('planQuestionGroup' in app.canonical, false);
+    assert.equal('planQuestionGroupMutation' in app.canonical, false);
+    assert.equal('canonicalizeQuestionGroup' in app.canonical, false);
 });

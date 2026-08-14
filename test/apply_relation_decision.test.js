@@ -54,8 +54,8 @@ function createHarness(overrides = {}) {
         calls.push(['prepare', structuredClone(input)]);
         return prepared();
     });
-    const planCanonicalizeQuestionGroup = overrides.planCanonicalizeQuestionGroup || (async (input) => {
-        calls.push(['plan', structuredClone(input)]);
+    const resolveQuestionGroupCanonicalization = overrides.resolveQuestionGroupCanonicalization || (async (input) => {
+        calls.push(['resolve', structuredClone(input)]);
         return {
             ok: true,
             canonical_id: 'cq_redis_performance',
@@ -66,7 +66,7 @@ function createHarness(overrides = {}) {
             },
         };
     });
-    const canonicalizeQuestionGroup = overrides.canonicalizeQuestionGroup || (async (input) => {
+    const executeQuestionGroupCanonicalization = overrides.executeQuestionGroupCanonicalization || (async (input) => {
         calls.push(['execute', structuredClone(input)]);
         return {
             ok: true,
@@ -84,13 +84,13 @@ function createHarness(overrides = {}) {
         calls,
         apply: createApplyRelationDecisionUseCase({
             prepareRelationApply,
-            planCanonicalizeQuestionGroup,
-            canonicalizeQuestionGroup,
+            resolveQuestionGroupCanonicalization,
+            executeQuestionGroupCanonicalization,
         }),
     };
 }
 
-test('orchestrator revalidates Decision first, then plans and executes Canonicalization without exposing intermediates', async () => {
+test('orchestrator revalidates Decision first, then resolves and executes Canonicalization without exposing intermediates', async () => {
     const harness = createHarness();
 
     const result = await harness.apply({
@@ -99,7 +99,7 @@ test('orchestrator revalidates Decision first, then plans and executes Canonical
         canonical_title: 'Redis 为什么快？',
     });
 
-    assert.deepEqual(harness.calls.map(([name]) => name), ['prepare', 'plan', 'execute']);
+    assert.deepEqual(harness.calls.map(([name]) => name), ['prepare', 'resolve', 'execute']);
     assert.deepEqual(harness.calls[0][1], {
         relation_candidate_key: 'entity|Redis|q_a,q_b',
         canonical_id: 'cq_redis_performance',
@@ -119,17 +119,17 @@ test('orchestrator revalidates Decision first, then plans and executes Canonical
     }
 });
 
-test('stale Dedup source rejection stops before any Canonical planning or mutation', async () => {
-    let planned = false;
+test('stale Dedup source rejection stops before any Canonical resolution or mutation', async () => {
+    let resolved = false;
     let executed = false;
     const harness = createHarness({
         prepareRelationApply: async () => {
             throw new Error('Dedup relation source changed: expected source-rev, got newer-rev');
         },
-        planCanonicalizeQuestionGroup: async () => {
-            planned = true;
+        resolveQuestionGroupCanonicalization: async () => {
+            resolved = true;
         },
-        canonicalizeQuestionGroup: async () => {
+        executeQuestionGroupCanonicalization: async () => {
             executed = true;
         },
     });
@@ -142,7 +142,7 @@ test('stale Dedup source rejection stops before any Canonical planning or mutati
         }),
         /Dedup relation source changed/,
     );
-    assert.equal(planned, false);
+    assert.equal(resolved, false);
     assert.equal(executed, false);
 });
 
@@ -153,7 +153,7 @@ test('relation-record-only and unrelated Decisions return explicit no-op without
         ['related', 'relation_record_only', 'relation_graph_apply_not_supported'],
         ['unrelated', 'no_apply', 'explicitly_unrelated'],
     ]) {
-        let planned = false;
+        let resolved = false;
         let executed = false;
         const harness = createHarness({
             prepareRelationApply: async () => prepared({
@@ -168,10 +168,10 @@ test('relation-record-only and unrelated Decisions return explicit no-op without
                     canonical_target: undefined,
                 }),
             }),
-            planCanonicalizeQuestionGroup: async () => {
-                planned = true;
+            resolveQuestionGroupCanonicalization: async () => {
+                resolved = true;
             },
-            canonicalizeQuestionGroup: async () => {
+            executeQuestionGroupCanonicalization: async () => {
                 executed = true;
             },
         });
@@ -182,7 +182,7 @@ test('relation-record-only and unrelated Decisions return explicit no-op without
         assert.equal(result.applied, false);
         assert.equal(result.relation, relation);
         assert.equal(result.reason_code, reasonCode);
-        assert.equal(planned, false);
+        assert.equal(resolved, false);
         assert.equal(executed, false);
     }
 });
@@ -196,7 +196,7 @@ test('same or alias Decision without required Canonical target refuses execution
                 canonical_target: undefined,
             }),
         }),
-        canonicalizeQuestionGroup: async () => {
+        executeQuestionGroupCanonicalization: async () => {
             executed = true;
         },
     });

@@ -1,320 +1,10 @@
 # 15 Canonical Naming Lifecycle Audit
 
-> Scope: freeze the real responsibilities of the Question-group Canonicalization flow before renaming it. This audit follows the previously agreed naming convention: names must remain understandable outside their directory, architecture roles come from the approved vocabulary, and shortening is never allowed to erase responsibility.
+> Rename status: completed. The Question-group Canonicalization lifecycle now uses one stable vocabulary and the Canonical mutation consistency boundary now uses the approved `Gateway` role. This was a behavior-free naming migration: persisted schemas, business rules, revision scope, transaction semantics, and post-commit validation were not changed.
 
-## 1. Why this audit exists
+## 1. Final lifecycle
 
-The current Canonical flow contains several near-collision names:
-
-```text
-createPlanCanonicalizeQuestionGroupUseCase
-createPrepareCanonicalizeQuestionGroupUseCase
-createPlanCanonicalizeQuestionGroupMutationUseCase
-createCanonicalizeQuestionGroupMutationPlan
-createCanonicalizeQuestionGroupUseCase
-CanonicalMutationStore
-createFsCanonicalMutationStore
-```
-
-The problem is not character count. The problem is that lifecycle words are asymmetric and overloaded:
-
-```text
-Plan...
-Prepare...
-Plan...Mutation...
-Canonicalize...
-```
-
-A reviewer has to reconstruct the lifecycle before they can tell which component only resolves business intent, which gathers concurrency evidence, which builds executable mutation intent, and which actually commits state.
-
-This document does not collapse those responsibilities. It makes them explicit first.
-
-## 2. Two plans are intentionally different concepts
-
-The current architecture contains two distinct plan values and both must remain.
-
-### 2.1 `CanonicalizationPlan`
-
-Current schema:
-
-```text
-canonicalization_plan.v1
-```
-
-Meaning:
-
-```text
-resolved business decision for Question-group Canonicalization
-```
-
-It determines:
-
-```text
-create_canonical vs extend_existing_canonical
-Canonical target identity
-requested title
-preserve-existing vs use-requested title
-planned Question ids
-Decision provenance
-```
-
-It explicitly carries:
-
-```text
-mutation_authorized = false
-```
-
-Therefore this value is **not** an executable persistence plan.
-
-### 2.2 `CanonicalMutationPlan`
-
-Current schema:
-
-```text
-canonical_mutation_plan.v1
-```
-
-Meaning:
-
-```text
-storage-agnostic semantic mutation intent that can be preflighted/committed
-```
-
-It contains:
-
-```text
-opaque expected revisions
-Canonical upserts/removals
-Question rebindings
-Review migrations
-Answer invalidations/archives
-index rebuild intent
-history intent
-```
-
-Infrastructure decides how those semantics map to files or another storage mechanism.
-
-### 2.3 Naming invariant
-
-Do not merge these concepts into one generic `Plan` object.
-
-```text
-CanonicalizationPlan = what the business operation should become
-CanonicalMutationPlan = what semantic state transition will be committed
-```
-
-The lifecycle names around them must make this distinction obvious.
-
-## 3. Current lifecycle by real responsibility
-
-### Stage A — resolve business Canonicalization
-
-Current entry:
-
-```text
-createPlanCanonicalizeQuestionGroupUseCase
-```
-
-Actual responsibility:
-
-```text
-validate ready Dedup apply intent
-inspect current Canonical target identity
-resolve absent vs existing target
-resolve create vs extend
-resolve effective title
-produce canonicalization_plan.v1
-```
-
-It does **not**:
-
-```text
-load all Question bindings
-project final Canonical aggregate state
-collect all mutation revisions
-build canonical_mutation_plan.v1
-commit anything
-```
-
-Therefore `Plan` is too broad at this stage. The distinctive responsibility is target/business **resolution**.
-
-Approved target:
-
-```text
-ResolveQuestionGroupCanonicalizationUseCase
-```
-
-Target factory/function/file direction:
-
-```text
-createResolveQuestionGroupCanonicalizationUseCase()
-resolveQuestionGroupCanonicalization()
-src/application/canonical/resolve-question-group-canonicalization.js
-```
-
-Production Application key:
-
-```text
-canonical.resolveQuestionGroupCanonicalization
-```
-
-## 4. Stage B — prepare current mutation evidence and projection
-
-Current entry:
-
-```text
-createPrepareCanonicalizeQuestionGroupUseCase
-```
-
-Actual responsibility:
-
-```text
-re-inspect Canonical target identity
-load every resulting Question binding snapshot
-load Canonical ownership snapshots
-validate ownership/binding consistency
-invoke Domain Question-group projection policy
-collect opaque expected revisions
-capture planned Question binding states
-```
-
-It does **not**:
-
-```text
-make the original create-vs-extend business decision
-construct canonical_mutation_plan.v1
-preflight/commit mutation
-publish state
-```
-
-This collaborator is not a top-level user-facing Application capability. It coordinates several outbound reads plus Domain projection for the mutation-planning stage.
-
-Approved architecture role:
-
-```text
-Coordinator
-```
-
-Approved target:
-
-```text
-QuestionGroupCanonicalizationPreparationCoordinator
-```
-
-Target factory/function/file direction:
-
-```text
-createQuestionGroupCanonicalizationPreparationCoordinator()
-prepareQuestionGroupCanonicalizationMutation()
-src/application/canonical/question-group-canonicalization-preparation-coordinator.js
-```
-
-It should remain internal to the mutation planning/execution workflow and should **not** be added as another public `app.canonical` capability.
-
-## 5. Stage C — plan executable Canonical mutation
-
-Current entry:
-
-```text
-createPlanCanonicalizeQuestionGroupMutationUseCase
-```
-
-Current pure factory:
-
-```text
-createCanonicalizeQuestionGroupMutationPlan
-```
-
-Actual responsibility:
-
-```text
-invoke the preparation Coordinator
-validate prepared projection/revision evidence
-convert prepared semantic state into canonical_mutation_plan.v1
-remain side-effect free
-```
-
-This is the one stage where the verb **Plan** should be reserved: it produces the executable-shaped mutation plan.
-
-Approved target Application capability:
-
-```text
-PlanQuestionGroupCanonicalizationMutationUseCase
-```
-
-Approved pure factory:
-
-```text
-createQuestionGroupCanonicalizationMutationPlan
-```
-
-Target files:
-
-```text
-src/application/canonical/plan-question-group-canonicalization-mutation.js
-src/application/canonical/question-group-canonicalization-mutation-plan.js
-```
-
-Production Application key:
-
-```text
-canonical.planQuestionGroupCanonicalizationMutation
-```
-
-This keeps the distinction visible near the beginning of the name:
-
-```text
-Resolve... = resolve business CanonicalizationPlan
-Plan...Mutation = build executable CanonicalMutationPlan
-```
-
-## 6. Stage D — execute Canonicalization
-
-Current entry:
-
-```text
-createCanonicalizeQuestionGroupUseCase
-```
-
-Actual responsibility:
-
-```text
-rebuild fresh mutation evidence inside Application
-build CanonicalMutationPlan
-preflight mutation boundary
-commit mutation boundary
-re-read committed Canonical/Question ownership state
-post-commit validate projection and ownership
-return execution result
-```
-
-The current verb `Canonicalize` names the business operation but does not make its lifecycle position explicit when compared with the three preceding near-collision names.
-
-Approved target:
-
-```text
-ExecuteQuestionGroupCanonicalizationUseCase
-```
-
-Target factory/function/file direction:
-
-```text
-createExecuteQuestionGroupCanonicalizationUseCase()
-executeQuestionGroupCanonicalization()
-src/application/canonical/execute-question-group-canonicalization.js
-```
-
-Production Application key:
-
-```text
-canonical.executeQuestionGroupCanonicalization
-```
-
-`Execute` means exactly one thing in this lifecycle: cross the mutation consistency boundary and validate the committed result.
-
-## 7. Final lifecycle vocabulary
-
-The Question-group Canonicalization lifecycle should read:
+The lifecycle is now:
 
 ```text
 Dedup ApplyIntent
@@ -333,32 +23,248 @@ ExecuteQuestionGroupCanonicalizationUseCase
     ↓
 CanonicalMutationGateway
     ↓
+FileCanonicalMutationGatewayAdapter
+    ↓
 post-commit validation
 ```
 
-The stable lifecycle verbs are:
+Stable lifecycle vocabulary:
 
 ```text
 Resolve → Prepare → Plan → Execute
 ```
 
-Rules:
+Each word has one meaning:
 
-1. `Resolve` produces/resolves the non-authorizing business CanonicalizationPlan.
-2. `Prepare` is an internal Coordinator that gathers current facts and projection evidence.
-3. `Plan` is reserved for construction of the executable CanonicalMutationPlan.
-4. `Execute` is reserved for preflight/commit/post-validation.
-5. Do not add another lifecycle synonym such as `Build`, `Process`, `Handle`, `Perform`, or `Run` for the same stages.
+- `Resolve` resolves the business-level Canonicalization decision.
+- `Prepare` gathers current facts, projection evidence, and opaque revisions; it remains an internal Coordinator.
+- `Plan` builds the executable-shaped, storage-agnostic CanonicalMutationPlan.
+- `Execute` crosses the mutation consistency boundary and validates the committed result.
 
-## 8. `CanonicalMutationStore` naming decision
+Do not add overlapping lifecycle synonyms such as `Build`, `Handle`, `Process`, `Perform`, or `Run` for these same stages.
 
-Current Port:
+## 2. Two Plan values must remain separate
+
+The architecture intentionally contains two different values.
+
+### 2.1 CanonicalizationPlan
+
+Persisted/wire schema remains:
+
+```text
+canonicalization_plan.v1
+```
+
+Meaning:
+
+```text
+resolved business decision for Question-group Canonicalization
+```
+
+It determines:
+
+```text
+create_canonical vs extend_existing_canonical
+Canonical target identity
+requested/effective title
+planned Question ids
+Decision provenance
+```
+
+It still explicitly carries:
+
+```text
+mutation_authorized = false
+```
+
+Therefore it is not a persistence mutation plan.
+
+### 2.2 CanonicalMutationPlan
+
+Schema remains:
+
+```text
+canonical_mutation_plan.v1
+```
+
+Meaning:
+
+```text
+storage-agnostic semantic state transition that may be preflighted and committed
+```
+
+It contains:
+
+```text
+opaque expected revisions
+Canonical upserts/removals
+Question rebindings
+Review migrations
+Answer invalidations/archives
+index rebuild intent
+history intent
+```
+
+Infrastructure alone decides how those semantic changes map to files or another persistence technology.
+
+### 2.3 Invariant
+
+`CanonicalizationPlan` and `CanonicalMutationPlan` must remain separate. Combining them would collapse the business-resolution boundary into the persistence-consistency boundary and would make caller-controlled mutation evidence easier to smuggle across layers.
+
+## 3. Final Application names
+
+### Resolve
+
+```text
+src/application/canonical/resolve-question-group-canonicalization.js
+createResolveQuestionGroupCanonicalizationUseCase()
+resolveQuestionGroupCanonicalization()
+```
+
+Responsibility:
+
+```text
+validate ready Dedup apply intent
+inspect target Canonical identity
+resolve absent vs existing
+resolve create vs extend
+resolve effective title
+produce canonicalization_plan.v1
+```
+
+It does not collect all Question revisions and cannot commit.
+
+### Prepare
+
+```text
+src/application/canonical/question-group-canonicalization-preparation-coordinator.js
+createQuestionGroupCanonicalizationPreparationCoordinator()
+prepareQuestionGroupCanonicalizationMutation()
+```
+
+Responsibility:
+
+```text
+re-inspect target identity
+load resulting Question binding snapshots
+load ownership snapshots
+validate membership consistency
+invoke Domain projection policy
+collect opaque expected revisions
+capture planned binding states
+```
+
+This remains an internal Application Coordinator and is not exposed as another public `app.canonical` capability.
+
+### Plan
+
+```text
+src/application/canonical/plan-question-group-canonicalization-mutation.js
+createPlanQuestionGroupCanonicalizationMutationUseCase()
+```
+
+Pure semantic plan factory:
+
+```text
+src/application/canonical/question-group-canonicalization-mutation-plan.js
+createQuestionGroupCanonicalizationMutationPlan()
+```
+
+Responsibility:
+
+```text
+invoke Preparation Coordinator
+validate prepared projection/revision evidence
+produce canonical_mutation_plan.v1
+remain side-effect free
+```
+
+### Execute
+
+```text
+src/application/canonical/execute-question-group-canonicalization.js
+createExecuteQuestionGroupCanonicalizationUseCase()
+executeQuestionGroupCanonicalization()
+```
+
+Responsibility:
+
+```text
+rebuild fresh mutation evidence
+build CanonicalMutationPlan
+preflight Gateway
+commit Gateway
+re-read committed state
+post-commit validate projection and ownership
+```
+
+`Execute` is the only Question-group Canonicalization stage allowed to cross the mutation consistency boundary.
+
+## 4. Final public Application surface
+
+Production `app.canonical` now exposes:
+
+```text
+list
+stats
+check
+merge
+split
+resolveQuestionGroupCanonicalization
+planQuestionGroupCanonicalizationMutation
+executeQuestionGroupCanonicalization
+```
+
+Retired public names are not retained as aliases:
+
+```text
+planQuestionGroup
+planQuestionGroupMutation
+canonicalizeQuestionGroup
+```
+
+Dedup Apply now reads naturally:
+
+```text
+prepareRelationApply
+→ resolveQuestionGroupCanonicalization
+→ executeQuestionGroupCanonicalization
+```
+
+Execution internally rebuilds mutation evidence immediately before preflight/commit, preserving the existing anti-forgery and concurrency semantics.
+
+## 5. Canonical mutation consistency boundary
+
+The retired name was:
 
 ```text
 CanonicalMutationStore
 ```
 
-Its actual responsibility is broader than persistence ownership of one aggregate. It is the consistency boundary across semantic operations that may touch:
+The final Port is:
+
+```text
+src/ports/canonical-mutation-gateway.js
+CanonicalMutationGateway
+assertCanonicalMutationGateway()
+```
+
+Contract remains exactly:
+
+```text
+preflight(plan)
+commit(plan, preflightResult)
+```
+
+The production implementation is:
+
+```text
+src/infrastructure/filesystem/file-canonical-mutation-gateway-adapter.js
+FileCanonicalMutationGatewayAdapter
+createFileCanonicalMutationGatewayAdapter()
+```
+
+`Gateway` is the correct approved outbound role because the boundary coordinates one atomic/recoverable state transition across multiple persistence concerns:
 
 ```text
 Canonical records
@@ -369,96 +275,47 @@ indexes
 history
 ```
 
-Its contract is:
+It is not a single-aggregate Repository.
 
-```text
-preflight(plan)
-commit(plan, preflightResult)
-```
+## 6. Filesystem transaction behavior preserved
 
-and the filesystem implementation already owns:
+The filesystem Adapter still owns the same transaction mechanics as before the rename:
 
 ```text
 opaque revision revalidation
-lock ownership
+mutation lock
 staging
 backups
-journal
+prepared journal
 multi-file publish
-rollback
-crash recovery
+committed journal marker
+rollback on normal failure
+process-crash recovery on a later preflight
+post-commit cleanup
 ```
 
-That responsibility matches the approved outbound role **Gateway**, not the grandfathered word `Store`.
-
-Approved target Port:
+The rename did not change:
 
 ```text
-CanonicalMutationGateway
-assertCanonicalMutationGateway()
+canonical_fs_transaction.v1
+lock location
+journal location
+operation materialization order
+rollback behavior
+crash recovery behavior
+fault-injection stages
 ```
 
-Approved target Infrastructure implementation:
+The original fault-injection coverage was migrated to the Gateway-named tests rather than deleted.
 
-```text
-FileCanonicalMutationGatewayAdapter
-createFileCanonicalMutationGatewayAdapter()
-```
+## 7. Behavior-free compatibility boundary
 
-Target files:
-
-```text
-src/ports/canonical-mutation-gateway.js
-src/infrastructure/filesystem/file-canonical-mutation-gateway-adapter.js
-```
-
-Do not rename it to `CanonicalRepository`: it coordinates one atomic/recoverable consistency boundary across multiple persistence concerns rather than owning a single Canonical aggregate repository.
-
-## 9. Public Application surface after rename
-
-Current:
-
-```text
-canonical.planQuestionGroup
-canonical.planQuestionGroupMutation
-canonical.canonicalizeQuestionGroup
-```
-
-Target:
-
-```text
-canonical.resolveQuestionGroupCanonicalization
-canonical.planQuestionGroupCanonicalizationMutation
-canonical.executeQuestionGroupCanonicalization
-```
-
-The internal Preparation Coordinator remains absent from the public surface.
-
-The public call chain in Dedup should become readable without opening implementation files:
-
-```text
-prepareRelationApply
-→ resolveQuestionGroupCanonicalization
-→ executeQuestionGroupCanonicalization
-```
-
-Execution internally rebuilds the mutation plan immediately before preflight/commit, preserving the existing anti-forgery/concurrency behavior.
-
-## 10. Compatibility boundaries
-
-The naming migration must be behavior-free.
-
-Do **not** rename or change persisted/wire schemas in the same slice:
+The rename intentionally did not change:
 
 ```text
 canonicalization_plan.v1
 canonical_mutation_plan.v1
 dedup_relation_apply_intent.v1
-```
-
-Do **not** change:
-
-```text
 create vs extend semantics
 mutation_authorized=false semantics
 revision scope
@@ -467,70 +324,56 @@ Question ownership rules
 preflight/commit behavior
 journal/rollback/recovery behavior
 post-commit validation
-Dedup decision semantics
+Dedup Decision semantics
 ```
 
-Do not retain compatibility aliases for the old internal JavaScript names after all repository-local callers/tests are migrated. Parallel old/new names would recreate the ambiguity this audit is removing.
+No compatibility aliases for the retired JavaScript names are kept in active `src` code. Keeping parallel old/new names would recreate the ambiguity the migration was intended to remove.
 
-## 11. Atomic rename set
+## 8. Separation of concerns after rename
 
-The next implementation slice must rename the lifecycle as one coordinated change rather than one symbol at a time.
-
-```text
-createPlanCanonicalizeQuestionGroupUseCase
-→ createResolveQuestionGroupCanonicalizationUseCase
-
-createPrepareCanonicalizeQuestionGroupUseCase
-→ createQuestionGroupCanonicalizationPreparationCoordinator
-
-createPlanCanonicalizeQuestionGroupMutationUseCase
-→ createPlanQuestionGroupCanonicalizationMutationUseCase
-
-createCanonicalizeQuestionGroupMutationPlan
-→ createQuestionGroupCanonicalizationMutationPlan
-
-createCanonicalizeQuestionGroupUseCase
-→ createExecuteQuestionGroupCanonicalizationUseCase
-
-CanonicalMutationStore
-→ CanonicalMutationGateway
-
-createFsCanonicalMutationStore
-→ createFileCanonicalMutationGatewayAdapter
-```
-
-Public Application keys move in the same atomic slice.
-
-## 12. Why this remains SoC / SRP compliant
-
-The rename must **not** collapse stages simply because they share the phrase `QuestionGroupCanonicalization`.
-
-Each component has a different reason to change:
+Each component has one distinct reason to change:
 
 ```text
-Resolve UseCase
+ResolveQuestionGroupCanonicalizationUseCase
   changes when business target-resolution semantics change
 
-Preparation Coordinator
+QuestionGroupCanonicalizationPreparationCoordinator
   changes when current-state evidence/projection orchestration changes
 
-Plan Mutation UseCase
-  changes when semantic mutation-plan construction changes
+PlanQuestionGroupCanonicalizationMutationUseCase
+  changes when semantic MutationPlan construction workflow changes
 
-Execute UseCase
-  changes when execution/post-validation workflow changes
+createQuestionGroupCanonicalizationMutationPlan
+  changes when pure canonicalize mutation-plan semantics change
+
+ExecuteQuestionGroupCanonicalizationUseCase
+  changes when execute/post-validation workflow changes
 
 CanonicalMutationGateway
-  changes when the consistency contract changes
+  changes when the outbound consistency contract changes
 
-File...GatewayAdapter
+FileCanonicalMutationGatewayAdapter
   changes when filesystem transaction mechanics change
 ```
 
-This is the separation point that naming should expose.
+The names now expose these separation points instead of hiding them behind overlapping `Plan / Prepare / Canonicalize / Store` terminology.
 
-## 13. Next step
+## 9. Regression gate
 
-Perform one behavior-free atomic rename of the complete lifecycle and update all callers/tests/docs together.
+`test/canonical_naming_lifecycle_audit.test.js` now enforces the post-rename state:
 
-After that rename is green, the next naming audit should examine other grandfathered `Store` names separately rather than expanding the Canonical slice.
+```text
+new lifecycle files and symbols must exist
+old Application files must not exist
+CanonicalMutationStore Port/file must not exist
+old exported lifecycle symbols must not appear in active src JavaScript
+Composition Root exposes only new public keys
+Dedup Apply uses Resolve + Execute
+Gateway Adapter contains the recoverable transaction implementation
+```
+
+The lifecycle rename is therefore no longer a documentation convention only; it is an executable architecture constraint.
+
+## 10. Next naming work
+
+Do not extend this slice by renaming unrelated grandfathered roles. Any remaining `Store`, `Writer`, `Provider`, or lifecycle ambiguity elsewhere should be audited separately against its actual responsibility before another rename is made.

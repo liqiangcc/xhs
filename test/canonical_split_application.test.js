@@ -64,7 +64,7 @@ function createUseCase(adapters, overrides = {}) {
         canonicalRepository: adapters.canonicalRepository,
         canonicalIdentityRepository: adapters.canonicalIdentityRepository,
         questionBindingRepository: adapters.questionBindingRepository,
-        mutationStore: adapters.mutationStore,
+        mutationGateway: adapters.mutationGateway,
         integrityChecker: {
             async check() {
                 return passingIntegrityReport();
@@ -198,14 +198,14 @@ test('rejects an existing new canonical before mutation preflight', async () => 
     const adapters = createInMemoryCanonicalAdapters(seed);
     const before = adapters.snapshot();
     let preflightCalled = false;
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
             preflightCalled = true;
-            return adapters.mutationStore.preflight(plan);
+            return adapters.mutationGateway.preflight(plan);
         },
     };
-    const split = createUseCase(adapters, { mutationStore });
+    const split = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         split({
@@ -222,9 +222,9 @@ test('rejects an existing new canonical before mutation preflight', async () => 
 
 test('rejects a concurrent create of the planned new canonical id', async () => {
     const adapters = createInMemoryCanonicalAdapters(createSeed());
-    const originalPreflight = adapters.mutationStore.preflight.bind(adapters.mutationStore);
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
             const absenceRevision = plan.expected_revisions.find(
                 (item) => item.resource === 'canonical:cq_new',
@@ -234,7 +234,7 @@ test('rejects a concurrent create of the planned new canonical id', async () => 
             return originalPreflight(plan);
         },
     };
-    const split = createUseCase(adapters, { mutationStore });
+    const split = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         split({
@@ -261,15 +261,15 @@ test('rejects a concurrent create of the planned new canonical id', async () => 
 test('rejects a stale question snapshot without publishing split state', async () => {
     const adapters = createInMemoryCanonicalAdapters(createSeed());
     const before = adapters.snapshot();
-    const originalPreflight = adapters.mutationStore.preflight.bind(adapters.mutationStore);
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
-            adapters.mutationStore.bumpRevision('question-bindings-by-question:q2');
+            adapters.mutationGateway.bumpRevision('question-bindings-by-question:q2');
             return originalPreflight(plan);
         },
     };
-    const split = createUseCase(adapters, { mutationStore });
+    const split = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         split({
@@ -286,7 +286,7 @@ test('rejects a stale question snapshot without publishing split state', async (
 test('commit failure leaves the whole split state unchanged', async () => {
     const adapters = createInMemoryCanonicalAdapters(createSeed());
     const before = adapters.snapshot();
-    adapters.mutationStore.failNextCommit(new Error('injected split commit failure'));
+    adapters.mutationGateway.failNextCommit(new Error('injected split commit failure'));
     const split = createUseCase(adapters);
 
     await assert.rejects(

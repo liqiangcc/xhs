@@ -8,8 +8,8 @@ const { createRelationDecision } = require('../src/domain/dedup/relation-decisio
 const { createRelationApplyIntent } = require('../src/domain/dedup/relation-apply-intent');
 const {
     createCanonicalizationPlan,
-    createPlanCanonicalizeQuestionGroupUseCase,
-} = require('../src/application/canonical/plan-canonicalize-question-group');
+    createResolveQuestionGroupCanonicalizationUseCase,
+} = require('../src/application/canonical/resolve-question-group-canonicalization');
 const {
     createInMemoryCanonicalAdapters,
 } = require('../src/infrastructure/in-memory/canonical-adapters');
@@ -80,7 +80,7 @@ function existingCanonical(overrides = {}) {
 
 test('absent Canonical target resolves to a side-effect-free create plan', async () => {
     const adapters = createInMemoryCanonicalAdapters();
-    const useCase = createPlanCanonicalizeQuestionGroupUseCase({
+    const useCase = createResolveQuestionGroupCanonicalizationUseCase({
         canonicalIdentityRepository: adapters.canonicalIdentityRepository,
     });
 
@@ -126,7 +126,7 @@ test('existing Canonical target resolves to extend and preserves the authoritati
     const adapters = createInMemoryCanonicalAdapters({
         canonicals: [existingCanonical()],
     });
-    const useCase = createPlanCanonicalizeQuestionGroupUseCase({
+    const useCase = createResolveQuestionGroupCanonicalizationUseCase({
         canonicalIdentityRepository: adapters.canonicalIdentityRepository,
     });
 
@@ -162,9 +162,9 @@ test('canonicalization plan is deterministic for a resolved identity snapshot', 
     assert.deepEqual(first.decision_provenance, intent.decision_provenance);
 });
 
-test('planning rejects non-ready or non-canonicalization relation intents', async () => {
+test('resolve rejects non-ready or non-canonicalization relation intents', async () => {
     const adapters = createInMemoryCanonicalAdapters();
-    const useCase = createPlanCanonicalizeQuestionGroupUseCase({
+    const useCase = createResolveQuestionGroupCanonicalizationUseCase({
         canonicalIdentityRepository: adapters.canonicalIdentityRepository,
     });
 
@@ -183,7 +183,7 @@ test('planning rejects non-ready or non-canonicalization relation intents', asyn
 
 test('Application owns target resolution and rejects caller-controlled Canonical state', async () => {
     const adapters = createInMemoryCanonicalAdapters();
-    const useCase = createPlanCanonicalizeQuestionGroupUseCase({
+    const useCase = createResolveQuestionGroupCanonicalizationUseCase({
         canonicalIdentityRepository: adapters.canonicalIdentityRepository,
     });
 
@@ -207,7 +207,7 @@ test('Application owns target resolution and rejects caller-controlled Canonical
     );
 });
 
-test('planning rejects an inconsistent Canonical identity snapshot', () => {
+test('resolve rejects an inconsistent Canonical identity snapshot', () => {
     assert.throws(
         () => createCanonicalizationPlan({
             intent: readyIntent('same'),

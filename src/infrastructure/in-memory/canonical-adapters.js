@@ -243,7 +243,7 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         };
     }
 
-    const mutationStore = {
+    const mutationGateway = {
         async preflight(plan) {
             assertExpectedRevisions(plan);
             const token = Object.freeze({ id: `preflight-${++preflightSequence}` });
@@ -427,7 +427,7 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         questionBindingRepository,
         reviewRepository,
         answerRepository,
-        mutationStore,
+        mutationGateway,
         testSupport,
         snapshot,
     };

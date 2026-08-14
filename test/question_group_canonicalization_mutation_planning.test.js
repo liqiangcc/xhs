@@ -4,11 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-    createPrepareCanonicalizeQuestionGroupUseCase,
-} = require('../src/application/canonical/prepare-canonicalize-question-group');
+    createQuestionGroupCanonicalizationPreparationCoordinator,
+} = require('../src/application/canonical/question-group-canonicalization-preparation-coordinator');
 const {
-    createCanonicalizeQuestionGroupMutationPlan,
-} = require('../src/application/canonical/plan-canonicalize-question-group-mutation');
+    createQuestionGroupCanonicalizationMutationPlan,
+} = require('../src/application/canonical/question-group-canonicalization-mutation-plan');
 const {
     createInMemoryCanonicalAdapters,
 } = require('../src/infrastructure/in-memory/canonical-adapters');
@@ -85,8 +85,8 @@ function existingCanonical(overrides = {}) {
     };
 }
 
-function prepareUseCase(adapters) {
-    return createPrepareCanonicalizeQuestionGroupUseCase({
+function prepareCoordinator(adapters) {
+    return createQuestionGroupCanonicalizationPreparationCoordinator({
         canonicalIdentityRepository: adapters.canonicalIdentityRepository,
         questionBindingRepository: adapters.questionBindingRepository,
         canonicalQuestionOwnershipRepository: adapters.canonicalQuestionOwnershipRepository,
@@ -106,14 +106,14 @@ test('create preparation maps to canonicalize MutationPlan with null-to-target r
             }),
         ],
     });
-    const preparation = await prepareUseCase(adapters)({ plan: plan() });
+    const preparation = await prepareCoordinator(adapters)({ plan: plan() });
 
     assert.deepEqual(preparation.planned_question_binding_states, [
         { question_id: 'q_a', from_canonical_ids: [null] },
         { question_id: 'q_b', from_canonical_ids: [null] },
     ]);
 
-    const mutationPlan = createCanonicalizeQuestionGroupMutationPlan(preparation);
+    const mutationPlan = createQuestionGroupCanonicalizationMutationPlan(preparation);
 
     assert.equal(mutationPlan.schema_version, 'canonical_mutation_plan.v1');
     assert.equal(mutationPlan.operation, 'canonicalize');
@@ -175,14 +175,14 @@ test('extend planning treats target-to-target bindings as no-op and only rebinds
             title_resolution: 'preserve_existing',
         },
     });
-    const preparation = await prepareUseCase(adapters)({ plan: extendPlan });
+    const preparation = await prepareCoordinator(adapters)({ plan: extendPlan });
 
     assert.deepEqual(preparation.planned_question_binding_states, [
         { question_id: 'q_a', from_canonical_ids: [null] },
         { question_id: 'q_b', from_canonical_ids: ['cq_redis_performance'] },
     ]);
 
-    const mutationPlan = createCanonicalizeQuestionGroupMutationPlan(preparation);
+    const mutationPlan = createQuestionGroupCanonicalizationMutationPlan(preparation);
 
     assert.deepEqual(mutationPlan.changes.question_rebindings, [
         {
@@ -229,8 +229,8 @@ test('planner preserves one null-to-target rebinding for mixed null and target s
             title_resolution: 'preserve_existing',
         },
     });
-    const preparation = await prepareUseCase(adapters)({ plan: extendPlan });
-    const mutationPlan = createCanonicalizeQuestionGroupMutationPlan(preparation);
+    const preparation = await prepareCoordinator(adapters)({ plan: extendPlan });
+    const mutationPlan = createQuestionGroupCanonicalizationMutationPlan(preparation);
 
     assert.deepEqual(preparation.planned_question_binding_states[0], {
         question_id: 'q_a',
@@ -246,12 +246,12 @@ test('pure planner rejects foreign binding state even when a caller forges a suc
     const adapters = createInMemoryCanonicalAdapters({
         bindings: [question(), question({ question_id: 'q_b', source_note_id: 'note-b' })],
     });
-    const preparation = await prepareUseCase(adapters)({ plan: plan() });
+    const preparation = await prepareCoordinator(adapters)({ plan: plan() });
     const forged = structuredClone(preparation);
     forged.planned_question_binding_states[1].from_canonical_ids = ['cq_other'];
 
     assert.throws(
-        () => createCanonicalizeQuestionGroupMutationPlan(forged),
+        () => createQuestionGroupCanonicalizationMutationPlan(forged),
         /Question q_b already belongs to cq_other/,
     );
 });
@@ -260,12 +260,12 @@ test('pure planner rejects target binding for an absent create target', async ()
     const adapters = createInMemoryCanonicalAdapters({
         bindings: [question(), question({ question_id: 'q_b', source_note_id: 'note-b' })],
     });
-    const preparation = await prepareUseCase(adapters)({ plan: plan() });
+    const preparation = await prepareCoordinator(adapters)({ plan: plan() });
     const forged = structuredClone(preparation);
     forged.planned_question_binding_states[0].from_canonical_ids = ['cq_redis_performance'];
 
     assert.throws(
-        () => createCanonicalizeQuestionGroupMutationPlan(forged),
+        () => createQuestionGroupCanonicalizationMutationPlan(forged),
         /binds to absent Canonical cq_redis_performance/,
     );
 });
@@ -274,26 +274,26 @@ test('pure planner rejects incomplete binding states, stale target evidence, or 
     const adapters = createInMemoryCanonicalAdapters({
         bindings: [question(), question({ question_id: 'q_b', source_note_id: 'note-b' })],
     });
-    const preparation = await prepareUseCase(adapters)({ plan: plan() });
+    const preparation = await prepareCoordinator(adapters)({ plan: plan() });
 
     const incomplete = structuredClone(preparation);
     incomplete.planned_question_binding_states.pop();
     assert.throws(
-        () => createCanonicalizeQuestionGroupMutationPlan(incomplete),
+        () => createQuestionGroupCanonicalizationMutationPlan(incomplete),
         /must cover exactly the planned question_ids/,
     );
 
     const staleTarget = structuredClone(preparation);
     staleTarget.expected_revisions[0].revision = 'newer-revision';
     assert.throws(
-        () => createCanonicalizeQuestionGroupMutationPlan(staleTarget),
+        () => createQuestionGroupCanonicalizationMutationPlan(staleTarget),
         /do not preserve target identity/,
     );
 
     const projectedDrift = structuredClone(preparation);
     projectedDrift.projected_record.question_ids = ['q_a'];
     assert.throws(
-        () => createCanonicalizeQuestionGroupMutationPlan(projectedDrift),
+        () => createQuestionGroupCanonicalizationMutationPlan(projectedDrift),
         /question_ids do not match prepared membership/,
     );
 });
@@ -302,11 +302,11 @@ test('pure planner is deterministic and does not mutate preparation', async () =
     const adapters = createInMemoryCanonicalAdapters({
         bindings: [question(), question({ question_id: 'q_b', source_note_id: 'note-b' })],
     });
-    const preparation = await prepareUseCase(adapters)({ plan: plan() });
+    const preparation = await prepareCoordinator(adapters)({ plan: plan() });
     const before = structuredClone(preparation);
 
-    const first = createCanonicalizeQuestionGroupMutationPlan(preparation);
-    const second = createCanonicalizeQuestionGroupMutationPlan(preparation);
+    const first = createQuestionGroupCanonicalizationMutationPlan(preparation);
+    const second = createQuestionGroupCanonicalizationMutationPlan(preparation);
 
     assert.deepEqual(first, second);
     assert.deepEqual(preparation, before);

@@ -122,12 +122,8 @@ function canonicalizationRebindings(plan, bindingStates) {
 /**
  * Convert a fully prepared CanonicalizationPlan into the shared
  * canonical_mutation_plan.v1 envelope without executing it.
- *
- * This function is pure: preparation has already loaded and validated current
- * state through Ports. Existing target bindings are no-ops; only null -> target
- * rebinding is emitted for planned Questions that still need ownership applied.
  */
-function createCanonicalizeQuestionGroupMutationPlan(preparation = {}) {
+function createQuestionGroupCanonicalizationMutationPlan(preparation = {}) {
     assertObject(preparation, 'Canonicalization preparation');
     if (preparation.ok !== true) {
         throw new Error('Canonicalization preparation must be successful');
@@ -174,6 +170,6 @@ function createCanonicalizeQuestionGroupMutationPlan(preparation = {}) {
 }
 
 module.exports = {
-    createCanonicalizeQuestionGroupMutationPlan,
+    createQuestionGroupCanonicalizationMutationPlan,
     canonicalizationRebindings,
 };

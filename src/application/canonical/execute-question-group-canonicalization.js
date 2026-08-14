@@ -2,8 +2,8 @@
 
 const { isDeepStrictEqual } = require('node:util');
 const {
-    createPlanCanonicalizeQuestionGroupMutationUseCase,
-} = require('./plan-canonicalize-question-group-mutation-use-case');
+    createPlanQuestionGroupCanonicalizationMutationUseCase,
+} = require('./plan-question-group-canonicalization-mutation');
 const {
     assertCanonicalIdentityRepository,
 } = require('../../ports/repositories/canonical-identity-repository');
@@ -13,7 +13,7 @@ const {
 const {
     assertCanonicalQuestionOwnershipRepository,
 } = require('../../ports/repositories/canonical-question-ownership-repository');
-const { assertCanonicalMutationStore } = require('../../ports/canonical-mutation-store');
+const { assertCanonicalMutationGateway } = require('../../ports/canonical-mutation-gateway');
 
 function assertSnapshot(snapshot, label, valueKey) {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
@@ -86,11 +86,10 @@ async function validateCanonicalizationCommit({
 
 /**
  * Execute one already-resolved CanonicalizationPlan through the shared
- * Canonical mutation boundary. Callers provide only the resolved plan;
- * preparation evidence and the executable MutationPlan are rebuilt inside
- * Application immediately before preflight/commit.
+ * Canonical mutation consistency boundary. Fresh mutation evidence and the
+ * CanonicalMutationPlan are rebuilt immediately before preflight/commit.
  */
-function createCanonicalizeQuestionGroupUseCase(dependencies = {}) {
+function createExecuteQuestionGroupCanonicalizationUseCase(dependencies = {}) {
     const canonicalIdentityRepository = assertCanonicalIdentityRepository(
         dependencies.canonicalIdentityRepository,
     );
@@ -100,16 +99,16 @@ function createCanonicalizeQuestionGroupUseCase(dependencies = {}) {
     const canonicalQuestionOwnershipRepository = assertCanonicalQuestionOwnershipRepository(
         dependencies.canonicalQuestionOwnershipRepository,
     );
-    const mutationStore = assertCanonicalMutationStore(dependencies.mutationStore);
+    const mutationGateway = assertCanonicalMutationGateway(dependencies.mutationGateway);
 
-    const planMutation = createPlanCanonicalizeQuestionGroupMutationUseCase({
+    const planMutation = createPlanQuestionGroupCanonicalizationMutationUseCase({
         canonicalIdentityRepository,
         questionBindingRepository,
         canonicalQuestionOwnershipRepository,
         taxonomy: dependencies.taxonomy,
     });
 
-    return async function canonicalizeQuestionGroupUseCase(input = {}) {
+    return async function executeQuestionGroupCanonicalization(input = {}) {
         for (const forbidden of [
             'preparation',
             'projected_record',
@@ -126,8 +125,8 @@ function createCanonicalizeQuestionGroupUseCase(dependencies = {}) {
 
         const planned = await planMutation({ plan: input.plan });
         const mutationPlan = planned.mutation_plan;
-        const preflightResult = await mutationStore.preflight(mutationPlan);
-        const commitResult = await mutationStore.commit(mutationPlan, preflightResult);
+        const preflightResult = await mutationGateway.preflight(mutationPlan);
+        const commitResult = await mutationGateway.commit(mutationPlan, preflightResult);
         const validation = await validateCanonicalizationCommit({
             canonicalId: planned.canonical_id,
             projectedRecord: planned.projected_record,
@@ -152,6 +151,6 @@ function createCanonicalizeQuestionGroupUseCase(dependencies = {}) {
 }
 
 module.exports = {
-    createCanonicalizeQuestionGroupUseCase,
+    createExecuteQuestionGroupCanonicalizationUseCase,
     validateCanonicalizationCommit,
 };

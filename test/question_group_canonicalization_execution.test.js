@@ -4,8 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-    createCanonicalizeQuestionGroupUseCase,
-} = require('../src/application/canonical/canonicalize-question-group');
+    createExecuteQuestionGroupCanonicalizationUseCase,
+} = require('../src/application/canonical/execute-question-group-canonicalization');
 const {
     createInMemoryCanonicalAdapters,
 } = require('../src/infrastructure/in-memory/canonical-adapters');
@@ -83,14 +83,14 @@ function existingCanonical(overrides = {}) {
 }
 
 function createUseCase(adapters, overrides = {}) {
-    return createCanonicalizeQuestionGroupUseCase({
+    return createExecuteQuestionGroupCanonicalizationUseCase({
         canonicalIdentityRepository: overrides.canonicalIdentityRepository
             || adapters.canonicalIdentityRepository,
         questionBindingRepository: overrides.questionBindingRepository
             || adapters.questionBindingRepository,
         canonicalQuestionOwnershipRepository: overrides.canonicalQuestionOwnershipRepository
             || adapters.canonicalQuestionOwnershipRepository,
-        mutationStore: overrides.mutationStore || adapters.mutationStore,
+        mutationGateway: overrides.mutationGateway || adapters.mutationGateway,
         taxonomy: TAXONOMY,
     });
 }
@@ -171,21 +171,21 @@ test('execute extend preserves authoritative Canonical state while assigning onl
     assert.ok(state.bindings.every((binding) => binding.canonical_id === 'cq_redis_performance'));
 });
 
-test('stale revision introduced after Application planning is rejected by MutationStore preflight', async () => {
+test('stale revision introduced after Application planning is rejected by MutationGateway preflight', async () => {
     const adapters = createInMemoryCanonicalAdapters({
         bindings: [question(), question({ question_id: 'q_b', source_note_id: 'note-b' })],
     });
     const before = adapters.snapshot();
-    const mutationStore = {
+    const mutationGateway = {
         async preflight(mutationPlan) {
-            adapters.mutationStore.bumpRevision('question-bindings-by-question:q_a');
-            return adapters.mutationStore.preflight(mutationPlan);
+            adapters.mutationGateway.bumpRevision('question-bindings-by-question:q_a');
+            return adapters.mutationGateway.preflight(mutationPlan);
         },
         async commit(mutationPlan, token) {
-            return adapters.mutationStore.commit(mutationPlan, token);
+            return adapters.mutationGateway.commit(mutationPlan, token);
         },
     };
-    const execute = createUseCase(adapters, { mutationStore });
+    const execute = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         execute({ plan: plan() }),
@@ -199,7 +199,7 @@ test('commit failure leaves Canonical and Question formal state unchanged', asyn
         bindings: [question(), question({ question_id: 'q_b', source_note_id: 'note-b' })],
     });
     const before = adapters.snapshot();
-    adapters.mutationStore.failNextCommit(new Error('injected canonicalize commit failure'));
+    adapters.mutationGateway.failNextCommit(new Error('injected canonicalize commit failure'));
     const execute = createUseCase(adapters);
 
     await assert.rejects(

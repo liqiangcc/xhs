@@ -96,7 +96,7 @@ function assertAnswerConcurrencyCoverage(plan) {
     if (!covered) {
         const effect = invalidations.length ? 'answer_invalidations' : 'answer_archives';
         throw new Error(
-            `Filesystem answer mutation requires an opaque answer-merge revision; FsCanonicalMutationStore does not yet materialize ${effect} without concurrency coverage`,
+            `Filesystem answer mutation requires an opaque answer-merge revision; FileCanonicalMutationGatewayAdapter does not yet materialize ${effect} without concurrency coverage`,
         );
     }
 }
@@ -364,8 +364,8 @@ function materializeOperations(paths, plan) {
     return operations;
 }
 
-function createFsCanonicalMutationStore(options = {}) {
-    if (!options.root) throw new Error('FsCanonicalMutationStore root is required');
+function createFileCanonicalMutationGatewayAdapter(options = {}) {
+    if (!options.root) throw new Error('FileCanonicalMutationGatewayAdapter root is required');
     const paths = options.paths || createCanonicalFsPaths(options.root);
     const faultInjector = typeof options.faultInjector === 'function'
         ? options.faultInjector
@@ -574,5 +574,5 @@ function createFsCanonicalMutationStore(options = {}) {
 
 module.exports = {
     SimulatedCanonicalMutationCrash,
-    createFsCanonicalMutationStore,
+    createFileCanonicalMutationGatewayAdapter,
 };

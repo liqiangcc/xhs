@@ -3,7 +3,7 @@
 const { assertPort } = require('./port-contract');
 
 /**
- * CanonicalMutationStore is the single write boundary for a Canonical mutation.
+ * CanonicalMutationGateway is the single consistency boundary for a Canonical mutation.
  *
  * preflight(plan)
  *   - verifies opaque expected revisions and adapter-specific preconditions;
@@ -17,10 +17,10 @@ const { assertPort } = require('./port-contract');
  *
  * The port deliberately does not expose writeFile/saveMany/rename primitives.
  */
-function assertCanonicalMutationStore(store) {
-    return assertPort(store, 'CanonicalMutationStore', ['preflight', 'commit']);
+function assertCanonicalMutationGateway(gateway) {
+    return assertPort(gateway, 'CanonicalMutationGateway', ['preflight', 'commit']);
 }
 
 module.exports = {
-    assertCanonicalMutationStore,
+    assertCanonicalMutationGateway,
 };

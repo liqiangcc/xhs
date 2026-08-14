@@ -8,14 +8,14 @@ const {
     createCheckCanonicalIntegrityUseCase,
 } = require('../application/canonical/check-canonical-integrity');
 const {
-    createPlanCanonicalizeQuestionGroupUseCase,
-} = require('../application/canonical/plan-canonicalize-question-group');
+    createResolveQuestionGroupCanonicalizationUseCase,
+} = require('../application/canonical/resolve-question-group-canonicalization');
 const {
-    createPlanCanonicalizeQuestionGroupMutationUseCase,
-} = require('../application/canonical/plan-canonicalize-question-group-mutation-use-case');
+    createPlanQuestionGroupCanonicalizationMutationUseCase,
+} = require('../application/canonical/plan-question-group-canonicalization-mutation');
 const {
-    createCanonicalizeQuestionGroupUseCase,
-} = require('../application/canonical/canonicalize-question-group');
+    createExecuteQuestionGroupCanonicalizationUseCase,
+} = require('../application/canonical/execute-question-group-canonicalization');
 const { createReviewIntegrityUseCase } = require('../application/review/review-integrity');
 const { createReviewTodayUseCase } = require('../application/review/review-today');
 const { createReviewNextUseCase } = require('../application/review/review-next');
@@ -64,7 +64,9 @@ const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesys
 const {
     createFsCanonicalQualityReportWriter,
 } = require('../infrastructure/filesystem/canonical-quality-report-writer');
-const { createFsCanonicalMutationStore } = require('../infrastructure/filesystem/fs-canonical-mutation-store');
+const {
+    createFileCanonicalMutationGatewayAdapter,
+} = require('../infrastructure/filesystem/file-canonical-mutation-gateway-adapter');
 const { createDedupFsPaths } = require('../infrastructure/filesystem/dedup-paths');
 const {
     createFsDedupSuggestionRepositories,
@@ -105,7 +107,7 @@ function createApplication(options = {}) {
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
     const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
     const qualityReportWriter = createFsCanonicalQualityReportWriter({ root: options.root, paths });
-    const mutationStore = createFsCanonicalMutationStore({ root: options.root, paths });
+    const mutationGateway = createFileCanonicalMutationGatewayAdapter({ root: options.root, paths });
 
     const list = createListCanonicalsUseCase({ catalogRepository });
     const stats = createCanonicalStatsUseCase({
@@ -122,7 +124,7 @@ function createApplication(options = {}) {
         reviewRepository,
         answerRepository,
         integrityChecker,
-        mutationStore,
+        mutationGateway,
         taxonomy,
         ...(options.clock ? { clock: options.clock } : {}),
     });
@@ -131,23 +133,24 @@ function createApplication(options = {}) {
         canonicalIdentityRepository: canonicalRepository,
         questionBindingRepository,
         integrityChecker,
-        mutationStore,
+        mutationGateway,
         taxonomy,
     });
-    const planQuestionGroup = createPlanCanonicalizeQuestionGroupUseCase({
+    const resolveQuestionGroupCanonicalization = createResolveQuestionGroupCanonicalizationUseCase({
         canonicalIdentityRepository: canonicalRepository,
     });
-    const planQuestionGroupMutation = createPlanCanonicalizeQuestionGroupMutationUseCase({
+    const planQuestionGroupCanonicalizationMutation =
+        createPlanQuestionGroupCanonicalizationMutationUseCase({
+            canonicalIdentityRepository: canonicalRepository,
+            questionBindingRepository,
+            canonicalQuestionOwnershipRepository,
+            taxonomy,
+        });
+    const executeQuestionGroupCanonicalization = createExecuteQuestionGroupCanonicalizationUseCase({
         canonicalIdentityRepository: canonicalRepository,
         questionBindingRepository,
         canonicalQuestionOwnershipRepository,
-        taxonomy,
-    });
-    const canonicalizeQuestionGroup = createCanonicalizeQuestionGroupUseCase({
-        canonicalIdentityRepository: canonicalRepository,
-        questionBindingRepository,
-        canonicalQuestionOwnershipRepository,
-        mutationStore,
+        mutationGateway,
         taxonomy,
     });
     const reviewQueueDependencies = {
@@ -209,8 +212,8 @@ function createApplication(options = {}) {
     });
     const applyDecision = createApplyRelationDecisionUseCase({
         prepareRelationApply: prepareApply,
-        planCanonicalizeQuestionGroup: planQuestionGroup,
-        canonicalizeQuestionGroup,
+        resolveQuestionGroupCanonicalization,
+        executeQuestionGroupCanonicalization,
     });
 
     return Object.freeze({
@@ -220,9 +223,9 @@ function createApplication(options = {}) {
             check,
             merge,
             split,
-            planQuestionGroup,
-            planQuestionGroupMutation,
-            canonicalizeQuestionGroup,
+            resolveQuestionGroupCanonicalization,
+            planQuestionGroupCanonicalizationMutation,
+            executeQuestionGroupCanonicalization,
         }),
         dedup: Object.freeze({
             suggest,

@@ -99,7 +99,7 @@ test('production root resolves an absent Canonical target to create without muta
         const { paths } = writeQuestionFixture(root);
         const app = createApplication({ root });
         const prepared = await prepareReadyIntent(app);
-        const result = await app.canonical.planQuestionGroup({ intent: prepared.intent });
+        const result = await app.canonical.resolveQuestionGroupCanonicalization({ intent: prepared.intent });
 
         assert.equal(result.ok, true);
         assert.equal(result.resolution, 'absent');
@@ -130,7 +130,7 @@ test('production root resolves an existing Canonical target to extend and preser
         const app = createApplication({ root });
         const prepared = await prepareReadyIntent(app);
         const before = readJsonl(paths.canonicalQuestions, []);
-        const result = await app.canonical.planQuestionGroup({ intent: prepared.intent });
+        const result = await app.canonical.resolveQuestionGroupCanonicalization({ intent: prepared.intent });
         const after = readJsonl(paths.canonicalQuestions, []);
 
         assert.equal(result.ok, true);

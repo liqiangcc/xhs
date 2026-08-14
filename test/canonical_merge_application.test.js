@@ -144,7 +144,7 @@ function createUseCase(adapters, overrides = {}) {
         questionBindingRepository: adapters.questionBindingRepository,
         reviewRepository: adapters.reviewRepository,
         answerRepository: adapters.answerRepository,
-        mutationStore: adapters.mutationStore,
+        mutationGateway: adapters.mutationGateway,
         integrityChecker: {
             async check() {
                 return passingIntegrityReport();
@@ -187,7 +187,10 @@ test('orchestrates canonical, review, and answer merge state in one mutation', a
     assert.equal(result.plan.changes.canonical_upserts[0].canonical_id, 'cq_target');
     assert.equal(result.plan.changes.canonical_upserts[0].answer_status, 'needs_update');
     assert.equal(result.plan.changes.canonical_upserts[0].frequency, 3);
-    assert.deepEqual(result.plan.changes.canonical_upserts[0].companies, ['字节', '美团'].sort((a, b) => a.localeCompare(b, 'zh')));
+    assert.deepEqual(
+        result.plan.changes.canonical_upserts[0].companies,
+        ['字节', '美团'].sort((a, b) => a.localeCompare(b, 'zh')),
+    );
     assert.deepEqual(result.plan.changes.canonical_upserts[0].primary_domain, { l1: '缓存', l2: 'Redis' });
     assert.deepEqual(result.plan.changes.canonical_upserts[0].primary_entities, ['Redis']);
     assert.deepEqual(result.plan.changes.question_rebindings, [
@@ -317,20 +320,20 @@ test('reports a global post-commit integrity failure without rolling back a comm
 
 test('rejects stale canonical revisions during preflight without publishing mutation state', async () => {
     const adapters = createInMemoryCanonicalAdapters(createSeed());
-    const originalPreflight = adapters.mutationStore.preflight.bind(adapters.mutationStore);
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
     let injected = false;
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
             if (!injected) {
                 injected = true;
-                adapters.mutationStore.bumpRevision(plan.expected_revisions[0].resource);
+                adapters.mutationGateway.bumpRevision(plan.expected_revisions[0].resource);
             }
             return originalPreflight(plan);
         },
     };
     const before = adapters.snapshot();
-    const merge = createUseCase(adapters, { mutationStore });
+    const merge = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
@@ -341,17 +344,17 @@ test('rejects stale canonical revisions during preflight without publishing muta
 
 test('rejects stale review revisions before canonical or review state is published', async () => {
     const adapters = createInMemoryCanonicalAdapters(createSeed());
-    const originalPreflight = adapters.mutationStore.preflight.bind(adapters.mutationStore);
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
             const reviewRevision = plan.expected_revisions.find((item) => item.resource.startsWith('review-merge:'));
-            adapters.mutationStore.bumpRevision(reviewRevision.resource);
+            adapters.mutationGateway.bumpRevision(reviewRevision.resource);
             return originalPreflight(plan);
         },
     };
     const before = adapters.snapshot();
-    const merge = createUseCase(adapters, { mutationStore });
+    const merge = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
@@ -362,17 +365,17 @@ test('rejects stale review revisions before canonical or review state is publish
 
 test('rejects stale answer revisions before canonical, review, or answer state is published', async () => {
     const adapters = createInMemoryCanonicalAdapters(createSeed());
-    const originalPreflight = adapters.mutationStore.preflight.bind(adapters.mutationStore);
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
             const answerRevision = plan.expected_revisions.find((item) => item.resource.startsWith('answer-merge:'));
-            adapters.mutationStore.bumpRevision(answerRevision.resource);
+            adapters.mutationGateway.bumpRevision(answerRevision.resource);
             return originalPreflight(plan);
         },
     };
     const before = adapters.snapshot();
-    const merge = createUseCase(adapters, { mutationStore });
+    const merge = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
@@ -387,14 +390,14 @@ test('duplicate review progress is rejected while planning before mutation prefl
     const adapters = createInMemoryCanonicalAdapters(seed);
     const before = adapters.snapshot();
     let preflightCalled = false;
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
             preflightCalled = true;
-            return adapters.mutationStore.preflight(plan);
+            return adapters.mutationGateway.preflight(plan);
         },
     };
-    const merge = createUseCase(adapters, { mutationStore });
+    const merge = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
@@ -410,14 +413,14 @@ test('existing source answer archive is rejected during planning before mutation
     const adapters = createInMemoryCanonicalAdapters(seed);
     const before = adapters.snapshot();
     let preflightCalled = false;
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
             preflightCalled = true;
-            return adapters.mutationStore.preflight(plan);
+            return adapters.mutationGateway.preflight(plan);
         },
     };
-    const merge = createUseCase(adapters, { mutationStore });
+    const merge = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
@@ -430,7 +433,7 @@ test('existing source answer archive is rejected during planning before mutation
 test('injected commit failure leaves canonical, review, answers, and archives unchanged', async () => {
     const adapters = createInMemoryCanonicalAdapters(createSeed());
     const before = adapters.snapshot();
-    adapters.mutationStore.failNextCommit(new Error('injected commit failure'));
+    adapters.mutationGateway.failNextCommit(new Error('injected commit failure'));
     const merge = createUseCase(adapters);
 
     await assert.rejects(
@@ -440,15 +443,15 @@ test('injected commit failure leaves canonical, review, answers, and archives un
     assert.deepEqual(adapters.snapshot(), before);
 });
 
-test('post-commit validation rejects a mutation store that reports success without applying the plan', async () => {
+test('post-commit validation rejects a mutation gateway that reports success without applying the plan', async () => {
     const adapters = createInMemoryCanonicalAdapters(createSeed());
-    const mutationStore = {
-        preflight: adapters.mutationStore.preflight.bind(adapters.mutationStore),
+    const mutationGateway = {
+        preflight: adapters.mutationGateway.preflight.bind(adapters.mutationGateway),
         async commit() {
             return { committed: true };
         },
     };
-    const merge = createUseCase(adapters, { mutationStore });
+    const merge = createUseCase(adapters, { mutationGateway });
 
     await assert.rejects(
         merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
@@ -461,7 +464,10 @@ test('validates required merge input before loading or mutating state', async ()
     const before = adapters.snapshot();
     const merge = createUseCase(adapters);
 
-    await assert.rejects(merge({ target: 'cq_target', source: 'cq_source' }), /target, source, and reason are required/);
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source' }),
+        /target, source, and reason are required/,
+    );
     await assert.rejects(
         merge({ target: 'cq_target', source: 'cq_target', reason: 'same' }),
         /target and source must be different/,

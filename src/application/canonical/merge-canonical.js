@@ -9,7 +9,7 @@ const { assertCanonicalRepository } = require('../../ports/repositories/canonica
 const { assertQuestionBindingRepository } = require('../../ports/repositories/question-binding-repository');
 const { assertReviewRepository } = require('../../ports/repositories/review-repository');
 const { assertAnswerRepository } = require('../../ports/repositories/answer-repository');
-const { assertCanonicalMutationStore } = require('../../ports/canonical-mutation-store');
+const { assertCanonicalMutationGateway } = require('../../ports/canonical-mutation-gateway');
 const { assertCanonicalIntegrityChecker } = require('../../ports/services/canonical-integrity-checker');
 
 function assertSnapshot(snapshot, label, valueKey) {
@@ -132,7 +132,7 @@ function createMergeCanonicalUseCase(dependencies = {}) {
     const questionBindingRepository = assertQuestionBindingRepository(dependencies.questionBindingRepository);
     const reviewRepository = assertReviewRepository(dependencies.reviewRepository);
     const answerRepository = assertAnswerRepository(dependencies.answerRepository);
-    const mutationStore = assertCanonicalMutationStore(dependencies.mutationStore);
+    const mutationGateway = assertCanonicalMutationGateway(dependencies.mutationGateway);
     const integrityChecker = assertCanonicalIntegrityChecker(dependencies.integrityChecker);
     const taxonomy = dependencies.taxonomy;
     const clock = dependencies.clock || (() => new Date().toISOString());
@@ -251,8 +251,8 @@ function createMergeCanonicalUseCase(dependencies = {}) {
             },
         });
 
-        const preflightResult = await mutationStore.preflight(plan);
-        const commitResult = await mutationStore.commit(plan, preflightResult);
+        const preflightResult = await mutationGateway.preflight(plan);
+        const commitResult = await mutationGateway.commit(plan, preflightResult);
 
         const [postTarget, postSource, postSourceBindings, postTargetBindings] = await Promise.all([
             canonicalRepository.get(targetId),

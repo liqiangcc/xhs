@@ -4,8 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-    createPrepareCanonicalizeQuestionGroupUseCase,
-} = require('../src/application/canonical/prepare-canonicalize-question-group');
+    createQuestionGroupCanonicalizationPreparationCoordinator,
+} = require('../src/application/canonical/question-group-canonicalization-preparation-coordinator');
 const {
     createInMemoryCanonicalAdapters,
 } = require('../src/infrastructure/in-memory/canonical-adapters');
@@ -82,8 +82,8 @@ function existingCanonical(overrides = {}) {
     };
 }
 
-function createUseCase(adapters) {
-    return createPrepareCanonicalizeQuestionGroupUseCase({
+function createCoordinator(adapters) {
+    return createQuestionGroupCanonicalizationPreparationCoordinator({
         canonicalIdentityRepository: adapters.canonicalIdentityRepository,
         questionBindingRepository: adapters.questionBindingRepository,
         canonicalQuestionOwnershipRepository: adapters.canonicalQuestionOwnershipRepository,
@@ -104,7 +104,7 @@ test('prepare create loads current rows and ownership and returns projection plu
             }),
         ],
     });
-    const prepare = createUseCase(adapters);
+    const prepare = createCoordinator(adapters);
 
     const result = await prepare({ plan: canonicalizationPlan() });
 
@@ -150,7 +150,7 @@ test('prepare extend loads existing and planned membership before projection', a
             }),
         ],
     });
-    const prepare = createUseCase(adapters);
+    const prepare = createCoordinator(adapters);
     const plan = canonicalizationPlan({
         plan_kind: 'extend_existing_canonical',
         canonical_target: {
@@ -191,7 +191,7 @@ test('prepare rejects planned Questions already owned or bound by another Canoni
             }),
         ],
     });
-    const prepare = createUseCase(adapters);
+    const prepare = createCoordinator(adapters);
 
     await assert.rejects(
         prepare({ plan: canonicalizationPlan() }),
@@ -213,7 +213,7 @@ test('prepare rejects inconsistent existing Canonical membership instead of proj
             question({ question_id: 'q_b', source_note_id: 'note-b' }),
         ],
     });
-    const prepare = createUseCase(adapters);
+    const prepare = createCoordinator(adapters);
     const plan = canonicalizationPlan({
         plan_kind: 'extend_existing_canonical',
         canonical_target: {
@@ -236,7 +236,7 @@ test('prepare rejects a stale Canonical target identity before reading a project
         bindings: [question(), question({ question_id: 'q_b', source_note_id: 'note-b' })],
     });
     adapters.testSupport.upsertCanonical(existingCanonical({ question_ids: [] }));
-    const prepare = createUseCase(adapters);
+    const prepare = createCoordinator(adapters);
 
     await assert.rejects(
         prepare({ plan: canonicalizationPlan() }),
@@ -248,7 +248,7 @@ test('prepare rejects caller-controlled snapshots, rows, ownership, and revision
     const adapters = createInMemoryCanonicalAdapters({
         bindings: [question(), question({ question_id: 'q_b', source_note_id: 'note-b' })],
     });
-    const prepare = createUseCase(adapters);
+    const prepare = createCoordinator(adapters);
 
     for (const forged of [
         { canonical_snapshot: {} },

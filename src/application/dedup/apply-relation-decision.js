@@ -10,13 +10,13 @@ function createApplyRelationDecisionUseCase(dependencies = {}) {
         dependencies.prepareRelationApply,
         'PrepareRelationApply',
     );
-    const planCanonicalizeQuestionGroup = assertUseCase(
-        dependencies.planCanonicalizeQuestionGroup,
-        'PlanCanonicalizeQuestionGroup',
+    const resolveQuestionGroupCanonicalization = assertUseCase(
+        dependencies.resolveQuestionGroupCanonicalization,
+        'ResolveQuestionGroupCanonicalization',
     );
-    const canonicalizeQuestionGroup = assertUseCase(
-        dependencies.canonicalizeQuestionGroup,
-        'CanonicalizeQuestionGroup',
+    const executeQuestionGroupCanonicalization = assertUseCase(
+        dependencies.executeQuestionGroupCanonicalization,
+        'ExecuteQuestionGroupCanonicalization',
     );
 
     return async function applyRelationDecisionUseCase(input = {}) {
@@ -46,7 +46,7 @@ function createApplyRelationDecisionUseCase(dependencies = {}) {
 
         // Re-load the persisted explicit Decision and re-check its Dedup source
         // revisions immediately inside the same Application workflow that will
-        // plan and execute Canonical mutation.
+        // resolve and execute Canonical mutation.
         const prepared = await prepareRelationApply(prepareInput);
         const intent = prepared.intent;
         if (!intent || typeof intent !== 'object') {
@@ -74,8 +74,8 @@ function createApplyRelationDecisionUseCase(dependencies = {}) {
             );
         }
 
-        const canonicalization = await planCanonicalizeQuestionGroup({ intent });
-        const execution = await canonicalizeQuestionGroup({ plan: canonicalization.plan });
+        const canonicalization = await resolveQuestionGroupCanonicalization({ intent });
+        const execution = await executeQuestionGroupCanonicalization({ plan: canonicalization.plan });
 
         return {
             ok: true,

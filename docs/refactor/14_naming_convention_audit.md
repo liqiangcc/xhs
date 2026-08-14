@@ -1,6 +1,6 @@
 # 14 Naming Convention Audit
 
-> Scope: keep the refactor aligned with the previously agreed naming convention. This document does **not** introduce a shorter naming style. Public symbols must remain understandable outside their directory.
+> Scope: keep the refactor aligned with the previously agreed naming convention. Public symbols must remain understandable outside their directory; shortening must never erase responsibility.
 
 ## 1. Naming convention
 
@@ -92,167 +92,177 @@ Target:
 
 ## 2. Review naming — completed
 
-### 2.1 Application UseCases
-
-```text
-createReviewIntegrityUseCase
-createReviewTodayUseCase
-createReviewNextUseCase
-createReviewWeakUseCase
-createReviewPrepareUseCase
-createReviewMarkUseCase
-```
-
-These names keep business context plus Application role and should not be shortened to ambiguous forms such as `createPrepare()` or `createMark()`.
-
-### 2.2 ReviewPlanPublisher — completed
-
-Former:
+The Review namespace now consistently uses the approved role vocabulary.
 
 ```text
 ReviewPlanWriter
-```
+→ ReviewPlanPublisher ✅
 
-Active:
-
-```text
-ReviewPlanPublisher
-assertReviewPlanPublisher()
-FileReviewPlanPublisherAdapter
-createFileReviewPlanPublisherAdapter()
-publish(plan)
-```
-
-`Publisher` describes the outbound business capability; the filesystem Adapter owns safe path and Markdown mechanics.
-
-### 2.3 ReviewStrategyReader — completed
-
-Former:
-
-```text
 ReviewStrategyProvider
-```
+→ ReviewStrategyReader ✅
 
-Active:
-
-```text
-ReviewStrategyReader
-assertReviewStrategyReader()
-FileReviewStrategyReaderAdapter
-createFileReviewStrategyReaderAdapter()
-read()
-```
-
-### 2.4 ReviewQueueStateCoordinator — completed
-
-Former:
-
-```text
 ReviewQueueStateLoader
+→ ReviewQueueStateCoordinator ✅
+
+ReviewProgressWriter
+→ ReviewProgressRepository ✅
+
+provisional ReviewMutationStore
+→ ReviewMutationGateway ✅
 ```
 
-Active:
+Final separation vocabulary:
 
 ```text
+ReviewIntegrityUseCase
+ReviewTodayUseCase
+ReviewNextUseCase
+ReviewWeakUseCase
+ReviewPrepareUseCase
+ReviewMarkUseCase
 ReviewQueueStateCoordinator
-createReviewQueueStateCoordinator()
-buildReviewQueueState(input)
+
+ReviewProgressReader
+ReviewProgressRepository
+ReviewSessionReader
+ReviewStrategyReader
+ReviewIssueLinkReader
+ReviewPlanPublisher
+ReviewMutationGateway
 ```
 
-The component coordinates multiple outbound capabilities, Domain progress initialization, optional CAS persistence, and queue projection; `Coordinator` matches the responsibility better than `Loader`.
+`ReviewProgressRepository` owns mutable progress aggregate persistence with opaque-revision compare-and-set semantics. `ReviewMutationGateway` owns the cross-resource progress + session consistency boundary. The existing Canonical-merge `ReviewRepository` remains a separate merge-specific capability and must not expand into generic Review CRUD.
 
-### 2.5 ReviewProgressRepository — completed
+## 3. Canonical lifecycle naming — completed
+
+The former Canonical Question-group lifecycle used overlapping phase language:
+
+```text
+Plan
+Prepare
+Plan...Mutation
+Canonicalize
+```
+
+and the consistency boundary used the grandfathered role `Store`.
+
+The completed lifecycle is now:
+
+```text
+Resolve → Prepare → Plan → Execute
+```
+
+with explicit responsibilities:
+
+```text
+ResolveQuestionGroupCanonicalizationUseCase
+  → resolves the non-authorizing business CanonicalizationPlan
+
+QuestionGroupCanonicalizationPreparationCoordinator
+  → gathers current facts, projection evidence, and opaque revisions
+
+PlanQuestionGroupCanonicalizationMutationUseCase
+  → constructs the executable-shaped CanonicalMutationPlan
+
+ExecuteQuestionGroupCanonicalizationUseCase
+  → preflights, commits, and post-validates the mutation
+```
+
+The two Plan values remain intentionally separate:
+
+```text
+CanonicalizationPlan
+schema = canonicalization_plan.v1
+meaning = resolved business outcome
+mutation_authorized = false
+
+CanonicalMutationPlan
+schema = canonical_mutation_plan.v1
+meaning = storage-agnostic semantic state transition
+```
+
+They must not be collapsed into one generic Plan because they sit on opposite sides of the business-resolution / persistence-consistency separation point.
+
+## 4. Canonical mutation boundary — completed
 
 Former:
 
 ```text
-ReviewProgressWriter
+CanonicalMutationStore
+createFsCanonicalMutationStore
 ```
 
 Active:
 
 ```text
-ReviewProgressRepository
-assertReviewProgressRepository()
-FileReviewProgressRepositoryAdapter
-createFileReviewProgressRepositoryAdapter()
-snapshot({ date })
-save(progress, { expected_revision, date })
+CanonicalMutationGateway
+assertCanonicalMutationGateway()
+
+FileCanonicalMutationGatewayAdapter
+createFileCanonicalMutationGatewayAdapter()
 ```
 
-Why `Repository`:
+Why `Gateway`:
 
 ```text
-ReviewProgress is persisted mutable aggregate state
-queue initialization reads a current snapshot
-queue initialization may save a new aggregate state
-save is compare-and-set against an opaque progress revision
+one mutation may coordinate
+Canonical records
+Question bindings
+Review state
+Answer state/archive
+indexes
+history
 ```
 
-It is deliberately separate from `ReviewProgressReader`, which remains a narrow read-only capability for integrity inspection.
-
-No `Writer` compatibility alias remains in active Review architecture.
-
-### 2.6 ReviewMutationGateway — completed
-
-Earlier design notes used the provisional term:
+The boundary exposes only:
 
 ```text
-ReviewMutationStore
+preflight(plan)
+commit(plan, preflightResult)
 ```
 
-The actual responsibility proved to be broader than owning one persisted aggregate:
+while the filesystem Adapter owns revision revalidation, lock, staging, backups, journal, multi-file publication, rollback, and crash recovery.
+
+This rename was behavior-free. It did not change:
 
 ```text
-coordinate progress + session consistency
-cover both resources with one opaque revision
-recheck that revision at commit
-stage both filesystem writes
-publish as an atomic/recoverable unit
-recover an interrupted prepared transaction
+canonicalization_plan.v1
+canonical_mutation_plan.v1
+dedup_relation_apply_intent.v1
+create/extend semantics
+revision scope
+projection and ownership rules
+preflight/commit behavior
+journal/rollback/recovery behavior
+post-commit validation
 ```
 
-Therefore the approved role is:
+No old `CanonicalMutationStore` or old Canonicalization lifecycle aliases remain in active source code.
+
+## 5. Final public Canonical Application surface
 
 ```text
-ReviewMutationGateway
-assertReviewMutationGateway()
-FileReviewMutationGatewayAdapter
-createFileReviewMutationGatewayAdapter()
-snapshot({ date })
-commit(review_mutation.v1)
+canonical.list
+canonical.stats
+canonical.check
+canonical.merge
+canonical.split
+canonical.resolveQuestionGroupCanonicalization
+canonical.planQuestionGroupCanonicalizationMutation
+canonical.executeQuestionGroupCanonicalization
 ```
 
-`Gateway` communicates that Application crosses one consistency boundary without learning the two underlying files or transaction protocol.
-
-No `ReviewMutationStore` production alias is introduced.
-
-## 3. Final Review separation vocabulary
+The Preparation Coordinator remains internal. Dedup Apply reads:
 
 ```text
-ReviewIntegrityUseCase          # Application operation
-ReviewTodayUseCase              # Application operation
-ReviewNextUseCase               # Application operation
-ReviewWeakUseCase               # Application operation
-ReviewPrepareUseCase            # Application operation
-ReviewMarkUseCase               # Application operation
-ReviewQueueStateCoordinator     # shared Application orchestration
-
-Review result Policy            # Domain state transition
-Review mark Policy              # Domain validation/event semantics
-
-ReviewProgressReader            # narrow read capability
-ReviewProgressRepository        # mutable progress aggregate persistence
-ReviewSessionReader             # narrow read capability
-ReviewStrategyReader            # config read capability
-ReviewIssueLinkReader           # issue-link read capability
-ReviewPlanPublisher             # plan publication capability
-ReviewMutationGateway           # cross-resource consistency capability
+prepareRelationApply
+→ resolveQuestionGroupCanonicalization
+→ executeQuestionGroupCanonicalization
 ```
 
-The existing Canonical-merge `ReviewRepository` remains a separate merge-specific capability and must not expand into generic Review CRUD.
+Execution rebuilds fresh mutation evidence immediately before the Gateway boundary, preserving anti-forgery and concurrency guarantees.
 
-## 4. Path, file, and symbol responsibilities
+## 6. Path, file, and symbol responsibilities
 
 ```text
 path/package = location + bounded context
@@ -265,105 +275,57 @@ Good active examples:
 src/application/review/review-mark.js
 createReviewMarkUseCase()
 
-src/application/review/review-queue-state-coordinator.js
-createReviewQueueStateCoordinator()
+src/application/canonical/resolve-question-group-canonicalization.js
+createResolveQuestionGroupCanonicalizationUseCase()
 
-src/ports/repositories/review-progress-repository.js
-assertReviewProgressRepository()
+src/application/canonical/question-group-canonicalization-preparation-coordinator.js
+createQuestionGroupCanonicalizationPreparationCoordinator()
 
-src/ports/repositories/review-mutation-gateway.js
-assertReviewMutationGateway()
+src/ports/canonical-mutation-gateway.js
+assertCanonicalMutationGateway()
 
-src/infrastructure/filesystem/review-mutation-gateway-adapter.js
-createFileReviewMutationGatewayAdapter()
+src/infrastructure/filesystem/file-canonical-mutation-gateway-adapter.js
+createFileCanonicalMutationGatewayAdapter()
 ```
 
 Rejected extremes:
 
 ```text
-createMark()                            # too vague
-createFsReviewProgressJsonWriter()     # implementation mechanism, no architecture role
-ReviewEverythingService                # mixed responsibility + unapproved role
+createMark()                         # too vague
+createFsCanonicalJsonWriter()        # mechanism without architecture role
+CanonicalEverythingService          # mixed responsibility + unapproved role
 ```
 
-## 5. Review naming gates now encoded in tests
+## 7. Naming gates
 
-`test/review_naming_convention.test.js` freezes the active Review decisions:
+Executable architecture tests now freeze the completed decisions:
 
 ```text
-Coordinator instead of Loader
-Publisher instead of Writer for plan publication
-Reader instead of Provider for strategy retrieval
-Repository instead of Writer for ReviewProgress persistence
-Gateway instead of Store for cross-resource Review mutation consistency
+Review: Coordinator / Publisher / Reader / Repository / Gateway roles
+Canonicalization: Resolve → Prepare → Plan → Execute
+Canonical mutation consistency: Gateway, not Store
+old Canonical lifecycle files/symbols/public keys must remain absent
+CanonicalizationPlan and CanonicalMutationPlan must remain separate
 ```
 
-Migration-era exceptions elsewhere in the repository do not expand the Review vocabulary.
+These tests make the naming system an architecture constraint rather than a documentation preference.
 
-## 6. Remaining repository-wide naming debt
+## 8. Remaining repository-wide naming debt
 
-Review is now settled. The largest remaining readability risk is Canonical lifecycle naming:
+Review and the Question-group Canonicalization lifecycle are settled. Remaining grandfathered names elsewhere must be audited separately against their actual responsibility before renaming.
+
+Do not use the completed Canonical slice as permission to mass-rename unrelated `Store`, `Writer`, `Provider`, or lifecycle terms. For every future rename:
 
 ```text
-createPlanCanonicalizeQuestionGroupUseCase
-createPrepareCanonicalizeQuestionGroup
-createPlanCanonicalizeQuestionGroupMutationUseCase
-createCanonicalizeQuestionGroupUseCase
-CanonicalMutationStore
+understand responsibility first
+freeze separation point
+choose an approved role
+rename all repository-local callers atomically
+remove old aliases
+prove behavior unchanged with CI
 ```
 
-The issue is not only length. Lifecycle vocabulary is asymmetric:
-
-```text
-Plan
-Prepare
-Plan...Mutation
-Canonicalize
-```
-
-and `Store` remains grandfathered terminology.
-
-This group should be reviewed atomically after Review migration because renaming one phase alone would make the lifecycle less predictable.
-
-## 7. Governance rule
-
-Do not introduce new architecture-role suffixes merely because they sound convenient:
-
-```text
-Loader
-Provider
-Accessor
-Fetcher
-Manager
-Helper
-Util
-Service
-Store
-Writer
-```
-
-If none of the approved roles fits, clarify the responsibility before naming the component.
-
-Do **not** enforce filename length or arbitrary word-count limits. Semantic predictability is the goal.
-
-## 8. Completed Review naming sequence
-
-```text
-ReviewPlanWriter
-→ ReviewPlanPublisher ✅ completed
-
-ReviewStrategyProvider
-→ ReviewStrategyReader ✅ completed
-
-ReviewQueueStateLoader
-→ ReviewQueueStateCoordinator ✅ completed
-
-ReviewProgressWriter
-→ ReviewProgressRepository ✅ completed
-
-provisional ReviewMutationStore
-→ ReviewMutationGateway ✅ completed
-```
+Do not enforce filename length or arbitrary word-count limits. Semantic predictability is the goal.
 
 The governing test remains:
 

@@ -6,7 +6,7 @@ const { createCanonicalMutationPlan } = require('./mutation-plan');
 const { assertCanonicalRepository } = require('../../ports/repositories/canonical-repository');
 const { assertCanonicalIdentityRepository } = require('../../ports/repositories/canonical-identity-repository');
 const { assertQuestionBindingRepository } = require('../../ports/repositories/question-binding-repository');
-const { assertCanonicalMutationStore } = require('../../ports/canonical-mutation-store');
+const { assertCanonicalMutationGateway } = require('../../ports/canonical-mutation-gateway');
 const { assertCanonicalIntegrityChecker } = require('../../ports/services/canonical-integrity-checker');
 
 function assertSnapshot(snapshot, label, valueKey) {
@@ -89,7 +89,7 @@ function createSplitCanonicalUseCase(dependencies = {}) {
     const canonicalRepository = assertCanonicalRepository(dependencies.canonicalRepository);
     const canonicalIdentityRepository = assertCanonicalIdentityRepository(dependencies.canonicalIdentityRepository);
     const questionBindingRepository = assertQuestionBindingRepository(dependencies.questionBindingRepository);
-    const mutationStore = assertCanonicalMutationStore(dependencies.mutationStore);
+    const mutationGateway = assertCanonicalMutationGateway(dependencies.mutationGateway);
     const integrityChecker = assertCanonicalIntegrityChecker(dependencies.integrityChecker);
     const taxonomy = dependencies.taxonomy;
 
@@ -189,8 +189,8 @@ function createSplitCanonicalUseCase(dependencies = {}) {
             },
         });
 
-        const preflightResult = await mutationStore.preflight(plan);
-        const commitResult = await mutationStore.commit(plan, preflightResult);
+        const preflightResult = await mutationGateway.preflight(plan);
+        const commitResult = await mutationGateway.commit(plan, preflightResult);
 
         const [postSource, postNewCanonical, postQuestionBindings] = await Promise.all([
             canonicalRepository.get(sourceCanonicalId),

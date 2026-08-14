@@ -14,8 +14,8 @@ const { createFsCanonicalRepositories } = require('../src/infrastructure/filesys
 const { createFsReviewRepository } = require('../src/infrastructure/filesystem/review-repositories');
 const {
     SimulatedCanonicalMutationCrash,
-    createFsCanonicalMutationStore,
-} = require('../src/infrastructure/filesystem/fs-canonical-mutation-store');
+    createFileCanonicalMutationGatewayAdapter,
+} = require('../src/infrastructure/filesystem/file-canonical-mutation-gateway-adapter');
 const { readJson, readJsonl, writeJson, writeJsonl } = require('../scripts/lib/io');
 const { buildIndexes, getIndexPaths, writeIndexes } = require('../scripts/lib/index_store');
 
@@ -67,7 +67,7 @@ function progress(canonicalId, overrides = {}) {
 }
 
 function createFixture() {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-fs-canonical-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-file-canonical-gateway-'));
     const paths = createCanonicalFsPaths(root);
     const canonicals = [
         canonical('cq_target', {
@@ -251,13 +251,13 @@ function cleanup(root) {
     fs.rmSync(root, { recursive: true, force: true });
 }
 
-test('filesystem mutation store commits canonical, bindings, indexes, and history as one recoverable unit', async () => {
+test('filesystem mutation gateway commits canonical, bindings, indexes, and history as one recoverable unit', async () => {
     const fixture = createFixture();
     try {
         const plan = await createCoreMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
-        const token = await store.preflight(plan);
-        const result = await store.commit(plan, token);
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
+        const token = await gateway.preflight(plan);
+        const result = await gateway.commit(plan, token);
 
         assert.equal(result.committed, true);
         assert.equal(result.recoverable, true);
@@ -306,13 +306,13 @@ test('filesystem review repository returns merge rows with a revision covering p
     }
 });
 
-test('filesystem mutation store materializes planned review progress and session migration in the same transaction', async () => {
+test('filesystem mutation gateway materializes planned review progress and session migration in the same transaction', async () => {
     const fixture = createFixture();
     try {
         const plan = await createReviewAwareMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
-        const token = await store.preflight(plan);
-        const result = await store.commit(plan, token);
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
+        const token = await gateway.preflight(plan);
+        const result = await gateway.commit(plan, token);
 
         assert.equal(result.committed, true);
         assert.equal(result.review_migration_count, 1);
@@ -342,14 +342,14 @@ test('commit rechecks opaque canonical revisions and refuses stale state before 
     const fixture = createFixture();
     try {
         const plan = await createCoreMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
-        const token = await store.preflight(plan);
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
+        const token = await gateway.preflight(plan);
 
         const canonicals = readJsonl(fixture.paths.canonicalQuestions, []);
         canonicals[0] = { ...canonicals[0], canonical_title: 'externally changed title' };
         writeJsonl(fixture.paths.canonicalQuestions, canonicals);
 
-        await assert.rejects(store.commit(plan, token), /Revision mismatch for canonical:cq_target/);
+        await assert.rejects(gateway.commit(plan, token), /Revision mismatch for canonical:cq_target/);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
         assert.equal(readJsonl(fixture.paths.canonicalQuestions, []).some((record) => record.canonical_id === 'cq_source'), true);
         assert.equal(readJsonl(fixture.paths.questions, []).find((row) => row.question_id === 'q2').canonical_id, 'cq_source');
@@ -362,8 +362,8 @@ test('commit rejects a stale review revision without overwriting the concurrent 
     const fixture = createFixture();
     try {
         const plan = await createReviewAwareMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
-        const token = await store.preflight(plan);
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
+        const token = await gateway.preflight(plan);
 
         const sessionPath = path.join(fixture.paths.reviewSessionsDir, '2026-08-02.json');
         const session = readJson(sessionPath);
@@ -372,7 +372,7 @@ test('commit rejects a stale review revision without overwriting the concurrent 
             events: [...session.events, { event_id: 'external', canonical_id: 'cq_other', result: 'easy' }],
         });
 
-        await assert.rejects(store.commit(plan, token), /Revision mismatch for review-merge:cq_target:cq_source/);
+        await assert.rejects(gateway.commit(plan, token), /Revision mismatch for review-merge:cq_target:cq_source/);
         assert.equal(readJsonl(fixture.paths.canonicalQuestions, []).some((record) => record.canonical_id === 'cq_source'), true);
         assert.equal(readJsonl(fixture.paths.questions, []).find((row) => row.question_id === 'q2').canonical_id, 'cq_source');
         assert.equal(readJson(sessionPath).events.some((event) => event.event_id === 'external'), true);
@@ -387,7 +387,7 @@ test('review progress publish failure rolls canonical, question, review, indexes
     try {
         const before = snapshotFormalFiles(fixture.paths);
         const plan = await createReviewAwareMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({
+        const gateway = createFileCanonicalMutationGatewayAdapter({
             root: fixture.root,
             faultInjector(stage, context) {
                 if (stage === 'before_publish' && context.operation.kind === 'review_progress') {
@@ -395,9 +395,9 @@ test('review progress publish failure rolls canonical, question, review, indexes
                 }
             },
         });
-        const token = await store.preflight(plan);
+        const token = await gateway.preflight(plan);
 
-        await assert.rejects(store.commit(plan, token), /injected review progress publish failure/);
+        await assert.rejects(gateway.commit(plan, token), /injected review progress publish failure/);
         assert.deepEqual(snapshotFormalFiles(fixture.paths), before);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
         assert.equal(fs.existsSync(fixture.paths.lock), false);
@@ -411,7 +411,7 @@ test('review session publish failure rolls already-published progress and canoni
     try {
         const before = snapshotFormalFiles(fixture.paths);
         const plan = await createReviewAwareMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({
+        const gateway = createFileCanonicalMutationGatewayAdapter({
             root: fixture.root,
             faultInjector(stage, context) {
                 if (stage === 'before_publish' && String(context.operation.kind).startsWith('review_session:')) {
@@ -419,9 +419,9 @@ test('review session publish failure rolls already-published progress and canoni
                 }
             },
         });
-        const token = await store.preflight(plan);
+        const token = await gateway.preflight(plan);
 
-        await assert.rejects(store.commit(plan, token), /injected review session publish failure/);
+        await assert.rejects(gateway.commit(plan, token), /injected review session publish failure/);
         assert.deepEqual(snapshotFormalFiles(fixture.paths), before);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
         assert.equal(fs.existsSync(fixture.paths.lock), false);
@@ -435,7 +435,7 @@ test('index publish failure rolls every formal file back to its exact previous b
     try {
         const before = snapshotFormalFiles(fixture.paths);
         const plan = await createCoreMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({
+        const gateway = createFileCanonicalMutationGatewayAdapter({
             root: fixture.root,
             faultInjector(stage, context) {
                 if (stage === 'before_publish' && context.operation.kind === 'index:entity') {
@@ -443,9 +443,9 @@ test('index publish failure rolls every formal file back to its exact previous b
                 }
             },
         });
-        const token = await store.preflight(plan);
+        const token = await gateway.preflight(plan);
 
-        await assert.rejects(store.commit(plan, token), /injected index publish failure/);
+        await assert.rejects(gateway.commit(plan, token), /injected index publish failure/);
         assert.deepEqual(snapshotFormalFiles(fixture.paths), before);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
         assert.equal(fs.existsSync(fixture.paths.lock), false);
@@ -459,7 +459,7 @@ test('a simulated process crash after partial publish is recovered automatically
     try {
         const before = snapshotFormalFiles(fixture.paths);
         const plan = await createCoreMergePlan(fixture.root);
-        const crashingStore = createFsCanonicalMutationStore({
+        const crashingGateway = createFileCanonicalMutationGatewayAdapter({
             root: fixture.root,
             faultInjector(stage, context) {
                 if (stage === 'after_publish' && context.index === 1) {
@@ -467,17 +467,17 @@ test('a simulated process crash after partial publish is recovered automatically
                 }
             },
         });
-        const token = await crashingStore.preflight(plan);
+        const token = await crashingGateway.preflight(plan);
 
         await assert.rejects(
-            crashingStore.commit(plan, token),
+            crashingGateway.commit(plan, token),
             /crash after questions publish/,
         );
         assert.equal(fs.existsSync(fixture.paths.journal), true);
         assert.notDeepEqual(snapshotFormalFiles(fixture.paths), before);
 
-        const recoveredStore = createFsCanonicalMutationStore({ root: fixture.root });
-        await recoveredStore.preflight(plan);
+        const recoveredGateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
+        await recoveredGateway.preflight(plan);
         assert.deepEqual(snapshotFormalFiles(fixture.paths), before);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
     } finally {
@@ -490,7 +490,7 @@ test('a crash after the committed journal marker preserves committed state durin
     try {
         const before = snapshotFormalFiles(fixture.paths);
         const plan = await createCoreMergePlan(fixture.root);
-        const crashingStore = createFsCanonicalMutationStore({
+        const crashingGateway = createFileCanonicalMutationGatewayAdapter({
             root: fixture.root,
             faultInjector(stage) {
                 if (stage === 'after_commit_mark') {
@@ -498,15 +498,15 @@ test('a crash after the committed journal marker preserves committed state durin
                 }
             },
         });
-        const token = await crashingStore.preflight(plan);
+        const token = await crashingGateway.preflight(plan);
 
-        await assert.rejects(crashingStore.commit(plan, token), /crash after commit marker/);
+        await assert.rejects(crashingGateway.commit(plan, token), /crash after commit marker/);
         assert.equal(fs.existsSync(fixture.paths.journal), true);
         const committedBytes = snapshotFormalFiles(fixture.paths);
         assert.notDeepEqual(committedBytes, before);
 
-        const recoveredStore = createFsCanonicalMutationStore({ root: fixture.root });
-        const recovery = recoveredStore.recoverPendingTransaction();
+        const recoveredGateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
+        const recovery = recoveredGateway.recoverPendingTransaction();
         assert.deepEqual(recovery, { recovered: true, outcome: 'committed' });
         assert.deepEqual(snapshotFormalFiles(fixture.paths), committedBytes);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
@@ -515,7 +515,7 @@ test('a crash after the committed journal marker preserves committed state durin
     }
 });
 
-test('filesystem store rejects review mutation without review concurrency coverage', async () => {
+test('filesystem gateway rejects review mutation without review concurrency coverage', async () => {
     const fixture = createFixture();
     try {
         const reviewPlan = await createReviewAwareMergePlan(fixture.root);
@@ -526,9 +526,9 @@ test('filesystem store rejects review mutation without review concurrency covera
             changes: reviewPlan.changes,
         });
         const before = snapshotFormalFiles(fixture.paths);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
 
-        await assert.rejects(store.preflight(plan), /requires an opaque review-merge revision/);
+        await assert.rejects(gateway.preflight(plan), /requires an opaque review-merge revision/);
         assert.deepEqual(snapshotFormalFiles(fixture.paths), before);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
     } finally {
@@ -536,7 +536,7 @@ test('filesystem store rejects review mutation without review concurrency covera
     }
 });
 
-test('filesystem store still rejects answer effects instead of silently ignoring them', async () => {
+test('filesystem gateway still rejects answer effects without concurrency coverage', async () => {
     const fixture = createFixture();
     try {
         const corePlan = await createCoreMergePlan(fixture.root);
@@ -549,9 +549,9 @@ test('filesystem store still rejects answer effects instead of silently ignoring
             },
         });
         const before = snapshotFormalFiles(fixture.paths);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
 
-        await assert.rejects(store.preflight(plan), /does not yet materialize answer_invalidations/);
+        await assert.rejects(gateway.preflight(plan), /does not yet materialize answer_invalidations/);
         assert.deepEqual(snapshotFormalFiles(fixture.paths), before);
         assert.equal(fs.existsSync(fixture.paths.journal), false);
     } finally {

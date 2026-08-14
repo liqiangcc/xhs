@@ -73,8 +73,14 @@ test('Composition Root exposes only migrated application capabilities', () => {
     assert.equal(Object.isFrozen(app.review), true);
     assert.deepEqual(Object.keys(app), ['canonical', 'dedup', 'review']);
     assert.deepEqual(Object.keys(app.canonical), [
-        'list', 'stats', 'check', 'merge', 'split',
-        'planQuestionGroup', 'planQuestionGroupMutation', 'canonicalizeQuestionGroup',
+        'list',
+        'stats',
+        'check',
+        'merge',
+        'split',
+        'resolveQuestionGroupCanonicalization',
+        'planQuestionGroupCanonicalizationMutation',
+        'executeQuestionGroupCanonicalization',
     ]);
     assert.deepEqual(Object.keys(app.dedup), [
         'suggest', 'recordDecision', 'prepareApply', 'applyDecision',
@@ -88,9 +94,12 @@ test('Composition Root exposes only migrated application capabilities', () => {
     assert.equal(typeof app.canonical.merge, 'function');
     assert.equal(typeof app.canonical.split, 'function');
     assert.equal('accept' in app.canonical, false);
-    assert.equal(typeof app.canonical.planQuestionGroup, 'function');
-    assert.equal(typeof app.canonical.planQuestionGroupMutation, 'function');
-    assert.equal(typeof app.canonical.canonicalizeQuestionGroup, 'function');
+    assert.equal(typeof app.canonical.resolveQuestionGroupCanonicalization, 'function');
+    assert.equal(typeof app.canonical.planQuestionGroupCanonicalizationMutation, 'function');
+    assert.equal(typeof app.canonical.executeQuestionGroupCanonicalization, 'function');
+    assert.equal('planQuestionGroup' in app.canonical, false);
+    assert.equal('planQuestionGroupMutation' in app.canonical, false);
+    assert.equal('canonicalizeQuestionGroup' in app.canonical, false);
     assert.equal(typeof app.dedup.suggest, 'function');
     assert.equal(typeof app.dedup.recordDecision, 'function');
     assert.equal(typeof app.dedup.prepareApply, 'function');

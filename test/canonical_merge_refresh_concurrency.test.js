@@ -45,15 +45,15 @@ test('rejects a merge when a question snapshot used for canonical refresh become
         ],
     });
     const before = adapters.snapshot();
-    const originalPreflight = adapters.mutationStore.preflight.bind(adapters.mutationStore);
-    const mutationStore = {
-        ...adapters.mutationStore,
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
+    const mutationGateway = {
+        ...adapters.mutationGateway,
         async preflight(plan) {
             const questionRevision = plan.expected_revisions.find(
                 (item) => item.resource === 'question-bindings-by-question:q2',
             );
             assert.ok(questionRevision);
-            adapters.mutationStore.bumpRevision(questionRevision.resource);
+            adapters.mutationGateway.bumpRevision(questionRevision.resource);
             return originalPreflight(plan);
         },
     };
@@ -62,7 +62,7 @@ test('rejects a merge when a question snapshot used for canonical refresh become
         questionBindingRepository: adapters.questionBindingRepository,
         reviewRepository: adapters.reviewRepository,
         answerRepository: adapters.answerRepository,
-        mutationStore,
+        mutationGateway,
         integrityChecker: {
             async check() {
                 return { schema_version: 'canonical_quality_report.v1', ok: true };

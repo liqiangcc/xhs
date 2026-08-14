@@ -14,7 +14,9 @@ const { createCanonicalFsPaths } = require('../src/infrastructure/filesystem/can
 const { createFsCanonicalRepositories } = require('../src/infrastructure/filesystem/canonical-repositories');
 const { createFsReviewRepository } = require('../src/infrastructure/filesystem/review-repositories');
 const { createFsAnswerRepository } = require('../src/infrastructure/filesystem/answer-repositories');
-const { createFsCanonicalMutationStore } = require('../src/infrastructure/filesystem/fs-canonical-mutation-store');
+const {
+    createFileCanonicalMutationGatewayAdapter,
+} = require('../src/infrastructure/filesystem/file-canonical-mutation-gateway-adapter');
 const { readAnswerFile } = require('../scripts/lib/answer_store');
 const { readJson, readJsonl, writeJson, writeJsonl } = require('../scripts/lib/io');
 const { buildIndexes, getIndexPaths, writeIndexes } = require('../scripts/lib/index_store');
@@ -273,13 +275,13 @@ test('filesystem answer repository revision covers target, source, and source ar
     }
 });
 
-test('filesystem mutation store commits answer invalidation and archive with canonical and review state', async () => {
+test('filesystem mutation gateway commits answer invalidation and archive with canonical and review state', async () => {
     const fixture = createFixture();
     try {
         const plan = await createFullMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
-        const token = await store.preflight(plan);
-        const result = await store.commit(plan, token);
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
+        const token = await gateway.preflight(plan);
+        const result = await gateway.commit(plan, token);
 
         assert.equal(result.committed, true);
         assert.equal(result.answer_invalidation_count, 1);
@@ -310,8 +312,8 @@ test('commit rejects stale answer revision before publishing canonical, review, 
     const fixture = createFixture();
     try {
         const plan = await createFullMergePlan(fixture.root);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
-        const token = await store.preflight(plan);
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
+        const token = await gateway.preflight(plan);
         const beforeCanonical = readJsonl(fixture.paths.canonicalQuestions, []);
 
         fs.writeFileSync(
@@ -326,7 +328,7 @@ test('commit rejects stale answer revision before publishing canonical, review, 
         );
 
         await assert.rejects(
-            store.commit(plan, token),
+            gateway.commit(plan, token),
             /Revision mismatch for answer-merge:cq_target:cq_source/,
         );
         assert.deepEqual(readJsonl(fixture.paths.canonicalQuestions, []), beforeCanonical);
@@ -348,7 +350,7 @@ for (const failure of [
         try {
             const before = snapshotFormalFiles(fixture.paths);
             const plan = await createFullMergePlan(fixture.root);
-            const store = createFsCanonicalMutationStore({
+            const gateway = createFileCanonicalMutationGatewayAdapter({
                 root: fixture.root,
                 faultInjector(stage, context) {
                     if (stage === 'before_publish' && context.operation.kind === failure[0]) {
@@ -356,9 +358,9 @@ for (const failure of [
                     }
                 },
             });
-            const token = await store.preflight(plan);
+            const token = await gateway.preflight(plan);
 
-            await assert.rejects(store.commit(plan, token), new RegExp(failure[1]));
+            await assert.rejects(gateway.commit(plan, token), new RegExp(failure[1]));
             assert.deepEqual(snapshotFormalFiles(fixture.paths), before);
             assert.equal(fs.existsSync(fixture.paths.journal), false);
             assert.equal(fs.existsSync(fixture.paths.lock), false);
@@ -380,10 +382,10 @@ test('filesystem answer effects require an opaque answer-merge revision', async 
             changes: fullPlan.changes,
         });
         const before = snapshotFormalFiles(fixture.paths);
-        const store = createFsCanonicalMutationStore({ root: fixture.root });
+        const gateway = createFileCanonicalMutationGatewayAdapter({ root: fixture.root });
 
         await assert.rejects(
-            store.preflight(plan),
+            gateway.preflight(plan),
             /Filesystem answer mutation requires an opaque answer-merge revision/,
         );
         assert.deepEqual(snapshotFormalFiles(fixture.paths), before);

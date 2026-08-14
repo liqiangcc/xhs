@@ -7,7 +7,7 @@ const { createCanonicalMutationPlan } = require('../src/application/canonical/mu
 const { assertCanonicalRepository } = require('../src/ports/repositories/canonical-repository');
 const { assertCanonicalQuestionOwnershipRepository } = require('../src/ports/repositories/canonical-question-ownership-repository');
 const { assertQuestionBindingRepository } = require('../src/ports/repositories/question-binding-repository');
-const { assertCanonicalMutationStore } = require('../src/ports/canonical-mutation-store');
+const { assertCanonicalMutationGateway } = require('../src/ports/canonical-mutation-gateway');
 
 test('Canonical read ports require only the narrow capabilities used by current application', () => {
     const canonicalRepository = { get() {} };
@@ -31,11 +31,11 @@ test('Canonical read ports require only the narrow capabilities used by current 
     );
 });
 
-test('CanonicalMutationStore exposes one preflight/commit write boundary', () => {
-    const store = { preflight() {}, commit() {} };
-    assert.equal(assertCanonicalMutationStore(store), store);
-    assert.throws(() => assertCanonicalMutationStore({ commit() {} }), /preflight\(\) is required/);
-    assert.throws(() => assertCanonicalMutationStore({ preflight() {} }), /commit\(\) is required/);
+test('CanonicalMutationGateway exposes one preflight/commit consistency boundary', () => {
+    const gateway = { preflight() {}, commit() {} };
+    assert.equal(assertCanonicalMutationGateway(gateway), gateway);
+    assert.throws(() => assertCanonicalMutationGateway({ commit() {} }), /preflight\(\) is required/);
+    assert.throws(() => assertCanonicalMutationGateway({ preflight() {} }), /commit\(\) is required/);
 });
 
 test('MutationPlan is storage agnostic, immutable, and carries opaque revisions', () => {

@@ -251,7 +251,7 @@ test('in-memory Canonical adapter no longer carries legacy candidate test suppor
 
     assert.match(adapter, /canonicalRepository/);
     assert.match(adapter, /questionBindingRepository/);
-    assert.match(adapter, /mutationStore/);
+    assert.match(adapter, /mutationGateway/);
     assert.match(adapter, /upsertCanonical/);
     assert.match(adapter, /replaceQuestionBindings/);
 });

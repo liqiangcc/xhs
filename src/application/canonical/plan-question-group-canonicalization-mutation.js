@@ -1,25 +1,21 @@
 'use strict';
 
 const {
-    createPrepareCanonicalizeQuestionGroupUseCase,
-} = require('./prepare-canonicalize-question-group');
+    createQuestionGroupCanonicalizationPreparationCoordinator,
+} = require('./question-group-canonicalization-preparation-coordinator');
 const {
-    createCanonicalizeQuestionGroupMutationPlan,
-} = require('./plan-canonicalize-question-group-mutation');
+    createQuestionGroupCanonicalizationMutationPlan,
+} = require('./question-group-canonicalization-mutation-plan');
 
 /**
  * Application orchestration for producing an executable-shaped, but still
- * side-effect-free, canonicalize MutationPlan from a resolved
- * CanonicalizationPlan.
- *
- * Callers provide only the resolved plan. Current Canonical/Question state,
- * ownership facts, projected records, and opaque revisions are always loaded
- * or derived inside Application so an Interface cannot forge mutation evidence.
+ * side-effect-free, CanonicalMutationPlan from a resolved CanonicalizationPlan.
  */
-function createPlanCanonicalizeQuestionGroupMutationUseCase(dependencies = {}) {
-    const prepareCanonicalizeQuestionGroup = createPrepareCanonicalizeQuestionGroupUseCase(dependencies);
+function createPlanQuestionGroupCanonicalizationMutationUseCase(dependencies = {}) {
+    const prepareQuestionGroupCanonicalizationMutation =
+        createQuestionGroupCanonicalizationPreparationCoordinator(dependencies);
 
-    return async function planCanonicalizeQuestionGroupMutationUseCase(input = {}) {
+    return async function planQuestionGroupCanonicalizationMutation(input = {}) {
         for (const forbidden of [
             'preparation',
             'canonical_snapshot',
@@ -35,10 +31,10 @@ function createPlanCanonicalizeQuestionGroupMutationUseCase(dependencies = {}) {
             }
         }
 
-        const preparation = await prepareCanonicalizeQuestionGroup({
+        const preparation = await prepareQuestionGroupCanonicalizationMutation({
             plan: input.plan,
         });
-        const mutationPlan = createCanonicalizeQuestionGroupMutationPlan(preparation);
+        const mutationPlan = createQuestionGroupCanonicalizationMutationPlan(preparation);
 
         return {
             ok: true,
@@ -54,5 +50,5 @@ function createPlanCanonicalizeQuestionGroupMutationUseCase(dependencies = {}) {
 }
 
 module.exports = {
-    createPlanCanonicalizeQuestionGroupMutationUseCase,
+    createPlanQuestionGroupCanonicalizationMutationUseCase,
 };

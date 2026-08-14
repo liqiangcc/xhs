@@ -117,12 +117,12 @@ function createCanonicalizationPlan(input = {}) {
     });
 }
 
-function createPlanCanonicalizeQuestionGroupUseCase(dependencies = {}) {
+function createResolveQuestionGroupCanonicalizationUseCase(dependencies = {}) {
     const canonicalIdentityRepository = assertCanonicalIdentityRepository(
         dependencies.canonicalIdentityRepository,
     );
 
-    return async function planCanonicalizeQuestionGroupUseCase(input = {}) {
+    return async function resolveQuestionGroupCanonicalization(input = {}) {
         if (Object.hasOwn(input, 'target_identity') || Object.hasOwn(input, 'canonical_record')) {
             throw new Error('Canonical target state is controlled by Application');
         }
@@ -148,5 +148,5 @@ module.exports = {
     CANONICALIZATION_RELATIONS,
     assertReadyCanonicalizationIntent,
     createCanonicalizationPlan,
-    createPlanCanonicalizeQuestionGroupUseCase,
+    createResolveQuestionGroupCanonicalizationUseCase,
 };

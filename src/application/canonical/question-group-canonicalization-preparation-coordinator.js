@@ -139,12 +139,12 @@ function plannedBindingStates(plan, resultingQuestionIds, questionSnapshots) {
 }
 
 /**
- * Load all current Canonical facts required to project a previously resolved
- * CanonicalizationPlan. This is still a read/prepare use case: it validates
- * ownership, preserves opaque revisions for a later mutation boundary, and
- * invokes the pure projection policy without constructing a MutationPlan.
+ * Coordinate the current Canonical facts required to project a previously
+ * resolved CanonicalizationPlan. This stage validates ownership, preserves
+ * opaque revisions for a later mutation boundary, and invokes the pure
+ * projection policy without constructing or committing a MutationPlan.
  */
-function createPrepareCanonicalizeQuestionGroupUseCase(dependencies = {}) {
+function createQuestionGroupCanonicalizationPreparationCoordinator(dependencies = {}) {
     const canonicalIdentityRepository = assertCanonicalIdentityRepository(
         dependencies.canonicalIdentityRepository,
     );
@@ -160,7 +160,7 @@ function createPrepareCanonicalizeQuestionGroupUseCase(dependencies = {}) {
         throw new Error('taxonomy is required');
     }
 
-    return async function prepareCanonicalizeQuestionGroupUseCase(input = {}) {
+    return async function prepareQuestionGroupCanonicalizationMutation(input = {}) {
         for (const forbidden of [
             'canonical_snapshot',
             'question_rows',
@@ -250,7 +250,7 @@ function createPrepareCanonicalizeQuestionGroupUseCase(dependencies = {}) {
 }
 
 module.exports = {
-    createPrepareCanonicalizeQuestionGroupUseCase,
+    createQuestionGroupCanonicalizationPreparationCoordinator,
     assertQuestionMembershipConsistency,
     plannedBindingStates,
 };

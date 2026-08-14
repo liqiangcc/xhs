@@ -100,7 +100,7 @@ async function resolveCanonicalizationPlan(app) {
         canonical_id: 'cq_redis_performance',
         canonical_title: 'Redis 为什么快？',
     });
-    return app.canonical.planQuestionGroup({ intent: prepared.intent });
+    return app.canonical.resolveQuestionGroupCanonicalization({ intent: prepared.intent });
 }
 
 function assertTransactionClean(paths) {
@@ -108,7 +108,7 @@ function assertTransactionClean(paths) {
     assert.equal(fs.existsSync(paths.journal), false);
 }
 
-test('production root executes absent-target canonicalization atomically through filesystem MutationStore', async () => {
+test('production root executes absent-target canonicalization atomically through filesystem MutationGateway', async () => {
     const root = makeRoot('xhs-canonicalize-execute-absent-fs-');
     try {
         const { paths } = writeFixture(root);
@@ -117,7 +117,7 @@ test('production root executes absent-target canonicalization atomically through
         const indexPaths = getIndexPaths(paths.indexDir);
         fs.writeFileSync(indexPaths.company, JSON.stringify({ stale_sentinel: true }), 'utf8');
 
-        const result = await app.canonical.canonicalizeQuestionGroup({
+        const result = await app.canonical.executeQuestionGroupCanonicalization({
             plan: canonicalization.plan,
         });
         const canonicals = readJsonl(paths.canonicalQuestions, []);
@@ -148,7 +148,7 @@ test('production root executes existing-target canonicalization and preserves au
         const app = createApplication({ root });
         const canonicalization = await resolveCanonicalizationPlan(app);
 
-        const result = await app.canonical.canonicalizeQuestionGroup({
+        const result = await app.canonical.executeQuestionGroupCanonicalization({
             plan: canonicalization.plan,
         });
         const canonicals = readJsonl(paths.canonicalQuestions, []);
@@ -178,7 +178,7 @@ test('production execution rejects caller-controlled MutationPlan evidence', asy
         const canonicalization = await resolveCanonicalizationPlan(app);
 
         await assert.rejects(
-            app.canonical.canonicalizeQuestionGroup({
+            app.canonical.executeQuestionGroupCanonicalization({
                 plan: canonicalization.plan,
                 mutation_plan: {
                     schema_version: 'canonical_mutation_plan.v1',

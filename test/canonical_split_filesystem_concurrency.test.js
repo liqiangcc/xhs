@@ -10,7 +10,9 @@ const taxonomy = require('../config/taxonomy.json');
 const { createSplitCanonicalUseCase } = require('../src/application/canonical/split-canonical');
 const { createCanonicalFsPaths } = require('../src/infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../src/infrastructure/filesystem/canonical-repositories');
-const { createFsCanonicalMutationStore } = require('../src/infrastructure/filesystem/fs-canonical-mutation-store');
+const {
+    createFileCanonicalMutationGatewayAdapter,
+} = require('../src/infrastructure/filesystem/file-canonical-mutation-gateway-adapter');
 const { readJsonl, writeJsonl } = require('../scripts/lib/io');
 
 function canonical(id, questionIds, overrides = {}) {
@@ -62,9 +64,9 @@ test('filesystem preflight rejects a concurrent create of a split destination id
             root,
             paths,
         });
-        const fsMutationStore = createFsCanonicalMutationStore({ root, paths });
-        const mutationStore = {
-            ...fsMutationStore,
+        const fileMutationGateway = createFileCanonicalMutationGatewayAdapter({ root, paths });
+        const mutationGateway = {
+            ...fileMutationGateway,
             async preflight(plan) {
                 const absenceRevision = plan.expected_revisions.find(
                     (item) => item.resource === 'canonical:cq_new',
@@ -76,14 +78,14 @@ test('filesystem preflight rejects a concurrent create of a split destination id
                     ...records,
                     canonical('cq_new', ['q9'], { canonical_title: 'concurrent create' }),
                 ]);
-                return fsMutationStore.preflight(plan);
+                return fileMutationGateway.preflight(plan);
             },
         };
         const split = createSplitCanonicalUseCase({
             canonicalRepository,
             canonicalIdentityRepository: canonicalRepository,
             questionBindingRepository,
-            mutationStore,
+            mutationGateway,
             integrityChecker: { async check() { return passingIntegrityReport(); } },
             taxonomy,
         });

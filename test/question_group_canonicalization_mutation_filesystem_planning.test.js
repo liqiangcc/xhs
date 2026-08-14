@@ -100,7 +100,7 @@ async function resolveCanonicalizationPlan(app) {
         canonical_id: 'cq_redis_performance',
         canonical_title: 'Redis 为什么快？',
     });
-    return app.canonical.planQuestionGroup({ intent: prepared.intent });
+    return app.canonical.resolveQuestionGroupCanonicalization({ intent: prepared.intent });
 }
 
 test('production root plans an absent-target canonicalize MutationPlan without executing it', async () => {
@@ -109,7 +109,7 @@ test('production root plans an absent-target canonicalize MutationPlan without e
         const { paths } = writeFixture(root);
         const app = createApplication({ root });
         const canonicalization = await resolveCanonicalizationPlan(app);
-        const result = await app.canonical.planQuestionGroupMutation({
+        const result = await app.canonical.planQuestionGroupCanonicalizationMutation({
             plan: canonicalization.plan,
         });
 
@@ -144,7 +144,7 @@ test('production root plans an existing-target canonicalize MutationPlan while l
         const app = createApplication({ root });
         const canonicalization = await resolveCanonicalizationPlan(app);
         const before = readJsonl(paths.canonicalQuestions, []);
-        const result = await app.canonical.planQuestionGroupMutation({
+        const result = await app.canonical.planQuestionGroupCanonicalizationMutation({
             plan: canonicalization.plan,
         });
         const after = readJsonl(paths.canonicalQuestions, []);
@@ -188,7 +188,7 @@ test('production mutation planner rejects caller-controlled preparation evidence
         const canonicalization = await resolveCanonicalizationPlan(app);
 
         await assert.rejects(
-            app.canonical.planQuestionGroupMutation({
+            app.canonical.planQuestionGroupCanonicalizationMutation({
                 plan: canonicalization.plan,
                 expected_revisions: [{ resource: 'fake', revision: 'fake' }],
             }),
