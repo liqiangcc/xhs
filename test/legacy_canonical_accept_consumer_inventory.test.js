@@ -101,11 +101,45 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
 
     assert.equal(
         inventory.retirement_status,
-        'repository_local_ready_external_confirmation_required',
+        'ready_for_runtime_removal_with_unobservable_external_risk',
     );
     assert.deepEqual(inventory.active_blockers, []);
     assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
-    assert.equal(inventory.summary.external_consumers_observable, false);
+    assert.equal(inventory.summary.observable_github_search_completed, true);
+    assert.equal(inventory.summary.observable_github_external_consumer_count, 0);
+    assert.equal(inventory.summary.external_consumers_fully_observable, false);
+    assert.equal(inventory.summary.source_deprecation_marked, true);
+});
+
+test('recorded GitHub consumer search distinguishes observable zero matches from unobservable external risk', () => {
+    const inventory = JSON.parse(fs.readFileSync(INVENTORY_PATH, 'utf8'));
+    const search = inventory.external_consumer_search;
+
+    assert.equal(search.result, 'no_observable_project_specific_external_consumers');
+    assert.equal(search.checked_at, '2026-08-14');
+    assert.ok(search.queries.length >= 5);
+    assert.ok(search.queries.every((item) => item.external_match_count === 0));
+    assert.equal(search.generic_name_collision.query, 'canonical_candidates.json');
+    assert.equal(search.generic_name_collision.external_matches_exist, true);
+    assert.ok(search.limitations.some((item) => /local shell scripts/i.test(item)));
+    assert.ok(search.limitations.some((item) => /does not prove absolute absence/i.test(item)));
+});
+
+test('legacy Accept entry points are source-deprecated without adding runtime warning behavior', () => {
+    const canonicalCli = read('scripts/commands/canonical.js');
+    const acceptApplication = read('src/application/canonical/accept-canonical.js');
+    const legacyPort = read('src/ports/repositories/legacy-canonical-candidate-repository.js');
+    const presenter = read('src/interfaces/cli/canonical-accept-presenter.js');
+
+    assert.match(canonicalCli, /@deprecated[\s\S]*async function runAccept/);
+    assert.match(acceptApplication, /@deprecated[\s\S]*function createAcceptCanonicalUseCase/);
+    assert.match(legacyPort, /@deprecated[\s\S]*function assertLegacyCanonicalCandidateRepository/);
+    assert.match(presenter, /@deprecated[\s\S]*function presentCanonicalAcceptResult/);
+
+    assert.doesNotMatch(canonicalCli, /console\.warn/);
+    assert.doesNotMatch(acceptApplication, /console\.warn/);
+    assert.doesNotMatch(legacyPort, /console\.warn/);
+    assert.doesNotMatch(presenter, /console\.warn/);
 });
 
 test('content-building execution no longer routes new relations through legacy Accept', () => {
