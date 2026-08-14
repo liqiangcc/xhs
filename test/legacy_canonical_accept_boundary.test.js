@@ -38,6 +38,19 @@ test('current Suggest interfaces and Actions cannot regenerate legacy canonical 
     assert.doesNotMatch(workflow, /name:\s*canonical-candidates/);
 });
 
+test('canonical accept is no longer exposed by the Interface layer', () => {
+    const canonicalCli = source('scripts/commands/canonical.js');
+    const topLevelCli = source('scripts/xhs.js');
+
+    assert.doesNotMatch(canonicalCli, /canonical-accept-presenter/);
+    assert.doesNotMatch(canonicalCli, /function runAccept/);
+    assert.doesNotMatch(canonicalCli, /command === ['"]accept['"]/);
+    assert.doesNotMatch(canonicalCli, /runAccept,/);
+    assert.doesNotMatch(canonicalCli, /suggest\|accept/);
+    assert.doesNotMatch(topLevelCli, /canonical accept/);
+    assert.equal(fs.existsSync(path.join(ROOT, 'src', 'interfaces', 'cli', 'canonical-accept-presenter.js')), false);
+});
+
 test('Production Root and Accept name historical candidate input as legacy compatibility', () => {
     const bootstrap = source('src/bootstrap/create-application.js');
     const accept = source('src/application/canonical/accept-canonical.js');
