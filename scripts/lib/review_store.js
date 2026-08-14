@@ -4,18 +4,18 @@ const fs = require('fs');
 const path = require('path');
 const { readJson, writeJson, ensureDir } = require('./io');
 const { defaultDate } = require('./date');
+const {
+    addDays,
+    defaultProgressItem: defaultProgressItemPolicy,
+    ensureProgressItems: ensureProgressItemsPolicy,
+    isDue,
+} = require('../../src/domain/review/progress-policy');
 
 const DEFAULT_REVIEW_DIR = path.resolve(__dirname, '..', '..', 'review');
 const DEFAULT_PROGRESS_PATH = path.join(DEFAULT_REVIEW_DIR, 'progress.json');
 
 function todayString(options = {}) {
     return defaultDate(options);
-}
-
-function addDays(dateString, days) {
-    const date = new Date(`${dateString}T00:00:00Z`);
-    date.setUTCDate(date.getUTCDate() + days);
-    return date.toISOString().slice(0, 10);
 }
 
 function loadProgress(options = {}) {
@@ -39,41 +39,15 @@ function saveProgress(progress, options = {}) {
 }
 
 function defaultProgressItem(canonicalId, options = {}) {
-    const date = todayString(options);
-    return {
-        canonical_id: canonicalId,
-        status: 'new',
-        level: 0,
-        review_count: 0,
-        last_reviewed_at: null,
-        next_review_at: date,
-        confidence: 0.5,
-        difficulty: 3,
-        mistake_count: 0,
-        updated_at: date,
-    };
+    return defaultProgressItemPolicy(canonicalId, todayString(options));
 }
 
 function ensureProgressItems(progress, canonicalRecords, options = {}) {
-    const byId = new Map((progress.items || []).map((item) => [item.canonical_id, item]));
-    for (const record of canonicalRecords) {
-        if (!byId.has(record.canonical_id)) {
-            byId.set(record.canonical_id, defaultProgressItem(record.canonical_id, options));
-        }
-    }
-    return {
-        ...progress,
-        updated_at: todayString(options),
-        items: [...byId.values()],
-    };
+    return ensureProgressItemsPolicy(progress, canonicalRecords, todayString(options));
 }
 
 function progressMap(progress) {
     return new Map((progress.items || []).map((item) => [item.canonical_id, item]));
-}
-
-function isDue(item, date) {
-    return !item.next_review_at || item.next_review_at <= date;
 }
 
 function clamp(value, min, max) {
