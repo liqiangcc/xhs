@@ -183,6 +183,6 @@ test('ReviewToday requires a resolved review date and narrow outbound capabiliti
     assert.throws(() => fixture.today({}), /review date is required/);
     assert.throws(
         () => createReviewTodayUseCase({}),
-        /CanonicalCatalogRepository\.list\(\) is required/,
+        /CanonicalCatalogRepository is required/,
     );
 });
