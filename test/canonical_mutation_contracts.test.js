@@ -5,29 +5,22 @@ const assert = require('node:assert/strict');
 
 const { createCanonicalMutationPlan } = require('../src/application/canonical/mutation-plan');
 const { assertCanonicalRepository } = require('../src/ports/repositories/canonical-repository');
-const { assertCanonicalCandidateRepository } = require('../src/ports/repositories/canonical-candidate-repository');
 const { assertCanonicalQuestionOwnershipRepository } = require('../src/ports/repositories/canonical-question-ownership-repository');
 const { assertQuestionBindingRepository } = require('../src/ports/repositories/question-binding-repository');
 const { assertCanonicalMutationStore } = require('../src/ports/canonical-mutation-store');
 
-test('Canonical read ports require only the narrow capabilities used by application', () => {
+test('Canonical read ports require only the narrow capabilities used by current application', () => {
     const canonicalRepository = { get() {} };
-    const candidateRepository = { get() {} };
     const ownershipRepository = { findOwners() {} };
     const questionBindingRepository = { findByCanonical() {}, findByQuestionId() {} };
 
     assert.equal(assertCanonicalRepository(canonicalRepository), canonicalRepository);
-    assert.equal(assertCanonicalCandidateRepository(candidateRepository), candidateRepository);
     assert.equal(
         assertCanonicalQuestionOwnershipRepository(ownershipRepository),
         ownershipRepository,
     );
     assert.equal(assertQuestionBindingRepository(questionBindingRepository), questionBindingRepository);
     assert.throws(() => assertCanonicalRepository({}), /CanonicalRepository\.get\(\) is required/);
-    assert.throws(
-        () => assertCanonicalCandidateRepository({}),
-        /CanonicalCandidateRepository\.get\(\) is required/,
-    );
     assert.throws(
         () => assertCanonicalQuestionOwnershipRepository({}),
         /CanonicalQuestionOwnershipRepository\.findOwners\(\) is required/,
