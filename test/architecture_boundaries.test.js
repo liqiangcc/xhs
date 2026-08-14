@@ -72,6 +72,7 @@ test('Composition Root exposes only migrated application capabilities', () => {
     assert.equal(Object.isFrozen(app.dedup), true);
     assert.deepEqual(Object.keys(app), ['canonical', 'dedup']);
     assert.deepEqual(Object.keys(app.canonical), [
+        'list',
         'merge',
         'split',
         'planQuestionGroup',
@@ -84,6 +85,7 @@ test('Composition Root exposes only migrated application capabilities', () => {
         'prepareApply',
         'applyDecision',
     ]);
+    assert.equal(typeof app.canonical.list, 'function');
     assert.equal(typeof app.canonical.merge, 'function');
     assert.equal(typeof app.canonical.split, 'function');
     assert.equal('accept' in app.canonical, false);
