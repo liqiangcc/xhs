@@ -26,6 +26,15 @@ canonical suggest
 3. 当前架构/Agent 文档中用于**禁止新流程回退到 Accept**的 policy reference；
 4. `docs/refactor/08_content_building_goals.md` 仍有一处当前内容建设步骤写着 `canonical accept / merge / split`，因此仓库内仍存在一个会指导人继续使用 Accept 的活跃文档残留。
 
+仓库内没有发现其它活跃执行依赖：
+
+```text
+package.json npm scripts          -> no canonical accept
+.github/workflows/*.yml           -> no canonical accept / legacy manifest
+当前 in_progress root task        -> no canonical accept / canonical_candidates
+checked-in legacy candidate data  -> 0 candidates
+```
+
 所以当前 retirement 状态是：
 
 ```text
@@ -87,9 +96,44 @@ candidate fixtures / revision bumps
 
 它用于 Accept 的纯 Application/事务 characterization，但 Production Composition Root 不会创建这个 adapter。
 
-因此它属于**测试兼容消费者**，不是线上 runtime dependency；真正删除 Accept 时应随 legacy-only characterization 一起清理。
+因此它属于**测试兼容消费者**，不是线上 runtime dependency；真正删除 Accept 时应只清理 candidate-specific members，不能删除整个 in-memory Canonical adapter，因为 Merge/Split/Canonicalize 测试仍复用它。
 
-## 4. Compatibility aliases
+## 4. Shared current code that must survive retirement
+
+有一个特别容易误删的命名陷阱：
+
+```text
+src/domain/canonical/accept-policy.js
+```
+
+虽然文件名带 `accept`，但它已经不是 legacy-only Domain code。当前：
+
+```text
+question-group-projection-policy.js
+  -> acceptCanonicalCandidate()
+  -> refreshCanonicalFromQuestions()
+```
+
+仍把 `acceptCanonicalCandidate()` 当作 Canonical aggregate create/extend 的 SSOT。
+
+因此退役时必须区分：
+
+```text
+legacy Accept CLI / Application / candidate input  -> 可删除
+accept-policy 的 Canonical 聚合语义                -> 当前仍在使用，必须保留
+```
+
+除非先有独立 refactor 把这部分语义迁移到新的、同样单一事实源的命名中，否则不能因为删除 `canonical accept` 顺手删除 `accept-policy.js`。
+
+同理：
+
+```text
+src/infrastructure/filesystem/fs-canonical-mutation-store.js
+```
+
+是 Merge/Split/Canonicalize 共同使用的当前事务边界。退役只应删除 `canonical-candidate:*` revision evidence 的兼容分支，不应删除 MutationStore 本身。
+
+## 5. Compatibility aliases
 
 为了不突然破坏旧测试或外部调用者，以下模块只保留 deprecated re-export：
 
@@ -102,7 +146,7 @@ src/infrastructure/filesystem/canonical-candidate-repositories.js
 
 真正删除 Accept 时，这两个 alias 应与 legacy Port/adapter 一起删除，而不是长期保留成为第二个入口。
 
-## 5. Checked-in legacy data
+## 6. Checked-in legacy data
 
 当前仓库中的：
 
@@ -124,7 +168,7 @@ candidates = []
 
 但它只能证明仓库内状态，不能证明仓库外没有人工脚本或旧调用者。
 
-## 6. Active documentation blocker
+## 7. Active documentation blocker
 
 `docs/refactor/08_content_building_goals.md` 是当前内容建设目标与 DoD 文档，但它的一段批次闭环仍写着：
 
@@ -151,7 +195,7 @@ candidates = []
 
 在这处活跃说明被清理前，不能声称仓库已经没有人工 `canonical accept` 使用路径。
 
-## 7. Current policy references are not active consumers
+## 8. Current policy references are not active consumers
 
 以下当前文档/Agent 文件会提到 `canonical accept`，但目的都是**明确禁止它成为新流程**或描述兼容边界：
 
@@ -168,7 +212,7 @@ docs/refactor/10_soc_srp_architecture.md
 
 这些引用不能因为字符串扫描命中就被当成 blocker；它们属于 anti-regression policy。
 
-## 8. Historical references are not consumers
+## 9. Historical references are not consumers
 
 以下文件可以保留旧术语，因为它们是历史设计/验收证据，而不是当前命令 SSOT：
 
@@ -183,7 +227,7 @@ review/plans/c6_scale_and_entry_delivery.md
 
 历史文件只需要确保不会被当前 README / AGENTS / Skill 当作操作依据。
 
-## 9. `candidate_id` 不是可靠的 legacy 搜索条件
+## 10. `candidate_id` 不是可靠的 legacy 搜索条件
 
 仓库还有另一套完全不同的 candidate：
 
@@ -219,7 +263,7 @@ canonical-candidate:<id> revision
 operation=accept
 ```
 
-## 10. Tests
+## 11. Tests
 
 legacy Accept 行为仍由 characterization 保护，主要包括：
 
@@ -242,19 +286,22 @@ test/legacy_canonical_accept_consumer_inventory.test.js
 
 前一类在真正删除 Accept 时应删除或改写；后一类应改成“legacy 已不存在”的永久 guard，而不是一起丢掉。
 
-## 11. Repository-local retirement criteria
+## 12. Repository-local retirement criteria
 
 下一阶段只有在以下条件满足后，才适合真正删除 runtime compatibility chain：
 
 1. `08_content_building_goals.md` 不再把 `canonical accept` 作为当前批次操作；
 2. README / AGENTS / Skill / Actions 继续只推荐 Suggest -> Decide -> Apply；
 3. GitHub Actions 不生成 `canonical_candidates.json`；
-4. checked-in legacy manifest 继续为空，或者已有明确迁移方案；
-5. 没有仓库内脚本/自动化重新生成 legacy manifest；
-6. 已确认是否存在仓库外人工调用者；这一点仅靠 GitHub repository search 无法证明；
-7. 删除 legacy runtime、test-support、alias、operation/tests/data 后完整 CI 仍能通过。
+4. `package.json` 不存在调用 legacy Accept 的 npm script；
+5. 当前 `in_progress` root task 不依赖 `canonical accept` / `canonical_candidates.v1`；
+6. checked-in legacy manifest 继续为空，或者已有明确迁移方案；
+7. 没有仓库内脚本/自动化重新生成 legacy manifest；
+8. 已确认是否存在仓库外人工调用者；这一点仅靠 GitHub repository search 无法证明；
+9. 删除 legacy runtime、test-support、alias、operation/tests/data 后完整 CI 仍能通过；
+10. `accept-policy.js` 的当前 Canonicalization SSOT 职责被保留，或先有等价迁移。
 
-## 12. 建议的真正删除顺序
+## 13. 建议的真正删除顺序
 
 当上述 blocker 清零后，建议按依赖方向删除：
 
@@ -273,3 +320,5 @@ test/legacy_canonical_accept_consumer_inventory.test.js
 ```
 
 不要先删底层 adapter 再留下半可用 CLI；从 Interface 向内收缩，能让每一步的失败面最清楚。
+
+**不要把 `accept-policy.js`、`refresh-policy.js` 或 `CanonicalMutationStore` 本身列入上述删除清单。** 它们仍有当前非 legacy 职责。
