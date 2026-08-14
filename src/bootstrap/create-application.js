@@ -16,6 +16,7 @@ const {
 const {
     createCanonicalizeQuestionGroupUseCase,
 } = require('../application/canonical/canonicalize-question-group');
+const { createReviewIntegrityUseCase } = require('../application/review/review-integrity');
 const {
     createSuggestCanonicalRelationsUseCase,
 } = require('../application/dedup/suggest-canonical-relations');
@@ -38,6 +39,8 @@ const {
     createFsQuestionCatalogRepository,
 } = require('../infrastructure/filesystem/question-catalog-repository');
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
+const { createFsReviewProgressReader } = require('../infrastructure/filesystem/review-progress-reader');
+const { createFsReviewSessionReader } = require('../infrastructure/filesystem/review-session-reader');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
 const {
@@ -72,6 +75,8 @@ function createApplication(options = {}) {
     const catalogRepository = createFsCanonicalCatalogRepository({ root: options.root, paths });
     const questionCatalogRepository = createFsQuestionCatalogRepository({ root: options.root, paths });
     const reviewRepository = createFsReviewRepository({ root: options.root, paths });
+    const reviewProgressReader = createFsReviewProgressReader({ root: options.root, paths });
+    const reviewSessionReader = createFsReviewSessionReader({ root: options.root, paths });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
     const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
     const qualityReportWriter = createFsCanonicalQualityReportWriter({ root: options.root, paths });
@@ -119,6 +124,11 @@ function createApplication(options = {}) {
         canonicalQuestionOwnershipRepository,
         mutationStore,
         taxonomy,
+    });
+    const reviewIntegrity = createReviewIntegrityUseCase({
+        canonicalCatalogRepository: catalogRepository,
+        progressReader: reviewProgressReader,
+        sessionReader: reviewSessionReader,
     });
 
     const dedupPaths = createDedupFsPaths(options.root);
@@ -176,6 +186,9 @@ function createApplication(options = {}) {
             recordDecision,
             prepareApply,
             applyDecision,
+        }),
+        review: Object.freeze({
+            integrity: reviewIntegrity,
         }),
     });
 }
