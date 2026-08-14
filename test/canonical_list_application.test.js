@@ -24,7 +24,7 @@ function canonical(id, overrides = {}) {
 
 function repository(records) {
     return {
-        async list() {
+        list() {
             return structuredClone(records);
         },
     };
