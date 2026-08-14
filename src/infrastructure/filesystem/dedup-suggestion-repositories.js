@@ -49,6 +49,10 @@ function entityIndexResource(seed) {
     return `dedup-entity-index:${String(seed)}`;
 }
 
+function hotspotIndexResource() {
+    return 'dedup-hotspot-index';
+}
+
 function questionSnapshotResource(refs) {
     return `dedup-questions-by-refs:${hashValue(normalizeRefs(refs)).slice(0, 20)}`;
 }
@@ -68,6 +72,13 @@ function readEntityIndex(paths) {
     });
 }
 
+function readHotspotIndex(paths) {
+    return readJson(paths.hotspotIndex, {
+        schema_version: 'hotspot_index.v1',
+        entries: [],
+    });
+}
+
 function matchingEntityRefs(paths, seed) {
     const index = readEntityIndex(paths);
     const normalizedSeed = String(seed || '');
@@ -79,6 +90,15 @@ function matchingEntityRefs(paths, seed) {
         }
     }
     return normalizeRefs(refs);
+}
+
+function listHotspots(paths) {
+    const index = readHotspotIndex(paths);
+    return (index.entries || []).map(clone);
+}
+
+function hotspotRefs(hotspots) {
+    return normalizeRefs((hotspots || []).flatMap((hotspot) => hotspot?.refs || []));
 }
 
 function readQuestions(paths) {
@@ -127,6 +147,17 @@ function createFsDedupSuggestionRepositories(options = {}) {
         },
     };
 
+    const hotspotRepository = {
+        async listHotspots() {
+            const hotspots = listHotspots(paths);
+            return {
+                hotspots,
+                resource: hotspotIndexResource(),
+                revision: hashValue(hotspots),
+            };
+        },
+    };
+
     const questionRepository = {
         async findByRefs(refs) {
             if (!Array.isArray(refs)) throw new Error('refs must be an array');
@@ -170,6 +201,7 @@ function createFsDedupSuggestionRepositories(options = {}) {
 
     return {
         indexRepository,
+        hotspotRepository,
         questionRepository,
         relationCandidateStore,
     };
@@ -178,11 +210,14 @@ function createFsDedupSuggestionRepositories(options = {}) {
 module.exports = {
     hashValue,
     entityIndexResource,
+    hotspotIndexResource,
     questionSnapshotResource,
     relationQueueKey,
     relationQueueResource,
     normalizeRefs,
     matchingEntityRefs,
+    listHotspots,
+    hotspotRefs,
     resolveQuestionsByRefs,
     readQueueManifest,
     relationQueueSnapshot,
