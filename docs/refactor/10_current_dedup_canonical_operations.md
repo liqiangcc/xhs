@@ -127,17 +127,16 @@ node scripts/xhs.js canonical stats
 
 ## 5. Legacy `canonical accept`
 
-`canonical accept` CLI、Production `canonical.accept` capability、旧 Accept Application、Legacy Candidate Repository 层、`canonical-candidate:<id>` Filesystem CAS revision bridge，以及 MutationPlan `operation=accept` 都已移除。
+`canonical accept` CLI、Production `canonical.accept` capability、旧 Accept Application、Legacy Candidate Repository 层、`canonical-candidate:<id>` Filesystem CAS revision bridge、MutationPlan `operation=accept`，以及 candidate-specific in-memory test support 都已移除。
 
-当前 `src/` 中没有任何运行时代码读取 `canonical_candidates.v1`，也没有任何 Canonical MutationPlan 能表达 Accept。仅剩尚待独立清理的非可执行残余：
+当前 `src/` 中没有运行时代码、MutationPlan contract 或共享测试 adapter 能表达/读取 legacy canonical candidate。仅剩最后一层不可执行残余：
 
 ```text
 legacyCandidateManifest / candidateManifest path
-in-memory candidate-specific test support
 empty checked-in canonical_candidates.json
 ```
 
-这些都不是可调用的业务流程，也不能把历史 manifest 重新变成 Canonical mutation。下一阶段只清理 in-memory test support，最后再删除 legacy path alias 与空历史数据。
+它们只是待删除的路径名与空历史数据，不能形成任何 Canonical mutation。下一阶段完成最终 path/data cleanup 后，legacy `canonical accept` 退役即可收口。
 
 新 Suggest、GitHub Actions、Agent 或日常人工操作不得生成新的 `canonical_candidates.v1`，也不得绕过 RelationCandidate / RelationDecision / ApplyDecision 边界。
 
@@ -239,4 +238,5 @@ Accept Application 文件不存在
 Legacy Candidate Repository 层不存在
 canonical-candidate:* Filesystem CAS revision routing 不存在
 MutationPlan 不支持 operation=accept
+in-memory Canonical adapter 不包含 legacy candidate test support
 ```
