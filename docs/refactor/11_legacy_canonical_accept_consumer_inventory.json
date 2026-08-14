@@ -1,7 +1,7 @@
 {
   "schema_version": "legacy_canonical_accept_consumer_inventory.v1",
   "scope": "repository-local-plus-observable-github",
-  "retirement_status": "runtime_removal_in_progress_test_support_removed",
+  "retirement_status": "fully_retired_repository_local_with_unobservable_external_risk",
   "summary": {
     "current_suggest_generates_legacy_manifest": false,
     "github_actions_generates_legacy_manifest": false,
@@ -19,7 +19,10 @@
     "legacy_candidate_repository_layer_removed": true,
     "legacy_candidate_cas_bridge_removed": true,
     "accept_mutation_operation_removed": true,
-    "in_memory_candidate_test_support_removed": true
+    "in_memory_candidate_test_support_removed": true,
+    "legacy_manifest_path_removed": true,
+    "checked_in_legacy_manifest_removed": true,
+    "legacy_accept_repository_local_fully_retired": true
   },
   "active_blockers": [],
   "external_consumer_search": {
@@ -63,12 +66,7 @@
       "A zero observable GitHub external-consumer count reduces migration risk but does not prove absolute absence of every external caller."
     ]
   },
-  "runtime_compatibility": [
-    {
-      "path": "src/infrastructure/filesystem/canonical-paths.js",
-      "role": "retains legacyCandidateManifest filesystem path and deprecated candidateManifest path alias"
-    }
-  ],
+  "runtime_compatibility": [],
   "removed_interface_runtime": [
     {
       "path": "scripts/commands/canonical.js",
@@ -142,12 +140,23 @@
       "removed_capability": "candidate seed state, canonicalCandidateRepository, canonical-candidate revisions, upsertCandidate, and candidate snapshot output"
     }
   ],
+  "removed_final_path_data": [
+    {
+      "path": "src/infrastructure/filesystem/canonical-paths.js",
+      "removed_capability": "legacyCandidateManifest and candidateManifest path fields"
+    },
+    {
+      "path": "data/manifests/canonical/canonical_candidates.json",
+      "removed": true,
+      "previous_state": "empty historical canonical_candidates.v1 snapshot"
+    }
+  ],
   "test_support_compatibility": [],
   "compatibility_aliases": [],
   "shared_current_dependencies": [
     {
       "path": "src/domain/canonical/accept-policy.js",
-      "role": "shared Canonical aggregate create/extend policy; current canonicalize projection reuses acceptCanonicalCandidate and this file must survive legacy retirement"
+      "role": "shared Canonical aggregate create/extend policy; current canonicalize projection reuses acceptCanonicalCandidate and this file survives legacy retirement"
     },
     {
       "path": "src/domain/canonical/question-group-projection-policy.js",
@@ -155,17 +164,10 @@
     },
     {
       "path": "src/infrastructure/filesystem/fs-canonical-mutation-store.js",
-      "role": "current transaction boundary shared by merge/split/canonicalize; legacy candidate revision evidence and accept operation have been removed without removing the store"
+      "role": "current transaction boundary shared by merge/split/canonicalize; legacy candidate support was removed without removing the store"
     }
   ],
-  "checked_in_legacy_data": [
-    {
-      "path": "data/manifests/canonical/canonical_candidates.json",
-      "schema_version": "canonical_candidates.v1",
-      "candidate_count": 0,
-      "state": "empty_historical_snapshot"
-    }
-  ],
+  "checked_in_legacy_data": [],
   "current_policy_references": [
     "README.md",
     "AGENTS.md",
@@ -207,10 +209,13 @@
       "reason": "boundary-audit output, not legacy Accept input"
     }
   ],
-  "retirement_preconditions": [
-    "accept the residual risk that local/uncommitted/unindexed private callers cannot be proven absent by GitHub search",
-    "remove legacy manifest path aliases and the empty checked-in manifest in the final data/path cleanup slice",
-    "preserve src/domain/canonical/accept-policy.js or first replace its current canonicalize projection responsibility with equivalent SSOT coverage",
-    "keep full CI green while deleting legacy path/data and obsolete policy wording"
+  "residual_risks": [
+    "GitHub code search cannot prove absence of local shell scripts, uncommitted automation, or inaccessible/unindexed private callers."
+  ],
+  "post_retirement_invariants": [
+    "current new-relation flow remains Suggest -> explicit Decide -> Apply",
+    "canonical accept must not return as a CLI, Application capability, Repository, CAS resource, MutationPlan operation, test-support model, filesystem path, or checked-in manifest",
+    "src/domain/canonical/accept-policy.js remains protected because current Canonicalization reuses its aggregate create/extend semantics as SSOT",
+    "full CI must remain green"
   ]
 }
