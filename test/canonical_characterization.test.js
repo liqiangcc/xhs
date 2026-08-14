@@ -146,49 +146,6 @@ test('characterizes canonical stats CLI JSON and exit code', () => {
     }
 });
 
-test('characterizes canonical accept CLI output and persisted side effects', () => {
-    const root = makeRoot('xhs-canonical-char-accept-');
-    try {
-        const q1 = makeQuestion('Redis 为什么快？', 'note-a', 0, '美团');
-        const canonicalId = 'cq_redis_fast';
-        writeJsonl(questionsPath(root), [q1]);
-        writeJsonl(canonicalPath(root), []);
-        writeJson(path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json'), {
-            schema_version: 'canonical_candidates.v1',
-            candidates: [{
-                candidate_id: 'cand_redis_fast',
-                canonical_title: 'Redis 为什么快？',
-                aliases: ['Redis 为什么快？'],
-                question_ids: [q1.question_id],
-                primary_domain: { l1: '缓存', l2: 'Redis' },
-                primary_entities: ['Redis'],
-                companies: ['美团'],
-                frequency: 1,
-                review_priority: 'P2',
-            }],
-        });
-
-        const result = runCanonicalCli(root, [
-            'accept',
-            '--candidate-id', 'cand_redis_fast',
-            '--canonical-id', canonicalId,
-        ]);
-        assert.equal(result.status, 0);
-        assert.equal(result.stderr, '');
-        assert.equal(result.json.ok, true);
-        assert.equal(result.json.canonical_id, canonicalId);
-        assert.equal(result.json.updated_question_rows, 1);
-        assert.equal(readJsonl(questionsPath(root))[0].canonical_id, canonicalId);
-        assert.equal(readJsonl(canonicalPath(root))[0].canonical_id, canonicalId);
-        for (const name of ['entity_index.json', 'company_index.json', 'domain_index.json', 'hotspot_index.json']) {
-            assert.equal(fs.existsSync(path.join(root, 'data', 'indexes', name)), true, name);
-        }
-        assert.equal(fs.existsSync(path.join(root, 'data', 'manifests', 'runs', 'latest_canonical_accept.json')), false);
-    } finally {
-        cleanup(root);
-    }
-});
-
 test('characterizes merge then split CLI state transitions', () => {
     const root = makeRoot('xhs-canonical-char-merge-split-');
     try {
@@ -253,8 +210,8 @@ test('characterizes canonical check: validation failure is JSON ok=false but pro
     }
 });
 
-test('characterizes accept conflict: exits one and leaves persisted state unchanged', () => {
-    const root = makeRoot('xhs-canonical-char-accept-conflict-');
+test('canonical accept is no longer exposed by CLI and cannot mutate legacy state', () => {
+    const root = makeRoot('xhs-canonical-char-accept-removed-');
     try {
         const existingId = 'cq_existing_redis';
         const q1 = makeQuestion('Redis 为什么快？', 'note-a', 0, '美团', existingId);
@@ -280,7 +237,7 @@ test('characterizes accept conflict: exits one and leaves persisted state unchan
             'accept', '--candidate-id', 'cand_conflict', '--canonical-id', 'cq_new_redis',
         ]);
         assert.equal(result.status, 1);
-        assert.match(result.stderr, /already belongs to cq_existing_redis/);
+        assert.match(result.stderr, /Unknown canonical command: accept/);
         assert.equal(result.stdout, '');
         assertSnapshotEqual(snapshotFiles(root), before);
     } finally {
