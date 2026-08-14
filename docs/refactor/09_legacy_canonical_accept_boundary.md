@@ -4,7 +4,7 @@
 
 `canonical_candidates.v1` is no longer part of the current Suggest → Review → Apply flow.
 
-The following legacy execution layers have been removed:
+The following legacy execution/contract layers have been removed:
 
 ```text
 canonical accept CLI / Presenter
@@ -12,6 +12,7 @@ Production createApplication().canonical.accept
 Accept Application
 Legacy Candidate Port / filesystem Repository
 canonical-candidate:<id> Filesystem CAS revision bridge
+MutationPlan operation=accept
 ```
 
 The current production flow is only:
@@ -24,16 +25,13 @@ Dedup Detect
   → Canonical planning / mutation
 ```
 
-There is no supported user-facing command, Production capability, Application use case, Repository, filesystem candidate reader, or candidate CAS route that can execute `data/manifests/canonical/canonical_candidates.json`.
+There is no supported user-facing command, Production capability, Application use case, Repository, filesystem candidate reader/CAS route, or MutationPlan operation that can execute `data/manifests/canonical/canonical_candidates.json`.
 
 ## Remaining non-executable legacy remnants
 
 Only these staged-cleanup remnants remain:
 
 ```text
-src/application/canonical/mutation-plan.js
-  → operation=accept is still accepted by the generic MutationPlan contract
-
 src/infrastructure/filesystem/canonical-paths.js
   → legacyCandidateManifest / candidateManifest path names still exist
 
@@ -44,11 +42,11 @@ data/manifests/canonical/canonical_candidates.json
   → empty historical snapshot
 ```
 
-None of these forms a runnable legacy Accept workflow. `src/` runtime JavaScript no longer reads `canonical_candidates.v1`.
+None of these forms a runnable legacy Accept workflow. `src/` runtime JavaScript no longer reads `canonical_candidates.v1`, and `canonical_mutation_plan.v1` no longer accepts `operation=accept`.
 
 ## Removed runtime dependencies
 
-Five staged layers have completed:
+Six staged layers have completed:
 
 ```text
 1. Interface
@@ -66,9 +64,12 @@ Five staged layers have completed:
 5. Filesystem candidate CAS bridge
    canonical-candidate:<id> revision routing                removed
    legacy-canonical-candidate-revision.js                   removed
+
+6. MutationPlan contract
+   operation=accept                                         removed
 ```
 
-`canonical-repositories.js` is now again responsible only for current Canonical / Question binding / ownership revisions. A historical `canonical-candidate:*` resource is unsupported and fails closed.
+`canonical-repositories.js` is responsible only for current Canonical / Question binding / ownership revisions. A historical `canonical-candidate:*` resource is unsupported and fails closed. `createCanonicalMutationPlan({ operation: 'accept', ... })` is also explicitly rejected.
 
 ## Forbidden dependencies
 
@@ -79,6 +80,7 @@ The following must not read, write, or derive executable state from `canonical_c
 - Application use cases;
 - Repository Ports/adapters;
 - filesystem Canonical revision routing;
+- Canonical MutationPlan operations;
 - Dedup entity/hotspot detection;
 - RelationCandidate / RelationDecision flows;
 - `PrepareRelationApply` / `ApplyRelationDecision`;
@@ -105,12 +107,10 @@ The staged removal proceeds with that residual risk explicitly recorded rather t
 
 ## Next removal slice
 
-The next boundary is now the generic MutationPlan contract:
+The next boundary is now test support:
 
 ```text
-remove operation=accept
-        ↓
-then remove in-memory candidate test support
+remove candidate-specific in-memory test support
         ↓
 then remove legacy path aliases / empty historical data
 ```
@@ -121,7 +121,7 @@ Likewise, do not delete `CanonicalMutationStore`; it remains the transaction bou
 
 ## Separation-of-concerns rule
 
-> RelationCandidate is current review state. Historical canonical candidate data is now only inert staged-cleanup residue; it has no current execution path.
+> RelationCandidate is current review state. Historical canonical candidate data is now only inert staged-cleanup residue; it has no current execution or mutation-contract path.
 
 The forbidden shortcut remains:
 
