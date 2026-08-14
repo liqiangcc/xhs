@@ -51,12 +51,10 @@ test('canonical accept is no longer exposed by the Interface layer', () => {
     assert.equal(fs.existsSync(path.join(ROOT, 'src', 'interfaces', 'cli', 'canonical-accept-presenter.js')), false);
 });
 
-test('Production Root and Accept Application are removed while lower legacy compatibility remains explicit', () => {
+test('legacy Accept Application and candidate repository layer are removed while CAS compatibility remains explicit', () => {
     const bootstrap = source('src/bootstrap/create-application.js');
-    const legacyPort = source('src/ports/repositories/legacy-canonical-candidate-repository.js');
-    const legacyAdapter = source('src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js');
-    const oldPort = source('src/ports/repositories/canonical-candidate-repository.js');
-    const oldAdapter = source('src/infrastructure/filesystem/canonical-candidate-repositories.js');
+    const canonicalRepositories = source('src/infrastructure/filesystem/canonical-repositories.js');
+    const casHelper = source('src/infrastructure/filesystem/legacy-canonical-candidate-revision.js');
     const mutationPlan = source('src/application/canonical/mutation-plan.js');
 
     assert.doesNotMatch(bootstrap, /createAcceptCanonicalUseCase/);
@@ -64,26 +62,29 @@ test('Production Root and Accept Application are removed while lower legacy comp
     assert.doesNotMatch(bootstrap, /createFsLegacyCanonicalCandidateRepository/);
     assert.doesNotMatch(bootstrap, /legacyCandidateRepository/);
     assert.doesNotMatch(bootstrap, /\baccept\s*,/);
-    assert.equal(fs.existsSync(path.join(ROOT, 'src', 'application', 'canonical', 'accept-canonical.js')), false);
 
-    assert.match(legacyPort, /LegacyCanonicalCandidateRepository/);
-    assert.match(legacyPort, /@deprecated/);
-    assert.match(legacyAdapter, /createFsLegacyCanonicalCandidateRepository/);
-    assert.match(mutationPlan, /['"]accept['"]/);
-
-    assert.match(oldPort, /Deprecated compatibility re-export/);
-    assert.match(oldPort, /legacy-canonical-candidate-repository/);
-    assert.match(oldAdapter, /Deprecated compatibility re-export/);
-    assert.match(oldAdapter, /legacy-canonical-candidate-repositories/);
-});
-
-test('canonical_candidates.v1 knowledge is confined to the explicit compatibility boundary', () => {
-    const srcRoot = path.join(ROOT, 'src');
-    const allowed = new Set([
+    for (const relativePath of [
+        'src/application/canonical/accept-canonical.js',
         'src/ports/repositories/legacy-canonical-candidate-repository.js',
         'src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js',
         'src/ports/repositories/canonical-candidate-repository.js',
         'src/infrastructure/filesystem/canonical-candidate-repositories.js',
+    ]) {
+        assert.equal(fs.existsSync(path.join(ROOT, relativePath)), false, relativePath);
+    }
+
+    assert.match(canonicalRepositories, /legacy-canonical-candidate-revision/);
+    assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-repositories/);
+    assert.match(canonicalRepositories, /canonical-candidate:/);
+    assert.match(casHelper, /revisionForLegacyCandidateResource/);
+    assert.doesNotMatch(casHelper, /createFsLegacyCanonicalCandidateRepository/);
+    assert.match(mutationPlan, /['"]accept['"]/);
+});
+
+test('canonical_candidates.v1 knowledge is confined to the remaining CAS compatibility helper', () => {
+    const srcRoot = path.join(ROOT, 'src');
+    const allowed = new Set([
+        'src/infrastructure/filesystem/legacy-canonical-candidate-revision.js',
     ]);
     const offenders = [];
 
