@@ -9,6 +9,7 @@ function createDedupFsPaths(root) {
         root: resolvedRoot,
         questions: path.join(resolvedRoot, 'data', 'questions', 'questions.jsonl'),
         entityIndex: path.join(resolvedRoot, 'data', 'indexes', 'entity_index.json'),
+        hotspotIndex: path.join(resolvedRoot, 'data', 'indexes', 'hotspot_index.json'),
         relationCandidateQueues: path.join(
             resolvedRoot,
             'data',
