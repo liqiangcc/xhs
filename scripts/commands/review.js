@@ -21,6 +21,7 @@ const {
 const { loadReviewStrategy, rankReviewRows } = require('../lib/review_scheduler');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption } = require('../lib/cli_options');
+const { createApplication } = require('../../src/bootstrap/create-application');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..', '..');
 
@@ -316,76 +317,8 @@ function runNext(options = {}) {
 
 function runIntegrity(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const paths = defaultPaths(root);
-    const records = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
-    const canonicalIds = new Set(records.map((record) => record.canonical_id));
-    const progress = loadProgress({ progressPath: paths.progressPath, date: options.date });
-    const occurrences = new Map();
-    const malformedProgressItems = [];
-
-    for (const [index, item] of (progress.items || []).entries()) {
-        const canonicalId = item?.canonical_id;
-        if (!canonicalId || typeof canonicalId !== 'string') {
-            malformedProgressItems.push({ index, canonical_id: canonicalId || null });
-            continue;
-        }
-        occurrences.set(canonicalId, (occurrences.get(canonicalId) || 0) + 1);
-    }
-
-    const duplicateProgressCanonicalIds = [...occurrences.entries()]
-        .filter(([, count]) => count > 1)
-        .map(([canonical_id, count]) => ({ canonical_id, count }))
-        .sort((a, b) => a.canonical_id.localeCompare(b.canonical_id));
-    const staleProgressCanonicalIds = [...occurrences.keys()]
-        .filter((canonicalId) => !canonicalIds.has(canonicalId))
-        .sort((a, b) => a.localeCompare(b));
-    const missingProgressCanonicalIds = [...canonicalIds]
-        .filter((canonicalId) => !occurrences.has(canonicalId))
-        .sort((a, b) => a.localeCompare(b));
-
-    const staleSessionEvents = [];
-    const sessionDir = path.join(paths.reviewDir, 'sessions');
-    if (fs.existsSync(sessionDir)) {
-        for (const file of fs.readdirSync(sessionDir).filter((name) => name.endsWith('.json')).sort()) {
-            const sessionPath = path.join(sessionDir, file);
-            let session;
-            try {
-                session = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-            } catch (error) {
-                staleSessionEvents.push({ file: path.relative(root, sessionPath), index: null, canonical_id: null, reason: 'invalid_json' });
-                continue;
-            }
-            for (const [index, event] of (session.events || []).entries()) {
-                if (!event?.canonical_id || !canonicalIds.has(event.canonical_id)) {
-                    staleSessionEvents.push({
-                        file: path.relative(root, sessionPath),
-                        index,
-                        canonical_id: event?.canonical_id || null,
-                        reason: event?.canonical_id ? 'unknown_canonical_id' : 'missing_canonical_id',
-                    });
-                }
-            }
-        }
-    }
-
-    const hardFailureCount = malformedProgressItems.length
-        + duplicateProgressCanonicalIds.length
-        + staleProgressCanonicalIds.length
-        + staleSessionEvents.length;
-    return {
-        schema_version: 'review_integrity.v1',
-        ok: hardFailureCount === 0,
-        canonical_count: records.length,
-        progress_item_count: (progress.items || []).length,
-        initialized_progress_count: occurrences.size,
-        missing_progress_count: missingProgressCanonicalIds.length,
-        missing_progress_sample: missingProgressCanonicalIds.slice(0, 20),
-        duplicate_progress_canonical_ids: duplicateProgressCanonicalIds,
-        stale_progress_canonical_ids: staleProgressCanonicalIds,
-        malformed_progress_items: malformedProgressItems,
-        stale_session_events: staleSessionEvents,
-        hard_failure_count: hardFailureCount,
-    };
+    const application = createApplication({ root });
+    return application.review.integrity();
 }
 
 function main(argv = process.argv) {
