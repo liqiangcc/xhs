@@ -1,7 +1,7 @@
 {
   "schema_version": "legacy_canonical_accept_consumer_inventory.v1",
   "scope": "repository-local-plus-observable-github",
-  "retirement_status": "runtime_removal_in_progress_accept_operation_removed",
+  "retirement_status": "runtime_removal_in_progress_test_support_removed",
   "summary": {
     "current_suggest_generates_legacy_manifest": false,
     "github_actions_generates_legacy_manifest": false,
@@ -18,7 +18,8 @@
     "accept_application_removed": true,
     "legacy_candidate_repository_layer_removed": true,
     "legacy_candidate_cas_bridge_removed": true,
-    "accept_mutation_operation_removed": true
+    "accept_mutation_operation_removed": true,
+    "in_memory_candidate_test_support_removed": true
   },
   "active_blockers": [],
   "external_consumer_search": {
@@ -135,12 +136,13 @@
       "removed_capability": "operation=accept; supported operations are merge, split, canonicalize"
     }
   ],
-  "test_support_compatibility": [
+  "removed_test_support": [
     {
       "path": "src/infrastructure/in-memory/canonical-adapters.js",
-      "role": "candidate-specific in-memory state/revision support retained for a later cleanup slice; no current Application depends on it"
+      "removed_capability": "candidate seed state, canonicalCandidateRepository, canonical-candidate revisions, upsertCandidate, and candidate snapshot output"
     }
   ],
+  "test_support_compatibility": [],
   "compatibility_aliases": [],
   "shared_current_dependencies": [
     {
@@ -207,9 +209,8 @@
   ],
   "retirement_preconditions": [
     "accept the residual risk that local/uncommitted/unindexed private callers cannot be proven absent by GitHub search",
-    "remove candidate-specific in-memory test support before deleting the legacy path/data cleanup guard",
-    "remove legacy manifest path aliases and the empty checked-in manifest only after no remaining test-support contract needs them",
+    "remove legacy manifest path aliases and the empty checked-in manifest in the final data/path cleanup slice",
     "preserve src/domain/canonical/accept-policy.js or first replace its current canonicalize projection responsibility with equivalent SSOT coverage",
-    "keep full CI green while deleting in-memory test support, legacy path/data, and obsolete policy wording"
+    "keep full CI green while deleting legacy path/data and obsolete policy wording"
   ]
 }
