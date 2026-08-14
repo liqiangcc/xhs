@@ -5,6 +5,8 @@
   "summary": {
     "current_suggest_generates_legacy_manifest": false,
     "github_actions_generates_legacy_manifest": false,
+    "package_scripts_invoke_legacy_accept": false,
+    "in_progress_root_task_invokes_legacy_accept": false,
     "checked_in_legacy_candidate_count": 0,
     "active_manual_procedure_blocker_count": 1,
     "external_consumers_observable": false
@@ -74,6 +76,20 @@
       "role": "deprecated re-export of the legacy filesystem adapter"
     }
   ],
+  "shared_current_dependencies": [
+    {
+      "path": "src/domain/canonical/accept-policy.js",
+      "role": "shared Canonical aggregate create/extend policy; the current canonicalize projection reuses acceptCanonicalCandidate and this file must not be deleted merely because the legacy CLI retires"
+    },
+    {
+      "path": "src/domain/canonical/question-group-projection-policy.js",
+      "role": "current canonicalize projection imports acceptCanonicalCandidate from accept-policy as Canonical aggregate SSOT"
+    },
+    {
+      "path": "src/infrastructure/filesystem/fs-canonical-mutation-store.js",
+      "role": "current transaction boundary shared by merge/split/canonicalize; retirement removes legacy candidate revision evidence, not the store"
+    }
+  ],
   "checked_in_legacy_data": [
     {
       "path": "data/manifests/canonical/canonical_candidates.json",
@@ -129,6 +145,7 @@
   "retirement_preconditions": [
     "remove the stale canonical accept step from docs/refactor/08_content_building_goals.md and point execution to the current operational SSOT",
     "confirm no external/manual caller still depends on canonical accept; repository search cannot prove external usage",
+    "preserve src/domain/canonical/accept-policy.js or first replace its current canonicalize projection responsibility with equivalent SSOT coverage",
     "keep full CI green while deleting the runtime compatibility chain, test-support compatibility, aliases, accept operation support, legacy-only tests, and empty checked-in manifest"
   ]
 }
