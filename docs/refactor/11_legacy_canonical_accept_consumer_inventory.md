@@ -17,7 +17,7 @@ canonical suggest
 
 Repository-local blocker 已清零，GitHub 可观察的项目特异外部消费者为 0；仍保留“本地脚本、未提交自动化、不可见/未索引私有调用无法证明不存在”的残余风险。
 
-已经完成五层 runtime removal：
+已经完成六层 runtime / contract removal：
 
 ```text
 Interface layer                         removed
@@ -25,15 +25,16 @@ Production Composition Root             removed
 Accept Application                      removed
 Legacy Candidate Repository layer       removed
 canonical-candidate:* Filesystem CAS     removed
+MutationPlan operation=accept            removed
 ```
 
 当前状态：
 
 ```text
-runtime_removal_in_progress_cas_bridge_removed
+runtime_removal_in_progress_accept_operation_removed
 ```
 
-因此当前 `src/` JavaScript 中已经没有读取 `canonical_candidates.v1` 的执行路径，也没有 `canonical-candidate:*` Filesystem revision route。
+因此当前 `src/` JavaScript 中已经没有读取 `canonical_candidates.v1` 的执行路径、没有 `canonical-candidate:*` Filesystem revision route，也没有能够表达 Accept 的 Canonical MutationPlan operation。
 
 ## 2. 外部消费者搜索证据
 
@@ -56,7 +57,7 @@ observable_github_external_consumer_count = 0
 external_consumers_fully_observable        = false
 ```
 
-## 3. 已删除的执行层
+## 3. 已删除的执行/契约层
 
 ### Interface
 
@@ -99,14 +100,20 @@ test/canonical_legacy_candidate_cas.test.js
 
 现在 `revisionForResource(..., 'canonical-candidate:...')` 会作为 unsupported resource fail-closed。
 
+### MutationPlan Accept operation
+
+```text
+src/application/canonical/mutation-plan.js
+  supported operations = merge / split / canonicalize
+```
+
+`createCanonicalMutationPlan({ operation: 'accept', ... })` 现在会明确报 `Unsupported canonical mutation operation: accept`。
+
 ## 4. Remaining non-executable compatibility
 
 仍待删除：
 
 ```text
-src/application/canonical/mutation-plan.js
-  -> operation=accept
-
 src/infrastructure/filesystem/canonical-paths.js
   -> legacyCandidateManifest / candidateManifest path
 
@@ -117,7 +124,7 @@ data/manifests/canonical/canonical_candidates.json
   -> empty historical snapshot
 ```
 
-这些都不再构成可调用业务能力，也没有 filesystem reader/CAS bridge 能把历史 manifest 变成正式 mutation。
+这些都不再构成可调用业务能力，也没有 filesystem reader/CAS bridge/MutationPlan operation 能把历史 manifest 变成正式 mutation。
 
 ## 5. Shared current code that must survive
 
@@ -135,7 +142,7 @@ src/domain/canonical/accept-policy.js
 src/infrastructure/filesystem/fs-canonical-mutation-store.js
 ```
 
-它仍是 Merge/Split/Canonicalize 的正式事务边界。Legacy candidate CAS evidence 已经从它依赖的 revision routing 中移除。
+它仍是 Merge/Split/Canonicalize 的正式事务边界。Legacy candidate CAS evidence 与 Accept operation 都已经移除，但共享事务边界继续有效。
 
 ## 6. Checked-in legacy data
 
@@ -169,29 +176,28 @@ docs/refactor/10_current_dedup_canonical_operations.md
 ```text
 canonical_candidates.v1
 canonical_candidates.json
-operation=accept
 candidate-specific in-memory support
 legacyCandidateManifest / candidateManifest
 ```
 
-`LegacyCanonicalCandidateRepository` 与 `canonical-candidate:*` filesystem CAS 都已经是已删除项。
+`LegacyCanonicalCandidateRepository`、`canonical-candidate:*` filesystem CAS 和 `operation=accept` 都已经是已删除项。
 
 ## 9. 下一步
 
-下一刀只删除 MutationPlan 中的：
+下一刀只清理 candidate-specific in-memory test support：
 
 ```text
-operation=accept
+src/infrastructure/in-memory/canonical-adapters.js
 ```
 
-同时删除/修改只保护该 operation 的 contract tests。
+只删除其中 candidate state / candidate revision / candidate repository / candidate testSupport members，保留 Merge/Split/Canonicalize 仍使用的 Canonical/Question/MutationStore in-memory 能力。
 
-先不删除 in-memory candidate support、legacy path alias 或空 manifest，继续保持：
+然后最后再清理：
 
 ```text
-operation=accept
-→ in-memory candidate test support
-→ legacy path alias / empty data
+legacyCandidateManifest / candidateManifest path alias
+empty canonical_candidates.json
+obsolete policy wording
 ```
 
 每一刀都必须独立跑完整 CI。
