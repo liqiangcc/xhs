@@ -3,9 +3,7 @@
 const { assertPort } = require('../port-contract');
 
 /**
- * LegacyCanonicalCandidateRepository is a compatibility-only read Port for
- * historical `canonical_candidates.v1` manifests consumed by `canonical accept`.
- *
+ * @deprecated Compatibility-only Port for historical/manual canonical_candidates.v1.
  * Current Dedup Suggest/Decide/Apply flows MUST NOT depend on this Port.
  * New candidate/review capabilities belong to RelationCandidate repositories.
  *
