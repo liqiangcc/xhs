@@ -2,7 +2,7 @@
 
 ## Status
 
-`canonical_candidates.v1` is no longer part of the current Suggest → Review → Apply flow. The `canonical accept` CLI has been removed, Production `createApplication()` no longer constructs or exposes `canonical.accept`, and the legacy Accept Application itself has now been deleted.
+`canonical_candidates.v1` is no longer part of the current Suggest → Review → Apply flow. The `canonical accept` CLI, Production `canonical.accept`, legacy Accept Application, Legacy Candidate Port, filesystem repository adapter, and deprecated aliases have all been removed.
 
 The current production flow is:
 
@@ -14,74 +14,74 @@ Dedup Detect
   → Canonical planning / mutation
 ```
 
-There is no supported user-facing command, Production Composition Root capability, or Accept Application use case that consumes `data/manifests/canonical/canonical_candidates.json`.
+There is no supported user-facing command, Production capability, Application use case, or candidate Repository that consumes `data/manifests/canonical/canonical_candidates.json`.
 
 ## Remaining lower-level compatibility boundary
 
-The legacy model now survives only as lower-level compatibility contracts awaiting staged cleanup:
+The legacy model now survives only as residual CAS / contract compatibility awaiting staged cleanup:
 
 ```text
-LegacyCanonicalCandidateRepository
+legacyCandidateManifest path
         ↓
-legacy-canonical-candidate-repositories.js
+legacy-canonical-candidate-revision.js
         ↓
-canonical_candidates.v1
-
 canonical-candidate:<id> revision bridge
-        ↓
+
 operation=accept MutationPlan compatibility
 ```
 
-The current Dedup flow, Interface layer, Production Composition Root, and Application use cases must never depend on this repository or manifest.
+The revision helper exposes no `get(candidate)` Repository capability. It exists only so the generic Canonical revision router can still validate historical `canonical-candidate:*` evidence until the dedicated CAS removal slice.
 
 ### Remaining internal dependencies
 
-- `src/ports/repositories/legacy-canonical-candidate-repository.js`
-  - compatibility-only read contract.
-- `src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js`
-  - compatibility-only filesystem adapter, now used only by direct lower-level characterization.
 - `src/infrastructure/filesystem/canonical-paths.js`
-  - retains `legacyCandidateManifest` plus a deprecated `candidateManifest` alias during staged cleanup.
+  - retains `legacyCandidateManifest` plus the old `candidateManifest` path alias during staged cleanup.
+- `src/infrastructure/filesystem/legacy-canonical-candidate-revision.js`
+  - computes semantic opaque revisions for `canonical-candidate:<id>` only; it is not a Repository adapter.
 - `src/infrastructure/filesystem/canonical-repositories.js`
-  - still resolves `canonical-candidate:<id>` revision evidence for later CAS cleanup.
+  - routes historical `canonical-candidate:<id>` revision evidence to the minimal helper.
 - `src/application/canonical/mutation-plan.js`
   - still accepts `operation=accept` until a later removal slice.
-
-The previous generic Port/adapter module names remain only as deprecated re-exports.
+- `src/infrastructure/in-memory/canonical-adapters.js`
+  - still contains candidate-specific test support that has no current Application consumer.
 
 ## Removed runtime dependencies
 
-Three runtime-removal slices have completed.
+Four runtime-removal layers have completed.
 
 Interface removal:
 
 ```text
-scripts/commands/canonical.js::runAccept       removed
-canonical accept command dispatch             removed
-canonical command help entry                  removed
-scripts/xhs.js top-level help entry            removed
-canonical-accept-presenter.js                  removed
-presenter / CLI success characterization      removed
+runAccept / command dispatch / help             removed
+canonical-accept-presenter.js                    removed
 ```
 
 Production Composition Root removal:
 
 ```text
-createAcceptCanonicalUseCase import            removed
-createFsLegacyCanonicalCandidateRepository     removed
-Legacy Candidate adapter construction          removed
-Accept use case construction                   removed
-app.canonical.accept capability                removed
+createAcceptCanonicalUseCase wiring              removed
+Legacy Candidate adapter construction            removed
+app.canonical.accept capability                   removed
 ```
 
 Application removal:
 
 ```text
-src/application/canonical/accept-canonical.js  removed
-test/canonical_accept_application.test.js      removed
+src/application/canonical/accept-canonical.js    removed
+test/canonical_accept_application.test.js        removed
 ```
 
-`canonical_accept_filesystem_integration.test.js` now characterizes only the lower-level legacy candidate repository / revision contract; it no longer recreates Accept orchestration.
+Repository layer removal:
+
+```text
+LegacyCanonicalCandidateRepository Port          removed
+legacy filesystem candidate Repository adapter   removed
+canonical-candidate-repository.js alias           removed
+canonical-candidate-repositories.js alias         removed
+repository characterization                      removed
+```
+
+The remaining `test/canonical_legacy_candidate_cas.test.js` characterizes only the CAS revision bridge, not a Repository capability.
 
 ## Forbidden dependencies
 
@@ -90,13 +90,11 @@ The following must not read, write, or derive executable state from `canonical_c
 - CLI / Interface layer;
 - Production Composition Root;
 - Application use cases;
-- Dedup entity detection;
-- Dedup hotspot detection;
-- `SuggestCanonicalRelations`;
-- RelationCandidate review queues;
-- RelationDecision recording;
+- Repository Ports/adapters;
+- Dedup entity/hotspot detection;
+- RelationCandidate / RelationDecision flows;
 - `PrepareRelationApply` / `ApplyRelationDecision`;
-- Canonicalization planning and execution;
+- Canonicalization planning/execution;
 - GitHub Actions Suggest tasks.
 
 A similarity signal or RelationCandidate must never be converted into a legacy candidate manifest to bypass explicit review.
@@ -125,23 +123,24 @@ The staged removal proceeds with that residual risk explicitly recorded rather t
 
 ## Next removal slice
 
-The next boundary is the Legacy Candidate Port / filesystem adapter:
+The next boundary is now the residual `canonical-candidate:*` CAS bridge:
 
 ```text
-delete LegacyCanonicalCandidateRepository + FS adapter
+remove canonical-candidate revision routing
+remove legacy-canonical-candidate-revision.js
         ↓
-then remove canonical-candidate CAS support
+then remove operation=accept
         ↓
-then remove operation=accept / test support / aliases / empty data
+then remove in-memory candidate test support / legacy path alias / empty data
 ```
 
-Do not delete `src/domain/canonical/accept-policy.js` merely because the legacy Accept Application is gone. Current Canonicalization projection still reuses its Canonical aggregate create/extend semantics as an SSOT.
+Do not delete `src/domain/canonical/accept-policy.js`. Current Canonicalization projection still reuses its aggregate create/extend semantics as an SSOT.
 
-Likewise, do not delete `CanonicalMutationStore`; only legacy candidate evidence should be removed from it in the later CAS slice.
+Likewise, do not delete `CanonicalMutationStore`; only legacy candidate evidence should be removed from the shared store/revision path.
 
 ## Separation-of-concerns rule
 
-> RelationCandidate is current review state. LegacyCanonicalCandidate is a lower-level compatibility data contract awaiting deletion. They are different concepts and must not share a generic candidate repository boundary.
+> RelationCandidate is current review state. Historical canonical candidate data is now only residual CAS evidence awaiting deletion. It is not a Repository model anymore.
 
 The forbidden shortcut remains:
 
