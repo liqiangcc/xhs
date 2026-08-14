@@ -11,9 +11,12 @@ const { createDedupFsPaths } = require('./dedup-paths');
 const {
     hashValue,
     entityIndexResource,
+    hotspotIndexResource,
     questionSnapshotResource,
     relationQueueResource,
     matchingEntityRefs,
+    listHotspots,
+    hotspotRefs,
     resolveQuestionsByRefs,
     readQueueManifest,
     relationQueueSnapshot,
@@ -77,14 +80,26 @@ function currentDecisionRevisions(paths, decision) {
     }
 
     const queueSnapshot = relationQueueSnapshot(paths, mode, seed);
-    const refs = matchingEntityRefs(paths, seed);
-    const questions = resolveQuestionsByRefs(paths, refs);
-
-    return new Map([
-        [queueSnapshot.resource, queueSnapshot.revision],
-        [entityIndexResource(seed), hashValue(refs)],
-        [questionSnapshotResource(refs), hashValue(questions)],
-    ]);
+    if (mode === 'entity') {
+        const refs = matchingEntityRefs(paths, seed);
+        const questions = resolveQuestionsByRefs(paths, refs);
+        return new Map([
+            [queueSnapshot.resource, queueSnapshot.revision],
+            [entityIndexResource(seed), hashValue(refs)],
+            [questionSnapshotResource(refs), hashValue(questions)],
+        ]);
+    }
+    if (mode === 'hotspot') {
+        const hotspots = listHotspots(paths);
+        const refs = hotspotRefs(hotspots);
+        const questions = resolveQuestionsByRefs(paths, refs);
+        return new Map([
+            [queueSnapshot.resource, queueSnapshot.revision],
+            [hotspotIndexResource(), hashValue(hotspots)],
+            [questionSnapshotResource(refs), hashValue(questions)],
+        ]);
+    }
+    throw new Error(`Unsupported dedup relation decision scope: ${mode}`);
 }
 
 function normalizeExpectedRevisions(expectedRevisions) {
