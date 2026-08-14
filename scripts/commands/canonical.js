@@ -3,25 +3,12 @@
 
 const path = require('path');
 const { writeJson } = require('../lib/io');
-const {
-    loadQuestions,
-    questionRef,
-    refKey,
-} = require('../lib/question_store');
-const { loadIndexes } = require('../lib/index_store');
-const { normalizeEntity, validateDomain } = require('../lib/taxonomy');
+const { loadQuestions } = require('../lib/question_store');
 const { writeRunManifest } = require('../lib/run_manifest');
 const { applyGlobalBooleanOption, shouldWriteReports } = require('../lib/cli_options');
 const { defaultDate } = require('../lib/date');
-const {
-    loadCanonicalQuestions,
-    suggestCanonicalId,
-    shortHash,
-} = require('../lib/canonical_store');
-const {
-    priorityRank,
-    computePriority,
-} = require('../../src/domain/canonical/priority-policy');
+const { loadCanonicalQuestions } = require('../lib/canonical_store');
+const { priorityRank } = require('../../src/domain/canonical/priority-policy');
 const { evaluateCanonicalIntegrity } = require('../../src/domain/canonical/integrity-policy');
 const { createApplication } = require('../../src/bootstrap/create-application');
 const { presentCanonicalAcceptResult } = require('../../src/interfaces/cli/canonical-accept-presenter');
@@ -34,14 +21,7 @@ function defaultPaths(root) {
     return {
         questions: path.join(root, 'data', 'questions', 'questions.jsonl'),
         canonicalQuestions: path.join(root, 'data', 'questions', 'canonical_questions.jsonl'),
-        indexDir: path.join(root, 'data', 'indexes'),
-        candidateManifest: path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json'),
         qualityReport: path.join(root, 'data', 'manifests', 'canonical', 'canonical_quality_report.json'),
-        reviewDir: path.join(root, 'review'),
-        reviewProgress: path.join(root, 'review', 'progress.json'),
-        answersDir: path.join(root, 'review', 'answers'),
-        answerArchiveDir: path.join(root, 'review', 'archive', 'answers'),
-        mergeHistory: path.join(root, 'data', 'manifests', 'canonical', 'canonical_merge_history.json'),
     };
 }
 
@@ -72,12 +52,14 @@ function printHelp() {
         'Commands:',
         '  suggest --entity <value> [--limit <n>]',
         '  suggest --hotspot [--limit <n>]',
-        '  accept --candidate-id <id> --canonical-id <cq_id>',
+        '  accept --candidate-id <id> --canonical-id <cq_id>  (legacy candidate manifest)',
         '  list [--priority <P0|P1|P2|P3>] [--answer-status <status>] [--limit <n>]',
         '  check',
         '  merge --target <canonical_id> --source <canonical_id> --reason <text>',
         '  split --canonical-id <id> --question-id <qid> --new-canonical-id <id> --title <title>',
         '  stats',
+        '',
+        'Suggestion commands produce Dedup RelationCandidates for explicit review.',
         '',
         'Options:',
         '  --noWrite     Do not write reports or run manifests for read-only commands',
@@ -91,138 +73,18 @@ function assertCanonicalId(canonicalId) {
     }
 }
 
-function buildQuestionMap(questions) {
-    const map = new Map();
-    for (const question of questions) map.set(refKey(questionRef(question)), question);
-    return map;
-}
-
-function rowsFromRefs(refs, questionMap) {
-    const rows = [];
-    const seen = new Set();
-    for (const ref of refs || []) {
-        const key = refKey(ref);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const question = questionMap.get(key);
-        if (question) rows.push(question);
-    }
-    return rows;
-}
-
-function normalizedDomain(question) {
-    const result = validateDomain(question.domain || {});
-    return result.valid ? result.normalized_domain : (question.domain || { l1: '其他', l2: '其他' });
-}
-
-function sortedQuestions(questions) {
-    return [...questions].sort((a, b) =>
-        a.question_id.localeCompare(b.question_id)
-        || a.source_note_id.localeCompare(b.source_note_id, 'zh')
-        || (a.source_question_index ?? 0) - (b.source_question_index ?? 0)
-    );
-}
-
-function countValues(values) {
-    const counts = new Map();
-    for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
-    return counts;
-}
-
-function pickTop(values, fallback) {
-    const counts = countValues(values.filter(Boolean));
-    const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'zh'));
-    return sorted[0]?.[0] || fallback;
-}
-
-function buildCandidate(mode, seed, questions) {
-    const sorted = sortedQuestions(questions);
-    const questionIds = [...new Set(sorted.map((question) => question.question_id))].sort();
-    const aliases = [...new Set(sorted.map((question) => question.original_question))]
-        .sort((a, b) => a.length - b.length || a.localeCompare(b, 'zh'))
-        .slice(0, 20);
-    const companies = [...new Set(sorted.map((question) => question.company || '未知'))]
-        .sort((a, b) => a.localeCompare(b, 'zh'));
-    const sourceNoteIds = [...new Set(sorted.map((question) => question.source_note_id))]
-        .sort((a, b) => a.localeCompare(b, 'zh'));
-    const domains = sorted.map(normalizedDomain);
-    const primaryDomain = JSON.parse(pickTop(
-        domains.map((domain) => JSON.stringify(domain)),
-        JSON.stringify({ l1: '其他', l2: '其他' })
-    ));
-    const entities = [];
-    for (const question of sorted) {
-        for (const entity of question.tech_entities || []) {
-            const normalized = normalizeEntity(entity);
-            if (normalized) entities.push(normalized);
-        }
-    }
-    const primaryEntities = [...new Set(entities)]
-        .sort((a, b) => (countValues(entities).get(b) || 0) - (countValues(entities).get(a) || 0) || a.localeCompare(b, 'zh'))
-        .slice(0, 8);
-    const canonicalTitle = aliases[0] || sorted[0]?.original_question || seed;
-    const canonicalIdSuggestion = suggestCanonicalId(primaryEntities[0] || seed || canonicalTitle, questionIds);
-    const frequency = sorted.length;
-    return {
-        candidate_id: `cand_${shortHash(`${mode}|${seed}|${questionIds.join('|')}`)}`,
-        mode,
-        seed,
-        canonical_id_suggestion: canonicalIdSuggestion,
-        canonical_title: canonicalTitle,
-        aliases,
-        question_ids: questionIds,
-        primary_domain: primaryDomain,
-        primary_entities: primaryEntities,
-        companies,
-        frequency,
-        source_note_ids: sourceNoteIds,
-        refs: sorted.map(questionRef),
-        review_priority: computePriority(frequency, companies.length),
-    };
-}
-
-function suggestFromHotspot(options, paths) {
-    const limit = Number(options.limit || 100);
-    const questions = loadQuestions({ filePath: paths.questions });
-    const questionMap = buildQuestionMap(questions);
-    const indexes = loadIndexes(paths.indexDir);
-    return (indexes.hotspot.entries || [])
-        .map((entry) => buildCandidate(
-            'hotspot',
-            entry.question_id,
-            rowsFromRefs(entry.refs, questionMap).filter((question) => question.is_valid_for_library && !question.canonical_id),
-        ))
-        .filter((candidate) => candidate.frequency >= 2)
-        .slice(0, limit);
-}
-
-function writeCandidateManifest(candidates, options, paths) {
-    const manifest = {
-        schema_version: 'canonical_candidates.v1',
-        generated_at: defaultDate(options),
-        mode: options.hotspot ? 'hotspot' : 'entity',
-        seed: options.hotspot ? 'hotspot' : (options.entity || options._[0] || ''),
-        source: {
-            questions: 'data/questions/questions.jsonl',
-            indexes: 'data/indexes',
-        },
-        candidate_count: candidates.length,
-        candidates,
-    };
-    writeJson(paths.candidateManifest, manifest);
-    return manifest;
-}
-
 function runSuggest(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const application = createApplication({ root });
     if (options.hotspot) {
-        const paths = defaultPaths(root);
-        return writeCandidateManifest(suggestFromHotspot(options, paths), options, paths);
+        return application.dedup.suggest({
+            mode: 'hotspot',
+            limit: Number(options.limit ?? 100),
+        });
     }
 
     const entity = options.entity || options._?.[0];
     if (!entity) throw new Error('Usage: canonical suggest --entity <value>');
-    const application = createApplication({ root });
     return application.dedup.suggest({
         mode: 'entity',
         seed: entity,
@@ -418,6 +280,5 @@ module.exports = {
     runMerge,
     runSplit,
     runStats,
-    buildCandidate,
     main,
 };
