@@ -50,7 +50,7 @@ test('canonical list stats and check all delegate to Application without read/qu
 
     assert.match(checkSource, /createApplication/);
     assert.match(checkSource, /application\.canonical\.check/);
-    assert.match(checkSource, /write_report:\s*!options\.noWrite/);
+    assert.match(checkSource, /write_report:\s*!options\.noWrite\s*&&\s*!options\.noReport/);
     assert.doesNotMatch(
         checkSource,
         /loadCanonicalQuestions|loadQuestions|evaluateCanonicalIntegrity|shouldWriteReports|writeJson|writeJsonl/,
