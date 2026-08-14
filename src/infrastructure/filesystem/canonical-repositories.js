@@ -3,7 +3,9 @@
 const crypto = require('crypto');
 const { readJsonl, stableStringify } = require('../../../scripts/lib/io');
 const { createCanonicalFsPaths } = require('./canonical-paths');
-const { revisionForCandidateResource } = require('./legacy-canonical-candidate-repositories');
+const {
+    revisionForLegacyCandidateResource,
+} = require('./legacy-canonical-candidate-revision');
 
 function clone(value) {
     return structuredClone(value);
@@ -53,10 +55,11 @@ function canonicalOwners(records, questionId) {
 }
 
 function revisionForResource(paths, resource) {
-    // Legacy compatibility only: canonical accept includes the historical
-    // canonical candidate snapshot in its MutationPlan CAS evidence.
+    // Legacy compatibility only: historical accept MutationPlans may still carry
+    // canonical-candidate revision evidence. The Repository/Port has been retired;
+    // only this opaque CAS bridge remains until its dedicated cleanup slice.
     if (resource.startsWith('canonical-candidate:')) {
-        return revisionForCandidateResource(paths, resource);
+        return revisionForLegacyCandidateResource(paths, resource);
     }
     if (resource.startsWith('canonical:')) {
         const canonicalId = resource.slice('canonical:'.length);
