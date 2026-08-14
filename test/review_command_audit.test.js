@@ -34,18 +34,19 @@ test('review audit freezes migration order and high-risk boundaries', () => {
     assert.match(audit, /review_weak\.v1/);
     assert.match(audit, /review_prepare_result\.v1/);
     assert.match(audit, /review_mark_result\.v1/);
-    assert.match(audit, /review integrity[\s\S]*completed|review integrity[\s\S]*已完成/i);
+    assert.match(audit, /review integrity[\s\S]*(?:completed|已完成)/i);
+    assert.match(audit, /review today[\s\S]*(?:completed|已完成)/i);
     assert.match(audit, /saveProgress\([\s\S]*appendSessionEvent/);
     assert.match(audit, /ReviewMutationPlan \/ ReviewMutationStore/);
 });
 
-test('Production Application exposes only review integrity after the first Review migration', () => {
+test('Production Application exposes only migrated Review capabilities', () => {
     const app = createApplication({ root: ROOT });
 
     assert.equal(Object.isFrozen(app.review), true);
-    assert.deepEqual(Object.keys(app.review), ['integrity']);
+    assert.deepEqual(Object.keys(app.review), ['integrity', 'today']);
     assert.equal(typeof app.review.integrity, 'function');
-    assert.equal('today' in app.review, false);
+    assert.equal(typeof app.review.today, 'function');
     assert.equal('next' in app.review, false);
     assert.equal('weak' in app.review, false);
     assert.equal('prepare' in app.review, false);
@@ -65,7 +66,21 @@ test('review integrity delegates to Application and preserves ok=false exit sema
     assert.match(commandModule, /return result\.ok === false \? 1 : 0/);
 });
 
-test('today next weak and prepare still synthesize progress and persist it unless noWrite', () => {
+test('review today delegates initialization ranking and optional persistence to Application', () => {
+    const source = runToday.toString();
+
+    assert.match(source, /createApplication/);
+    assert.match(source, /application\.review\.today/);
+    assert.match(source, /date:\s*defaultDate\(options\)/);
+    assert.match(source, /with_issues:\s*Boolean\(options\[['"]with-issues['"]\]\)/);
+    assert.match(source, /write_progress:\s*!options\.noWrite/);
+    assert.doesNotMatch(
+        source,
+        /loadReviewState|ensureProgressItems|saveProgress|canonicalRows|dueRows|rankReviewRows|loadReviewStrategy|loadIssueLinks/,
+    );
+});
+
+test('next weak and prepare still synthesize progress and persist it unless noWrite', () => {
     const commandModule = read('scripts/commands/review.js');
 
     assert.match(
@@ -73,7 +88,7 @@ test('today next weak and prepare still synthesize progress and persist it unles
         /function loadReviewState[\s\S]*ensureProgressItems\([\s\S]*if \(!options\.noWrite\)[\s\S]*saveProgress\(/,
     );
 
-    for (const source of [runToday.toString(), runNext.toString(), runWeak.toString(), runPrepare.toString()]) {
+    for (const source of [runNext.toString(), runWeak.toString(), runPrepare.toString()]) {
         assert.match(source, /loadReviewState/);
     }
 });
@@ -103,19 +118,22 @@ test('mark still combines Review Domain transition with two separate filesystem 
     assert.match(source, /oral-version must be one_minute/);
 });
 
-test('legacy Review helpers still mix pure policy with persistence/config loading', () => {
+test('legacy Review helpers delegate migrated pure policies while retaining pending persistence/config compatibility', () => {
     const reviewStore = read('scripts/lib/review_store.js');
     const scheduler = read('scripts/lib/review_scheduler.js');
 
     assert.match(reviewStore, /require\(['"]fs['"]\)/);
+    assert.match(reviewStore, /domain\/review\/progress-policy/);
     assert.match(reviewStore, /function loadProgress/);
     assert.match(reviewStore, /function saveProgress/);
     assert.match(reviewStore, /function applyReviewResult/);
-    assert.match(reviewStore, /function ensureProgressItems/);
+    assert.match(reviewStore, /defaultProgressItemPolicy/);
+    assert.match(reviewStore, /ensureProgressItemsPolicy/);
 
+    assert.match(scheduler, /domain\/review\/ranking-policy/);
     assert.match(scheduler, /function loadReviewStrategy/);
-    assert.match(scheduler, /function scoreReviewRow/);
-    assert.match(scheduler, /function rankReviewRows/);
+    assert.match(scheduler, /scoreReviewRowPolicy/);
+    assert.match(scheduler, /rankReviewRowsPolicy/);
     assert.match(scheduler, /readJson/);
 });
 
