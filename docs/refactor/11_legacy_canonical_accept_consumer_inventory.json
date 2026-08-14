@@ -1,7 +1,7 @@
 {
   "schema_version": "legacy_canonical_accept_consumer_inventory.v1",
   "scope": "repository-local-plus-observable-github",
-  "retirement_status": "runtime_removal_in_progress_repository_layer_removed",
+  "retirement_status": "runtime_removal_in_progress_cas_bridge_removed",
   "summary": {
     "current_suggest_generates_legacy_manifest": false,
     "github_actions_generates_legacy_manifest": false,
@@ -16,7 +16,8 @@
     "interface_runtime_removed": true,
     "production_composition_root_accept_removed": true,
     "accept_application_removed": true,
-    "legacy_candidate_repository_layer_removed": true
+    "legacy_candidate_repository_layer_removed": true,
+    "legacy_candidate_cas_bridge_removed": true
   },
   "active_blockers": [],
   "external_consumer_search": {
@@ -68,14 +69,6 @@
     {
       "path": "src/infrastructure/filesystem/canonical-paths.js",
       "role": "retains legacyCandidateManifest filesystem path and deprecated candidateManifest path alias"
-    },
-    {
-      "path": "src/infrastructure/filesystem/canonical-repositories.js",
-      "role": "retains canonical-candidate:<id> revision routing for historical MutationPlan CAS evidence"
-    },
-    {
-      "path": "src/infrastructure/filesystem/legacy-canonical-candidate-revision.js",
-      "role": "minimal legacy candidate semantic revision helper; exposes no Repository/get capability"
     }
   ],
   "removed_interface_runtime": [
@@ -125,6 +118,20 @@
       "role": "removed deprecated filesystem adapter alias"
     }
   ],
+  "removed_cas_bridge": [
+    {
+      "path": "src/infrastructure/filesystem/canonical-repositories.js",
+      "removed_capability": "canonical-candidate:<id> revision routing; current Canonical/Question revision routing remains"
+    },
+    {
+      "path": "src/infrastructure/filesystem/legacy-canonical-candidate-revision.js",
+      "removed": true
+    },
+    {
+      "path": "test/canonical_legacy_candidate_cas.test.js",
+      "removed": true
+    }
+  ],
   "test_support_compatibility": [
     {
       "path": "src/infrastructure/in-memory/canonical-adapters.js",
@@ -143,7 +150,7 @@
     },
     {
       "path": "src/infrastructure/filesystem/fs-canonical-mutation-store.js",
-      "role": "current transaction boundary shared by merge/split/canonicalize; only legacy candidate revision evidence is pending removal"
+      "role": "current transaction boundary shared by merge/split/canonicalize; legacy candidate revision evidence has been removed without removing the store"
     }
   ],
   "checked_in_legacy_data": [
@@ -172,7 +179,6 @@
     "review/plans/c6_scale_and_entry_delivery.md"
   ],
   "legacy_characterization_tests": [
-    "test/canonical_legacy_candidate_cas.test.js",
     "test/canonical_mutation_contracts.test.js"
   ],
   "anti_legacy_regression_tests": [
@@ -199,9 +205,9 @@
   ],
   "retirement_preconditions": [
     "accept the residual risk that local/uncommitted/unindexed private callers cannot be proven absent by GitHub search",
-    "remove the canonical-candidate CAS bridge and its minimal revision helper in a dedicated slice before removing the legacy manifest path/data",
     "remove operation=accept from the MutationPlan contract in its own slice",
+    "remove legacy manifest path aliases and the empty checked-in manifest only after no remaining runtime/test-support contract needs them",
     "preserve src/domain/canonical/accept-policy.js or first replace its current canonicalize projection responsibility with equivalent SSOT coverage",
-    "keep full CI green while deleting remaining CAS compatibility, accept operation support, in-memory test support, legacy-only data, and obsolete policy wording"
+    "keep full CI green while deleting accept operation support, in-memory test support, legacy path/data, and obsolete policy wording"
   ]
 }
