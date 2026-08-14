@@ -27,10 +27,11 @@ test('canonical read-only audit freezes behavior and migration order', () => {
     assert.match(audit, /canonical_quality_report\.v1/);
     assert.match(audit, /report\.ok=false[\s\S]*exit remains 0/);
     assert.match(audit, /CanonicalCatalogRepository\.list\(\)/);
-    assert.match(audit, /canonical list[\s\S]*已完成|canonical list[\s\S]*completed/i);
+    assert.match(audit, /QuestionCatalogRepository\.list\(\)/);
+    assert.match(audit, /canonical stats[\s\S]*已完成|canonical stats[\s\S]*completed/i);
 });
 
-test('canonical list delegates to Application while stats remains legacy read-only', () => {
+test('canonical list and stats delegate to Application without persistence or query semantics in CLI', () => {
     const listSource = runList.toString();
     const statsSource = runStats.toString();
 
@@ -39,9 +40,12 @@ test('canonical list delegates to Application while stats remains legacy read-on
     assert.match(listSource, /answer_status:\s*options\[['"]answer-status['"]\]/);
     assert.doesNotMatch(listSource, /loadCanonicalQuestions|priorityRank|writeJson|writeJsonl/);
 
-    assert.match(statsSource, /loadCanonicalQuestions/);
-    assert.match(statsSource, /loadQuestions/);
-    assert.doesNotMatch(statsSource, /writeJson|writeJsonl|saveCanonicalQuestions|saveQuestions/);
+    assert.match(statsSource, /createApplication/);
+    assert.match(statsSource, /application\.canonical\.stats/);
+    assert.doesNotMatch(
+        statsSource,
+        /loadCanonicalQuestions|loadQuestions|canonicalQuestionIds|assigned_question_rows|top_canonical|writeJson|writeJsonl/,
+    );
 });
 
 test('legacy check has only its characterized quality-report write boundary', () => {
@@ -55,11 +59,11 @@ test('legacy check has only its characterized quality-report write boundary', ()
     assert.doesNotMatch(checkSource, /writeJsonl|saveCanonicalQuestions|saveQuestions/);
 });
 
-test('Production Application exposes list but not stats/check after the first read migration', () => {
+test('Production Application exposes list and stats but not check after the second read migration', () => {
     const app = createApplication({ root: ROOT });
 
     assert.equal(typeof app.canonical.list, 'function');
-    assert.equal('stats' in app.canonical, false);
+    assert.equal(typeof app.canonical.stats, 'function');
     assert.equal('check' in app.canonical, false);
     assert.equal(typeof app.canonical.merge, 'function');
     assert.equal(typeof app.canonical.split, 'function');
