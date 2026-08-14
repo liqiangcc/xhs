@@ -16,10 +16,6 @@ function questionResource(questionId) {
     return `question-bindings-by-question:${questionId}`;
 }
 
-function candidateResource(candidateId) {
-    return `canonical-candidate:${candidateId}`;
-}
-
 function ownershipResource(questionId) {
     return `canonical-ownership-by-question:${questionId}`;
 }
@@ -37,9 +33,6 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         (seed.canonicals || []).map((record) => [record.canonical_id, clone(record)]),
     );
     let questionBindings = (seed.bindings || []).map(clone);
-    let candidates = new Map(
-        (seed.candidates || []).map((candidate) => [candidate.candidate_id, clone(candidate)]),
-    );
     let reviewProgress = (seed.review_progress || []).map(clone);
     let reviewSessionEvents = (seed.review_session_events || []).map(clone);
     let answers = new Map(
@@ -97,19 +90,6 @@ function createInMemoryCanonicalAdapters(seed = {}) {
             const resource = canonicalResource(canonicalId);
             return {
                 record: record ? clone(record) : null,
-                resource,
-                revision: revision(resource),
-            };
-        },
-    };
-
-    const canonicalCandidateRepository = {
-        async get(candidateId) {
-            const candidate = candidates.get(candidateId);
-            if (!candidate) return null;
-            const resource = candidateResource(candidateId);
-            return {
-                candidate: clone(candidate),
                 resource,
                 revision: revision(resource),
             };
@@ -413,12 +393,6 @@ function createInMemoryCanonicalAdapters(seed = {}) {
             for (const questionId of questionIds) bump(ownershipResource(questionId));
         },
 
-        upsertCandidate(candidate) {
-            if (!candidate || !candidate.candidate_id) throw new Error('canonical candidate is required');
-            candidates.set(candidate.candidate_id, clone(candidate));
-            bump(candidateResource(candidate.candidate_id));
-        },
-
         replaceQuestionBindings(questionId, bindings) {
             if (!questionId) throw new Error('questionId is required');
             const previous = questionBindings.filter((binding) => binding.question_id === questionId);
@@ -438,7 +412,6 @@ function createInMemoryCanonicalAdapters(seed = {}) {
         return {
             canonicals: [...canonicalRecords.values()].map(clone),
             bindings: questionBindings.map(clone),
-            candidates: [...candidates.values()].map(clone),
             review_progress: reviewProgress.map(clone),
             review_session_events: reviewSessionEvents.map(clone),
             answers: [...answers.values()].map(clone),
@@ -450,7 +423,6 @@ function createInMemoryCanonicalAdapters(seed = {}) {
     return {
         canonicalRepository,
         canonicalIdentityRepository: canonicalRepository,
-        canonicalCandidateRepository,
         canonicalQuestionOwnershipRepository,
         questionBindingRepository,
         reviewRepository,
