@@ -3,7 +3,9 @@
 const { acceptCanonicalCandidate } = require('../../domain/canonical/accept-policy');
 const { refreshCanonicalFromQuestions } = require('../../domain/canonical/refresh-policy');
 const { createCanonicalMutationPlan } = require('./mutation-plan');
-const { assertCanonicalCandidateRepository } = require('../../ports/repositories/canonical-candidate-repository');
+const {
+    assertLegacyCanonicalCandidateRepository,
+} = require('../../ports/repositories/legacy-canonical-candidate-repository');
 const { assertCanonicalIdentityRepository } = require('../../ports/repositories/canonical-identity-repository');
 const { assertCanonicalQuestionOwnershipRepository } = require('../../ports/repositories/canonical-question-ownership-repository');
 const { assertQuestionBindingRepository } = require('../../ports/repositories/question-binding-repository');
@@ -60,7 +62,13 @@ function assertCandidateConflicts(
 }
 
 function createAcceptCanonicalUseCase(dependencies = {}) {
-    const candidateRepository = assertCanonicalCandidateRepository(dependencies.candidateRepository);
+    // Preferred dependency name is explicit: this use case exists only to keep
+    // historical canonical_candidates.v1 input executable during migration.
+    // `candidateRepository` remains a compatibility alias for existing tests
+    // and callers while Production wiring uses `legacyCandidateRepository`.
+    const candidateRepository = assertLegacyCanonicalCandidateRepository(
+        dependencies.legacyCandidateRepository || dependencies.candidateRepository,
+    );
     const canonicalIdentityRepository = assertCanonicalIdentityRepository(dependencies.canonicalIdentityRepository);
     const canonicalQuestionOwnershipRepository = assertCanonicalQuestionOwnershipRepository(
         dependencies.canonicalQuestionOwnershipRepository,
