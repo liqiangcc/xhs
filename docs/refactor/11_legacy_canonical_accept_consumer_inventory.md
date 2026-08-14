@@ -4,9 +4,9 @@
 
 ## 1. 结论
 
-当前仓库**还不能直接删除** `canonical accept`，但原因已经非常具体。
+当前仓库已经达到 **repository-local retirement ready**：仓库内没有仍要求新工作使用 `canonical accept` 的活跃流程，正式 Dedup 链路也不生成或消费 `canonical_candidates.v1`。
 
-不是因为当前 Dedup 流程仍依赖它：
+当前正式链路是：
 
 ```text
 canonical suggest
@@ -17,14 +17,11 @@ canonical suggest
   -> Canonical mutation
 ```
 
-这条正式链路已经完全不生成或消费 `canonical_candidates.v1`。
-
-真正剩余的是：
+仓库内仍保留三类 legacy 内容，但它们现在都是明确的退役对象或保护性说明：
 
 1. 一整条显式的 runtime compatibility chain，用于执行历史/手工 `canonical_candidates.v1`；
 2. 一套仅服务 legacy Accept characterization 的 in-memory test support；
-3. 当前架构/Agent 文档中用于**禁止新流程回退到 Accept**的 policy reference；
-4. `docs/refactor/08_content_building_goals.md` 仍有一处当前内容建设步骤写着 `canonical accept / merge / split`，因此仓库内仍存在一个会指导人继续使用 Accept 的活跃文档残留。
+3. 当前架构/Agent 文档中用于**禁止新流程回退到 Accept**的 policy reference。
 
 仓库内没有发现其它活跃执行依赖：
 
@@ -32,16 +29,17 @@ canonical suggest
 package.json npm scripts          -> no canonical accept
 .github/workflows/*.yml           -> no canonical accept / legacy manifest
 当前 in_progress root task        -> no canonical accept / canonical_candidates
+08 内容建设批次流程               -> suggest / decide / apply
 checked-in legacy candidate data  -> 0 candidates
 ```
 
 所以当前 retirement 状态是：
 
 ```text
-blocked_by_active_documentation
+repository_local_ready_external_confirmation_required
 ```
 
-而不是“业务新流程仍未迁移”。
+这里的限制只剩一个仓库搜索无法证明的事实：**是否存在仓库外人工脚本、旧 checkout 或其它外部调用者仍在调用 `canonical accept`。** 在没有外部确认前，不应把“repository-local ready”表述成“全局无消费者”。
 
 ## 2. Runtime compatibility chain
 
@@ -168,9 +166,9 @@ candidates = []
 
 但它只能证明仓库内状态，不能证明仓库外没有人工脚本或旧调用者。
 
-## 7. Active documentation blocker
+## 7. Active documentation blocker 已清零
 
-`docs/refactor/08_content_building_goals.md` 是当前内容建设目标与 DoD 文档，但它的一段批次闭环仍写着：
+`docs/refactor/08_content_building_goals.md` 过去的一段批次闭环写成：
 
 ```text
 候选召回
@@ -179,9 +177,7 @@ candidates = []
   -> ...
 ```
 
-这与当前操作 SSOT 冲突。
-
-当前正确解释应是：
+这处活跃残留现在已经迁移为：
 
 ```text
 候选召回
@@ -193,7 +189,16 @@ candidates = []
   -> canonical check
 ```
 
-在这处活跃说明被清理前，不能声称仓库已经没有人工 `canonical accept` 使用路径。
+并显式引用 `docs/refactor/10_current_dedup_canonical_operations.md` 作为命令级 SSOT。
+
+因此 repository-local inventory 中：
+
+```text
+active_manual_procedure_blocker_count = 0
+active_blockers = []
+```
+
+仓库内已经没有仍指导新候选走 legacy Accept 的活跃人工流程。
 
 ## 8. Current policy references are not active consumers
 
@@ -205,12 +210,15 @@ AGENTS.md
 .agents/skills/xhs-answer-curator/SKILL.md
 .agents/skills/xhs-answer-curator/references/repo-map.md
 docs/refactor/06_github_actions_ai_management.md
+docs/refactor/08_content_building_goals.md
 docs/refactor/09_legacy_canonical_accept_boundary.md
 docs/refactor/10_current_dedup_canonical_operations.md
 docs/refactor/10_soc_srp_architecture.md
 ```
 
-这些引用不能因为字符串扫描命中就被当成 blocker；它们属于 anti-regression policy。
+其中 `08_content_building_goals.md` 现在只引用当前 Dedup 操作 SSOT，不再把 `canonical accept` 作为批次动作。
+
+这些 policy reference 不能因为字符串扫描命中就被当成 blocker；它们属于 current routing / anti-regression policy。
 
 ## 9. Historical references are not consumers
 
@@ -288,22 +296,36 @@ test/legacy_canonical_accept_consumer_inventory.test.js
 
 ## 12. Repository-local retirement criteria
 
-下一阶段只有在以下条件满足后，才适合真正删除 runtime compatibility chain：
+以下 repository-local 条件现在已经满足：
 
 1. `08_content_building_goals.md` 不再把 `canonical accept` 作为当前批次操作；
-2. README / AGENTS / Skill / Actions 继续只推荐 Suggest -> Decide -> Apply；
+2. README / AGENTS / Skill / Actions 只推荐 Suggest -> Decide -> Apply；
 3. GitHub Actions 不生成 `canonical_candidates.json`；
 4. `package.json` 不存在调用 legacy Accept 的 npm script；
 5. 当前 `in_progress` root task 不依赖 `canonical accept` / `canonical_candidates.v1`；
-6. checked-in legacy manifest 继续为空，或者已有明确迁移方案；
-7. 没有仓库内脚本/自动化重新生成 legacy manifest；
-8. 已确认是否存在仓库外人工调用者；这一点仅靠 GitHub repository search 无法证明；
-9. 删除 legacy runtime、test-support、alias、operation/tests/data 后完整 CI 仍能通过；
-10. `accept-policy.js` 的当前 Canonicalization SSOT 职责被保留，或先有等价迁移。
+6. checked-in legacy manifest 为空；
+7. 没有仓库内脚本/自动化重新生成 legacy manifest。
+
+真正删除 runtime compatibility chain 前还需要保留两个约束：
+
+8. 确认是否存在仓库外人工调用者；这一点仅靠 GitHub repository search 无法证明；
+9. 删除 legacy runtime、test-support、alias、operation/tests/data 后完整 CI 仍能通过。
+
+同时必须继续保护当前共享代码：
+
+10. `accept-policy.js` 的 Canonicalization SSOT 职责必须保留，或先有等价迁移。
+
+因此当前准确状态不是“完全可删”，而是：
+
+```text
+repository-local ready
++ external usage confirmation required
++ deletion slice still needs its own CI proof
+```
 
 ## 13. 建议的真正删除顺序
 
-当上述 blocker 清零后，建议按依赖方向删除：
+完成外部使用确认后，建议按依赖方向删除：
 
 ```text
 1. 移除 canonical accept CLI / presenter
