@@ -27,9 +27,9 @@ function toListRecord(record) {
 function createListCanonicalsUseCase(options = {}) {
     const catalogRepository = assertCanonicalCatalogRepository(options.catalogRepository);
 
-    return async function listCanonicals(input = {}) {
+    return function listCanonicals(input = {}) {
         const limit = normalizeLimit(input.limit);
-        const records = (await catalogRepository.list())
+        const records = catalogRepository.list()
             .filter((record) => !input.priority || record.review_priority === input.priority)
             .filter((record) => !input.answer_status || record.answer_status === input.answer_status)
             .sort((a, b) =>
