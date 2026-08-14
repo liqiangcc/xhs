@@ -101,7 +101,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
 
     assert.equal(
         inventory.retirement_status,
-        'runtime_removal_in_progress_repository_layer_removed',
+        'runtime_removal_in_progress_cas_bridge_removed',
     );
     assert.deepEqual(inventory.active_blockers, []);
     assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
@@ -112,6 +112,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
     assert.equal(inventory.summary.production_composition_root_accept_removed, true);
     assert.equal(inventory.summary.accept_application_removed, true);
     assert.equal(inventory.summary.legacy_candidate_repository_layer_removed, true);
+    assert.equal(inventory.summary.legacy_candidate_cas_bridge_removed, true);
 });
 
 test('recorded GitHub consumer search distinguishes observable zero matches from unobservable external risk', () => {
@@ -128,12 +129,11 @@ test('recorded GitHub consumer search distinguishes observable zero matches from
     assert.ok(search.limitations.some((item) => /does not prove absolute absence/i.test(item)));
 });
 
-test('legacy Accept Interface, Production Root, Application, and candidate repository layer are removed', () => {
+test('legacy Accept Interface, Production Root, Application, repository layer, and filesystem CAS bridge are removed', () => {
     const canonicalCli = read('scripts/commands/canonical.js');
     const topLevelCli = read('scripts/xhs.js');
     const bootstrap = read('src/bootstrap/create-application.js');
     const canonicalRepositories = read('src/infrastructure/filesystem/canonical-repositories.js');
-    const casHelper = read('src/infrastructure/filesystem/legacy-canonical-candidate-revision.js');
     const mutationPlan = read('src/application/canonical/mutation-plan.js');
 
     assert.doesNotMatch(canonicalCli, /function runAccept/);
@@ -152,14 +152,14 @@ test('legacy Accept Interface, Production Root, Application, and candidate repos
         'src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js',
         'src/ports/repositories/canonical-candidate-repository.js',
         'src/infrastructure/filesystem/canonical-candidate-repositories.js',
+        'src/infrastructure/filesystem/legacy-canonical-candidate-revision.js',
     ]) {
         assert.equal(fs.existsSync(path.join(ROOT, relativePath)), false, relativePath);
     }
 
-    assert.match(canonicalRepositories, /legacy-canonical-candidate-revision/);
+    assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-revision/);
     assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-repositories/);
-    assert.match(casHelper, /revisionForLegacyCandidateResource/);
-    assert.doesNotMatch(casHelper, /createFsLegacyCanonicalCandidateRepository/);
+    assert.doesNotMatch(canonicalRepositories, /canonical-candidate:/);
     assert.match(mutationPlan, /['"]accept['"]/);
 });
 
@@ -209,21 +209,21 @@ test('active package scripts, workflows, and in-progress root task do not depend
     assert.equal(inventory.summary.github_actions_generates_legacy_manifest, false);
 });
 
-test('legacy CAS bridge is isolated from the retired repository layer', () => {
+test('filesystem Canonical revision router no longer accepts legacy candidate resources', () => {
     const canonicalRepositories = read('src/infrastructure/filesystem/canonical-repositories.js');
-    const casHelper = read('src/infrastructure/filesystem/legacy-canonical-candidate-revision.js');
-    const canonicalCli = read('scripts/commands/canonical.js');
-    const workflow = read('.github/workflows/xhs-manage.yml');
+    const { revisionForResource } = require('../src/infrastructure/filesystem/canonical-repositories');
+    const { createCanonicalFsPaths } = require('../src/infrastructure/filesystem/canonical-paths');
 
-    assert.match(canonicalRepositories, /legacy-canonical-candidate-revision/);
-    assert.match(canonicalRepositories, /Legacy compatibility only/);
-    assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-repositories/);
-    assert.match(casHelper, /canonical-candidate:/);
-    assert.doesNotMatch(casHelper, /Repository/);
-
-    assert.doesNotMatch(canonicalCli, /canonical_candidates\.json/);
-    assert.doesNotMatch(workflow, /data\/manifests\/canonical\/canonical_candidates\.json/);
-    assert.match(workflow, /data\/manifests\/dedup\/relation_candidate_queues\.json/);
+    assert.doesNotMatch(canonicalRepositories, /canonical-candidate:/);
+    assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-revision/);
+    assert.equal(
+        fs.existsSync(path.join(ROOT, 'src', 'infrastructure', 'filesystem', 'legacy-canonical-candidate-revision.js')),
+        false,
+    );
+    assert.throws(
+        () => revisionForResource(createCanonicalFsPaths(ROOT), 'canonical-candidate:retired'),
+        /Unsupported filesystem canonical resource/,
+    );
 });
 
 test('in-memory canonical candidate support is classified as later test-support cleanup', () => {
