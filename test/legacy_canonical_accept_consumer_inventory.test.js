@@ -101,7 +101,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
 
     assert.equal(
         inventory.retirement_status,
-        'runtime_removal_in_progress_cas_bridge_removed',
+        'runtime_removal_in_progress_accept_operation_removed',
     );
     assert.deepEqual(inventory.active_blockers, []);
     assert.equal(inventory.summary.active_manual_procedure_blocker_count, 0);
@@ -113,6 +113,7 @@ test('legacy canonical accept inventory matches repository-local runtime and doc
     assert.equal(inventory.summary.accept_application_removed, true);
     assert.equal(inventory.summary.legacy_candidate_repository_layer_removed, true);
     assert.equal(inventory.summary.legacy_candidate_cas_bridge_removed, true);
+    assert.equal(inventory.summary.accept_mutation_operation_removed, true);
 });
 
 test('recorded GitHub consumer search distinguishes observable zero matches from unobservable external risk', () => {
@@ -129,7 +130,7 @@ test('recorded GitHub consumer search distinguishes observable zero matches from
     assert.ok(search.limitations.some((item) => /does not prove absolute absence/i.test(item)));
 });
 
-test('legacy Accept Interface, Production Root, Application, repository layer, and filesystem CAS bridge are removed', () => {
+test('legacy Accept runtime and accept MutationPlan operation are removed', () => {
     const canonicalCli = read('scripts/commands/canonical.js');
     const topLevelCli = read('scripts/xhs.js');
     const bootstrap = read('src/bootstrap/create-application.js');
@@ -160,7 +161,10 @@ test('legacy Accept Interface, Production Root, Application, repository layer, a
     assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-revision/);
     assert.doesNotMatch(canonicalRepositories, /legacy-canonical-candidate-repositories/);
     assert.doesNotMatch(canonicalRepositories, /canonical-candidate:/);
-    assert.match(mutationPlan, /['"]accept['"]/);
+    assert.doesNotMatch(mutationPlan, /['"]accept['"]/);
+    assert.match(mutationPlan, /['"]merge['"]/);
+    assert.match(mutationPlan, /['"]split['"]/);
+    assert.match(mutationPlan, /['"]canonicalize['"]/);
 });
 
 test('content-building execution no longer routes new relations through legacy Accept', () => {
