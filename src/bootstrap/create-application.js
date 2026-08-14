@@ -2,6 +2,7 @@
 
 const { createMergeCanonicalUseCase } = require('../application/canonical/merge-canonical');
 const { createSplitCanonicalUseCase } = require('../application/canonical/split-canonical');
+const { createListCanonicalsUseCase } = require('../application/canonical/list-canonicals');
 const {
     createPlanCanonicalizeQuestionGroupUseCase,
 } = require('../application/canonical/plan-canonicalize-question-group');
@@ -26,6 +27,9 @@ const {
 const { loadTaxonomy } = require('../infrastructure/config/taxonomy-provider');
 const { createCanonicalFsPaths } = require('../infrastructure/filesystem/canonical-paths');
 const { createFsCanonicalRepositories } = require('../infrastructure/filesystem/canonical-repositories');
+const {
+    createFsCanonicalCatalogRepository,
+} = require('../infrastructure/filesystem/canonical-catalog-repository');
 const { createFsReviewRepository } = require('../infrastructure/filesystem/review-repositories');
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
@@ -55,11 +59,13 @@ function createApplication(options = {}) {
         questionBindingRepository,
         canonicalQuestionOwnershipRepository,
     } = createFsCanonicalRepositories({ root: options.root, paths });
+    const catalogRepository = createFsCanonicalCatalogRepository({ root: options.root, paths });
     const reviewRepository = createFsReviewRepository({ root: options.root, paths });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
     const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
     const mutationStore = createFsCanonicalMutationStore({ root: options.root, paths });
 
+    const list = createListCanonicalsUseCase({ catalogRepository });
     const merge = createMergeCanonicalUseCase({
         canonicalRepository,
         questionBindingRepository,
@@ -136,6 +142,7 @@ function createApplication(options = {}) {
 
     return Object.freeze({
         canonical: Object.freeze({
+            list,
             merge,
             split,
             planQuestionGroup,
