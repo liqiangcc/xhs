@@ -11,6 +11,7 @@ function createCanonicalFsPaths(root) {
         canonicalQuestions: path.join(resolvedRoot, 'data', 'questions', 'canonical_questions.jsonl'),
         questions: path.join(resolvedRoot, 'data', 'questions', 'questions.jsonl'),
         indexDir: path.join(resolvedRoot, 'data', 'indexes'),
+        qualityReport: path.join(resolvedRoot, 'data', 'manifests', 'canonical', 'canonical_quality_report.json'),
         mergeHistory: path.join(resolvedRoot, 'data', 'manifests', 'canonical', 'canonical_merge_history.json'),
         reviewDir,
         reviewProgress: path.join(reviewDir, 'progress.json'),
