@@ -7,6 +7,9 @@ const {
     assertDedupIndexRetrievalRepository,
 } = require('../src/ports/repositories/dedup-index-retrieval-repository');
 const {
+    assertDedupHotspotRetrievalRepository,
+} = require('../src/ports/repositories/dedup-hotspot-retrieval-repository');
+const {
     assertDedupQuestionRetrievalRepository,
 } = require('../src/ports/repositories/dedup-question-retrieval-repository');
 const {
@@ -31,6 +34,7 @@ function questionRef(question) {
 
 test('dedup suggestion and decision Ports stay narrow and reject missing capabilities', () => {
     assert.equal(assertDedupIndexRetrievalRepository({ findEntityRefs() {} }).findEntityRefs instanceof Function, true);
+    assert.equal(assertDedupHotspotRetrievalRepository({ listHotspots() {} }).listHotspots instanceof Function, true);
     assert.equal(assertDedupQuestionRetrievalRepository({ findByRefs() {} }).findByRefs instanceof Function, true);
     assert.equal(assertRelationCandidateRepository({ get() {} }).get instanceof Function, true);
     assert.equal(assertRelationDecisionRepository({ get() {} }).get instanceof Function, true);
@@ -40,6 +44,10 @@ test('dedup suggestion and decision Ports stay narrow and reject missing capabil
     assert.throws(
         () => assertDedupIndexRetrievalRepository({}),
         /findEntityRefs\(\) is required/,
+    );
+    assert.throws(
+        () => assertDedupHotspotRetrievalRepository({}),
+        /listHotspots\(\) is required/,
     );
     assert.throws(
         () => assertDedupQuestionRetrievalRepository({}),
@@ -70,22 +78,35 @@ test('in-memory retrieval adapters expose opaque revisions that change with thei
         source_question_index: 0,
         original_question: 'Redis 为什么快？',
     };
+    const hotspot = {
+        canonical_id: null,
+        question_id: 'q1',
+        frequency: 2,
+        refs: [questionRef(q1)],
+    };
     const adapters = createInMemoryDedupSuggestionAdapters({
         questions: [q1],
         entity_refs: { Redis: [questionRef(q1)] },
+        hotspots: [hotspot],
     });
 
     const firstIndex = await adapters.indexRepository.findEntityRefs('Redis');
+    const firstHotspots = await adapters.hotspotRepository.listHotspots();
     const firstQuestions = await adapters.questionRepository.findByRefs(firstIndex.refs);
 
     adapters.testSupport.replaceEntityRefs('Redis', []);
+    adapters.testSupport.replaceHotspots([{ ...hotspot, frequency: 3 }]);
     adapters.testSupport.replaceQuestions([{ ...q1, original_question: 'Redis 为什么这么快？' }]);
 
     const secondIndex = await adapters.indexRepository.findEntityRefs('Redis');
+    const secondHotspots = await adapters.hotspotRepository.listHotspots();
     const secondQuestions = await adapters.questionRepository.findByRefs([questionRef(q1)]);
 
     assert.equal(firstIndex.resource, secondIndex.resource);
     assert.notEqual(firstIndex.revision, secondIndex.revision);
+    assert.equal(firstHotspots.resource, 'dedup-hotspot-index');
+    assert.equal(firstHotspots.resource, secondHotspots.resource);
+    assert.notEqual(firstHotspots.revision, secondHotspots.revision);
     assert.equal(firstQuestions.resource, secondQuestions.resource);
     assert.notEqual(firstQuestions.revision, secondQuestions.revision);
 });
