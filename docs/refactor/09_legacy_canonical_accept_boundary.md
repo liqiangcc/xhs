@@ -2,21 +2,9 @@
 
 ## Status
 
-`canonical_candidates.v1` is no longer part of the current Suggest → Review → Apply flow.
+Legacy `canonical accept` is **fully retired inside this repository**.
 
-The following legacy execution/contract/test-support layers have been removed:
-
-```text
-canonical accept CLI / Presenter
-Production createApplication().canonical.accept
-Accept Application
-Legacy Candidate Port / filesystem Repository
-canonical-candidate:<id> Filesystem CAS revision bridge
-MutationPlan operation=accept
-candidate-specific in-memory Canonical test support
-```
-
-The current production flow is only:
+The current production path is only:
 
 ```text
 Dedup Detect
@@ -26,70 +14,43 @@ Dedup Detect
   → Canonical planning / mutation
 ```
 
-There is no supported user-facing command, Production capability, Application use case, Repository, filesystem candidate reader/CAS route, MutationPlan operation, or shared in-memory candidate test API that can execute or model `data/manifests/canonical/canonical_candidates.json`.
-
-## Remaining non-executable legacy remnants
-
-Only the final path/data cleanup remains:
+The following legacy layers have all been removed:
 
 ```text
-src/infrastructure/filesystem/canonical-paths.js
-  → legacyCandidateManifest / candidateManifest path names still exist
-
-data/manifests/canonical/canonical_candidates.json
-  → empty historical snapshot
+canonical accept CLI / Presenter
+Production createApplication().canonical.accept
+Accept Application
+Legacy Candidate Port / filesystem Repository
+canonical-candidate:<id> Filesystem CAS revision bridge
+MutationPlan operation=accept
+candidate-specific in-memory test support
+legacyCandidateManifest / candidateManifest filesystem paths
+checked-in canonical_candidates.json
 ```
 
-These are inert names/data only. `src/` runtime JavaScript no longer reads `canonical_candidates.v1`, `canonical_mutation_plan.v1` rejects `operation=accept`, and the shared in-memory Canonical adapter no longer carries candidate state or revisions.
+There is no repository-local command, Production capability, Application use case, Repository, CAS resource, MutationPlan operation, shared test API, filesystem path, or checked-in manifest that can execute or model the old `canonical_candidates.v1` flow.
 
-## Removed runtime / contract layers
+## Current invariant
 
-Seven staged layers have completed:
+New relation work must remain:
 
 ```text
-1. Interface
-   runAccept / command dispatch / help / Presenter          removed
-
-2. Production Composition Root
-   Accept wiring / candidate adapter construction           removed
-
-3. Application
-   src/application/canonical/accept-canonical.js            removed
-
-4. Repository layer
-   LegacyCanonicalCandidateRepository + FS adapter + aliases removed
-
-5. Filesystem candidate CAS bridge
-   canonical-candidate:<id> revision routing                removed
-   legacy-canonical-candidate-revision.js                   removed
-
-6. MutationPlan contract
-   operation=accept                                         removed
-
-7. In-memory test support
-   candidate seed/repository/revision/upsert/snapshot state removed
+Detect
+  ↓
+RelationCandidate
+  ↓
+Explicit Decision
+  ↓
+Apply
 ```
 
-`canonical-repositories.js` is responsible only for current Canonical / Question binding / ownership revisions. A historical `canonical-candidate:*` resource is unsupported and fails closed. `createCanonicalMutationPlan({ operation: 'accept', ... })` is explicitly rejected.
+Forbidden shortcut:
 
-## Forbidden dependencies
+```text
+Detect → generated candidate → direct Accept
+```
 
-The following must not read, write, derive, or model executable state from `canonical_candidates.v1`:
-
-- CLI / Interface layer;
-- Production Composition Root;
-- Application use cases;
-- Repository Ports/adapters;
-- filesystem Canonical revision routing;
-- Canonical MutationPlan operations;
-- shared in-memory Canonical test adapters;
-- Dedup entity/hotspot detection;
-- RelationCandidate / RelationDecision flows;
-- `PrepareRelationApply` / `ApplyRelationDecision`;
-- Canonicalization planning/execution;
-- GitHub Actions Suggest tasks.
-
-A similarity signal or RelationCandidate must never be converted into a legacy candidate manifest to bypass explicit review.
+Similarity/Jaccard/AI output remains evidence only. It cannot authorize Canonical mutation.
 
 ## GitHub Actions
 
@@ -99,40 +60,48 @@ A similarity signal or RelationCandidate must never be converted into a legacy c
 data/manifests/dedup/relation_candidate_queues.json
 ```
 
-They do not upload, commit, or create PRs for `canonical_candidates.json`. A generated review queue still requires explicit `dedup decide` before `dedup apply` can mutate Canonical state.
+They do not create or update a legacy Canonical candidate manifest. A generated queue still requires explicit `dedup decide` before `dedup apply` can mutate Canonical state.
+
+## Historical evidence
+
+Historical ADRs and review plans may still contain old `canonical accept` / `canonical_candidates.v1` terminology. They are preserved as historical evidence and are not operational SSOT.
+
+Current operational SSOT:
+
+```text
+docs/refactor/10_current_dedup_canonical_operations.md
+```
 
 ## External-consumer evidence
 
-As of 2026-08-14, repository-local consumers are classified and project-specific GitHub code search found zero observable external consumers. This does not prove absence of local shell scripts, uncommitted automation, or inaccessible/unindexed private repositories.
+As of 2026-08-14, project-specific GitHub code searches found zero observable external consumers. This does **not** prove the absence of local shell scripts, uncommitted automation, or inaccessible/unindexed private repositories.
 
-The staged removal proceeds with that residual risk explicitly recorded rather than claiming global certainty.
+That limitation is recorded as an observability risk, not as a reason to keep dead repository-local compatibility code.
 
-## Final removal slice
+## Current code that must survive
 
-The final cleanup is now limited to inert filesystem path/data residue:
+Do not delete:
 
 ```text
-remove legacyCandidateManifest / candidateManifest path aliases
-remove empty canonical_candidates.json
-update anti-legacy guards / policy wording to final retired state
+src/domain/canonical/accept-policy.js
 ```
 
-Do not delete `src/domain/canonical/accept-policy.js`. Current Canonicalization projection still reuses its aggregate create/extend semantics as an SSOT.
+Despite its historical name, current Canonicalization still reuses `acceptCanonicalCandidate()` as the Canonical aggregate create/extend Domain SSOT.
 
-Likewise, do not delete `CanonicalMutationStore`; it remains the transaction boundary for Merge/Split/Canonicalize.
+Likewise, `CanonicalMutationStore` remains the shared transaction boundary for Merge/Split/Canonicalize.
 
-## Separation-of-concerns rule
+## Regression rule
 
-> RelationCandidate is current review state. Historical canonical candidate data is now only inert path/data residue; it has no execution, mutation-contract, repository, CAS, or shared test-support path.
-
-The forbidden shortcut remains:
+Legacy Accept must not return as any of the following:
 
 ```text
-Detect → generated candidate → direct Accept
-```
-
-The required current boundary remains:
-
-```text
-Detect → RelationCandidate → explicit Decision → Apply
+CLI / help / Presenter
+Production capability
+Application use case
+Repository / adapter
+canonical-candidate:* CAS resource
+MutationPlan operation
+in-memory candidate support
+legacy filesystem path
+checked-in canonical_candidates.json
 ```
