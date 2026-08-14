@@ -127,18 +127,18 @@ node scripts/xhs.js canonical stats
 
 ## 5. Legacy `canonical accept`
 
-`canonical accept` CLI、Production `canonical.accept` capability、旧 Accept Application，以及 Legacy Candidate Port / FS repository adapter / deprecated aliases 都已移除。当前没有受支持的用户命令、Production Root capability、Application use case 或 candidate Repository 可以执行 historical/manual `canonical_candidates.v1`。
+`canonical accept` CLI、Production `canonical.accept` capability、旧 Accept Application、Legacy Candidate Repository 层，以及 `canonical-candidate:<id>` Filesystem CAS revision bridge 都已移除。
 
-底层只暂时保留：
+当前 `src/` 中没有任何运行时代码读取 `canonical_candidates.v1`。仅剩尚待独立清理的非可执行残余：
 
 ```text
-canonical-candidate:<id> CAS revision helper
-legacyCandidateManifest filesystem path
+legacyCandidateManifest / candidateManifest path
 operation=accept MutationPlan compatibility
 in-memory candidate-specific test support
+empty checked-in canonical_candidates.json
 ```
 
-这些都是为后续逐层清理保留的残余兼容证据，不构成可调用的业务流程。下一阶段单独删除 CAS bridge，再单独清理 `operation=accept` 与 test support/data。
+这些都不是可调用的业务流程，也不能把历史 manifest 重新变成 Canonical mutation。下一阶段单独删除 `operation=accept`，之后再清理 in-memory test support、legacy path alias 与空历史数据。
 
 新 Suggest、GitHub Actions、Agent 或日常人工操作不得生成新的 `canonical_candidates.v1`，也不得绕过 RelationCandidate / RelationDecision / ApplyDecision 边界。
 
@@ -237,5 +237,7 @@ GitHub Actions artifact 指向 relation_candidate_queues.json
 canonical accept 不再由 CLI 暴露
 Production Root 不暴露 canonical.accept
 Accept Application 文件不存在
-Legacy Candidate Port / FS repository / aliases 不存在
+Legacy Candidate Repository 层不存在
+canonical-candidate:* Filesystem CAS revision routing 不存在
+operation=accept 仍仅作为下一阶段待删除 contract 残余
 ```
