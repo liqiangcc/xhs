@@ -1,0 +1,125 @@
+{
+  "schema_version": "legacy_canonical_accept_consumer_inventory.v1",
+  "scope": "repository-local",
+  "retirement_status": "blocked_by_active_documentation",
+  "summary": {
+    "current_suggest_generates_legacy_manifest": false,
+    "github_actions_generates_legacy_manifest": false,
+    "checked_in_legacy_candidate_count": 0,
+    "active_manual_procedure_blocker_count": 1,
+    "external_consumers_observable": false
+  },
+  "active_blockers": [
+    {
+      "path": "docs/refactor/08_content_building_goals.md",
+      "kind": "active_documentation",
+      "reason": "The current content-building execution loop still names canonical accept / merge / split as the fixed candidate-confirmation step. Current operational SSOT requires suggest -> decide -> apply for new relations."
+    }
+  ],
+  "runtime_compatibility": [
+    {
+      "path": "scripts/commands/canonical.js",
+      "role": "legacy CLI entry point and argument parsing"
+    },
+    {
+      "path": "scripts/xhs.js",
+      "role": "legacy command discoverability in top-level help"
+    },
+    {
+      "path": "src/bootstrap/create-application.js",
+      "role": "wires the legacy candidate adapter into canonical.accept"
+    },
+    {
+      "path": "src/application/canonical/accept-canonical.js",
+      "role": "legacy Accept orchestration and MutationPlan construction"
+    },
+    {
+      "path": "src/application/canonical/mutation-plan.js",
+      "role": "shared mutation contract still accepts operation=accept"
+    },
+    {
+      "path": "src/ports/repositories/legacy-canonical-candidate-repository.js",
+      "role": "compatibility-only read port"
+    },
+    {
+      "path": "src/infrastructure/filesystem/legacy-canonical-candidate-repositories.js",
+      "role": "reads canonical_candidates.v1 and produces candidate revisions"
+    },
+    {
+      "path": "src/infrastructure/filesystem/canonical-paths.js",
+      "role": "retains legacyCandidateManifest filesystem path"
+    },
+    {
+      "path": "src/infrastructure/filesystem/canonical-repositories.js",
+      "role": "legacy canonical-candidate revision bridge used by MutationStore CAS"
+    },
+    {
+      "path": "src/interfaces/cli/canonical-accept-presenter.js",
+      "role": "preserves legacy CLI response shape"
+    }
+  ],
+  "compatibility_aliases": [
+    {
+      "path": "src/ports/repositories/canonical-candidate-repository.js",
+      "role": "deprecated re-export of LegacyCanonicalCandidateRepository"
+    },
+    {
+      "path": "src/infrastructure/filesystem/canonical-candidate-repositories.js",
+      "role": "deprecated re-export of the legacy filesystem adapter"
+    }
+  ],
+  "checked_in_legacy_data": [
+    {
+      "path": "data/manifests/canonical/canonical_candidates.json",
+      "schema_version": "canonical_candidates.v1",
+      "candidate_count": 0,
+      "state": "empty_historical_snapshot"
+    }
+  ],
+  "current_policy_references": [
+    "README.md",
+    "AGENTS.md",
+    ".agents/skills/xhs-answer-curator/SKILL.md",
+    "docs/refactor/06_github_actions_ai_management.md",
+    "docs/refactor/09_legacy_canonical_accept_boundary.md",
+    "docs/refactor/10_current_dedup_canonical_operations.md"
+  ],
+  "historical_references": [
+    "docs/adr/003-agent-candidates-script-state.md",
+    "docs/refactor/07_actions_review_todo.md",
+    "review/plans/c1_asset_calibration.md",
+    "review/plans/c6_scale_and_entry_delivery.md"
+  ],
+  "legacy_characterization_tests": [
+    "test/canonical_accept_application.test.js",
+    "test/canonical_accept_filesystem_integration.test.js",
+    "test/canonical_accept_presenter.test.js",
+    "test/canonical_characterization.test.js",
+    "test/canonical.test.js",
+    "test/canonical_mutation_contracts.test.js"
+  ],
+  "anti_legacy_regression_tests": [
+    "test/legacy_canonical_accept_boundary.test.js",
+    "test/current_dedup_operational_docs.test.js"
+  ],
+  "unrelated_candidate_id_models": [
+    {
+      "path": "scripts/content/audit_canonical_boundaries.js",
+      "schema_version": "canonical_boundary_candidate.v1",
+      "reason": "candidate_id identifies review pairs between existing Canonicals; it is not canonical_candidates.v1 and is not consumed by canonical accept"
+    },
+    {
+      "path": "data/manifests/canonical/boundary_review_decisions.json",
+      "reason": "boundary-audit reviewer state, not legacy Accept input"
+    },
+    {
+      "path": "data/manifests/canonical/long_tail_duplicate_candidates.jsonl",
+      "reason": "boundary-audit output, not legacy Accept input"
+    }
+  ],
+  "retirement_preconditions": [
+    "remove the stale canonical accept step from docs/refactor/08_content_building_goals.md and point execution to the current operational SSOT",
+    "confirm no external/manual caller still depends on canonical accept; repository search cannot prove external usage",
+    "keep full CI green while deleting the runtime compatibility chain, aliases, accept operation support, legacy-only tests, and empty checked-in manifest"
+  ]
+}
