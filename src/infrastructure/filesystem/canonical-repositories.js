@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const { readJsonl, stableStringify } = require('../../../scripts/lib/io');
 const { createCanonicalFsPaths } = require('./canonical-paths');
-const { revisionForCandidateResource } = require('./canonical-candidate-repositories');
+const { revisionForCandidateResource } = require('./legacy-canonical-candidate-repositories');
 
 function clone(value) {
     return structuredClone(value);
@@ -53,6 +53,8 @@ function canonicalOwners(records, questionId) {
 }
 
 function revisionForResource(paths, resource) {
+    // Legacy compatibility only: canonical accept includes the historical
+    // canonical candidate snapshot in its MutationPlan CAS evidence.
     if (resource.startsWith('canonical-candidate:')) {
         return revisionForCandidateResource(paths, resource);
     }
