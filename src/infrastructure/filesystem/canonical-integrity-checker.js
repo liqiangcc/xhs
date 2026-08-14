@@ -9,7 +9,7 @@ function createFsCanonicalIntegrityChecker(options = {}) {
     const paths = options.paths || createCanonicalFsPaths(options.root);
 
     return {
-        async check() {
+        check() {
             const records = readJsonl(paths.canonicalQuestions, []);
             const questions = readJsonl(paths.questions, []);
             return evaluateCanonicalIntegrity(records, questions);
