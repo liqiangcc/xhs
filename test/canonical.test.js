@@ -9,6 +9,7 @@ const { computeQuestionId } = require('../scripts/lib/hash');
 const { writeJsonl, readJsonl, writeJson } = require('../scripts/lib/io');
 const { buildIndexes, writeIndexes } = require('../scripts/lib/index_store');
 const { runSuggest, runAccept, runStats, runList, runCheck, runMerge, runSplit } = require('../scripts/commands/canonical');
+const { runDecide, runApply } = require('../scripts/commands/dedup');
 const { runIntegrity } = require('../scripts/commands/review');
 const { answerPath } = require('../scripts/lib/answer_store');
 
@@ -52,9 +53,12 @@ function makeCanonical(canonicalId, title, questionIds) {
     };
 }
 
-test('suggests and accepts canonical hotspot candidates idempotently', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-'));
+test('suggests reviews and applies hotspot relations through the Dedup pipeline', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-hotspot-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
+    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
+    const candidateManifestPath = path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json');
+    const relationQueuePath = path.join(root, 'data', 'manifests', 'dedup', 'relation_candidate_queues.json');
     const indexDir = path.join(root, 'data', 'indexes');
     const questions = [
         makeQuestion('Redis 为什么快？', 'note-a', 0, '美团'),
@@ -64,27 +68,44 @@ test('suggests and accepts canonical hotspot candidates idempotently', async () 
     writeJsonl(questionsPath, questions);
     writeIndexes(buildIndexes(questions, { canonicalQuestions: [] }), indexDir);
 
-    const manifest = runSuggest({ root, hotspot: true, limit: 10 });
-    assert.equal(manifest.candidate_count, 1);
-    const candidate = manifest.candidates[0];
-    const accepted = await runAccept({
-        root,
-        'candidate-id': candidate.candidate_id,
-        'canonical-id': candidate.canonical_id_suggestion,
-    });
-    assert.equal(accepted.ok, true);
-    assert.equal(accepted.updated_question_rows, 2);
+    const suggestions = await runSuggest({ root, hotspot: true, limit: 10 });
+    assert.equal(suggestions.schema_version, 'dedup_relation_suggestions.v1');
+    assert.equal(suggestions.mode, 'hotspot');
+    assert.equal(suggestions.seed, 'hotspot');
+    assert.equal(suggestions.candidate_count, 1);
+    const candidate = suggestions.relation_candidates[0];
+    assert.equal(candidate.scope, 'hotspot');
+    assert.deepEqual(candidate.question_ids, [questions[0].question_id]);
+    assert.equal(candidate.member_count, 2);
+    assert.equal(candidate.evidence[0].signal, 'hotspot_question_id');
+    assert.equal(fs.existsSync(relationQueuePath), true);
+    assert.equal(fs.existsSync(candidateManifestPath), false);
 
-    const acceptedAgain = await runAccept({
+    await runDecide({
         root,
-        'candidate-id': candidate.candidate_id,
-        'canonical-id': candidate.canonical_id_suggestion,
+        'relation-candidate-key': candidate.relation_candidate_key,
+        relation: 'same',
+        'actor-type': 'human',
+        'actor-id': 'hotspot-reviewer',
+        rationale: 'same repeated hotspot question',
+        'decided-at': '2026-08-14T14:45:00+08:00',
     });
-    assert.equal(acceptedAgain.ok, true);
-    assert.equal(readJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl')).length, 1);
+    const applied = await runApply({
+        root,
+        'relation-candidate-key': candidate.relation_candidate_key,
+        'canonical-id': 'cq_redis_hotspot',
+        'canonical-title': 'Redis 为什么快？',
+    });
+    assert.equal(applied.applied, true);
+    assert.equal(applied.operation, 'canonicalize');
+    assert.equal(applied.updated_question_rows, 2);
+    assert.equal(readJsonl(canonicalPath).length, 1);
     assert.equal(readJsonl(questionsPath).filter((question) => question.canonical_id).length, 2);
     assert.equal(runStats({ root }).canonical_count, 1);
-    assert.equal(runSuggest({ root, hotspot: true, limit: 10 }).candidate_count, 0);
+
+    const after = await runSuggest({ root, hotspot: true, limit: 10 });
+    assert.equal(after.candidate_count, 0);
+    assert.equal(fs.existsSync(candidateManifestPath), false);
 
     fs.rmSync(root, { recursive: true, force: true });
 });
