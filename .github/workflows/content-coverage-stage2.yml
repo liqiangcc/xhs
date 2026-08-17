@@ -1,0 +1,83 @@
+name: Advance Content Coverage Stage 2
+
+on:
+  push:
+    branches:
+      - content/full-coverage
+    paths:
+      - .content-stage2-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  advance:
+    if: "${{ github.event.head_commit.message == 'chore: advance content coverage stage 2' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Initialize complete ReviewProgress coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/stage2
+          node scripts/xhs.js review today --limit 20 > review/content_build/stage2/review-today-bootstrap.json
+          node scripts/xhs.js review integrity > review/content_build/stage2/review-integrity-after-init.json
+
+      - name: Build answer rewrite work queue
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit > review/content_build/stage2/answer-type-audit.json
+          node scripts/xhs.js answer queue > review/content_build/stage2/answer-rewrite-queue-report.json
+
+      - name: Audit currently invalid Question rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const rows = fs.readFileSync('data/questions/questions.jsonl', 'utf8')
+            .split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const invalid = rows.filter((row) => row.is_valid_for_library === false);
+          const report = {
+            schema_version: 'invalid_question_audit.v1',
+            total_question_count: rows.length,
+            invalid_count: invalid.length,
+            rows: invalid,
+          };
+          fs.writeFileSync('review/content_build/stage2/invalid-question-audit.json', `${JSON.stringify(report, null, 2)}\n`);
+          NODE
+
+      - name: Verify reachability and quality state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer reachability --full --noWrite > review/content_build/stage2/reachability.json
+          node scripts/xhs.js canonical check --noWrite > review/content_build/stage2/canonical-check.json
+          node scripts/xhs.js report quality --noWrite --noFail > review/content_build/stage2/quality-report.json
+          npm run ci:check
+
+      - name: Commit stage 2 evidence and state
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .content-stage2-trigger
+          git add -A
+          git commit -m "content: initialize full review coverage and rewrite queue"
+          git push origin HEAD:content/full-coverage
