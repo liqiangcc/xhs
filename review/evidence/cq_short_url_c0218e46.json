@@ -1,32 +1,77 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_short_url_c0218e46",
-  "candidate_sha256": "5dfaf0f0017ea3204dd964385d9babbee3a81fc060869a010d084faed30ad5a0",
-  "checked_at": "2026-07-11",
-  "writer": {"writer_id": "answer-curator", "writer_version": "short-url-injective-id-design.v1"},
+  "candidate_sha256": "dead8bfed53630ddb10e6cde6c0c7e032c6f834a4a8f866d38bf85f0cac3a6a2",
+  "checked_at": "2026-08-17",
+  "writer": {
+    "writer_id": "content-remediator-20260817",
+    "writer_version": "short-url-injective-id-design.v2"
+  },
   "sources": [
-    {"source_id": "rfc3986-unreserved", "title": "RFC 3986: Uniform Resource Identifier Generic Syntax, section 2.3", "locator": "https://www.rfc-editor.org/rfc/rfc3986.html#section-2.3", "source_type": "official_specification_or_standard", "checked_at": "2026-07-11"},
-    {"source_id": "short-url-capacity-test", "title": "Reproducible Base62 capacity test", "locator": "review/evidence/tests/cq_short_url_c0218e46/short_code_capacity.test.js", "source_type": "executable_test_or_reproducible_experiment", "checked_at": "2026-07-11"}
+    {
+      "source_id": "rfc3986-unreserved",
+      "title": "RFC 3986: Uniform Resource Identifier Generic Syntax, section 2.3",
+      "locator": "https://www.rfc-editor.org/rfc/rfc3986.html#section-2.3",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "short-url-capacity-test",
+      "title": "Reproducible Base62 capacity and allocation state-model test",
+      "locator": "review/evidence/tests/cq_short_url_c0218e46/short_code_capacity.test.js",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-17"
+    }
   ],
   "claims": [
-    {"claim_id": "short-url-base62-uri-alphabet", "text": "RFC 3986 defines letters and decimal digits as URI unreserved characters; the candidate's Base62 alphabet is a subset used as an unescaped path token.", "source_ids": ["rfc3986-unreserved"], "answer_locations": ["1 分钟版", "3 分钟版", "关键细节"]},
-    {"claim_id": "short-url-base62-capacity", "text": "The reproducible test verifies 62^5=916,132,832 and 62^6=56,800,235,584, proving that five Base62 characters do not cover the declared 10-billion assumption while six do.", "source_ids": ["short-url-capacity-test"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节"]},
-    {"claim_id": "short-url-injective-id-design", "text": "The candidate explicitly presents range allocation, Base62 encoding, mapping uniqueness, idempotency, cache invalidation, multi-site write exclusion, and disaster recovery as a design proposal under declared assumptions, not as universal product behavior.", "source_ids": ["short-url-capacity-test"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问", "易错点"]},
-    {"claim_id": "short-url-range-and-idempotency-state-model", "text": "The reproducible state-model tests show non-overlapping sequential range claims, unused failed tails not being reissued, and repeated idempotency keys returning the first stored short code. The candidate makes production correctness conditional on an actual linearizable range-claim store and transactional uniqueness constraints.", "source_ids": ["short-url-capacity-test"], "answer_locations": ["1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]}
+    {
+      "claim_id": "short-url-base62-uri-alphabet",
+      "text": "RFC 3986 defines letters and decimal digits as URI unreserved characters; the candidate's Base62 alphabet is a subset used as an unescaped path token.",
+      "source_ids": ["rfc3986-unreserved"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "short-url-base62-capacity",
+      "text": "The reproducible test verifies 62^5=916,132,832 and 62^6=56,800,235,584, proving that five Base62 characters do not cover the declared 10-billion assumption while six do.",
+      "source_ids": ["short-url-capacity-test"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "short-url-range-and-idempotency-state-model",
+      "text": "The reproducible state-model tests show non-overlapping sequential range claims, unused failed tails not being reissued, and repeated idempotency keys returning the first stored short code. The candidate makes production correctness conditional on an actual linearizable range-claim store and transactional uniqueness constraints.",
+      "source_ids": ["short-url-capacity-test"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "short-url-complete-scenario-design",
+      "text": "The replacement candidate states capacity and latency assumptions, an ID-range and mapping data model, uniqueness and idempotency invariants, fail-fast behavior when safe range allocation is unavailable, transaction-unknown recovery through the idempotency key, cache version plus invalidation convergence, multi-site write exclusion, load/failure injection, rollout gates, observability, disaster-recovery boundaries, and a random-code alternative. These are explicitly framed as design choices to validate rather than as measured production facts.",
+      "source_ids": ["short-url-capacity-test"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问", "易错点"]
+    }
   ],
   "source_question_coverage": [
-    {"question_id": "1e1099465a590d7328177d0d633b4620", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}
+    {
+      "question_id": "1e1099465a590d7328177d0d633b4620",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
   ],
-  "review": {
+  "previous_review": {
     "reviewer_id": "isolated-reviewer",
     "review_version": "r2.0",
     "independent": true,
     "decision": "revise",
     "revision_round": 2,
-    "scores": {"facts_and_evidence": 24, "directness_and_relevance": 20, "type_specific_completeness": 15, "mechanism_and_causality": 14, "boundaries_and_tradeoffs": 9, "followup_quality": 5, "oral_quality": 4},
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 15,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 4
+    },
     "hard_failures": [],
-    "uncovered_source_variants": [],
-    "unsupported_claims": [],
     "findings": [
       "需求假设缺少创建与解析延迟/SLO。",
       "未定义号段源或映射存储不可用时的创建降级与超时补偿。",
