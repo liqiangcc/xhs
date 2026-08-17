@@ -26,6 +26,9 @@
 11_legacy_canonical_accept_consumer_inventory.json   上述退役证据的机器可检查事实源
 12_canonical_read_only_command_audit.md              Canonical list / stats / check 已完成迁移记录
 13_review_command_audit.md                           Review namespace 职责审计与迁移顺序
+14_naming_convention_audit.md                        Review 架构角色命名完成记录
+15_canonical_naming_lifecycle_audit.md               Canonical 生命周期命名完成记录
+16_repository_role_term_audit.md                     仓库剩余角色命名完成记录
 ```
 
 这些文档的关系是：
@@ -48,6 +51,10 @@
         ↓
 13：Review namespace 迁移审计
         ↓
+14 / 15：Review 与 Canonical 命名迁移完成记录
+        ↓
+16：仓库角色命名收口与防回归规则
+        ↓
 循环迭代
 ```
 
@@ -58,16 +65,21 @@
 2. 08_content_building_goals.md：内容建设 C0-C10 目标、DoD 与退出条件
 3. README.md：当前数据状态和日常入口
 4. 06_github_actions_ai_management.md：Actions / AI 当前调度规范
-5. 13_review_command_audit.md：Review namespace 当前迁移依据
-6. 12_canonical_read_only_command_audit.md：Canonical read-side 已完成迁移记录
-7. 11_legacy_canonical_accept_consumer_inventory.md：legacy Accept 完整退役证据
-8. 05_execution_checklist.md：工程底座长期验收清单
-9. 07 / 历史 ADR / review plans：历史证据，不作为当前命令 SSOT
+5. 16_repository_role_term_audit.md：仓库架构角色命名已完成记录与防回归规则
+6. 15_canonical_naming_lifecycle_audit.md：Canonical 生命周期命名已完成记录
+7. 14_naming_convention_audit.md：Review 架构角色命名已完成记录
+8. 13_review_command_audit.md：Review namespace 已完成迁移记录
+9. 12_canonical_read_only_command_audit.md：Canonical read-side 已完成迁移记录
+10. 11_legacy_canonical_accept_consumer_inventory.md：legacy Accept 完整退役证据
+11. 05_execution_checklist.md：工程底座长期验收清单
+12. 07 / 历史 ADR / review plans：历史证据，不作为当前命令 SSOT
 ```
 
 如果 `08` 或历史文档中的旧命令示例与 `10_current_dedup_canonical_operations.md` 冲突，**命令语义以 10 和当前代码/测试为准**；08 继续负责业务目标和内容完成定义。Review namespace 的工程迁移顺序以 `13_review_command_audit.md` 为准；`12_canonical_read_only_command_audit.md` 保留为已完成迁移记录。
 
 内容建设中的 60/200、100/300、200/600 都是中间门槛；最终目标以 `08_content_building_goals.md` 为准：所有真实面试题绑定 Canonical、拥有 ready 答案和 ReviewProgress，并能从查询或复习入口实际访问。
+
+截至 2026-08-17，SoC/SRP 工程重构及仓库架构角色命名已经收口；后续主线不再扩大架构改造范围，而是按内容质量合同推进候选、证据、独立审查、人工签核与真实复习闭环。
 
 ---
 
@@ -188,7 +200,7 @@ M7：建立迁移、测试、CI 和 ADR 机制
 M8：建立 GitHub Actions + AI 管理层
 ```
 
-工程重构里程碑见 `04_refactor_plan.md`，当前内容建设目标见 `08_content_building_goals.md`，Canonical/Dedup 当前操作见 `10_current_dedup_canonical_operations.md`，Legacy Accept 完整退役证据见 `11_legacy_canonical_accept_consumer_inventory.md`，Canonical read-side 已完成迁移记录见 `12_canonical_read_only_command_audit.md`，Review namespace 迁移审计见 `13_review_command_audit.md`。
+工程重构里程碑见 `04_refactor_plan.md`，当前内容建设目标见 `08_content_building_goals.md`，Canonical/Dedup 当前操作见 `10_current_dedup_canonical_operations.md`，Legacy Accept 完整退役证据见 `11_legacy_canonical_accept_consumer_inventory.md`，Canonical read-side 已完成迁移记录见 `12_canonical_read_only_command_audit.md`，Review namespace 迁移审计见 `13_review_command_audit.md`；Review / Canonical 命名完成记录分别见 `14_naming_convention_audit.md`、`15_canonical_naming_lifecycle_audit.md`，仓库剩余角色命名收口见 `16_repository_role_term_audit.md`。
 
 ---
 
