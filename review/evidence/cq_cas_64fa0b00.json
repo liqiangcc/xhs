@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_cas_64fa0b00",
-  "candidate_sha256": "005ba087956daa65e4347dccfd35f02fbc87ff4422ab4eddd3218eb4eb421411",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "09001d37311bf7d760a79d38bd7b7ce8566bf93b3d45ebf1de674d006cef2939",
+  "checked_at": "2026-08-17",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "java-21-cas-aba.v1"
+    "writer_version": "java-21-cas-aba-contention.v2"
   },
   "sources": [
     {
@@ -13,47 +13,149 @@
       "title": "Java SE 21 AtomicReference API",
       "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/AtomicReference.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     },
     {
       "source_id": "java-21-atomic-stamped-reference",
       "title": "Java SE 21 AtomicStampedReference API",
       "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/AtomicStampedReference.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "java-21-long-adder",
+      "title": "Java SE 21 LongAdder API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/LongAdder.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
     }
   ],
   "claims": [
     {
       "claim_id": "atomic-reference-cas-contract",
       "text": "Java SE 21 documents that AtomicReference.compareAndSet atomically sets a new value when the current value is reference-identical (==) to the expected value and reports whether it succeeds.",
-      "source_ids": ["java-21-atomic-reference"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "source_ids": [
+        "java-21-atomic-reference"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "atomic-reference-contention-reapplication",
+      "text": "Java SE 21 documents that AtomicReference functional atomic updates may re-apply their update function when attempted updates fail due to contention, so the function should be side-effect-free.",
+      "source_ids": [
+        "java-21-atomic-reference"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问"
+      ]
     },
     {
       "claim_id": "atomic-stamped-reference-cas-contract",
       "text": "Java SE 21 documents that AtomicStampedReference.compareAndSet atomically updates both reference and stamp only when the current reference is == to the expected reference and the current stamp equals the expected stamp.",
-      "source_ids": ["java-21-atomic-stamped-reference"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "source_ids": [
+        "java-21-atomic-stamped-reference"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "long-adder-contention-tradeoff",
+      "text": "Java SE 21 documents that LongAdder is expected to provide significantly higher throughput than AtomicLong under high update contention for shared sums, at the cost of higher space usage, and that sum() is not an atomic snapshot during concurrent updates.",
+      "source_ids": [
+        "java-21-long-adder"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
     }
   ],
   "source_question_coverage": [
     {
       "question_id": "29dbb38911281f4cbe69066d792dfb80",
       "covered": true,
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
     }
   ],
-  "review": {
+  "review_state": "independent_rereview_passed",
+  "prior_review": {
     "reviewer_id": "cas_isolated_review_r2",
     "review_version": "1.0",
     "independent": true,
     "decision": "reject",
     "revision_round": 2,
-    "scores": {"facts_and_evidence": 24, "directness_and_relevance": 20, "type_specific_completeness": 15, "mechanism_and_causality": 12, "boundaries_and_tradeoffs": 9, "followup_quality": 5, "oral_quality": 5},
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 15,
+      "mechanism_and_causality": 12,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
     "hard_failures": [],
     "uncovered_source_variants": [],
     "unsupported_claims": [],
-    "findings": ["CAS/ABA 和 Java SE 21 API 证据映射正确。", "高竞争 CAS 重试的资源成本与可验证的调用方性能边界未完成，机制题专项低于门槛。"]
+    "findings": [
+      "CAS/ABA 和 Java SE 21 API 证据映射正确。",
+      "高竞争 CAS 重试的资源成本与可验证的调用方性能边界未完成，机制题专项低于门槛。"
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-cas-reviewer",
+    "review_version": "r2.1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "revision_suggestions": [],
+    "findings": [
+      "Source-first rereview checked the current CAS/ABA candidate and the Java SE 21 AtomicReference, AtomicStampedReference, and LongAdder contracts before consulting the prior rejection.",
+      "The revised answer now makes the retry state machine explicit: contention can invalidate the expected value, and retrying repeats read/compute/CAS work; Java SE 21 directly documents function re-application after failed attempted updates caused by contention.",
+      "The answer now defines an observable performance boundary using attempt/failure/retry counts and tail latency rather than claiming lock-free operations are cost-free.",
+      "The LongAdder comparison is bounded to shared statistics/counting and preserves its semantic tradeoff: higher expected high-contention throughput costs more space and sum() is not an atomic snapshot.",
+      "CAS identity semantics, ABA applicability, stamped-reference semantics, resource cost, failure handling, version boundary, and targeted follow-ups are all covered with no remaining hard failure."
+    ]
   }
 }
