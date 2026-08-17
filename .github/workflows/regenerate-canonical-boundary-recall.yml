@@ -1,0 +1,115 @@
+name: Regenerate Canonical Boundary Recall
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .canonical-boundary-recall-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    if: "${{ github.event.head_commit.message == 'chore: regenerate canonical boundary recall' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Freeze previous boundary candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp data/manifests/canonical/long_tail_duplicate_candidates.jsonl "$RUNNER_TEMP/boundary-before.jsonl"
+
+      - name: Verify recall regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test test/canonical_boundary_audit.test.js
+
+      - name: Regenerate boundary candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/audit_canonical_boundaries.js
+
+      - name: Record recall delta and enforce safety ceiling
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/canonical_boundary_recall_fix
+          node - "$RUNNER_TEMP/boundary-before.jsonl" data/manifests/canonical/long_tail_duplicate_candidates.jsonl <<'NODE'
+          const fs = require('fs');
+          const [beforePath, afterPath] = process.argv.slice(2);
+          const parse = (p) => fs.readFileSync(p, 'utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const before = parse(beforePath);
+          const after = parse(afterPath);
+          const beforeById = new Map(before.map((row) => [row.candidate_id, row]));
+          const afterById = new Map(after.map((row) => [row.candidate_id, row]));
+          const added = after.filter((row) => !beforeById.has(row.candidate_id));
+          const removed = before.filter((row) => !afterById.has(row.candidate_id));
+          const pending = after.filter((row) => row.reviewer_decision === 'pending');
+          const contained = after.filter((row) => row.evidence?.contained_variant_signal);
+          const report = {
+            schema_version: 'canonical_boundary_recall_fix.v1',
+            before_count: before.length,
+            after_count: after.length,
+            added_count: added.length,
+            removed_count: removed.length,
+            pending_count: pending.length,
+            contained_variant_count: contained.length,
+            added,
+            removed,
+            pending_candidate_ids: pending.map((row) => row.candidate_id),
+          };
+          fs.writeFileSync(
+            'review/content_build/canonical_boundary_recall_fix/report.json',
+            `${JSON.stringify(report, null, 2)}\n`,
+          );
+          if (after.length > 100) {
+            throw new Error(`boundary recall safety ceiling exceeded: ${after.length} > 100`);
+          }
+          NODE
+
+      - name: Verify regenerated boundary state and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/audit_canonical_boundaries.js --check
+          npm test
+          npm run ci:check
+
+      - name: Commit recall fix and candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git commit -m "content: improve canonical boundary recall"
+
+      - name: Remove temporary regeneration workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .canonical-boundary-recall-trigger .github/workflows/regenerate-canonical-boundary-recall.yml
+          git add -A
+          git commit -m "chore: remove canonical boundary recall regeneration workflow"
+
+      - name: Push corrected boundary state
+        shell: bash
+        run: git push origin HEAD:content/quality-completion
