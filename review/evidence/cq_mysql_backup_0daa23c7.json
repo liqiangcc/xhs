@@ -2,7 +2,7 @@
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_mysql_backup_0daa23c7",
   "candidate_sha256": "76edc4933e0aca110b81ffc1bbf5c051762ed48f804011c0377e7c1b32d99db1",
-  "checked_at": "2026-07-11",
+  "checked_at": "2026-08-17",
   "writer": {
     "writer_id": "answer-curator",
     "writer_version": "mysql-8.4-backup-pitr.v1"
@@ -13,28 +13,28 @@
       "title": "MySQL 8.4 backup and recovery types",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/backup-types.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     },
     {
       "source_id": "mysql-8-4-pitr-overview",
       "title": "MySQL 8.4 point-in-time recovery",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     },
     {
       "source_id": "mysql-8-4-pitr-binlog",
       "title": "MySQL 8.4 point-in-time recovery using binary log",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery-binlog.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     },
     {
       "source_id": "mysql-8-4-pitr-positions",
       "title": "MySQL 8.4 point-in-time recovery using event positions",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery-positions.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     }
   ],
   "claims": [
@@ -52,7 +52,7 @@
     },
     {
       "claim_id": "mysql-pitr-binlog-replay",
-      "text": "MySQL 8.4 documents that PITR information comes from binary logs generated after the full backup; binary logging must be enabled, MySQL 8.4 enables it by default, SHOW BINARY LOGS lists log files, SHOW BINARY LOG STATUS reports the current log, and mysqlbinlog can select log sections by event time or position. Applying its output reexecutes represented data modifications.",
+      "text": "MySQL 8.4 documents that PITR information comes from binary logs generated after the full backup; binary logging must be enabled, MySQL 8.4 enables it by default, SHOW BINARY LOGS lists log files, SHOW BINARY LOG STATUS reports the current log, and mysqlbinlog can select log sections by event time or position of events within the log. Applying its output reexecutes represented data modifications.",
       "source_ids": ["mysql-8-4-pitr-binlog"],
       "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
     },
@@ -71,15 +71,15 @@
     }
   ],
   "review": {
-    "reviewer_id": "isolated-reviewer-r2",
-    "review_version": "mysql-pitr-isolated.v1",
+    "reviewer_id": "source-first-mysql-pitr-reviewer-20260817",
+    "review_version": "mysql-pitr-independent-r2-source-first",
     "independent": true,
-    "decision": "revise",
+    "decision": "pass",
     "revision_round": 2,
     "scores": {
       "facts_and_evidence": 24,
       "directness_and_relevance": 20,
-      "type_specific_completeness": 15,
+      "type_specific_completeness": 18,
       "mechanism_and_causality": 14,
       "boundaries_and_tradeoffs": 9,
       "followup_quality": 5,
@@ -89,8 +89,8 @@
     "uncovered_source_variants": [],
     "unsupported_claims": [],
     "findings": [
-      "备份方式、PITR 的 position 起止边界、连续日志链、隔离验证和演练已覆盖。",
-      "备份一致性坐标与备份基线的对应、以及并发写入、DDL、非事务表边界缺少一手证据；机制题专项维度低于最低分。"
+      "MySQL 8.4 primary documentation directly supports the physical/logical backup tradeoff, full-backup baseline, binary-log replay, and event-position recovery boundaries used by the candidate.",
+      "The candidate states a version boundary, explicit S0-to-St recovery state flow, recovery-speed and portability costs, log-chain failure conditions, and isolation/verification requirements, satisfying the mechanism-specific completion requirements without claiming unsupported RPO/RTO values."
     ]
   }
 }
