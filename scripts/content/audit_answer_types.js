@@ -32,9 +32,15 @@ function classify(canonical, questions) {
 
     // Personal-answer types must have an explicit first-person/team/career cue.
     // Technical terms such as Hash/Bean/classpath “冲突” are not behavior questions.
-    const behaviorCue = /职业规划|职业选择|为什么离职|离职原因|自我介绍|个人优缺点|期望薪资|未来\s*\d+\s*[-—~至到]\s*\d+\s*年|团队(?:目标|分歧|冲突)|沟通(?:分歧|冲突)|个人意见|如何推动方案决策|技术决策冲突|不同阶段的工作经历|核心成长|如何平衡团队|你最大的(?:优点|缺点)|你对.*(?:实践|思考|看法|见解)/;
-    const projectCue = /你们?项目|你的项目|在你们?的?项目中|在项目中|你项目中|上一家公司|你曾经|你是如何|你如何(?:落地|实现|设计|排查|优化)|你的职责|实际项目|线上(?:故障|事故).*你|故障复盘|线上故障排查|复盘一次|用过哪些设计模式|设计模式.*(?:落地|应用|实践)|请问你的.*qps|为什么使用.+不用|你们采用.+架构/;
-    const sourceProjectCue = sourceTypeSignals.includes('project') && /项目|公司|职责|经历|故障|复盘/.test(title);
+    const behaviorCue = /职业规划|职业选择|为什么离职|离职原因|自我介绍|个人优缺点|期望薪资|未来\s*\d+\s*[-—~至到]\s*年|团队(?:目标|分歧|冲突)|沟通(?:分歧|冲突)|个人意见|如何推动方案决策|技术决策冲突|不同阶段的工作经历|核心成长|如何平衡团队|你最大的(?:优点|缺点)|你对.*(?:实践|思考|看法|见解)/;
+
+    // A legacy Project source label is not evidence that the expected answer is
+    // a first-person STAR story. Require an explicit personal action/experience
+    // cue before classifying as Project. This keeps questions such as
+    // “项目中 HashMap 的底层原理是什么” in the technical queue while preserving
+    // genuine “你如何落地/排查/优化” project questions.
+    const projectCue = /上一家公司|你曾经|你是如何|你如何(?:落地|实现|设计|排查|优化)|你的职责|实际项目(?:中)?.*(?:负责|职责|落地|实现|设计|排查|优化)|你们?(?:的)?项目(?:中|里)?.*(?:你|你们).*(?:如何|怎么|为何|为什么).*(?:落地|实现|设计|排查|优化|选择|采用|使用)|线上(?:故障|事故).*你|故障复盘|线上故障排查|复盘一次|用过哪些设计模式|设计模式.*(?:落地|应用|实践)|请问你的.*qps|为什么使用.+不用|你们采用.+架构/;
+    const sourceProjectCue = sourceTypeSignals.includes('project') && /上一家公司|你的职责|你曾经|你是如何|你如何|你们(?:如何|怎么|为何|为什么|采用|使用|选择)|线上(?:故障|事故)|故障复盘|复盘一次|实际项目.*(?:负责|职责|落地|实现|设计|排查|优化)/.test(title);
 
     // SQL must be an explicit language/query request. The substring “sql” in
     // “mysql” must never classify a database theory question as Coding.
