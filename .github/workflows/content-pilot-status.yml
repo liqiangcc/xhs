@@ -1,0 +1,69 @@
+name: Refresh Content Pilot Status
+
+on:
+  push:
+    branches:
+      - content/full-coverage
+    paths:
+      - .content-pilot-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: "${{ github.event.head_commit.message == 'chore: refresh content pilot status' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Refresh pilot audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/pilot
+          node scripts/content/build_pilot_answer_audit.js > review/content_build/pilot/pilot-audit-refresh.json
+          node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite > review/content_build/pilot/pilot-candidate-audit.json || true
+          node - <<'NODE'
+          const fs = require('fs');
+          const audit = JSON.parse(fs.readFileSync('data/manifests/quality/pilot_answer_audit.json', 'utf8'));
+          const rows = audit.rows || [];
+          const value = {
+            schema_version: 'content_pilot_status.v1',
+            summary: audit.summary,
+            awaiting_human_review: rows.filter(r => r.promotion_status === 'awaiting_human_review').map(r => r.canonical_id),
+            candidate_pending: rows.filter(r => r.candidate_status === 'pending').map(r => r.canonical_id),
+            independent_review_pending: rows.filter(r => r.independent_review_status === 'pending').map(r => r.canonical_id),
+            rendered_needs_update: rows.filter(r => r.candidate_status === 'rendered' && r.promotion_status === 'needs_update').map(r => r.canonical_id),
+          };
+          fs.writeFileSync('review/content_build/pilot/pilot-status.json', `${JSON.stringify(value, null, 2)}\n`);
+          NODE
+
+      - name: Verify repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run ci:check
+
+      - name: Commit pilot status evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .content-pilot-trigger
+          git add -A
+          git commit -m "content: refresh pilot quality status"
+          git push origin HEAD:content/full-coverage
