@@ -1,0 +1,83 @@
+name: Finalize Content and Source-First Review
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .finalize-content-and-review-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-review-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Remove temporary content machinery before freezing snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .automation-probe-20260817 \
+            .answer-quality-regeneration-trigger \
+            .finalize-content-and-review-trigger \
+            .github/workflows/regenerate-answer-quality-artifacts.yml \
+            .github/workflows/finalize-content-and-review.yml
+          rm -rf .github/tmp/answer-quality-regeneration 2>/dev/null || true
+          rmdir .github/tmp 2>/dev/null || true
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            git add -A
+            git commit -m "chore: freeze final content candidate without temporary automation"
+          fi
+
+      - name: Run independent source-first review on fixed candidate
+        id: review
+        shell: bash
+        run: |
+          set +e
+          CANDIDATE_SHA="$(git rev-parse HEAD)"
+          echo "$CANDIDATE_SHA" > "$RUNNER_TEMP/candidate_sha"
+          AUDITED_SHA="$CANDIDATE_SHA" node scripts/audit/final_content_source_first_review.js \
+            > "$RUNNER_TEMP/final-review.log" 2>&1
+          REVIEW_EXIT=$?
+          cat "$RUNNER_TEMP/final-review.log"
+          echo "review_exit=$REVIEW_EXIT" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha=$CANDIDATE_SHA" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add review/reports/FINAL_SOURCE_FIRST_REVIEW.json \
+                  review/reports/FINAL_SOURCE_FIRST_REVIEW.md
+          if [ -f review/reports/FINAL_SOURCE_FIRST_REVIEW_PASS ]; then
+            git add review/reports/FINAL_SOURCE_FIRST_REVIEW_PASS
+          fi
+          git commit -m "review: record source-first final content verdict"
+          git push origin HEAD:content/quality-completion
+
+      - name: Enforce final verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.review.outputs.review_exit }}" = "0"
+          test -f review/reports/FINAL_SOURCE_FIRST_REVIEW_PASS
+          test "$(cat review/reports/FINAL_SOURCE_FIRST_REVIEW_PASS | tr -d '\r\n')" = "${{ steps.review.outputs.candidate_sha }}"
