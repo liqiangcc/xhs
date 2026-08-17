@@ -39,9 +39,18 @@ function classify(canonical, questions) {
     // SQL must be an explicit language/query request. The substring “sql” in
     // “mysql” must never classify a database theory question as Coding.
     const explicitSqlCue = /(?:^|[^a-z])sql(?:[^a-z]|$).*(?:查询|语句|实现|编写|优化)|(?:编写|写出|实现).*(?:^|[^a-z])sql(?:[^a-z]|$)/;
-    const codingCue = /手写|代码实现|编程题|leetcode|(?:编写|写出|实现).*(?:代码|函数|方法|程序)|给定.*(?:数组|链表|字符串|二叉树|区间|矩阵)|反转链表|合并区间|最长(?:递增|公共|回文)|最短路径|二分查找|动态规划|背包问题|判断.*(?:链表环|回文)|实现\s*lru|排序算法/;
+    const codingCue = /代码手撕|手撕代码|手写|代码实现|编程题|leetcode|(?:编写|写出|实现).*(?:代码|函数|方法|程序)|给定.*(?:数组|链表|字符串|二叉树|区间|矩阵)|反转链表|合并区间|最长(?:递增|公共|回文)|最短路径|二分查找|动态规划|背包问题|判断.*(?:链表环|回文)|实现\s*lru|排序算法|多线程环境下的账户转账/;
 
-    const scenarioCue = /(?:如何|怎么|怎样)(?:设计|保证|确保|提升|优化|避免).*(?:系统|架构|一致性|可靠性|高可用|幂等|性能|全量扫描)|设计.*(?:系统|架构|方案)|高并发|容量规划|容灾|灾备|灰度发布|蓝绿发布|附近的人|短\s*url|短链接|秒杀|搜索引擎|缓存一致性|exactly[- ]?once|消息.*只被消费一次|提升.*(?:rocketmq|kafka|消息).*性能|文件上传.*(?:设计|流程)|如何(?:排查|解决).*(?:类路径|classpath|依赖|故障|问题)/;
+    // Scenario classification is about producing a concrete design/selection
+    // under constraints. Keep these cues ahead of mechanism classification so
+    // “how to use Redis to implement a distributed lock” is not reduced to a
+    // mechanism-only answer.
+    const scenarioCue = /(?:如何|怎么|怎样)(?:设计|保证|确保|提升|优化|避免).*(?:系统|架构|一致性|可靠性|高可用|幂等|性能|全量扫描)|设计.*(?:系统|架构|方案)|高并发|容量规划|容灾|灾备|灰度发布|蓝绿发布|附近的人|短\s*url|短链接|秒杀|搜索引擎|缓存一致性|exactly[- ]?once|消息.*只被消费一次|提升.*(?:rocketmq|kafka|消息).*性能|文件上传.*(?:设计|流程)|如何(?:排查|解决).*(?:类路径|classpath|依赖|故障|问题)|(?:如何|怎么|怎样).*(?:选择|选型).*(?:消息中间件|中间件|kafka|rocketmq|rabbitmq|数据库|缓存|存储|技术方案)|如何(?:使用|利用).*redis.*(?:实现|做).*分布式锁/;
+
+    // Some questions contain comparison words but still require a state/flow
+    // explanation as the primary artifact. These strong cues must be evaluated
+    // before the generic “区别/对比 -> concept” rule.
+    const strongMechanismCue = /cms.*(?:垃圾回收|垃圾收集|收集器).*(?:执行|回收)?(?:流程|过程)|(?:cms|垃圾回收).*(?:为什么|为啥).*(?:分成|需要).*(?:步|阶段)|(?:io|i\/o)\s*多路复用|tcp.*(?:三次握手|四次挥手).*(?:过程|原理|原因)/;
     const mechanismCue = /原理|底层|机制|生命周期|工作流程|复制流程|恢复流程|状态(?:转换|变化)|为什么快|如何保证.*(?:原子性|可见性|有序性)|安全点|等待与唤醒|加锁失败后的等待|如何实现分布式锁|binlog|undo\s*log|零拷贝|\bisr\b|\bspi\b|hashmap.*(?:原理|底层)|hash(?:表| table)?.*冲突|bean.*生命周期/;
     const comparisonCue = /区别|对比/;
     const conceptCue = /有哪些|类型|分类|状态|策略|是什么|什么是|特点|优缺点|常见.*(?:算法|索引|场景)/;
@@ -60,6 +69,9 @@ function classify(canonical, questions) {
     } else if (scenarioCue.test(title)) {
         answerType = 'scenario';
         rationale = 'requires_assumptions_data_flow_and_tradeoffs';
+    } else if (strongMechanismCue.test(title)) {
+        answerType = 'mechanism';
+        rationale = 'strong_state_flow_or_protocol_mechanism_required';
     } else if (comparisonCue.test(title)) {
         answerType = 'concept';
         rationale = 'explicit_comparison';
@@ -78,7 +90,7 @@ function classify(canonical, questions) {
     }
 
     const secondary = [];
-    if (answerType === 'concept' && /原理|底层|机制|实现/.test(title)) secondary.push('mechanism');
+    if (answerType === 'concept' && /原理|底层|机制|实现|原因|为什么|为啥/.test(title)) secondary.push('mechanism');
     if (answerType === 'scenario' && /原理|底层|源码|机制/.test(title)) secondary.push('mechanism');
     if (answerType === 'project' && /设计|方案|架构|高并发|一致性/.test(title)) secondary.push('scenario');
     if (answerType === 'behavior' && /技术|项目|方案|选型/.test(title)) secondary.push('project');
