@@ -71,7 +71,11 @@ jobs:
           if [ -f review/reports/FINAL_SOURCE_FIRST_REVIEW_PASS ]; then
             git add review/reports/FINAL_SOURCE_FIRST_REVIEW_PASS
           fi
-          git commit -m "review: record source-first final content verdict"
+          if ! git diff --cached --quiet; then
+            git commit -m "review: record source-first final content verdict"
+          else
+            echo "Review evidence is unchanged; pushing the frozen candidate commit only."
+          fi
           git push origin HEAD:content/quality-completion
 
       - name: Enforce final verdict
