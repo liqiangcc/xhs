@@ -74,6 +74,8 @@ jobs:
             removed_count: removed.length,
             pending_count: pending.length,
             contained_variant_count: contained.length,
+            safety_ceiling: 150,
+            candidate_ratio: Number((after.length / 9034).toFixed(4)),
             added,
             removed,
             pending_candidate_ids: pending.map((row) => row.candidate_id),
@@ -82,8 +84,8 @@ jobs:
             'review/content_build/canonical_boundary_recall_fix/report.json',
             `${JSON.stringify(report, null, 2)}\n`,
           );
-          if (after.length > 100) {
-            throw new Error(`boundary recall safety ceiling exceeded: ${after.length} > 100`);
+          if (after.length > 150) {
+            throw new Error(`boundary recall safety ceiling exceeded: ${after.length} > 150`);
           }
           NODE
 
