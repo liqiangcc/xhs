@@ -152,7 +152,7 @@ test('filesystem DecisionStore CAS rejects hotspot-index race after Application 
             indexRepository: suggestionRepositories.indexRepository,
             hotspotRepository: suggestionRepositories.hotspotRepository,
             questionRepository: suggestionRepositories.questionRepository,
-            relationCandidateStore: suggestionRepositories.relationCandidateStore,
+            relationCandidatePublisher: suggestionRepositories.relationCandidatePublisher,
         });
         const wrappedStore = {
             async record(decision, options) {

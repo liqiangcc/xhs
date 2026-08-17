@@ -13,7 +13,7 @@ const {
 const {
     assertDedupQuestionRetrievalRepository,
 } = require('../../ports/repositories/dedup-question-retrieval-repository');
-const { assertRelationCandidateStore } = require('../../ports/relation-candidate-store');
+const { assertRelationCandidatePublisher } = require('../../ports/relation-candidate-publisher');
 const { hotspotRefs } = require('./relation-source-retrieval');
 
 function normalizeDetectionQuestion(question, taxonomy) {
@@ -158,7 +158,7 @@ function createSuggestCanonicalRelationsUseCase(dependencies = {}) {
         ? null
         : assertDedupHotspotRetrievalRepository(dependencies.hotspotRepository);
     const questionRepository = assertDedupQuestionRetrievalRepository(dependencies.questionRepository);
-    const relationCandidateStore = assertRelationCandidateStore(dependencies.relationCandidateStore);
+    const relationCandidatePublisher = assertRelationCandidatePublisher(dependencies.relationCandidatePublisher);
     const entityDetector = dependencies.detectEntityQuestionClusters || detectEntityQuestionClusters;
     const hotspotDetector = dependencies.detectHotspotQuestionClusters || detectHotspotQuestionClusters;
 
@@ -232,7 +232,7 @@ function createSuggestCanonicalRelationsUseCase(dependencies = {}) {
             candidate_count: planned.candidate_count,
             relation_candidates: planned.relation_candidates,
         };
-        const storedQueue = await relationCandidateStore.replaceQueue(queue);
+        const storedQueue = await relationCandidatePublisher.replaceQueue(queue);
         assertSnapshot(storedQueue, 'relation candidate queue', 'candidate_count');
         if (Number(storedQueue.candidate_count) !== planned.candidate_count) {
             throw new Error('relation candidate queue candidate_count mismatch');

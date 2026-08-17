@@ -171,7 +171,7 @@ function createFsDedupSuggestionRepositories(options = {}) {
         },
     };
 
-    const relationCandidateStore = {
+    const relationCandidatePublisher = {
         async replaceQueue(queue) {
             if (!queue || typeof queue !== 'object' || Array.isArray(queue)) {
                 throw new Error('relation candidate queue is required');
@@ -203,7 +203,7 @@ function createFsDedupSuggestionRepositories(options = {}) {
         indexRepository,
         hotspotRepository,
         questionRepository,
-        relationCandidateStore,
+        relationCandidatePublisher,
     };
 }
 

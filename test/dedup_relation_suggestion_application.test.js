@@ -47,7 +47,7 @@ function createUseCase(questions, entitySeed, overrides = {}, seed = {}) {
         indexRepository: adapters.indexRepository,
         hotspotRepository: adapters.hotspotRepository,
         questionRepository: adapters.questionRepository,
-        relationCandidateStore: adapters.relationCandidateStore,
+        relationCandidatePublisher: adapters.relationCandidatePublisher,
         ...overrides,
     });
     return { useCase, adapters };

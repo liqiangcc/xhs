@@ -115,7 +115,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         },
     };
 
-    const relationCandidateStore = {
+    const relationCandidatePublisher = {
         async replaceQueue(queue) {
             if (!queue || typeof queue !== 'object' || Array.isArray(queue)) {
                 throw new Error('relation candidate queue is required');
@@ -221,7 +221,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         indexRepository,
         hotspotRepository,
         questionRepository,
-        relationCandidateStore,
+        relationCandidatePublisher,
         relationCandidateRepository,
         relationDecisionRepository,
         relationDecisionStore,

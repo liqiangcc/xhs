@@ -182,7 +182,7 @@ function createApplication(options = {}) {
         indexRepository: dedupIndexRepository,
         hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
-        relationCandidateStore,
+        relationCandidatePublisher,
     } = createFsDedupSuggestionRepositories({ root: options.root, paths: dedupPaths });
     const {
         relationCandidateRepository,
@@ -195,7 +195,7 @@ function createApplication(options = {}) {
         indexRepository: dedupIndexRepository,
         hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
-        relationCandidateStore,
+        relationCandidatePublisher,
     });
     const recordDecision = createRecordRelationDecisionUseCase({
         relationCandidateRepository,

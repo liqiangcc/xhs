@@ -63,7 +63,7 @@ async function seedDecision(adapters, relation = 'same') {
         taxonomy,
         indexRepository: adapters.indexRepository,
         questionRepository: adapters.questionRepository,
-        relationCandidateStore: adapters.relationCandidateStore,
+        relationCandidatePublisher: adapters.relationCandidatePublisher,
     });
     const suggestions = await suggest({ mode: 'entity', seed: 'redis', limit: 10 });
     const relationCandidateKey = suggestions.relation_candidates[0].relation_candidate_key;

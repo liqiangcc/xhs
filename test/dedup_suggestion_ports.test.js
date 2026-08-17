@@ -18,7 +18,7 @@ const {
 const {
     assertRelationDecisionRepository,
 } = require('../src/ports/repositories/relation-decision-repository');
-const { assertRelationCandidateStore } = require('../src/ports/relation-candidate-store');
+const { assertRelationCandidatePublisher } = require('../src/ports/relation-candidate-publisher');
 const { assertRelationDecisionStore } = require('../src/ports/relation-decision-store');
 const {
     createInMemoryDedupSuggestionAdapters,
@@ -38,7 +38,7 @@ test('dedup suggestion and decision Ports stay narrow and reject missing capabil
     assert.equal(assertDedupQuestionRetrievalRepository({ findByRefs() {} }).findByRefs instanceof Function, true);
     assert.equal(assertRelationCandidateRepository({ get() {} }).get instanceof Function, true);
     assert.equal(assertRelationDecisionRepository({ get() {} }).get instanceof Function, true);
-    assert.equal(assertRelationCandidateStore({ replaceQueue() {} }).replaceQueue instanceof Function, true);
+    assert.equal(assertRelationCandidatePublisher({ replaceQueue() {} }).replaceQueue instanceof Function, true);
     assert.equal(assertRelationDecisionStore({ record() {} }).record instanceof Function, true);
 
     assert.throws(
@@ -62,7 +62,7 @@ test('dedup suggestion and decision Ports stay narrow and reject missing capabil
         /get\(\) is required/,
     );
     assert.throws(
-        () => assertRelationCandidateStore({}),
+        () => assertRelationCandidatePublisher({}),
         /replaceQueue\(\) is required/,
     );
     assert.throws(
@@ -111,9 +111,9 @@ test('in-memory retrieval adapters expose opaque revisions that change with thei
     assert.notEqual(firstQuestions.revision, secondQuestions.revision);
 });
 
-test('relation candidate store replaces one review queue without becoming a Canonical mutation store', async () => {
+test('relation candidate publisher replaces one review queue without becoming a Canonical mutation store', async () => {
     const adapters = createInMemoryDedupSuggestionAdapters();
-    const first = await adapters.relationCandidateStore.replaceQueue({
+    const first = await adapters.relationCandidatePublisher.replaceQueue({
         schema_version: 'dedup_relation_candidate_queue.v1',
         mode: 'entity',
         seed: 'Redis',
@@ -122,7 +122,7 @@ test('relation candidate store replaces one review queue without becoming a Cano
         relation_candidates: [{ relation_candidate_key: 'entity|Redis|q1,q2', review_state: 'pending' }],
     });
     const candidate = await adapters.relationCandidateRepository.get('entity|Redis|q1,q2');
-    const second = await adapters.relationCandidateStore.replaceQueue({
+    const second = await adapters.relationCandidatePublisher.replaceQueue({
         schema_version: 'dedup_relation_candidate_queue.v1',
         mode: 'entity',
         seed: 'Redis',
@@ -138,15 +138,15 @@ test('relation candidate store replaces one review queue without becoming a Cano
     assert.equal(second.resource, first.resource);
     assert.notEqual(second.revision, first.revision);
     assert.equal(second.candidate_count, 0);
-    assert.equal(Object.hasOwn(adapters.relationCandidateStore, 'preflight'), false);
-    assert.equal(Object.hasOwn(adapters.relationCandidateStore, 'commit'), false);
-    assert.equal(Object.hasOwn(adapters.relationCandidateStore, 'merge'), false);
+    assert.equal(Object.hasOwn(adapters.relationCandidatePublisher, 'preflight'), false);
+    assert.equal(Object.hasOwn(adapters.relationCandidatePublisher, 'commit'), false);
+    assert.equal(Object.hasOwn(adapters.relationCandidatePublisher, 'merge'), false);
     assert.deepEqual(adapters.snapshot().queues[second.resource].relation_candidates, []);
 });
 
 test('relation decision store and repository are audit boundaries, not Apply boundaries', async () => {
     const adapters = createInMemoryDedupSuggestionAdapters();
-    const queue = await adapters.relationCandidateStore.replaceQueue({
+    const queue = await adapters.relationCandidatePublisher.replaceQueue({
         schema_version: 'dedup_relation_candidate_queue.v1',
         mode: 'entity',
         seed: 'Redis',

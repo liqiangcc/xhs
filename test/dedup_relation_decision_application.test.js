@@ -60,7 +60,7 @@ async function suggest(adapters) {
         taxonomy,
         indexRepository: adapters.indexRepository,
         questionRepository: adapters.questionRepository,
-        relationCandidateStore: adapters.relationCandidateStore,
+        relationCandidatePublisher: adapters.relationCandidatePublisher,
     });
     return useCase({ mode: 'entity', seed: 'redis', limit: 10 });
 }
@@ -156,7 +156,7 @@ test('decision store rejects a review queue race after the candidate was loaded'
     const racingStore = {
         async record(decision, options) {
             const currentQueue = adapters.snapshot().queues[queueResource];
-            await adapters.relationCandidateStore.replaceQueue(currentQueue);
+            await adapters.relationCandidatePublisher.replaceQueue(currentQueue);
             return adapters.relationDecisionStore.record(decision, options);
         },
     };
