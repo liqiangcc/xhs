@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_hashmap_4d9f15d2",
-  "candidate_sha256": "409df6d7a2e719935c71aa46bd6ce6796f33cf4c03c1d7abf7b249f2137b216f",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "825d0c3a944208b6731f15aa2d2e207d51a0a56f61b1fb65cc0927839a295f26",
+  "checked_at": "2026-08-17",
   "writer": {
-    "writer_id": "answer-curator",
-    "writer_version": "openjdk21-hashmap.v1"
+    "writer_id": "content-remediator-20260817",
+    "writer_version": "openjdk21-hashmap.v2"
   },
   "sources": [
     {
@@ -13,87 +13,68 @@
       "title": "OpenJDK 21 HashMap source",
       "locator": "https://github.com/openjdk/jdk21u/blob/master/src/java.base/share/classes/java/util/HashMap.java",
       "source_type": "upstream_source_code_or_release_note",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     }
   ],
   "claims": [
     {
       "claim_id": "structure-and-put",
       "text": "OpenJDK 21 HashMap source defines hash spreading, power-of-two index calculation, Node table buckets, collision traversal, TreeNode insertion and resize on size exceeding threshold.",
-      "source_ids": [
-        "openjdk21-hashmap"
-      ],
-      "answer_locations": [
-        "核心结论",
-        "1 分钟版",
-        "3 分钟版",
-        "关键细节",
-        "原理机制",
-        "常见追问"
-      ]
+      "source_ids": ["openjdk21-hashmap"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
     },
     {
       "claim_id": "thresholds-and-tree-boundary",
       "text": "OpenJDK 21 HashMap source defines default initial capacity 16, default load factor 0.75, TREEIFY_THRESHOLD 8, UNTREEIFY_THRESHOLD 6, MIN_TREEIFY_CAPACITY 64, and resizes instead of treeifying when the table is smaller than the minimum capacity.",
-      "source_ids": [
-        "openjdk21-hashmap"
-      ],
-      "answer_locations": [
-        "核心结论",
-        "1 分钟版",
-        "3 分钟版",
-        "关键细节",
-        "原理机制",
-        "常见追问",
-        "易错点"
-      ]
+      "source_ids": ["openjdk21-hashmap"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "tree-bin-complexity-boundary",
+      "text": "OpenJDK 21 HashMap source uses TreeNode tree bins, comparable-key ordering when available, and tieBreakOrder when keys are otherwise not readily ordered. The replacement candidate therefore describes tree bins as degradation protection for severe collision paths and explicitly refuses an unconditional O(log n) guarantee for arbitrary bad-hash inputs.",
+      "source_ids": ["openjdk21-hashmap"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]
     },
     {
       "claim_id": "cost-and-concurrency-boundary",
       "text": "OpenJDK 21 HashMap source documents load-factor time/space tradeoffs, tree bins for poor hash distributions, that HashMap is not synchronized, and that fail-fast iterators are best effort bug detection rather than a correctness guarantee.",
-      "source_ids": [
-        "openjdk21-hashmap"
-      ],
-      "answer_locations": [
-        "3 分钟版",
-        "关键细节",
-        "原理机制",
-        "常见追问",
-        "易错点"
-      ]
+      "source_ids": ["openjdk21-hashmap"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
     }
   ],
   "source_question_coverage": [
     {
       "question_id": "3a0e79e30ff61e05bbbabb47eae6babf",
       "covered": true,
-      "answer_locations": [
-        "核心结论",
-        "1 分钟版",
-        "3 分钟版",
-        "原理机制"
-      ]
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制"]
     },
     {
       "question_id": "7a1246677f7ffb61ef6e181b02c847bb",
       "covered": true,
-      "answer_locations": [
-        "核心结论",
-        "1 分钟版",
-        "3 分钟版",
-        "原理机制"
-      ]
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制"]
     },
     {
       "question_id": "89ffed4d9bde2e82a453dee7008b9f4d",
       "covered": true,
-      "answer_locations": [
-        "核心结论",
-        "1 分钟版",
-        "3 分钟版",
-        "原理机制"
-      ]
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制"]
     }
   ],
-  "review": {"reviewer_id":"hashmap-isolated-reviewer-r2","review_version":"openjdk21-source-review.v2","independent":true,"decision":"revise","revision_round":2,"scores":{"facts_and_evidence":21,"directness_and_relevance":20,"type_specific_completeness":20,"mechanism_and_causality":14,"boundaries_and_tradeoffs":8,"followup_quality":5,"oral_quality":5},"hard_failures":["unsupported_factual_claim"],"revision_suggestions":["保留源码关于可区分或可排序 key 的限定条件，不能将树桶性能外推为所有坏哈希碰撞的 O(log n)。"]}
+  "previous_review": {
+    "reviewer_id": "hashmap-isolated-reviewer-r2",
+    "review_version": "openjdk21-source-review.v2",
+    "independent": true,
+    "decision": "revise",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 21,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 8,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": ["unsupported_factual_claim"],
+    "revision_suggestions": ["保留源码关于可区分或可排序 key 的限定条件，不能将树桶性能外推为所有坏哈希碰撞的 O(log n)。"]
+  }
 }
