@@ -1,0 +1,89 @@
+name: Merge Pilot TCP Handshake Duplicate
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .merge-pilot-tcp-handshake-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    if: "${{ github.event.head_commit.message == 'chore: merge pilot TCP handshake duplicate' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Merge duplicate Canonical through Application boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=review/content_build/pilot_canonical_boundary_audit
+          mkdir -p "$out"
+          node scripts/xhs.js canonical merge \
+            --target cq_tcp_handshake_39cc7c09 \
+            --source cq_q_b7070ee7dadc35e7b4e4bb15db9ddd44 \
+            --reason 'Source asks the TCP three-way-handshake/four-way-close process; target covers the same process plus rationale. Source-first review found no independent semantic boundary and no candidate/evidence assets on the source Canonical.' \
+            > "$out/tcp-handshake-merge-result.json"
+          node scripts/xhs.js canonical check --noWrite > "$out/canonical-check-after-merge.json"
+          node scripts/xhs.js answer context --canonical-id cq_tcp_handshake_39cc7c09 --noWrite > "$out/cq_tcp_handshake_after_merge.json"
+
+      - name: Regenerate quality state after Canonical merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/audit_answer_types.js
+          node scripts/content/build_answer_rewrite_queue.js
+          node scripts/content/select_answer_pilot.js
+          node scripts/content/build_pilot_answer_audit.js
+          node scripts/content/build_pilot_human_review_plan.js
+
+      - name: Verify merged state and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/audit_answer_types.js --check
+          node scripts/content/build_answer_rewrite_queue.js --check
+          node scripts/content/select_answer_pilot.js --check
+          node scripts/content/build_pilot_answer_audit.js --check
+          node scripts/content/build_pilot_human_review_plan.js --check
+          node scripts/xhs.js answer queue check --set data/manifests/quality/answer_pilot_set.json --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Commit canonical merge and regenerated quality state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git commit -m "content: merge duplicate TCP handshake canonical"
+
+      - name: Remove temporary merge workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .merge-pilot-tcp-handshake-trigger .github/workflows/merge-pilot-tcp-handshake-duplicate.yml
+          git add -A
+          git commit -m "chore: remove TCP handshake canonical merge workflow"
+
+      - name: Push merged content state
+        shell: bash
+        run: git push origin HEAD:content/quality-completion
