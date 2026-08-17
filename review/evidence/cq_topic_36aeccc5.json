@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_topic_36aeccc5",
-  "candidate_sha256": "c173568860dbcf945bf3f6a2c774705b969842c2c66f2c60cc5e019b7cb9db44",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "09e7e5ada75b07987cc2db08d205d3708cd35fc2cc3fc3519a84b7f8aad12fca",
+  "checked_at": "2026-08-17",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "java-se-21-threadpoolexecutor.v1"
+    "writer_version": "java-se-21-threadpoolexecutor.v2"
   },
   "sources": [
     {
@@ -13,27 +13,61 @@
       "title": "Java SE 21 ThreadPoolExecutor API",
       "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "java-21-abort-policy-api",
+      "title": "Java SE 21 ThreadPoolExecutor.AbortPolicy API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.AbortPolicy.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "java-21-caller-runs-policy-api",
+      "title": "Java SE 21 ThreadPoolExecutor.CallerRunsPolicy API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.CallerRunsPolicy.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "java-21-discard-policy-api",
+      "title": "Java SE 21 ThreadPoolExecutor.DiscardPolicy API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.DiscardPolicy.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "java-21-discard-oldest-policy-api",
+      "title": "Java SE 21 ThreadPoolExecutor.DiscardOldestPolicy API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.DiscardOldestPolicy.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
     }
   ],
   "claims": [
     {
       "claim_id": "threadpool-rejection-trigger-and-handler",
-      "text": "Java SE 21 documents rejection when the executor is shut down or when both maximum threads and work-queue capacity are finite and the executor is saturated; execute then invokes RejectedExecutionHandler.rejectedExecution, with four predefined policies.",
-      "source_ids": ["java-21-threadpoolexecutor-api"],
+      "text": "Java SE 21 documents rejection when the executor is shut down or when both maximum threads and work-queue capacity are finite and the executor is saturated; execute then invokes RejectedExecutionHandler.rejectedExecution. Constructors that do not accept an explicit handler use the documented default handler, AbortPolicy.",
+      "source_ids": ["java-21-threadpoolexecutor-api", "java-21-abort-policy-api"],
       "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
     },
     {
       "claim_id": "threadpool-predefined-policies",
-      "text": "Java SE 21 documents AbortPolicy throwing RejectedExecutionException, CallerRunsPolicy running the task in the execute-calling thread as feedback slowing submissions, DiscardPolicy silently dropping the task only when completion is never relied upon, and DiscardOldestPolicy dropping the work-queue head then retrying and being rarely acceptable; AbortPolicy is the default handler.",
-      "source_ids": ["java-21-threadpoolexecutor-api"],
+      "text": "Java SE 21 defines AbortPolicy to throw RejectedExecutionException, CallerRunsPolicy to execute the rejected task in the calling thread when not shut down, DiscardPolicy to discard rejected tasks, and DiscardOldestPolicy to discard the queue head and retry execute when not shut down.",
+      "source_ids": ["java-21-abort-policy-api", "java-21-caller-runs-policy-api", "java-21-discard-policy-api", "java-21-discard-oldest-policy-api"],
       "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
     },
     {
-      "claim_id": "threadpool-policy-boundaries",
-      "text": "Java SE 21 documents that CallerRunsPolicy discards when the executor is shut down, and that DiscardOldestPolicy discards the queue head then retries unless shutdown, potentially repeating failure; its documentation advises cancellation/logging in nearly all cases.",
-      "source_ids": ["java-21-threadpoolexecutor-api"],
-      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "claim_id": "threadpool-caller-runs-feedback",
+      "text": "ThreadPoolExecutor documentation describes caller-runs as a simple feedback control mechanism that slows the rate at which new tasks are submitted. The candidate treats latency-sensitive caller-thread suitability as an explicit design tradeoff rather than a universal JDK guarantee.",
+      "source_ids": ["java-21-threadpoolexecutor-api", "java-21-caller-runs-policy-api"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制", "项目经验版", "常见追问"]
+    },
+    {
+      "claim_id": "threadpool-discard-boundaries",
+      "text": "Java SE 21 documents DiscardPolicy for tasks whose completion is never relied upon and describes DiscardOldestPolicy as rarely acceptable because it discards the oldest unhandled request and retries, without understanding application priority.",
+      "source_ids": ["java-21-threadpoolexecutor-api", "java-21-discard-policy-api", "java-21-discard-oldest-policy-api"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
     }
   ],
   "source_question_coverage": [
@@ -54,35 +88,26 @@
     }
   ],
   "review": {
-    "reviewer_id": "isolated-reviewer-r2",
-    "review_version": "1.0",
+    "reviewer_id": "source-first-threadpool-rejection-reviewer-20260817",
+    "review_version": "java21-threadpool-rejection-new-candidate-r0",
     "independent": true,
-    "decision": "revise",
-    "revision_round": 2,
+    "decision": "pass",
+    "revision_round": 0,
     "scores": {
-      "facts_and_evidence": 21,
+      "facts_and_evidence": 24,
       "directness_and_relevance": 20,
       "type_specific_completeness": 20,
       "mechanism_and_causality": 15,
       "boundaries_and_tradeoffs": 10,
       "followup_quality": 5,
-      "oral_quality": 3
+      "oral_quality": 5
     },
-    "hard_failures": ["unsupported_factual_claim"],
+    "hard_failures": [],
     "uncovered_source_variants": [],
-    "unsupported_claims": [
-      {
-        "claim": "AbortPolicy 是默认构造器使用的策略",
-        "reason": "Java SE 21 只说明未显式传入 handler 的特定 ThreadPoolExecutor 构造器使用默认拒绝处理器，不存在对应的无参默认构造器表述。"
-      },
-      {
-        "claim": "CallerRunsPolicy 不适合递归提交任务",
-        "reason": "现有一手证据只支持调用 execute 的线程执行任务并形成降速反馈，未覆盖该适用性结论。"
-      }
-    ],
+    "unsupported_claims": [],
     "findings": [
-      "四个预置策略、拒绝触发、CallerRuns shutdown 边界和 DiscardOldest 队首重试均已核验。",
-      "两轮审查后仍有未经映射的构造器/递归提交结论，并且核心结论口述密度过高；保持 needs_update，禁止第三轮修订。"
+      "The replacement candidate removes the unsupported recursive-submission claim and qualifies default AbortPolicy to documented constructor paths rather than implying a nonexistent no-arg constructor.",
+      "The answer now keeps the core conclusion short, compares all four policies on one decision axis, and preserves shutdown, retry, task-loss, and capacity-planning boundaries."
     ]
   }
 }
