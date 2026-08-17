@@ -18,16 +18,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Audit answer/evidence readiness
+      - name: Audit answer/evidence/review readiness
         shell: bash
         run: |
           node <<'NODE'
           const fs = require('fs');
           const path = require('path');
-          const crypto = require('crypto');
           const root = process.cwd();
           const answerDir = path.join(root, 'review', 'answers');
           const evidenceDir = path.join(root, 'review', 'evidence');
+          const candidateDir = path.join(root, 'review', 'candidates', 'answers');
+          const auditDir = path.join(root, 'review', 'candidates', 'audits');
+          const progressPath = path.join(root, 'review', 'progress.json');
+
           function walk(dir) {
             if (!fs.existsSync(dir)) return [];
             const out = [];
@@ -37,16 +40,20 @@ jobs:
             }
             return out;
           }
+          function readJson(file) {
+            try { return JSON.parse(fs.readFileSync(file,'utf8')); } catch { return null; }
+          }
           function meta(text) {
             const m = (text.split(/\r?\n/,1)[0] || '').match(/<!--\s*xhs-answer:\s*(\{.*\})\s*-->/);
             if (!m) return null;
             try { return JSON.parse(m[1]); } catch { return null; }
           }
+
           const answers = walk(answerDir).filter(f => f.endsWith('.md') && !f.split(path.sep).includes('archive') && !f.split(path.sep).includes('archived'));
           const status = {}, tiers = {};
           const placeholders = [], suspiciousClaims = [];
-          let evidenceCount = 0, pass=0, revise=0, reject=0, missingEvidence=0, hashMatchPass=0, fullyEligible=0;
-          const eligibleIds = [];
+          let evidenceCount = 0, pass=0, revise=0, reject=0, missingEvidence=0;
+          let humanApproved=0, humanRejected=0, humanMissing=0;
           for (const file of answers) {
             const text = fs.readFileSync(file,'utf8');
             const m = meta(text) || {};
@@ -54,37 +61,53 @@ jobs:
             status[m.status || 'missing'] = (status[m.status || 'missing'] || 0) + 1;
             tiers[m.quality_tier || 'missing'] = (tiers[m.quality_tier || 'missing'] || 0) + 1;
             const body = text.replace(/^<!--[^\n]*-->\s*/, '');
-            if (/(?:TODO|TBD|待补充|占位|请补充|\[填写|\{\{)/i.test(body)) placeholders.push(id);
+            if (/(?:TODO|TBD|待补充|占位(?!符)|请补充|\[填写|\{\{)/i.test(body)) placeholders.push(id);
             if (/(我在|我负责|我们项目|线上事故|最终提升|最终降低)/.test(text) && !/(项目映射|示例|模板|按真实经历|不要虚构|需替换|可结合)/.test(text)) suspiciousClaims.push(id);
             const ep = path.join(evidenceDir, `${id}.json`);
             if (!fs.existsSync(ep)) { missingEvidence++; continue; }
             evidenceCount++;
-            let ev; try { ev = JSON.parse(fs.readFileSync(ep,'utf8')); } catch { continue; }
+            const ev = readJson(ep);
+            if (!ev) continue;
             const decision = ev.review && ev.review.decision;
             if (decision === 'pass') pass++; else if (decision === 'revise') revise++; else if (decision === 'reject') reject++;
-            if (decision !== 'pass') continue;
-            const hash = crypto.createHash('sha256').update(text).digest('hex');
-            const hashMatch = ev.candidate_sha256 === hash;
-            if (hashMatch) hashMatchPass++;
-            const scores = ev.review && ev.review.scores || {};
-            const total = Object.values(scores).reduce((a,b)=>a+(Number(b)||0),0);
-            const hard = Array.isArray(ev.review && ev.review.hard_failures) ? ev.review.hard_failures : [];
-            if (hashMatch && ev.review.independent === true && hard.length === 0 && total >= 90) {
-              fullyEligible++;
-              eligibleIds.push(id);
-            }
+            const hr = ev.human_review;
+            if (hr && hr.reviewer_type === 'human' && hr.decision === 'approved') humanApproved++;
+            else if (hr && hr.reviewer_type === 'human' && hr.decision === 'rejected') humanRejected++;
+            else humanMissing++;
           }
+
+          const candidateFiles = walk(candidateDir).filter(f => f.endsWith('.md'));
+          const auditFiles = walk(auditDir).filter(f => f.endsWith('.json'));
+          let auditPass=0, auditFail=0;
+          const failedAuditIds=[];
+          for (const file of auditFiles) {
+            const row = readJson(file);
+            if (!row) continue;
+            if (row.ok === true) auditPass++;
+            else { auditFail++; failedAuditIds.push(row.canonical_id || path.basename(file,'.json')); }
+          }
+
+          const progress = readJson(progressPath) || {};
+          const progressItems = Array.isArray(progress) ? progress : (Array.isArray(progress.items) ? progress.items : []);
+          const reviewedItems = progressItems.filter(item => Number(item && item.review_count || 0) > 0);
+          const totalReviewMarks = reviewedItems.reduce((sum,item)=>sum+Number(item.review_count||0),0);
+          const results = {};
+          for (const item of reviewedItems) {
+            const key = item.status || 'unknown';
+            results[key] = (results[key] || 0) + 1;
+          }
+
           const result = {
             answer_count: answers.length,
             status,
             quality_tier: tiers,
             evidence_count: evidenceCount,
             missing_evidence_count: missingEvidence,
-            review_decisions: {pass, revise, reject},
-            pass_with_candidate_hash_match: hashMatchPass,
-            fully_eligible_for_ready_by_metadata: fullyEligible,
-            eligible_sample: eligibleIds.slice(0,50),
-            placeholder_count: placeholders.length,
+            independent_review_decisions: {pass, revise, reject},
+            human_review: {approved: humanApproved, rejected: humanRejected, missing_or_not_human: humanMissing},
+            candidates: {answer_files: candidateFiles.length, audit_files: auditFiles.length, audit_pass: auditPass, audit_fail: auditFail, failed_ids: failedAuditIds.slice(0,100)},
+            review_progress: {record_count: progressItems.length, reviewed_canonical_count: reviewedItems.length, total_review_marks: totalReviewMarks, reviewed_statuses: results},
+            placeholder_count_excluding_technical_placeholder_word: placeholders.length,
             placeholder_ids: placeholders,
             suspicious_personal_claim_count: suspiciousClaims.length,
             suspicious_personal_claim_ids: suspiciousClaims,
