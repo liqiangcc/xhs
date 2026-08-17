@@ -1,0 +1,476 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const taxonomy = require('../config/taxonomy.json');
+const { createMergeCanonicalUseCase } = require('../src/application/canonical/merge-canonical');
+const { createInMemoryCanonicalAdapters } = require('../src/infrastructure/in-memory/canonical-adapters');
+
+function canonical(id, overrides = {}) {
+    return {
+        canonical_id: id,
+        canonical_title: id,
+        aliases: [id],
+        question_ids: [],
+        primary_domain: { l1: '缓存', l2: 'Redis' },
+        primary_entities: ['Redis'],
+        companies: [],
+        frequency: 0,
+        review_priority: 'P2',
+        answer_status: 'ready',
+        schema_version: 'canonical_question.v1',
+        ...overrides,
+    };
+}
+
+function progress(canonicalId, overrides = {}) {
+    return {
+        canonical_id: canonicalId,
+        status: 'learning',
+        level: 2,
+        review_count: 3,
+        last_reviewed_at: '2026-08-01',
+        next_review_at: '2026-08-10',
+        confidence: 0.7,
+        difficulty: 3,
+        mistake_count: 0,
+        updated_at: '2026-08-01',
+        ...overrides,
+    };
+}
+
+function answer(canonicalId, metadataOverrides = {}) {
+    return {
+        canonical_id: canonicalId,
+        metadata: {
+            schema_version: 'answer.v1',
+            canonical_id: canonicalId,
+            version: 3,
+            status: 'draft',
+            quality_tier: 'long_tail_baseline',
+            updated_at: '2026-08-01',
+            ...metadataOverrides,
+        },
+        content: `# ${canonicalId}`,
+    };
+}
+
+function binding(questionId, canonicalId, rowId, company) {
+    return {
+        question_id: questionId,
+        canonical_id: canonicalId,
+        row_id: rowId,
+        company,
+        domain: { l1: '缓存', l2: 'Redis' },
+        tech_entities: ['redis'],
+    };
+}
+
+function passingIntegrityReport() {
+    return {
+        schema_version: 'canonical_quality_report.v1',
+        ok: true,
+    };
+}
+
+function createSeed() {
+    return {
+        canonicals: [
+            canonical('cq_target', {
+                canonical_title: 'Redis 为什么快？',
+                aliases: ['Redis 为什么快？'],
+                question_ids: ['q1'],
+                companies: ['美团'],
+                frequency: 1,
+                review_priority: 'P1',
+            }),
+            canonical('cq_source', {
+                canonical_title: 'Redis 单线程为什么快？',
+                aliases: ['Redis 单线程为什么快？'],
+                question_ids: ['q2', 'q3'],
+                companies: ['字节'],
+                frequency: 2,
+                review_priority: 'P0',
+            }),
+        ],
+        bindings: [
+            binding('q1', 'cq_target', 'r1', '美团'),
+            binding('q2', 'cq_source', 'r2', '字节'),
+            binding('q3', 'cq_source', 'r3', '字节'),
+        ],
+        review_progress: [
+            progress('cq_target', {
+                level: 3,
+                review_count: 2,
+                last_reviewed_at: '2026-08-02',
+                next_review_at: '2026-08-20',
+                confidence: 0.8,
+                difficulty: 2,
+            }),
+            progress('cq_source', {
+                level: 1,
+                review_count: 4,
+                last_reviewed_at: '2026-08-05',
+                next_review_at: '2026-08-08',
+                confidence: 0.4,
+                difficulty: 5,
+                mistake_count: 1,
+                updated_at: '2026-08-05',
+            }),
+        ],
+        review_session_events: [
+            { canonical_id: 'cq_target', result: 'good', event_id: 'e1' },
+            { canonical_id: 'cq_source', result: 'hard', event_id: 'e2' },
+        ],
+        answers: [
+            answer('cq_target', {
+                version: 4,
+                status: 'ready',
+                quality_tier: 'curated',
+            }),
+            answer('cq_source', {
+                version: 2,
+                status: 'draft',
+            }),
+        ],
+        answer_archives: [],
+    };
+}
+
+function createUseCase(adapters, overrides = {}) {
+    return createMergeCanonicalUseCase({
+        canonicalRepository: adapters.canonicalRepository,
+        questionBindingRepository: adapters.questionBindingRepository,
+        reviewRepository: adapters.reviewRepository,
+        answerRepository: adapters.answerRepository,
+        mutationGateway: adapters.mutationGateway,
+        integrityChecker: {
+            async check() {
+                return passingIntegrityReport();
+            },
+        },
+        taxonomy,
+        clock: () => '2026-08-12T05:52:00.000Z',
+        ...overrides,
+    });
+}
+
+test('orchestrates canonical, review, and answer merge state in one mutation', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const merge = createUseCase(adapters);
+
+    const result = await merge({
+        target: 'cq_target',
+        source: 'cq_source',
+        reason: 'same interview knowledge point',
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.integrity.ok, true);
+    assert.deepEqual(result.moved_question_ids, ['q2', 'q3']);
+    assert.equal(Object.isFrozen(result.plan), true);
+    assert.equal(result.plan.operation, 'merge');
+    assert.equal(result.plan.expected_revisions.length, 9);
+    assert.match(result.plan.expected_revisions[4].resource, /^review-merge:/);
+    assert.match(result.plan.expected_revisions[5].resource, /^answer-merge:/);
+    assert.deepEqual(
+        result.plan.expected_revisions.slice(6).map((item) => item.resource),
+        [
+            'question-bindings-by-question:q1',
+            'question-bindings-by-question:q2',
+            'question-bindings-by-question:q3',
+        ],
+    );
+    assert.equal(result.plan.changes.rebuild_indexes, true);
+    assert.deepEqual(result.plan.changes.canonical_removals, ['cq_source']);
+    assert.equal(result.plan.changes.canonical_upserts[0].canonical_id, 'cq_target');
+    assert.equal(result.plan.changes.canonical_upserts[0].answer_status, 'needs_update');
+    assert.equal(result.plan.changes.canonical_upserts[0].frequency, 3);
+    assert.deepEqual(
+        result.plan.changes.canonical_upserts[0].companies,
+        ['字节', '美团'].sort((a, b) => a.localeCompare(b, 'zh')),
+    );
+    assert.deepEqual(result.plan.changes.canonical_upserts[0].primary_domain, { l1: '缓存', l2: 'Redis' });
+    assert.deepEqual(result.plan.changes.canonical_upserts[0].primary_entities, ['Redis']);
+    assert.deepEqual(result.plan.changes.question_rebindings, [
+        { question_id: 'q2', from_canonical_id: 'cq_source', to_canonical_id: 'cq_target' },
+        { question_id: 'q3', from_canonical_id: 'cq_source', to_canonical_id: 'cq_target' },
+    ]);
+
+    const reviewMigration = result.plan.changes.review_migrations[0];
+    assert.equal(reviewMigration.from_canonical_id, 'cq_source');
+    assert.equal(reviewMigration.to_canonical_id, 'cq_target');
+    assert.deepEqual(reviewMigration.progress.remove_canonical_ids, ['cq_target', 'cq_source']);
+    assert.equal(reviewMigration.progress.upsert.canonical_id, 'cq_target');
+    assert.equal(reviewMigration.progress.upsert.level, 1);
+    assert.equal(reviewMigration.progress.upsert.review_count, 6);
+    assert.equal(reviewMigration.progress.upsert.status, 'weak');
+    assert.equal(reviewMigration.progress.upsert.confidence, 0.4);
+    assert.equal(reviewMigration.progress.upsert.difficulty, 5);
+    assert.equal(reviewMigration.progress.upsert.next_review_at, '2026-08-08');
+    assert.deepEqual(reviewMigration.session_events, {
+        rebind_from_canonical_id: 'cq_source',
+        rebind_to_canonical_id: 'cq_target',
+        annotate_migrated_from: true,
+    });
+
+    const invalidation = result.plan.changes.answer_invalidations[0];
+    assert.equal(invalidation.canonical_id, 'cq_target');
+    assert.equal(invalidation.source_canonical_id, 'cq_source');
+    assert.equal(invalidation.next_metadata.status, 'needs_update');
+    assert.equal(invalidation.next_metadata.quality_tier, 'needs_update');
+    assert.equal(invalidation.next_metadata.version, 5);
+    assert.equal(invalidation.next_metadata.updated_at, '2026-08-12');
+    assert.equal(invalidation.next_metadata.invalidated_by_canonical_merge, 'cq_source');
+
+    const archiveIntent = result.plan.changes.answer_archives[0];
+    assert.deepEqual(archiveIntent, {
+        canonical_id: 'cq_source',
+        target_canonical_id: 'cq_target',
+        source_answer_status: 'draft',
+        reason: 'canonical_merge',
+    });
+
+    assert.deepEqual(result.plan.changes.history_entry.review_migration, {
+        source_progress_found: true,
+        target_progress_found: true,
+        migrated_session_event_count: 1,
+    });
+    assert.deepEqual(result.plan.changes.history_entry.invalidated_target_answer, {
+        canonical_id: 'cq_target',
+        version: 5,
+        status: 'needs_update',
+        quality_tier: 'needs_update',
+    });
+    assert.deepEqual(result.plan.changes.history_entry.archived_source_answer, {
+        canonical_id: 'cq_source',
+        source_answer_status: 'draft',
+        target_canonical_id: 'cq_target',
+    });
+    assert.equal(JSON.stringify(result.plan.changes.history_entry).includes('answer_path'), false);
+    assert.equal(JSON.stringify(result.plan.changes.history_entry).includes('archived_answer_path'), false);
+
+    const state = adapters.snapshot();
+    assert.deepEqual(state.canonicals.map((record) => record.canonical_id), ['cq_target']);
+    assert.deepEqual(state.canonicals[0].question_ids, ['q1', 'q2', 'q3']);
+    assert.equal(state.canonicals[0].frequency, 3);
+    assert.deepEqual(
+        state.bindings.map((item) => [item.question_id, item.canonical_id]),
+        [
+            ['q1', 'cq_target'],
+            ['q2', 'cq_target'],
+            ['q3', 'cq_target'],
+        ],
+    );
+    assert.equal(state.review_progress.length, 1);
+    assert.equal(state.review_progress[0].canonical_id, 'cq_target');
+    assert.equal(state.review_progress[0].level, 1);
+    assert.equal(state.review_progress[0].review_count, 6);
+    assert.equal(state.review_progress[0].mistake_count, 1);
+    assert.deepEqual(
+        state.review_session_events.map((event) => [
+            event.event_id,
+            event.canonical_id,
+            event.migrated_from_canonical_id || null,
+        ]),
+        [
+            ['e1', 'cq_target', null],
+            ['e2', 'cq_target', 'cq_source'],
+        ],
+    );
+    assert.equal(state.answers.length, 1);
+    assert.equal(state.answers[0].canonical_id, 'cq_target');
+    assert.equal(state.answers[0].metadata.status, 'needs_update');
+    assert.equal(state.answers[0].metadata.quality_tier, 'needs_update');
+    assert.equal(state.answers[0].metadata.version, 5);
+    assert.equal(state.answer_archives.length, 1);
+    assert.equal(state.answer_archives[0].canonical_id, 'cq_source');
+    assert.equal(state.answer_archives[0].metadata.version, 2);
+    assert.deepEqual(state.effects.review_migrations, [reviewMigration]);
+    assert.deepEqual(state.effects.answer_invalidations, [invalidation]);
+    assert.deepEqual(state.effects.answer_archives, [archiveIntent]);
+    assert.equal(state.effects.index_rebuild_count, 1);
+    assert.deepEqual(state.effects.history, [result.plan.changes.history_entry]);
+});
+
+test('reports a global post-commit integrity failure without rolling back a committed merge', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const merge = createUseCase(adapters, {
+        integrityChecker: {
+            async check() {
+                return {
+                    schema_version: 'canonical_quality_report.v1',
+                    ok: false,
+                    orphan_binding_count: 1,
+                };
+            },
+        },
+    });
+
+    const result = await merge({ target: 'cq_target', source: 'cq_source', reason: 'same' });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.integrity.ok, false);
+    const state = adapters.snapshot();
+    assert.deepEqual(state.canonicals.map((record) => record.canonical_id), ['cq_target']);
+    assert.deepEqual(state.bindings.map((item) => item.canonical_id), ['cq_target', 'cq_target', 'cq_target']);
+    assert.equal(state.effects.history.length, 1);
+});
+
+test('rejects stale canonical revisions during preflight without publishing mutation state', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
+    let injected = false;
+    const mutationGateway = {
+        ...adapters.mutationGateway,
+        async preflight(plan) {
+            if (!injected) {
+                injected = true;
+                adapters.mutationGateway.bumpRevision(plan.expected_revisions[0].resource);
+            }
+            return originalPreflight(plan);
+        },
+    };
+    const before = adapters.snapshot();
+    const merge = createUseCase(adapters, { mutationGateway });
+
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
+        /Revision mismatch/,
+    );
+    assert.deepEqual(adapters.snapshot(), before);
+});
+
+test('rejects stale review revisions before canonical or review state is published', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
+    const mutationGateway = {
+        ...adapters.mutationGateway,
+        async preflight(plan) {
+            const reviewRevision = plan.expected_revisions.find((item) => item.resource.startsWith('review-merge:'));
+            adapters.mutationGateway.bumpRevision(reviewRevision.resource);
+            return originalPreflight(plan);
+        },
+    };
+    const before = adapters.snapshot();
+    const merge = createUseCase(adapters, { mutationGateway });
+
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
+        /Revision mismatch for review-merge:/,
+    );
+    assert.deepEqual(adapters.snapshot(), before);
+});
+
+test('rejects stale answer revisions before canonical, review, or answer state is published', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const originalPreflight = adapters.mutationGateway.preflight.bind(adapters.mutationGateway);
+    const mutationGateway = {
+        ...adapters.mutationGateway,
+        async preflight(plan) {
+            const answerRevision = plan.expected_revisions.find((item) => item.resource.startsWith('answer-merge:'));
+            adapters.mutationGateway.bumpRevision(answerRevision.resource);
+            return originalPreflight(plan);
+        },
+    };
+    const before = adapters.snapshot();
+    const merge = createUseCase(adapters, { mutationGateway });
+
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
+        /Revision mismatch for answer-merge:/,
+    );
+    assert.deepEqual(adapters.snapshot(), before);
+});
+
+test('duplicate review progress is rejected while planning before mutation preflight', async () => {
+    const seed = createSeed();
+    seed.review_progress.push(progress('cq_source', { level: 0 }));
+    const adapters = createInMemoryCanonicalAdapters(seed);
+    const before = adapters.snapshot();
+    let preflightCalled = false;
+    const mutationGateway = {
+        ...adapters.mutationGateway,
+        async preflight(plan) {
+            preflightCalled = true;
+            return adapters.mutationGateway.preflight(plan);
+        },
+    };
+    const merge = createUseCase(adapters, { mutationGateway });
+
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
+        /Cannot merge review progress with duplicate rows/,
+    );
+    assert.equal(preflightCalled, false);
+    assert.deepEqual(adapters.snapshot(), before);
+});
+
+test('existing source answer archive is rejected during planning before mutation preflight', async () => {
+    const seed = createSeed();
+    seed.answer_archives.push(answer('cq_source', { status: 'ready', version: 1 }));
+    const adapters = createInMemoryCanonicalAdapters(seed);
+    const before = adapters.snapshot();
+    let preflightCalled = false;
+    const mutationGateway = {
+        ...adapters.mutationGateway,
+        async preflight(plan) {
+            preflightCalled = true;
+            return adapters.mutationGateway.preflight(plan);
+        },
+    };
+    const merge = createUseCase(adapters, { mutationGateway });
+
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
+        /Source answer archive already exists for cq_source/,
+    );
+    assert.equal(preflightCalled, false);
+    assert.deepEqual(adapters.snapshot(), before);
+});
+
+test('injected commit failure leaves canonical, review, answers, and archives unchanged', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const before = adapters.snapshot();
+    adapters.mutationGateway.failNextCommit(new Error('injected commit failure'));
+    const merge = createUseCase(adapters);
+
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
+        /injected commit failure/,
+    );
+    assert.deepEqual(adapters.snapshot(), before);
+});
+
+test('post-commit validation rejects a mutation gateway that reports success without applying the plan', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const mutationGateway = {
+        preflight: adapters.mutationGateway.preflight.bind(adapters.mutationGateway),
+        async commit() {
+            return { committed: true };
+        },
+    };
+    const merge = createUseCase(adapters, { mutationGateway });
+
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source', reason: 'same' }),
+        /Post-commit validation failed: source canonical cq_source still exists/,
+    );
+});
+
+test('validates required merge input before loading or mutating state', async () => {
+    const adapters = createInMemoryCanonicalAdapters(createSeed());
+    const before = adapters.snapshot();
+    const merge = createUseCase(adapters);
+
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_source' }),
+        /target, source, and reason are required/,
+    );
+    await assert.rejects(
+        merge({ target: 'cq_target', source: 'cq_target', reason: 'same' }),
+        /target and source must be different/,
+    );
+    assert.deepEqual(adapters.snapshot(), before);
+});

@@ -61,14 +61,18 @@
 
 ```text
 候选召回
-  -> 去重与边界确认
-  -> canonical accept / merge / split
+  -> canonical suggest
+  -> 显式 dedup decide
+  -> dedup apply（same / alias）
+     或 canonical merge / split（维护已有 Canonical）
   -> 编写或升级答案
   -> answer validate --strict
   -> answer sync
   -> canonical check
   -> 加入复习队列
 ```
+
+Canonical/Dedup 当前命令语义以 `docs/refactor/10_current_dedup_canonical_operations.md` 为准；本文只定义内容建设目标和批次完成标准。
 
 不得只增加 Canonical 而长期保留 missing answer，也不得批量生成答案后跳过内容复核。
 

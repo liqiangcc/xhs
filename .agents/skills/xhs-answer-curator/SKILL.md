@@ -15,8 +15,9 @@ Before changing an answer, read:
 2. `config/answer_quality.json` for scores, hard failures, evidence policy, and type requirements.
 3. `docs/refactor/09_answer_content_standard.md` for answer structure and oral quality.
 4. `references/repo-map.md` for commands, inputs, and outputs.
+5. `docs/refactor/10_current_dedup_canonical_operations.md` when Canonical boundaries need review or mutation.
 
-If these sources conflict, use the stricter quality requirement and record the conflict in task notes.
+If these sources conflict, use the stricter quality requirement and record the conflict in task notes. For Canonical/Dedup command semantics, `10_current_dedup_canonical_operations.md` is authoritative over historical plans and ADRs.
 
 ## Select bounded work
 
@@ -33,8 +34,23 @@ For each ID:
 
 1. Read the Canonical, every assigned source wording, domain, entities, companies, and nearby Canonicals.
 2. Decide whether all source variants have one answer boundary.
-3. Stop answer writing and route to canonical merge/split review when the boundary is duplicated, mixed, or too broad.
+3. Stop answer writing and route to Canonical relation/boundary review when the boundary is duplicated, mixed, or too broad.
 4. Confirm the answer type from the response expected by the interviewer; do not trust the historical source label alone.
+
+### Canonical boundary handoff
+
+Answer curation must not bypass the Canonical/Dedup workflow.
+
+When step 3 finds a boundary problem:
+
+- use `canonical suggest -> dedup decide -> dedup apply` for newly detected same/alias relationships;
+- use `canonical merge` / `canonical split` only to maintain already-existing Canonical records;
+- never create a new `canonical_candidates.v1` manifest;
+- never use `canonical accept` as the default path for newly detected relationships;
+- never edit Question `canonical_id` manually to make answer validation pass;
+- never let similarity evidence silently become a relation decision.
+
+`canonical accept` is legacy compatibility for historical/manual manifests only. If the needed operation cannot be expressed through the current Application flow, stop answer writing, record the blocker, and route the repository change separately instead of inventing state transitions inside the answer task.
 
 ## Research before writing
 

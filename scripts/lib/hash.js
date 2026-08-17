@@ -1,11 +1,10 @@
 'use strict';
 
 const crypto = require('crypto');
+const { normalizeQuestionText } = require('../../src/domain/question/normalization-policy');
 
 function normalizeQuestion(text) {
-    return String(text ?? '')
-        .toLowerCase()
-        .replace(/[^\w\u4e00-\u9fa5]/g, '');
+    return normalizeQuestionText(text);
 }
 
 function computeQuestionId(text) {

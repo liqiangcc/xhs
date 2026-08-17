@@ -8,7 +8,8 @@ const assert = require('node:assert/strict');
 const { computeQuestionId } = require('../scripts/lib/hash');
 const { writeJsonl, readJsonl, writeJson } = require('../scripts/lib/io');
 const { buildIndexes, writeIndexes } = require('../scripts/lib/index_store');
-const { runSuggest, runAccept, runStats, runList, runCheck, runMerge, runSplit } = require('../scripts/commands/canonical');
+const { runSuggest, runStats, runList, runCheck, runMerge, runSplit } = require('../scripts/commands/canonical');
+const { runDecide, runApply } = require('../scripts/commands/dedup');
 const { runIntegrity } = require('../scripts/commands/review');
 const { answerPath } = require('../scripts/lib/answer_store');
 
@@ -52,9 +53,12 @@ function makeCanonical(canonicalId, title, questionIds) {
     };
 }
 
-test('suggests and accepts canonical hotspot candidates idempotently', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-'));
+test('suggests reviews and applies hotspot relations through the Dedup pipeline', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-hotspot-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
+    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
+    const candidateManifestPath = path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json');
+    const relationQueuePath = path.join(root, 'data', 'manifests', 'dedup', 'relation_candidate_queues.json');
     const indexDir = path.join(root, 'data', 'indexes');
     const questions = [
         makeQuestion('Redis 为什么快？', 'note-a', 0, '美团'),
@@ -64,75 +68,54 @@ test('suggests and accepts canonical hotspot candidates idempotently', () => {
     writeJsonl(questionsPath, questions);
     writeIndexes(buildIndexes(questions, { canonicalQuestions: [] }), indexDir);
 
-    const manifest = runSuggest({ root, hotspot: true, limit: 10 });
-    assert.equal(manifest.candidate_count, 1);
-    const candidate = manifest.candidates[0];
-    const accepted = runAccept({
-        root,
-        'candidate-id': candidate.candidate_id,
-        'canonical-id': candidate.canonical_id_suggestion,
-    });
-    assert.equal(accepted.ok, true);
-    assert.equal(accepted.updated_question_rows, 2);
+    const suggestions = await runSuggest({ root, hotspot: true, limit: 10 });
+    assert.equal(suggestions.schema_version, 'dedup_relation_suggestions.v1');
+    assert.equal(suggestions.mode, 'hotspot');
+    assert.equal(suggestions.seed, 'hotspot');
+    assert.equal(suggestions.candidate_count, 1);
+    const candidate = suggestions.relation_candidates[0];
+    assert.equal(candidate.scope, 'hotspot');
+    assert.deepEqual(candidate.question_ids, [questions[0].question_id]);
+    assert.equal(candidate.member_count, 2);
+    assert.equal(candidate.evidence[0].signal, 'hotspot_question_id');
+    assert.equal(fs.existsSync(relationQueuePath), true);
+    assert.equal(fs.existsSync(candidateManifestPath), false);
 
-    const acceptedAgain = runAccept({
+    await runDecide({
         root,
-        'candidate-id': candidate.candidate_id,
-        'canonical-id': candidate.canonical_id_suggestion,
+        'relation-candidate-key': candidate.relation_candidate_key,
+        relation: 'same',
+        'actor-type': 'human',
+        'actor-id': 'hotspot-reviewer',
+        rationale: 'same repeated hotspot question',
+        'decided-at': '2026-08-14T14:45:00+08:00',
     });
-    assert.equal(acceptedAgain.ok, true);
-    assert.equal(readJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl')).length, 1);
+    const applied = await runApply({
+        root,
+        'relation-candidate-key': candidate.relation_candidate_key,
+        'canonical-id': 'cq_redis_hotspot',
+        'canonical-title': 'Redis 为什么快？',
+    });
+    assert.equal(applied.applied, true);
+    assert.equal(applied.operation, 'canonicalize');
+    assert.equal(applied.updated_question_rows, 2);
+    assert.equal(readJsonl(canonicalPath).length, 1);
     assert.equal(readJsonl(questionsPath).filter((question) => question.canonical_id).length, 2);
     assert.equal(runStats({ root }).canonical_count, 1);
-    assert.equal(runSuggest({ root, hotspot: true, limit: 10 }).candidate_count, 0);
+
+    const after = await runSuggest({ root, hotspot: true, limit: 10 });
+    assert.equal(after.candidate_count, 0);
+    assert.equal(fs.existsSync(candidateManifestPath), false);
 
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('preserves an editorial domain override when accepting more questions', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-domain-override-'));
-    const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
-    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
-    const manifestPath = path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json');
-    const indexDir = path.join(root, 'data', 'indexes');
-    const canonicalId = 'cq_search_efficiency';
-    const q1 = { ...makeQuestion('如何提高搜索效率？', 'note-a', 0, '美团'), canonical_id: canonicalId };
-    const q2 = makeQuestion('如何避免搜索全量扫描？', 'note-b', 0, '字节');
-    const canonical = {
-        ...makeCanonical(canonicalId, '搜索引擎如何高效检索？', [q1.question_id]),
-        primary_domain: { l1: '中间件', l2: '搜索引擎(Elasticsearch等)' },
-        primary_domain_override: { l1: '中间件', l2: '搜索引擎(Elasticsearch等)' },
-    };
-    writeJsonl(questionsPath, [q1, q2]);
-    writeJsonl(canonicalPath, [canonical]);
-    writeIndexes(buildIndexes([q1, q2], { canonicalQuestions: [canonical] }), indexDir);
-    writeJson(manifestPath, {
-        schema_version: 'canonical_candidates.v1',
-        candidates: [{
-            candidate_id: 'cand_search_efficiency',
-            canonical_title: canonical.canonical_title,
-            aliases: [q2.original_question],
-            question_ids: [q2.question_id],
-            primary_domain: { l1: '缓存', l2: 'Redis' },
-            primary_entities: ['Elasticsearch'],
-            companies: ['字节'],
-            frequency: 1,
-            review_priority: 'P2',
-        }],
-    });
-
-    runAccept({ root, 'candidate-id': 'cand_search_efficiency', 'canonical-id': canonicalId });
-
-    const refreshed = readJsonl(canonicalPath)[0];
-    assert.deepEqual(refreshed.primary_domain, canonical.primary_domain_override);
-    assert.deepEqual(refreshed.primary_domain_override, canonical.primary_domain_override);
-    fs.rmSync(root, { recursive: true, force: true });
-});
-
-test('suggests entity candidates by normalized entity and question overlap', () => {
+test('delegates entity suggestions to the Dedup Application review queue', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-entity-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const indexDir = path.join(root, 'data', 'indexes');
+    const candidateManifestPath = path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json');
+    const relationQueuePath = path.join(root, 'data', 'manifests', 'dedup', 'relation_candidate_queues.json');
     const questions = [
         makeQuestion('Redis 为什么快？', 'note-a', 0, '美团'),
         makeQuestion('Redis 为什么这么快？', 'note-b', 0, '字节'),
@@ -141,19 +124,22 @@ test('suggests entity candidates by normalized entity and question overlap', () 
     writeJsonl(questionsPath, questions);
     writeIndexes(buildIndexes(questions, { canonicalQuestions: [] }), indexDir);
 
-    const manifest = runSuggest({ root, entity: 'redis', limit: 5 });
-    assert.equal(manifest.mode, 'entity');
-    assert.equal(manifest.candidate_count, 1);
-    assert.equal(manifest.candidates[0].question_ids.length, 2);
-    assert.deepEqual(
-        manifest.candidates[0].aliases,
-        ['Redis 为什么快？', 'Redis 为什么这么快？'],
-    );
+    const suggestions = await runSuggest({ root, entity: 'redis', limit: 5 });
+    assert.equal(suggestions.schema_version, 'dedup_relation_suggestions.v1');
+    assert.equal(suggestions.mode, 'entity');
+    assert.equal(suggestions.seed, 'Redis');
+    assert.equal(suggestions.candidate_count, 1);
+    assert.equal(suggestions.relation_candidates[0].question_ids.length, 2);
+    assert.deepEqual(suggestions.relation_candidates[0].allowed_relations, [
+        'same', 'alias', 'parent_child', 'followup', 'related', 'unrelated',
+    ]);
+    assert.equal(fs.existsSync(relationQueuePath), true);
+    assert.equal(fs.existsSync(candidateManifestPath), false);
 
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('lists checks merges and splits canonical records', () => {
+test('lists checks merges and splits canonical records', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-maintain-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
@@ -174,12 +160,12 @@ test('lists checks merges and splits canonical records', () => {
 
     assert.equal(runList({ root, priority: 'P0' }).returned_count, 2);
     assert.equal(runCheck({ root }).ok, true);
-    const merged = runMerge({ root, target: targetId, source: sourceId, reason: 'same_topic' });
+    const merged = await runMerge({ root, target: targetId, source: sourceId, reason: 'same_topic' });
     assert.equal(merged.ok, true);
     assert.equal(readJsonl(canonicalPath).length, 1);
     assert.equal(readJsonl(questionsPath).find((question) => question.question_id === q2.question_id).canonical_id, targetId);
 
-    const split = runSplit({
+    const split = await runSplit({
         root,
         'canonical-id': targetId,
         'question-id': q2.question_id,
@@ -194,7 +180,7 @@ test('lists checks merges and splits canonical records', () => {
     fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('merge migrates review references and archives the redundant formal answer', () => {
+test('merge migrates review references and archives the redundant formal answer', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-merge-history-'));
     const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
     const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
@@ -223,7 +209,7 @@ test('merge migrates review references and archives the redundant formal answer'
         fs.writeFileSync(answerPath(canonicalId, { answersDir: path.join(root, 'review', 'answers') }), `<!-- xhs-answer: ${JSON.stringify({ schema_version: 'answer.v1', canonical_id: canonicalId, version: 1, status: 'needs_update', updated_at: '2026-06-30', quality_tier: 'long_tail_baseline' })} -->\n# ${canonicalId}\n`, 'utf8');
     }
 
-    const result = runMerge({ root, target: targetId, source: sourceId, reason: 'semantic_duplicate', date: '2026-06-30' });
+    const result = await runMerge({ root, target: targetId, source: sourceId, reason: 'semantic_duplicate', date: '2026-06-30' });
     assert.equal(result.ok, true);
     assert.equal(result.review_migration.migrated_session_event_count, 1);
     assert.equal(fs.existsSync(answerPath(sourceId, { answersDir: path.join(root, 'review', 'answers') })), false);
@@ -241,38 +227,6 @@ test('merge migrates review references and archives the redundant formal answer'
     assert.equal(runIntegrity({ root, noWrite: true }).ok, true);
     const history = require('../scripts/lib/io').readJson(path.join(root, 'data', 'manifests', 'canonical', 'canonical_merge_history.json'));
     assert.equal(history.items[0].source, sourceId);
-    fs.rmSync(root, { recursive: true, force: true });
-});
-
-test('rejects accepting a candidate whose question is already bound elsewhere', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-canonical-conflict-'));
-    const questionsPath = path.join(root, 'data', 'questions', 'questions.jsonl');
-    const canonicalPath = path.join(root, 'data', 'questions', 'canonical_questions.jsonl');
-    const manifestPath = path.join(root, 'data', 'manifests', 'canonical', 'canonical_candidates.json');
-    const q1 = { ...makeQuestion('Redis 为什么快？', 'note-a', 0, '美团'), canonical_id: 'cq_existing_redis' };
-    writeJsonl(questionsPath, [q1]);
-    writeJsonl(canonicalPath, [makeCanonical('cq_existing_redis', 'Redis 为什么快？', [q1.question_id])]);
-    writeJson(manifestPath, {
-        schema_version: 'canonical_candidates.v1',
-        candidates: [{
-            candidate_id: 'cand_conflict',
-            canonical_title: 'Redis 为什么快？',
-            aliases: ['Redis 为什么快？'],
-            question_ids: [q1.question_id],
-            primary_domain: { l1: '缓存', l2: 'Redis' },
-            primary_entities: ['Redis'],
-            companies: ['美团'],
-            frequency: 1,
-            review_priority: 'P2',
-        }],
-    });
-
-    assert.throws(
-        () => runAccept({ root, 'candidate-id': 'cand_conflict', 'canonical-id': 'cq_new_redis' }),
-        /already belongs to cq_existing_redis/
-    );
-    assert.equal(readJsonl(questionsPath)[0].canonical_id, 'cq_existing_redis');
-
     fs.rmSync(root, { recursive: true, force: true });
 });
 
