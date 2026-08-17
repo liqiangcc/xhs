@@ -54,17 +54,19 @@ function parseMetadata(text) {
   }
 }
 
-function extractProgressIds(raw) {
-  if (Array.isArray(raw)) {
-    return raw.map((row) => row && row.canonical_id).filter(Boolean);
-  }
+function extractProgressItems(raw) {
+  if (Array.isArray(raw)) return raw.filter(Boolean);
   if (!raw || typeof raw !== 'object') return [];
   for (const key of ['items', 'progress', 'records', 'rows']) {
-    if (Array.isArray(raw[key])) {
-      return raw[key].map((row) => row && row.canonical_id).filter(Boolean);
-    }
+    if (Array.isArray(raw[key])) return raw[key].filter(Boolean);
   }
-  return Object.keys(raw).filter((key) => key.startsWith('cq_'));
+  return Object.entries(raw)
+    .filter(([key]) => key.startsWith('cq_'))
+    .map(([canonicalId, value]) => ({ canonical_id: canonicalId, ...(value && typeof value === 'object' ? value : {}) }));
+}
+
+function extractProgressIds(raw) {
+  return extractProgressItems(raw).map((row) => row && row.canonical_id).filter(Boolean);
 }
 
 function normalizedAnswerHash(text) {
@@ -216,7 +218,7 @@ for (const file of answerFiles) {
     }
   }
   const body = text.replace(/^<!--[^\n]*-->\s*/, '');
-  if (/(?:TODO|TBD|待补充|占位|请补充|\[填写|\{\{)/i.test(body)) {
+  if (/(?:TODO|TBD|待补充|占位(?!符)|请补充|\[填写|\{\{)/i.test(body)) {
     answerDefects.push({ canonical_id: canonicalId, file: relative, defect: 'placeholder' });
   }
   const hash = normalizedAnswerHash(text);
@@ -253,6 +255,7 @@ if (massDuplicateClusters.length) {
   });
 }
 
+const progressItems = extractProgressItems(progress);
 const progressIds = new Set(extractProgressIds(progress));
 const missingProgress = canonicals
   .filter((canonical) => !progressIds.has(canonical.canonical_id))
@@ -266,6 +269,16 @@ const orphanProgress = [...progressIds].filter((canonicalId) => !canonicalById.h
 if (orphanProgress.length) {
   addFinding(findings, 'major', 'REVIEW_PROGRESS_ORPHAN', `${orphanProgress.length} ReviewProgress records reference missing Canonicals.`, {
     sample_canonical_ids: orphanProgress.slice(0, 25),
+  });
+}
+const reviewedProgress = progressItems.filter((item) => Number(item && item.review_count || 0) > 0);
+const totalReviewMarks = reviewedProgress.reduce((sum, item) => sum + Number(item.review_count || 0), 0);
+if (reviewedProgress.length < 5 || totalReviewMarks < 10) {
+  addFinding(findings, 'major', 'REAL_REVIEW_VALIDATION_INCOMPLETE', 'The content SSOT requires at least 5 reviewed Canonicals and 10 real review marks before final completion.', {
+    reviewed_canonical_count: reviewedProgress.length,
+    total_review_marks: totalReviewMarks,
+    required_reviewed_canonical_count: 5,
+    required_total_review_marks: 10,
   });
 }
 
@@ -318,6 +331,8 @@ const metrics = {
   missing_answer_count: missingAnswers.length,
   review_progress_count: progressIds.size,
   missing_review_progress_count: missingProgress.length,
+  reviewed_canonical_count: reviewedProgress.length,
+  total_review_marks: totalReviewMarks,
   excluded_without_reason_count: invalidWithoutReason.length,
   mass_identical_answer_cluster_count: massDuplicateClusters.length,
 };
@@ -332,7 +347,7 @@ const report = {
     review_scope: [
       'Question/Canonical ownership and reachability',
       'active Answer completeness and anti-template checks',
-      'ReviewProgress completeness and orphan detection',
+      'ReviewProgress completeness, real-review validation and orphan detection',
       'excluded Question explainability',
       'unverified personal-experience claim detection',
       'full repository and answer quality gates',
@@ -360,6 +375,7 @@ const markdown = [
   `- Canonicals: ${metrics.canonical_count}`,
   `- Active answers: ${metrics.active_answer_count}; ready: ${metrics.ready_answer_count}; missing: ${metrics.missing_answer_count}`,
   `- ReviewProgress: ${metrics.review_progress_count}; missing: ${metrics.missing_review_progress_count}`,
+  `- Real review validation: ${metrics.reviewed_canonical_count} Canonicals; ${metrics.total_review_marks} review marks`,
   `- Excluded rows without reason: ${metrics.excluded_without_reason_count}`,
   '',
   '## Executable Verification',
