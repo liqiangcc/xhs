@@ -4,8 +4,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { classify } = require('../scripts/content/audit_answer_types');
 
-function type(title, questionType = '八股文_Concept', original = title) {
-    return classify({ canonical_title: title, aliases: [] }, [{ question_type: questionType, original_question: original }]).answer_type;
+function result(title, questionType = '八股文_Concept', original = title, aliases = []) {
+    return classify({ canonical_title: title, aliases }, [{ question_type: questionType, original_question: original }]);
+}
+
+function type(title, questionType = '八股文_Concept', original = title, aliases = []) {
+    return result(title, questionType, original, aliases).answer_type;
 }
 
 test('answer type audit prioritizes expected answer artifact over legacy source label', () => {
@@ -33,4 +37,37 @@ test('explicit coding and SQL requests are recognized without treating MySQL as 
     assert.equal(type('编写 SQL 查询每个部门工资最高的员工'), 'coding');
     assert.equal(type('MySQL 常见索引类型及作用'), 'concept');
     assert.equal(type('ArrayList 和 LinkedList 的区别及底层实现'), 'concept');
+});
+
+test('real pilot questions are classified by the response artifact they require', () => {
+    assert.equal(
+        type('并发转账如何保证原子性并避免死锁？', '原理深度_UnderTheHood', '代码手撕：多线程环境下的账户转账（转账操作的原子性与死锁避免）。'),
+        'coding',
+    );
+    assert.equal(
+        type('CMS 垃圾收集器的执行流程及 STW 阶段', '八股文_Concept', '[美团] CMS 的垃圾回收过程。为啥要分成 4 步？'),
+        'mechanism',
+    );
+    assert.equal(
+        type('IO 多路复用及 select、poll、epoll 的区别', '八股文_Concept', 'IO多路复用'),
+        'mechanism',
+    );
+    assert.equal(
+        type('如何选择 Kafka、RocketMQ 和 RabbitMQ？', '八股文_Concept', '如何根据应用场景 choose 合适的消息中间件?'),
+        'scenario',
+    );
+    assert.equal(
+        type('如何使用 Redis 正确实现分布式锁？', '八股文_Concept', '如何使用 Redis 实现分布式锁？'),
+        'scenario',
+    );
+    assert.equal(type('TCP 三次握手和四次挥手的过程与原因'), 'mechanism');
+});
+
+test('comparison questions stay concept while mechanism-heavy subrequirements remain explicit', () => {
+    assert.equal(type('synchronized 和 Lock 的区别'), 'concept');
+    assert.equal(type('synchronized 和 volatile 的区别'), 'concept');
+
+    const tcpWait = result('TIME_WAIT 与 CLOSE_WAIT 的区别及 2MSL 原因');
+    assert.equal(tcpWait.answer_type, 'concept');
+    assert.deepEqual(tcpWait.secondary_requirements, ['mechanism']);
 });
