@@ -1,0 +1,93 @@
+name: Content Readiness Audit
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .content-readiness-audit-trigger
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Audit answer/evidence readiness
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const crypto = require('crypto');
+          const root = process.cwd();
+          const answerDir = path.join(root, 'review', 'answers');
+          const evidenceDir = path.join(root, 'review', 'evidence');
+          function walk(dir) {
+            if (!fs.existsSync(dir)) return [];
+            const out = [];
+            for (const e of fs.readdirSync(dir, {withFileTypes:true})) {
+              const p = path.join(dir, e.name);
+              if (e.isDirectory()) out.push(...walk(p)); else out.push(p);
+            }
+            return out;
+          }
+          function meta(text) {
+            const m = (text.split(/\r?\n/,1)[0] || '').match(/<!--\s*xhs-answer:\s*(\{.*\})\s*-->/);
+            if (!m) return null;
+            try { return JSON.parse(m[1]); } catch { return null; }
+          }
+          const answers = walk(answerDir).filter(f => f.endsWith('.md') && !f.split(path.sep).includes('archive') && !f.split(path.sep).includes('archived'));
+          const status = {}, tiers = {};
+          const placeholders = [], suspiciousClaims = [];
+          let evidenceCount = 0, pass=0, revise=0, reject=0, missingEvidence=0, hashMatchPass=0, fullyEligible=0;
+          const eligibleIds = [];
+          for (const file of answers) {
+            const text = fs.readFileSync(file,'utf8');
+            const m = meta(text) || {};
+            const id = m.canonical_id || path.basename(file,'.md');
+            status[m.status || 'missing'] = (status[m.status || 'missing'] || 0) + 1;
+            tiers[m.quality_tier || 'missing'] = (tiers[m.quality_tier || 'missing'] || 0) + 1;
+            const body = text.replace(/^<!--[^\n]*-->\s*/, '');
+            if (/(?:TODO|TBD|待补充|占位|请补充|\[填写|\{\{)/i.test(body)) placeholders.push(id);
+            if (/(我在|我负责|我们项目|线上事故|最终提升|最终降低)/.test(text) && !/(项目映射|示例|模板|按真实经历|不要虚构|需替换|可结合)/.test(text)) suspiciousClaims.push(id);
+            const ep = path.join(evidenceDir, `${id}.json`);
+            if (!fs.existsSync(ep)) { missingEvidence++; continue; }
+            evidenceCount++;
+            let ev; try { ev = JSON.parse(fs.readFileSync(ep,'utf8')); } catch { continue; }
+            const decision = ev.review && ev.review.decision;
+            if (decision === 'pass') pass++; else if (decision === 'revise') revise++; else if (decision === 'reject') reject++;
+            if (decision !== 'pass') continue;
+            const hash = crypto.createHash('sha256').update(text).digest('hex');
+            const hashMatch = ev.candidate_sha256 === hash;
+            if (hashMatch) hashMatchPass++;
+            const scores = ev.review && ev.review.scores || {};
+            const total = Object.values(scores).reduce((a,b)=>a+(Number(b)||0),0);
+            const hard = Array.isArray(ev.review && ev.review.hard_failures) ? ev.review.hard_failures : [];
+            if (hashMatch && ev.review.independent === true && hard.length === 0 && total >= 90) {
+              fullyEligible++;
+              eligibleIds.push(id);
+            }
+          }
+          const result = {
+            answer_count: answers.length,
+            status,
+            quality_tier: tiers,
+            evidence_count: evidenceCount,
+            missing_evidence_count: missingEvidence,
+            review_decisions: {pass, revise, reject},
+            pass_with_candidate_hash_match: hashMatchPass,
+            fully_eligible_for_ready_by_metadata: fullyEligible,
+            eligible_sample: eligibleIds.slice(0,50),
+            placeholder_count: placeholders.length,
+            placeholder_ids: placeholders,
+            suspicious_personal_claim_count: suspiciousClaims.length,
+            suspicious_personal_claim_ids: suspiciousClaims,
+          };
+          console.log('CONTENT_READINESS_AUDIT=' + JSON.stringify(result));
+          NODE
