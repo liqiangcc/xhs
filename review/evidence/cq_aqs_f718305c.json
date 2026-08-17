@@ -1,76 +1,81 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_aqs_f718305c",
-  "candidate_sha256": "02953bcc2d50d1d8e59656c064a87fc4b7b78b367af6145b2f986bb88b7a572d",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "725393967217173a0ee0bfed840eb84cb08cd8b5f4c121d295fd885023ed404b",
+  "checked_at": "2026-08-17",
   "writer": {
-    "writer_id": "historical-curated-audit",
-    "writer_version": "v1"
+    "writer_id": "answer-curator",
+    "writer_version": "aqs-jdk21.v2"
   },
   "sources": [
-    {
-      "source_id": "openjdk-aqs-source",
-      "title": "OpenJDK AbstractQueuedSynchronizer source",
-      "locator": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/locks/AbstractQueuedSynchronizer.java",
-      "source_type": "upstream_source_code_or_release_note",
-      "checked_at": "2026-07-11"
-    },
     {
       "source_id": "java-21-aqs-api",
       "title": "Java SE 21 AbstractQueuedSynchronizer API",
       "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/AbstractQueuedSynchronizer.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "openjdk21u-aqs-source-fixed",
+      "title": "OpenJDK 21u AbstractQueuedSynchronizer source at fixed revision 7da13d210d4c6024083c57f0b8432fc6fee19a90",
+      "locator": "https://github.com/openjdk/jdk21u/blob/7da13d210d4c6024083c57f0b8432fc6fee19a90/src/java.base/share/classes/java/util/concurrent/locks/AbstractQueuedSynchronizer.java",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-17"
     }
   ],
   "claims": [
     {
       "claim_id": "aqs-framework-state-queue",
-      "text": "AQS is a framework for blocking locks and synchronizers that uses a FIFO wait queue and a single atomically updated int synchronization state; subclasses define the protected state-changing methods.",
-      "source_ids": ["openjdk-aqs-source"],
+      "text": "Java 21 defines AQS as a framework for blocking locks and related synchronizers based on an internal FIFO wait queue and one atomically updated int synchronization state whose meaning is defined by subclasses.",
+      "source_ids": ["java-21-aqs-api", "openjdk21u-aqs-source-fixed"],
       "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
     },
     {
-      "claim_id": "aqs-acquire-release-template",
-      "text": "Exclusive acquire repeatedly invokes tryAcquire, queues and possibly blocks on failure; release invokes tryRelease and may unblock the first queued thread. Shared mode may cascade signals.",
-      "source_ids": ["openjdk-aqs-source", "java-21-aqs-api"],
-      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制", "常见追问"]
-    },
-    {
-      "claim_id": "aqs-fairness-boundary",
-      "text": "AQS has an internal FIFO queue but does not automatically enforce FIFO acquisition; subclass acquisition policy determines whether barging/fairness checks are used.",
-      "source_ids": ["openjdk-aqs-source"],
-      "answer_locations": ["关键细节", "常见追问", "易错点"]
-    },
-    {
-      "claim_id": "aqs-condition-transfer",
-      "text": "ConditionObject condition waiting releases the saved state, blocks, and then reacquires; signal moves a waiting node from the condition wait queue to the owning lock queue rather than granting the lock immediately.",
+      "claim_id": "aqs-template-method-boundary",
+      "text": "Subclasses implement protected tryAcquire/tryRelease and/or shared counterparts while AQS final public methods perform the queuing and blocking mechanics; the protected methods should be thread-safe, short and normally non-blocking.",
       "source_ids": ["java-21-aqs-api"],
-      "answer_locations": ["1 分钟版", "常见追问", "易错点"]
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "aqs-acquire-release-loop",
+      "text": "For Java 21 exclusive acquisition, AQS invokes tryAcquire at least once, then queues and may repeatedly block/unblock and retry until successful; release invokes tryRelease and, when release permits progress, unblocks a queued thread. Shared mode uses the same FIFO queue and may cascade signals.",
+      "source_ids": ["java-21-aqs-api", "openjdk21u-aqs-source-fixed"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "aqs-fairness-throughput-boundary",
+      "text": "The FIFO queue does not automatically enforce FIFO acquisition because acquisition checks occur before enqueueing and new threads may barge; hasQueuedPredecessors can be used by fair synchronizers, while the Java 21 API states that default barging generally offers higher throughput and scalability.",
+      "source_ids": ["java-21-aqs-api"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "aqs-condition-reacquire",
+      "text": "Java 21 ConditionObject support releases the saved synchronization state while waiting and eventually reacquires the saved state before returning; a condition signal does not directly grant the lock.",
+      "source_ids": ["java-21-aqs-api", "openjdk21u-aqs-source-fixed"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "claim_id": "aqs-implementation-version-boundary",
+      "text": "Internal node layout, links, parking and cancellation cleanup are implementation details rather than the public AQS contract; this candidate binds such source-level discussion to OpenJDK 21u revision 7da13d210d4c6024083c57f0b8432fc6fee19a90.",
+      "source_ids": ["openjdk21u-aqs-source-fixed"],
+      "answer_locations": ["核心结论", "关键细节", "常见追问", "易错点"]
     }
   ],
   "source_question_coverage": [
     {
       "question_id": "019eb1e87747d4170c30018cbbf1ad6c",
       "covered": true,
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
     }
   ],
-  "review": {
+  "review_state": "pending_independent_rereview",
+  "prior_review": {
     "reviewer_id": "review_aqs_isolated",
     "review_version": "v1",
     "independent": true,
     "decision": "revise",
     "revision_round": 1,
-    "scores": {
-      "facts_and_evidence": 19,
-      "directness_and_relevance": 19,
-      "type_specific_completeness": 14,
-      "mechanism_and_causality": 13,
-      "boundaries_and_tradeoffs": 7,
-      "followup_quality": 5,
-      "oral_quality": 5
-    },
+    "candidate_sha256": "02953bcc2d50d1d8e59656c064a87fc4b7b78b367af6145b2f986bb88b7a572d",
     "hard_failures": ["unsupported_factual_claim", "missing_version_boundary"],
     "revision_suggestions": [
       "明确 Java 21 API 适用边界，并区分稳定的 AQS 抽象与可能随 JDK 版本变化的实现细节。",
