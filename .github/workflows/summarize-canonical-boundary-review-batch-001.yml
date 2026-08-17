@@ -1,0 +1,103 @@
+name: Summarize Canonical Boundary Review Batch 001
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .canonical-boundary-summary-batch-001-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  summarize:
+    if: "${{ github.event.head_commit.message == 'chore: summarize canonical boundary review batch 001' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Build source-only review summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const base = 'review/content_build/canonical_boundary_review/batch_001';
+          const batch = JSON.parse(fs.readFileSync(path.join(base, 'candidates.json'), 'utf8'));
+          const summaries = batch.candidates.map((candidate) => ({
+            candidate_id: candidate.candidate_id,
+            algorithm_evidence: candidate.evidence,
+            sides: candidate.canonical_ids.map((id) => {
+              const contextPath = path.join(base, 'contexts', candidate.candidate_id, `${id}.json`);
+              const context = JSON.parse(fs.readFileSync(contextPath, 'utf8'));
+              return {
+                canonical_id: id,
+                canonical_title: context.canonical.canonical_title,
+                aliases: context.canonical.aliases || [],
+                answer_status: context.canonical.answer_status,
+                frequency: context.canonical.frequency,
+                primary_domain: context.canonical.primary_domain,
+                primary_entities: context.canonical.primary_entities || [],
+                source_variants: context.source_variants || [],
+                source_questions: (context.source_questions || []).map((row) => ({
+                  question_id: row.question_id,
+                  original_question: row.original_question,
+                  question_type: row.question_type,
+                  cognitive_depth: row.cognitive_depth,
+                  company: row.company,
+                  source_note_id: row.source_note_id,
+                  source_question_index: row.source_question_index,
+                  tech_entities: row.tech_entities || [],
+                })),
+              };
+            }),
+          }));
+          fs.writeFileSync(path.join(base, 'source_summary.json'), `${JSON.stringify({
+            schema_version: 'canonical_boundary_review_source_summary.v1',
+            batch_id: batch.batch_id,
+            reviewer_decisions_included: false,
+            count: summaries.length,
+            candidates: summaries,
+          }, null, 2)}\n`);
+          NODE
+
+      - name: Verify summary is read-only and repository stays green
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run ci:check
+
+      - name: Commit source-only summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add review/content_build/canonical_boundary_review/batch_001/source_summary.json
+          git commit -m "content: summarize boundary review batch 001 sources"
+
+      - name: Remove temporary summary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .canonical-boundary-summary-batch-001-trigger .github/workflows/summarize-canonical-boundary-review-batch-001.yml
+          git add -A
+          git commit -m "chore: remove boundary batch 001 summary workflow"
+
+      - name: Push review summary
+        shell: bash
+        run: git push origin HEAD:content/quality-completion
