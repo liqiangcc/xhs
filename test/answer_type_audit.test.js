@@ -26,6 +26,16 @@ test('technical words do not trigger unrelated answer types', () => {
     assert.equal(type('依赖冲突：在大型 Maven 项目中，如何排查并解决类路径冲突'), 'scenario');
 });
 
+test('legacy project source labels do not turn technical main questions into STAR answers', () => {
+    assert.equal(type('你们项目中 MySQL 事务隔离级别有哪些？', '项目实战_Project'), 'concept');
+    assert.equal(type('在项目中，HashMap 的底层原理是什么？', '项目实战_Project'), 'mechanism');
+    assert.equal(type('你们项目里 GC 的执行流程是什么？', '项目实战_Project'), 'mechanism');
+    assert.equal(type('项目中如何设计高并发库存扣减？', '项目实战_Project'), 'scenario');
+
+    assert.equal(type('在你们项目中，你如何排查线上 Full GC 问题？', '项目实战_Project'), 'project');
+    assert.equal(type('在你上一家公司中是如何实现蓝绿发布的？', '项目实战_Project'), 'project');
+});
+
 test('personal cues remain explicit and fail closed', () => {
     assert.equal(type('团队出现技术分歧时，你如何平衡团队目标与个人意见？', '项目实战_Project'), 'behavior');
     assert.equal(type('在你上一家公司中是如何实现蓝绿发布的？', '场景设计_Scenario'), 'project');
