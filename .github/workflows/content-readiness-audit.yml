@@ -127,15 +127,20 @@ jobs:
           node <<'NODE'
           const report = require('./review/reports/FINAL_SOURCE_FIRST_REVIEW.json');
           const answerFinding = report.findings.find((row) => row.code === 'ANSWER_NOT_COMPLETE');
-          if (!answerFinding) throw new Error('expected ANSWER_NOT_COMPLETE while answers are not ready');
+          if (!answerFinding) throw new Error('expected ANSWER_NOT_COMPLETE while answers are not curated-ready');
           if ((answerFinding.evidence.by_defect || {}).placeholder) throw new Error('technical placeholder wording is still misclassified');
           if (report.findings.some((row) => row.code === 'UNVERIFIED_PERSONAL_CLAIMS')) throw new Error('explicit behavior evidence boundary is still misclassified');
-          if (report.findings.some((row) => row.code === 'REAL_REVIEW_VALIDATION_INCOMPLETE')) throw new Error('real review validation should satisfy the current SSOT gate');
-          if (report.metrics.reviewed_canonical_count < 5 || report.metrics.total_review_marks < 10) throw new Error('real review metrics are below the SSOT threshold');
+          const stabilityFinding = report.findings.find((row) => row.code === 'REAL_REVIEW_VALIDATION_INCOMPLETE');
+          if (!stabilityFinding) throw new Error('expected S11 to remain incomplete until four consecutive real sampled review weeks pass');
+          if (report.metrics.real_review_stability_weeks !== 4) throw new Error('final review is not enforcing the four-week S11 window');
+          if (report.metrics.real_review_stability_ok !== false) throw new Error('current branch must not claim S11 completion without four valid weekly rounds');
+          if (!report.real_review_stability || !Array.isArray(report.real_review_stability.reports)) throw new Error('missing machine-readable S11 stability evidence');
           console.log(JSON.stringify({
             regression_ok: true,
-            reviewed_canonical_count: report.metrics.reviewed_canonical_count,
-            total_review_marks: report.metrics.total_review_marks,
+            reviewed_canonical_count_telemetry: report.metrics.reviewed_canonical_count,
+            total_review_marks_telemetry: report.metrics.total_review_marks,
+            s11_end_week: report.metrics.real_review_stability_end_week,
+            s11_reports: report.real_review_stability.reports,
             answer_defects: answerFinding.evidence.by_defect,
           }));
           NODE
