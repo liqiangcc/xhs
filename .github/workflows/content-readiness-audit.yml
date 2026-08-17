@@ -114,3 +114,28 @@ jobs:
           };
           console.log('CONTENT_READINESS_AUDIT=' + JSON.stringify(result));
           NODE
+
+      - name: Regression-check final source-first review rules
+        shell: bash
+        run: |
+          set +e
+          AUDITED_SHA="$(git rev-parse HEAD)" node scripts/audit/final_content_source_first_review.js > "$RUNNER_TEMP/final-review-regression.log" 2>&1
+          REVIEW_EXIT=$?
+          set -e
+          cat "$RUNNER_TEMP/final-review-regression.log"
+          test "$REVIEW_EXIT" = "2"
+          node <<'NODE'
+          const report = require('./review/reports/FINAL_SOURCE_FIRST_REVIEW.json');
+          const answerFinding = report.findings.find((row) => row.code === 'ANSWER_NOT_COMPLETE');
+          if (!answerFinding) throw new Error('expected ANSWER_NOT_COMPLETE while answers are not ready');
+          if ((answerFinding.evidence.by_defect || {}).placeholder) throw new Error('technical placeholder wording is still misclassified');
+          if (report.findings.some((row) => row.code === 'UNVERIFIED_PERSONAL_CLAIMS')) throw new Error('explicit behavior evidence boundary is still misclassified');
+          if (report.findings.some((row) => row.code === 'REAL_REVIEW_VALIDATION_INCOMPLETE')) throw new Error('real review validation should satisfy the current SSOT gate');
+          if (report.metrics.reviewed_canonical_count < 5 || report.metrics.total_review_marks < 10) throw new Error('real review metrics are below the SSOT threshold');
+          console.log(JSON.stringify({
+            regression_ok: true,
+            reviewed_canonical_count: report.metrics.reviewed_canonical_count,
+            total_review_marks: report.metrics.total_review_marks,
+            answer_defects: answerFinding.evidence.by_defect,
+          }));
+          NODE
