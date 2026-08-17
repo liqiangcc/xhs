@@ -1,0 +1,79 @@
+name: Pilot Writer Batch 001 Context
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .pilot-writer-batch-001-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    if: "${{ github.event.head_commit.message == 'chore: start pilot writer batch 001' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Capture isolated writer contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=review/content_build/pilot_writer_batch_001/contexts
+          mkdir -p "$out"
+          ids=(
+            cq_q_ed07a615cc87067a83229eb388be2ffa
+            cq_cms_collector_c069b541
+            cq_io_multiplexing_6e30840f
+            cq_mq_selection_9293dfad
+            cq_redis_lock_ec98b854
+            cq_synchronized_lock_2886cc94
+            cq_synchronized_volatile_2801d05c
+            cq_tcp_wait_states_c808f88e
+            cq_concurrent_transfer_a35181e0
+            cq_tcp_handshake_39cc7c09
+          )
+          for id in "${ids[@]}"; do
+            node scripts/xhs.js answer context --canonical-id "$id" --noWrite > "$out/$id.json"
+          done
+
+      - name: Verify repository remains green
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run ci:check
+
+      - name: Commit writer contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add review/content_build/pilot_writer_batch_001/contexts
+          git commit -m "content: capture pilot writer batch 001 contexts"
+
+      - name: Remove temporary context workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .pilot-writer-batch-001-trigger .github/workflows/pilot-writer-batch-001.yml
+          git add -A
+          git commit -m "chore: remove pilot writer batch 001 context workflow"
+
+      - name: Push batch context evidence
+        shell: bash
+        run: git push origin HEAD:content/quality-completion
