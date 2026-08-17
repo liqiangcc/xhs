@@ -6,6 +6,8 @@ on:
       - content/quality-completion
     paths:
       - .content-readiness-audit-trigger
+      - .github/workflows/content-readiness-audit.yml
+      - scripts/audit/final_completion_reachability.js
 
 permissions:
   contents: read
@@ -113,6 +115,32 @@ jobs:
             suspicious_personal_claim_ids: suspiciousClaims,
           };
           console.log('CONTENT_READINESS_AUDIT=' + JSON.stringify(result));
+          NODE
+
+      - name: Regression-check final completion closure/reachability contract
+        shell: bash
+        run: |
+          set +e
+          node scripts/audit/final_completion_reachability.js > "$RUNNER_TEMP/final-completion-reachability.json" 2>&1
+          COMPLETION_EXIT=$?
+          set -e
+          cat "$RUNNER_TEMP/final-completion-reachability.json"
+          test "$COMPLETION_EXIT" = "2"
+          node - "$RUNNER_TEMP/final-completion-reachability.json" <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (report.ok !== false) throw new Error('current branch must not claim final completion while curated closure is incomplete');
+          if (!report.closure || report.closure.ok !== false || !(report.closure.incomplete_count > 0)) {
+            throw new Error('expected incomplete Canonical→Answer→Evidence→ReviewProgress closure');
+          }
+          if (!report.reachability || report.reachability.ok !== false || !(report.reachability.unreachable_count > 0)) {
+            throw new Error('expected incomplete original Question→Canonical→Answer→Review reachability');
+          }
+          console.log(JSON.stringify({
+            regression_ok: true,
+            closure_incomplete_count: report.closure.incomplete_count,
+            unreachable_question_count: report.reachability.unreachable_count,
+          }));
           NODE
 
       - name: Regression-check final source-first review rules
