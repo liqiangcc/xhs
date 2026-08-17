@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_gc_algorithms_3f884748",
-  "candidate_sha256": "fffb328de7af7a8a0dd3ed42e6574da7fb1a6bfb5d4f9312e71b385c67459403",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "4be181753c63263603a8dacbd0cdc892f227197e1033580f840f732838d85b70",
+  "checked_at": "2026-08-17",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "jvm-gc-algorithms.v1"
+    "writer_version": "jvm-gc-algorithms.v2"
   },
   "sources": [
     {
@@ -13,67 +13,115 @@
       "title": "Java SE 21 HotSpot Garbage Collector Implementation",
       "locator": "https://docs.oracle.com/en/java/javase/21/gctuning/garbage-collector-implementation.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     },
     {
       "source_id": "jdk8-hotspot-gc-introduction",
       "title": "Java SE 8 HotSpot GC Tuning Guide Introduction",
       "locator": "https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/introduction.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     },
     {
       "source_id": "gc-space-model",
       "title": "Mark-sweep, compact, and copy space model",
       "locator": "review/evidence/tests/cq_gc_algorithms_3f884748/gc_space_model.test.js",
       "source_type": "executable_test_or_reproducible_experiment",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
     }
   ],
   "claims": [
     {
       "claim_id": "gc-unreachability-and-generational-hypothesis",
       "text": "Java SE 21 HotSpot defines garbage as memory for objects no longer reachable from live references, and explains generational collection using the weak generational hypothesis that most objects survive only briefly.",
-      "source_ids": ["jdk21-gc-implementation"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+      "source_ids": [
+        "jdk21-gc-implementation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
     },
     {
       "claim_id": "hotspot-young-generation-copying",
       "text": "The Java SE 21 HotSpot guide describes Eden and two Survivor spaces, copying surviving young objects between Survivor spaces and promoting them by age or space conditions; young collections primarily process the young generation and their cost is related to live objects collected.",
-      "source_ids": ["jdk21-gc-implementation"],
-      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "source_ids": [
+        "jdk21-gc-implementation"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
     },
     {
       "claim_id": "gc-throughput-latency-footprint-tradeoff",
       "text": "The Java SE 21 HotSpot guide treats throughput, latency, footprint, and promptness as GC tradeoffs and notes that young-generation sizing trades throughput against footprint, promptness, and pause times.",
-      "source_ids": ["jdk21-gc-implementation"],
-      "answer_locations": ["3 分钟版", "关键细节", "项目经验版", "常见追问"]
+      "source_ids": [
+        "jdk21-gc-implementation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "项目经验版",
+        "常见追问"
+      ]
     },
     {
       "claim_id": "copy-and-compaction-space-model",
       "text": "The executable model demonstrates the algorithmic distinction that sweeping can leave non-contiguous holes that cannot satisfy a two-slot contiguous allocation, while compacting or copying surviving objects leaves a contiguous free region; Oracle's Java SE 8 HotSpot guide documents recovery by compacting live objects through parallel copying as a collector implementation mechanism.",
-      "source_ids": ["gc-space-model", "jdk8-hotspot-gc-introduction"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "source_ids": [
+        "gc-space-model",
+        "jdk8-hotspot-gc-introduction"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
     },
     {
-      "claim_id": "jdk9plus-hotspot-gc-logging-boundary",
-      "text": "The Java SE 21 HotSpot GC guide documents -Xlog:gc* as the detailed GC logging configuration and states that -verbose:gc is an alias for -Xlog:gc; the candidate limits this command syntax to JDK 9+ HotSpot and does not assert it for older JDKs.",
-      "source_ids": ["jdk21-gc-implementation"],
-      "answer_locations": ["关键细节", "项目经验版", "易错点"]
+      "claim_id": "jdk21-hotspot-gc-logging-boundary",
+      "text": "The Java SE 21 HotSpot GC guide documents -Xlog:gc* as a detailed GC logging configuration. The candidate now scopes that syntax only to JDK 21 HotSpot and explicitly directs earlier JDK users to their version-specific logging options.",
+      "source_ids": [
+        "jdk21-gc-implementation"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "项目经验版",
+        "易错点"
+      ]
     }
   ],
   "source_question_coverage": [
     {
       "question_id": "99c303951dfeb4cd39cae93ae0e53a5d",
       "covered": true,
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
     }
   ],
   "validation": {
     "command": "node review/evidence/tests/cq_gc_algorithms_3f884748/gc_space_model.test.js",
     "result": "passed"
   },
-  "review": {
+  "review_state": "independent_rereview_passed",
+  "prior_review": {
     "reviewer_id": "gc-algorithms-independent-reviewer-round2",
     "review_version": "jvm-gc-algorithms.review.v2",
     "independent": true,
@@ -88,9 +136,37 @@
       "followup_quality": 5,
       "oral_quality": 5
     },
-    "hard_failures": ["unsupported_factual_claim"],
+    "hard_failures": [
+      "unsupported_factual_claim"
+    ],
     "revision_suggestions": [
       "现有来源只直接覆盖 JDK 21 的 -Xlog:gc*；如需声明 JDK 9+，必须补充 JDK 9 官方文档或 JEP 158 的一手证据。"
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-gc-algorithms-reviewer",
+    "review_version": "jvm-gc-algorithms.review.r2.1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "revision_suggestions": [],
+    "findings": [
+      "Source-first rereview checked the current candidate against the Java SE 21 HotSpot GC guide and the existing reproducible space-model evidence before consulting the prior review.",
+      "The only prior hard failure was the unsupported JDK 9+ scope for -Xlog:gc*. The candidate now states only the directly supported JDK 21 HotSpot boundary, so the version-sensitive logging claim matches its primary source.",
+      "The answer retains explicit algorithm/collector separation, reachability and generational boundaries, fragmentation/copy/compaction tradeoffs, observable tuning dimensions, and source-question coverage.",
+      "No unsupported factual claim or other hard failure remains."
     ]
   }
 }
