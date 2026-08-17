@@ -1,0 +1,61 @@
+name: Bootstrap Content Coverage
+
+on:
+  push:
+    branches:
+      - content/full-coverage
+    paths:
+      - .content-coverage-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: github.event.head_commit.message == 'chore: start content coverage bootstrap'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Capture baseline and generate first review queue
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/bootstrap
+          node scripts/xhs.js canonical stats > review/content_build/bootstrap/canonical-stats.json
+          node scripts/xhs.js canonical list --limit 200 > review/content_build/bootstrap/canonical-list.json
+          node scripts/xhs.js canonical suggest --hotspot --limit 50
+          cp data/manifests/dedup/relation_candidate_queues.json review/content_build/bootstrap/hotspot-relation-candidates.json
+          node scripts/xhs.js answer status --missing > review/content_build/bootstrap/answer-missing.json
+          node scripts/xhs.js review integrity > review/content_build/bootstrap/review-integrity.json
+          node scripts/xhs.js canonical check > review/content_build/bootstrap/canonical-check.json
+          node scripts/xhs.js report quality --noWrite --noFail > review/content_build/bootstrap/quality-report.json
+
+      - name: Verify repository gates before content mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run ci:check
+
+      - name: Commit bootstrap evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .content-coverage-trigger
+          git add -A
+          git commit -m "content: bootstrap full-coverage evidence and first hotspot queue"
+          git push origin HEAD:content/full-coverage
