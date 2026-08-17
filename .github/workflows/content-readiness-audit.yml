@@ -163,3 +163,32 @@ jobs:
             total_score: row.total_score,
           }));
           NODE
+
+      - name: Validate revised CAS candidate and source-first rereview
+        shell: bash
+        run: |
+          node <<'NODE'
+          const path = require('path');
+          const fs = require('fs');
+          const { auditOneCandidate } = require('./scripts/lib/answer_quality');
+          const candidate = path.join(process.cwd(), 'review', 'candidates', 'answers', 'cq_cas_64fa0b00.md');
+          const row = auditOneCandidate(candidate, { root: process.cwd(), noWrite: true });
+          console.log(JSON.stringify(row, null, 2));
+          if (row.candidate_sha256 !== '09001d37311bf7d760a79d38bd7b7ce8566bf93b3d45ebf1de674d006cef2939') {
+            throw new Error(`unexpected CAS candidate hash: ${row.candidate_sha256}`);
+          }
+          if (!row.ok) {
+            throw new Error(`CAS candidate/rereview audit failed: ${JSON.stringify({ hard_failures: row.hard_failures, errors: row.errors })}`);
+          }
+          if (row.total_score < 90) throw new Error(`CAS rereview score below promotion threshold: ${row.total_score}`);
+          if ((row.hard_failures || []).length) throw new Error(`unexpected CAS hard failures: ${row.hard_failures.join(',')}`);
+          const stored = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'review', 'candidates', 'audits', 'cq_cas_64fa0b00.json'), 'utf8'));
+          if (!stored.ok || stored.candidate_sha256 !== row.candidate_sha256 || stored.total_score !== row.total_score) {
+            throw new Error(`stored CAS audit is stale: ${JSON.stringify({stored, computed: row})}`);
+          }
+          console.log(JSON.stringify({
+            cas_source_first_rereview_passed: true,
+            candidate_sha256: row.candidate_sha256,
+            total_score: row.total_score,
+          }));
+          NODE
