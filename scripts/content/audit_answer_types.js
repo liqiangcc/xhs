@@ -57,7 +57,7 @@ function classify(canonical, questions) {
     // explanation as the primary artifact. These strong cues must be evaluated
     // before the generic “区别/对比 -> concept” rule.
     const strongMechanismCue = /cms.*(?:垃圾回收|垃圾收集|收集器).*(?:执行|回收)?(?:流程|过程)|(?:cms|垃圾回收).*(?:为什么|为啥).*(?:分成|需要).*(?:步|阶段)|(?:io|i\/o)\s*多路复用|tcp.*(?:三次握手|四次挥手).*(?:过程|原理|原因)/;
-    const mechanismCue = /原理|底层|机制|生命周期|工作流程|复制流程|恢复流程|状态(?:转换|变化)|为什么快|如何保证.*(?:原子性|可见性|有序性)|安全点|等待与唤醒|加锁失败后的等待|如何实现分布式锁|binlog|undo\s*log|零拷贝|\bisr\b|\bspi\b|hashmap.*(?:原理|底层)|hash(?:表| table)?.*冲突|bean.*生命周期/;
+    const mechanismCue = /原理|底层|机制|生命周期|工作流程|执行流程|运行流程|处理流程|复制流程|恢复流程|状态(?:转换|变化)|为什么快|如何保证.*(?:原子性|可见性|有序性)|安全点|等待与唤醒|加锁失败后的等待|如何实现分布式锁|binlog|undo\s*log|零拷贝|\bisr\b|\bspi\b|hashmap.*(?:原理|底层)|hash(?:表| table)?.*冲突|bean.*生命周期/;
     const comparisonCue = /区别|对比/;
     const conceptCue = /有哪些|类型|分类|状态|策略|是什么|什么是|特点|优缺点|常见.*(?:算法|索引|场景)/;
 
