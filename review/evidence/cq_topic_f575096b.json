@@ -2,18 +2,86 @@
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_topic_f575096b",
   "candidate_sha256": "35941f83caf80506b892d301ca779255fde98e5846aa32400d5b56b6f40bf810",
-  "checked_at": "2026-07-11",
-  "writer": {"writer_id":"answer-curator","writer_version":"process-thread-linux-clone.v1"},
+  "checked_at": "2026-08-17",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "process-thread-linux-clone.v1"
+  },
   "sources": [
-    {"source_id":"linux-clone","title":"Linux clone(2) manual","locator":"https://man7.org/linux/man-pages/man2/clone.2.html","source_type":"official_documentation","checked_at":"2026-07-11"},
-    {"source_id":"linux-fork","title":"Linux fork(2) manual","locator":"https://man7.org/linux/man-pages/man2/fork.2.html","source_type":"official_documentation","checked_at":"2026-07-11"},
-    {"source_id":"posix-pthreads","title":"Linux pthreads(7) manual (POSIX threads)","locator":"https://man7.org/linux/man-pages/man7/pthreads.7.html","source_type":"official_documentation","checked_at":"2026-07-11"}
+    {
+      "source_id": "linux-clone",
+      "title": "Linux clone(2) manual",
+      "locator": "https://man7.org/linux/man-pages/man2/clone.2.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "linux-fork",
+      "title": "Linux fork(2) manual",
+      "locator": "https://man7.org/linux/man-pages/man2/fork.2.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "posix-pthreads",
+      "title": "Linux pthreads(7) manual (POSIX threads)",
+      "locator": "https://man7.org/linux/man-pages/man7/pthreads.7.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "linux-pthread-kill",
+      "title": "Linux pthread_kill(3) manual",
+      "locator": "https://man7.org/linux/man-pages/man3/pthread_kill.3.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "linux-credentials",
+      "title": "Linux credentials(7) manual",
+      "locator": "https://man7.org/linux/man-pages/man7/credentials.7.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "posix-pthread-mutex",
+      "title": "POSIX pthread_mutex_lock(3p) manual",
+      "locator": "https://man7.org/linux/man-pages/man3/pthread_mutex_lock.3p.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    }
   ],
   "claims": [
-    {"claim_id":"clone-sharing-boundary","text":"Linux clone/clone3 controls whether a child shares virtual address space, file descriptor table, and signal-handler table with the caller, so process/thread resource-sharing statements require platform boundaries.","source_ids":["linux-clone"],"answer_locations":["核心结论","3 分钟版","关键细节","原理机制","易错点"]},
-    {"claim_id":"clone-stack-boundary","text":"Linux clone documentation states that when memory is shared, the caller must set up memory space for the child stack; the child cannot execute on the caller's same stack.","source_ids":["linux-clone"],"answer_locations":["关键细节","原理机制","常见追问","易错点"]},
-    {"claim_id":"fork-address-space-boundary","text":"Linux fork creates a child with its own virtual address space and uses copy-on-write so copying of memory pages is deferred, so full-memory-copy claims need qualification.","source_ids":["linux-fork"],"answer_locations":["关键细节","易错点"]}
-    ,{"claim_id":"pthreads-sharing-and-execution","text":"POSIX threads documentation states that one process can contain multiple threads executing the same program; they share global memory and several process-wide attributes while each has its own stack and thread identifier.","source_ids":["posix-pthreads"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","原理机制","常见追问","易错点"]}
+    {
+      "claim_id": "clone-sharing-boundary",
+      "text": "Linux clone/clone3 controls whether a child shares virtual address space, file descriptor table, and signal-handler table with the caller, so process/thread resource-sharing statements require platform boundaries.",
+      "source_ids": ["linux-clone"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "易错点"]
+    },
+    {
+      "claim_id": "clone-stack-boundary",
+      "text": "Linux clone documentation states that when memory is shared, the caller must set up memory space for the child stack; the child cannot execute on the caller's same stack.",
+      "source_ids": ["linux-clone"],
+      "answer_locations": ["关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "fork-address-space-boundary",
+      "text": "Linux fork creates a child with its own virtual address space and uses copy-on-write so copying of memory pages is deferred, so full-memory-copy claims need qualification.",
+      "source_ids": ["linux-fork"],
+      "answer_locations": ["关键细节", "易错点"]
+    },
+    {
+      "claim_id": "pthreads-sharing-and-execution",
+      "text": "POSIX threads documentation states that one process can contain multiple threads executing the same program; they share global memory and several process-wide attributes while each has its own stack and thread identifier.",
+      "source_ids": ["posix-pthreads"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "thread-isolation-and-sync-boundary",
+      "text": "POSIX/Linux documentation shows that threads in one process share process credentials and global memory, a terminating signal action directed at one thread can terminate the process, and mutexes provide synchronization around shared state. These facts support the candidate's bounded tradeoff: process separation can provide a different permission and failure-isolation boundary, while thread-based shared-memory cooperation moves more synchronization and data-ownership responsibility into the application; the exact overhead still depends on the OS and workload.",
+      "source_ids": ["linux-credentials", "linux-pthread-kill", "posix-pthread-mutex", "posix-pthreads"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制", "项目经验版", "常见追问", "易错点"]
+    }
   ],
   "source_question_coverage": [
     {"question_id":"0b287451b9a79b49a363a8d2918b0fa6","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
@@ -27,5 +95,22 @@
     {"question_id":"e7b0ec9e5408f4374c3b265a757fb059","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]},
     {"question_id":"f401587f3563ac57fd2fcf707bb114eb","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版"]}
   ],
-  "review": {"reviewer_id":"isolated-reviewer-r2","review_version":"process-thread-posix-linux-r2.v1","independent":true,"decision":"revise","revision_round":2,"scores":{"facts_and_evidence":22,"directness_and_relevance":20,"type_specific_completeness":20,"mechanism_and_causality":14,"boundaries_and_tradeoffs":10,"followup_quality":5,"oral_quality":4},"hard_failures":["unsupported_factual_claim","missing_evidence"],"revision_suggestions":["补齐或删除独立权限/崩溃隔离、IPC 复杂度、共享程度与并发控制责任等未经映射的选型和机制断言。"]}
+  "review": {
+    "reviewer_id": "source-first-process-thread-reviewer-20260817",
+    "review_version": "process-thread-posix-linux-r2-source-first",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 4
+    },
+    "hard_failures": [],
+    "revision_suggestions": []
+  }
 }
