@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_gc_algorithms_3f884748","version":1,"status":"draft","updated_at":"2026-07-11","answer_type":"concept","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_gc_algorithms_3f884748","version":1,"status":"draft","updated_at":"2026-08-17","answer_type":"concept","quality_tier":"candidate"} -->
 # JVM 常见垃圾回收算法
 
 ## 核心结论
@@ -28,7 +28,7 @@
 - 碎片不是内存总量不足：总空闲足够但没有连续块时，连续分配仍可能失败；清除与整理/复制的取舍就在这里。
 - 复制的“额外空间”不是固定一半堆：具体收集器的区域、Survivor 设计和晋升策略不同，回答时不要套一个通用比例。
 - 分代假设是经验规律，不是每个业务都满足；长寿命对象多、晋升过快或分配过快时，分代收益会下降。
-- 在 JDK 9+ HotSpot 可用 `-Xlog:gc*` 观测暂停时间、回收前后堆占用、晋升和分配速率；较早 JDK 应使用其版本对应的 GC 日志参数。不要只根据一次 Full GC 就断言算法不适合。
+- 在 JDK 21 HotSpot 可用 `-Xlog:gc*` 观测暂停时间、回收前后堆占用、晋升和分配速率；较早 JDK 应使用其版本对应的 GC 日志参数。不要只根据一次 Full GC 就断言算法不适合。
 
 ## 原理机制
 
