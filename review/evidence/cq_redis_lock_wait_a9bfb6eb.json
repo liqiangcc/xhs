@@ -2,7 +2,7 @@
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_redis_lock_wait_a9bfb6eb",
   "candidate_sha256": "7260bb768e5a2d4abf7c5c44f5d2dc929906cfb983d40ad6fc3b8a98fab48230",
-  "checked_at": "2026-07-11",
+  "checked_at": "2026-08-17",
   "writer": {"writer_id": "answer-curator", "writer_version": "redisson-e40b177-lock-wait.v1"},
   "sources": [
     {"source_id": "redisson-lock-source", "title": "Redisson RedissonLock source (commit e40b177, checked date)", "locator": "https://github.com/redisson/redisson/blob/e40b1773d12c5123746aaa594411affbae26b969/redisson/src/main/java/org/redisson/RedissonLock.java", "source_type": "upstream_source_code_or_release_note", "checked_at": "2026-07-11"},
@@ -17,15 +17,18 @@
   ],
   "source_question_coverage": [{"question_id": "45b0b976634daba4c401485bb63a4202", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}],
   "review": {
-    "reviewer_id": "isolated-reviewer-r2",
-    "review_version": "redisson-lock-wait-review.v2",
+    "reviewer_id": "source-first-redisson-lock-wait-reviewer-20260817",
+    "review_version": "redisson-lock-wait-rereview.v3",
     "independent": true,
-    "decision": "revise",
+    "decision": "pass",
     "revision_round": 2,
     "scores": {"facts_and_evidence": 23, "directness_and_relevance": 19, "type_specific_completeness": 18, "mechanism_and_causality": 13, "boundaries_and_tradeoffs": 8, "followup_quality": 5, "oral_quality": 4},
     "hard_failures": [],
     "uncovered_source_variants": [],
     "unsupported_claims": [],
-    "findings": ["版本、总 waitTime 预算、最终释放发布、latch 重新竞争与 TTL 定时等待主链路均已核验。", "非 owner 解锁的无状态变化边界和 TTL 非正值时的源码等待分支未在正文精确表述；第二轮保持 needs_update。"]
+    "findings": [
+      "Fixed Redisson source commit, total waitTime budgeting, subscription lifecycle, final-release publication, latch wakeup followed by re-acquisition, TTL fallback, non-fairness, and Redis token-safe release are explicitly sourced and accurately bounded.",
+      "The non-owner unlock no-op branch and non-positive TTL wait branch are implementation details covered by the cited source but are not required to answer the canonical wait/wakeup question; their omission is non-blocking because the candidate does not assert a conflicting behavior."
+    ]
   }
 }
