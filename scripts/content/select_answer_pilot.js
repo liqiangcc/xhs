@@ -22,26 +22,40 @@ function riskRank(row) {
         + (risks.has('mixed_source_question_type') ? 30 : 0)
         + (risks.has('secondary_coverage_required') ? 20 : 0)
         + (risks.has('source_type_overridden') ? 10 : 0)
+        + (risks.has('personal_fact_verification_required') ? 40 : 0)
         + (risks.has('long_tail_baseline') ? 1 : 0);
 }
 
 function selectType(rows, type) {
     const sorted = rows.filter((row) => row.answer_type === type).sort((a, b) =>
         riskRank(b) - riskRank(a) || b.frequency - a.frequency || a.canonical_id.localeCompare(b.canonical_id));
-    const historical = sorted.filter((row) => (row.risk_flags || []).includes('historical_curated_audit_failed')).slice(0, 3);
-    const selected = new Map(historical.map((row) => [row.canonical_id, { ...row, selection_reasons: ['historical_quality_hard_failure'] }]));
+    const hardRisk = sorted.filter((row) => {
+        const risks = new Set(row.risk_flags || []);
+        return risks.has('historical_curated_audit_failed')
+            || risks.has('placeholder_implementation')
+            || risks.has('personal_fact_verification_required');
+    }).slice(0, 3);
+    const selected = new Map(hardRisk.map((row) => [row.canonical_id, {
+        ...row,
+        selection_reasons: [(row.risk_flags || []).includes('historical_curated_audit_failed')
+            ? 'historical_quality_hard_failure'
+            : (row.risk_flags || []).includes('placeholder_implementation')
+                ? 'known_placeholder_hard_failure'
+                : 'personal_evidence_hard_failure_risk'],
+    }]));
     for (const row of sorted) {
         if (selected.size >= 10) break;
         if (selected.has(row.canonical_id)) continue;
         const reasons = [];
         if ((row.risk_flags || []).includes('placeholder_implementation')) reasons.push('known_placeholder_risk');
         if ((row.risk_flags || []).includes('long_tail_baseline')) reasons.push('long_tail_baseline');
+        if ((row.risk_flags || []).includes('personal_fact_verification_required')) reasons.push('personal_fact_verification');
         if ((row.risk_flags || []).includes('mixed_source_question_type')) reasons.push('mixed_type_risk');
         if ((row.risk_flags || []).includes('secondary_coverage_required')) reasons.push('coverage_risk');
         if (!reasons.length) reasons.push('priority_and_domain_coverage');
         selected.set(row.canonical_id, { ...row, selection_reasons: reasons });
     }
-    if (selected.size !== 10 || historical.length < 3) throw new Error(`Cannot choose a 10-question pilot for ${type} with three historical hard-failure samples`);
+    if (selected.size !== 10 || hardRisk.length < 3) throw new Error(`Cannot choose a 10-question pilot for ${type} with three hard-failure-risk samples`);
     return [...selected.values()].sort((a, b) => a.canonical_id.localeCompare(b.canonical_id));
 }
 

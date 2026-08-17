@@ -31,6 +31,9 @@ function buildQueue(options = {}) {
         if (answer.metadata.quality_tier === 'long_tail_baseline') riskFlags.push('long_tail_baseline');
         if (answer.metadata.quality_tier === 'curated_audit_failed') riskFlags.push('historical_curated_audit_failed');
         if (/ProblemSpec|source_table|solveDp/.test(answer.content)) riskFlags.push('placeholder_implementation');
+        if (type?.answer_type === 'project' || type?.answer_type === 'behavior') {
+            riskFlags.push('personal_fact_verification_required');
+        }
         return {
             schema_version: 'answer_rewrite_queue.v1',
             batch_id: null,

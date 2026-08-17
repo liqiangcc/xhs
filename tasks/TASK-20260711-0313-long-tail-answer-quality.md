@@ -382,10 +382,10 @@
   - 对混合题选择主类型并在 Canonical 中记录次要覆盖要求；不可兼容的混合题执行 split。
   - 对技术题误标 Behavior、算法题误标 Concept 等硬错误全部清零。
 - Expected files: `data/questions/canonical_questions.jsonl`, `data/manifests/quality/answer_type_audit.jsonl`
-- Validation: `node scripts/xhs.js answer type-audit --check --noWrite` -> passed (9,260 Canonical)
+- Validation: `node scripts/xhs.js answer type-audit --check --noWrite` -> passed (9,035 Canonical)
 - Commit: `pending`
 - Changed files: `scripts/content/audit_answer_types.js`, `scripts/commands/answer.js`, `data/manifests/quality/answer_type_audit.jsonl`, `test/answer_type_audit.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
-- Notes: 基于面试输出预期判定主类型，并独立记录来源类型信号、次要覆盖要求和风险标记；结果为 Concept 2122、Mechanism 2354、Scenario 2369、Coding 1724、Project 383、Behavior 308，2,752 条带混合/覆盖风险供后续 split review。
+- Notes: 2026-08-17 修复跨来源文本拼接、`MySQL` 被 `sql` 子串误判为 Coding、以及哈希/Bean/ClassPath 等技术“冲突”被误判为 Behavior 的系统性缺陷；逐来源保留信号并按面试产物 fail-closed 判定。最终结果为 Concept 3,569、Mechanism 2,555、Scenario 1,637、Coding 814、Project 324、Behavior 136；2,076 条带混合/覆盖风险供后续 split review。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T04-S04` 生成稳定重写队列和批次 ID
 
@@ -398,10 +398,10 @@
   - 为每个最多 10 题的批次生成 `tasks/answer-batches/` 子任务文件；根 ID 固定为 `TASK-20260711-0313-answer-batch-NNNN`，每份文件包含题簇复核、研究编写、独立审查、晋级和批次验证子任务。
   - 队列记录 `task_file`，后续使用 `task-md-workflow:execute-task-md` 按批次任务 ID 执行和恢复；每个批次独立提交，阶段任务只在全部对应批次任务 done 后完成。
 - Expected files: `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/*.md`
-- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,036 rows, 904 batches, each ≤10); all retained boundary candidates have explicit keep_separate decisions
+- Validation: `node scripts/xhs.js answer queue check --noWrite` -> passed (9,035 rows, 904 batches, each ≤10); all retained boundary candidates have explicit keep_separate decisions
 - Commit: `pending`
 - Changed files: `scripts/content/build_answer_rewrite_queue.js`, `scripts/commands/answer.js`, `data/manifests/quality/answer_rewrite_queue.jsonl`, `data/manifests/quality/answer_rewrite_batches.json`, `tasks/answer-batches/TASK-20260711-0313-answer-batch-*.md`, `test/answer_rewrite_queue.test.js`, `tasks/TASK-20260711-0313-long-tail-answer-quality.md`
-- Notes: 已在边界清单清零（0 pending）后重建最终稳定队列；HTTP 与进程/线程同义题后续归并后再次重建：全部 9,036 个非 curated Canonical 被稳定排序并分配唯一可恢复任务，共 904 批，每批最多 10 题。首 60 题试点 Canonical ID 保持冻结，不以队列重新排序覆盖。队列只冻结执行顺序，不等价于答案晋级。
+- Notes: 已在边界清单清零（0 pending）并完成 ZooKeeper 锁重复题簇归并后重建稳定队列：全部 9,035 个 Canonical 被稳定排序并分配唯一可恢复任务，共 904 批，每批最多 10 题。Project/Behavior 额外标记 `personal_fact_verification_required`，没有真实个人事实时不得晋级。队列只冻结执行顺序，不等价于答案晋级。
 
 ### `TASK-20260711-0313-long-tail-answer-quality-T05` S4：完成六类型 60 题试点
 
@@ -423,7 +423,7 @@
 - Expected files: `data/manifests/quality/answer_pilot_set.json`
 - Validation: `node scripts/content/select_answer_pilot.js --check && node scripts/xhs.js answer queue check --set data/manifests/quality/answer_pilot_set.json --noWrite` -> passed (60 items, 10 per type)
 - Commit: `a8e54c0f`
-- Notes: 新增确定性 selector；每类选择 10 题，均至少包含 3 条历史精选审计失败样本，Coding 同时优先占位实现风险，Project/Behavior 同时优先真实材料/混合题风险。样本清单将作为首 60 题的 100% 人工审查范围。
+- Notes: 2026-08-17 按纠正后的实际 answer_type 重新选择确定性试点；六类各 10 题，优先历史审计失败、占位实现和个人事实核验等硬失败风险。新清单保留旧试点 27 题、替换 33 题；`answer_pilot_set.json` 是当前唯一试点范围，旧候选与证据仍保留为仓库资产但不自动计入当前试点。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S02` 执行 60 题完整闭环
 
@@ -500,6 +500,9 @@ ZooKeeper 锁 Canonical 边界记录（2026-07-11）：`cq_zookeeper_lock_2808e1
 
 ZooKeeper 锁合并与进展（2026-07-11）：将 `cq_q_17a452529374881c0a57e963f08a18e2` 合并到试点 Canonical `cq_zookeeper_lock_2808e178`，迁移 1 个 Question、归档重复正式答案、保留目标复习进度并重建 type-audit/稳定队列（9,035 Canonical、904 批），Canonical 与队列校验通过。合并后的候选按 mechanism 编写，依据 ZooKeeper 官方 lock recipe、3.9.5 `CreateMode` 与客户端 API 完成两轮隔离审查；第二轮 98 分、无硬失败，候选审计通过。晋级预检仅以 `missing_human_review` 失败，正式答案 SHA-256 仍为 `2fc9071534194143525cc67200356e64a4944868a033aeac87d70d12257d3d79`，未修改；当前台账为 26/60 `awaiting_human_review`、18/60 `needs_update`、16/60 未起草。试点清单遗留类型为 scenario，但合并后来源问法与 `answer context` 均为 mechanism，候选采用 mechanism。
 
+
+试点重选记录（2026-08-17）：修复 answer_type 系统性误分类后，重新生成 60 题试点与台账。当前为 15/60 `awaiting_human_review`、36/60 `candidate_pending`、15/60 `independent_review_passed`、45/60 `independent_review_pending`、0/60 `human_review_approved`、0 promoted。旧试点中已经形成的候选、证据和审查结论继续作为对应 Canonical 的有效资产，但当前试点计数严格以最新 manifest 为准。
+
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S03` 校准并冻结 v1 流水线
 
 - Status: `pending`
@@ -511,7 +514,7 @@ ZooKeeper 锁合并与进展（2026-07-11）：将 `cq_q_17a452529374881c0a57e96
 - Expected files: `.agents/skills/xhs-answer-curator/SKILL.md`, `config/answer_quality.json`, `data/manifests/quality/pilot_answer_audit.json`
 - Validation: `npm test && node scripts/xhs.js answer audit --set data/manifests/quality/answer_pilot_set.json --require-evidence --noWrite`
 - Commit: `pending`
-- Notes: 2026-07-11 已将 26 份独立审查通过、待人工签核的候选整理为 `review/plans/pilot_human_review.md`（提交 `680ce0df`），其中包含不可替代的 candidate SHA-256 与签核/晋级命令；尚未产生任何人工决定，子任务保持 pending。
+- Notes: 2026-08-17 根据当前纠正后试点重新生成 `review/plans/pilot_human_review.md`；仅列出机器审计与独立审查均通过的 15 份候选，并绑定不可替代的 candidate SHA-256、签核格式和晋级命令。尚未产生任何人工决定，子任务保持 pending。
 
 ##### `TASK-20260711-0313-long-tail-answer-quality-T05-S04` 收集 Project/Behavior 试点真实材料
 
