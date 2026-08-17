@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const { stability } = require('../lib/answer_completion');
 
 const ROOT = path.resolve(__dirname, '../..');
 const REPORT_DIR = path.join(ROOT, 'review', 'reports');
@@ -216,6 +217,9 @@ for (const file of answerFiles) {
     if (metadata.status !== 'ready') {
       answerDefects.push({ canonical_id: canonicalId, file: relative, defect: 'status_not_ready', status: metadata.status });
     }
+    if (metadata.quality_tier !== 'curated') {
+      answerDefects.push({ canonical_id: canonicalId, file: relative, defect: 'quality_tier_not_curated', quality_tier: metadata.quality_tier });
+    }
   }
   const body = text.replace(/^<!--[^\n]*-->\s*/, '');
   if (/(?:TODO|TBD|待补充|占位(?!符)|请补充|\[填写|\{\{)/i.test(body)) {
@@ -271,14 +275,48 @@ if (orphanProgress.length) {
     sample_canonical_ids: orphanProgress.slice(0, 25),
   });
 }
+
+// ReviewProgress counters are useful telemetry, but they are not S11 completion proof.
+// The SSOT requires four consecutive weekly sampled oral-review rounds, with at least
+// 60 items/week, >=5/type, one-minute recall + random follow-up, zero hard failures,
+// closed feedback, and no curated-ready coverage regression.
 const reviewedProgress = progressItems.filter((item) => Number(item && item.review_count || 0) > 0);
 const totalReviewMarks = reviewedProgress.reduce((sum, item) => sum + Number(item.review_count || 0), 0);
-if (reviewedProgress.length < 5 || totalReviewMarks < 10) {
-  addFinding(findings, 'major', 'REAL_REVIEW_VALIDATION_INCOMPLETE', 'The content SSOT requires at least 5 reviewed Canonicals and 10 real review marks before final completion.', {
-    reviewed_canonical_count: reviewedProgress.length,
-    total_review_marks: totalReviewMarks,
-    required_reviewed_canonical_count: 5,
-    required_total_review_marks: 10,
+const stabilityOptions = {
+  root: ROOT,
+  weeks: 4,
+  'require-zero-hard-fail': true,
+  'require-no-regression': true,
+  noWrite: true,
+};
+if (process.env.AUDIT_WEEK) stabilityOptions.week = process.env.AUDIT_WEEK;
+let realReviewStability;
+try {
+  realReviewStability = stability(stabilityOptions);
+} catch (error) {
+  realReviewStability = {
+    schema_version: 'answer_stability_report.v1',
+    ok: false,
+    weeks: 4,
+    end_week: process.env.AUDIT_WEEK || null,
+    regression_detected: null,
+    reports: [],
+    error: error.message,
+  };
+}
+if (!realReviewStability.ok) {
+  addFinding(findings, 'major', 'REAL_REVIEW_VALIDATION_INCOMPLETE', 'S11 requires four consecutive weekly real oral-review rounds with complete samples, closed feedback, zero hard failures and no coverage regression.', {
+    required_weeks: 4,
+    required_sample_size_per_week: 60,
+    required_minimum_per_answer_type: 5,
+    required_oral_version: 'one_minute',
+    required_followup_answered: true,
+    end_week: realReviewStability.end_week || null,
+    regression_detected: realReviewStability.regression_detected,
+    reports: realReviewStability.reports || [],
+    error: realReviewStability.error || null,
+    reviewed_canonical_count_telemetry: reviewedProgress.length,
+    total_review_marks_telemetry: totalReviewMarks,
   });
 }
 
@@ -328,11 +366,16 @@ const metrics = {
   canonical_count: canonicals.length,
   active_answer_count: answerById.size,
   ready_answer_count: [...answerById.values()].filter((answer) => answer.metadata && answer.metadata.status === 'ready').length,
+  curated_ready_answer_count: [...answerById.values()].filter((answer) => answer.metadata && answer.metadata.status === 'ready' && answer.metadata.quality_tier === 'curated').length,
   missing_answer_count: missingAnswers.length,
   review_progress_count: progressIds.size,
   missing_review_progress_count: missingProgress.length,
   reviewed_canonical_count: reviewedProgress.length,
   total_review_marks: totalReviewMarks,
+  real_review_stability_ok: Boolean(realReviewStability.ok),
+  real_review_stability_weeks: Number(realReviewStability.weeks || 4),
+  real_review_stability_end_week: realReviewStability.end_week || null,
+  real_review_stability_regression_detected: realReviewStability.regression_detected ?? null,
   excluded_without_reason_count: invalidWithoutReason.length,
   mass_identical_answer_cluster_count: massDuplicateClusters.length,
 };
@@ -346,8 +389,8 @@ const report = {
     historical_reviews_read_before_conclusion: false,
     review_scope: [
       'Question/Canonical ownership and reachability',
-      'active Answer completeness and anti-template checks',
-      'ReviewProgress completeness, real-review validation and orphan detection',
+      'active Answer completeness, curated status and anti-template checks',
+      'ReviewProgress completeness, S11 four-week real-review stability and orphan detection',
       'excluded Question explainability',
       'unverified personal-experience claim detection',
       'full repository and answer quality gates',
@@ -355,6 +398,7 @@ const report = {
   },
   verdict,
   metrics,
+  real_review_stability: realReviewStability,
   gates,
   findings,
   open_blocking_finding_count: openBlockingFindings.length,
@@ -373,9 +417,10 @@ const markdown = [
   '',
   `- Question rows: ${metrics.question_rows}; valid: ${metrics.valid_question_rows}; valid unassigned: ${metrics.valid_unassigned_count}`,
   `- Canonicals: ${metrics.canonical_count}`,
-  `- Active answers: ${metrics.active_answer_count}; ready: ${metrics.ready_answer_count}; missing: ${metrics.missing_answer_count}`,
+  `- Active answers: ${metrics.active_answer_count}; ready: ${metrics.ready_answer_count}; curated-ready: ${metrics.curated_ready_answer_count}; missing: ${metrics.missing_answer_count}`,
   `- ReviewProgress: ${metrics.review_progress_count}; missing: ${metrics.missing_review_progress_count}`,
-  `- Real review validation: ${metrics.reviewed_canonical_count} Canonicals; ${metrics.total_review_marks} review marks`,
+  `- Review telemetry: ${metrics.reviewed_canonical_count} Canonicals; ${metrics.total_review_marks} review marks`,
+  `- S11 four-week real-review stability: ${metrics.real_review_stability_ok ? 'PASS' : 'FAIL'}; end week: ${metrics.real_review_stability_end_week || 'n/a'}; coverage regression: ${String(metrics.real_review_stability_regression_detected)}`,
   `- Excluded rows without reason: ${metrics.excluded_without_reason_count}`,
   '',
   '## Executable Verification',
@@ -391,7 +436,7 @@ const markdown = [
   '## Final Decision',
   '',
   verdict === 'PASS'
-    ? 'The fixed snapshot satisfies the repository-local refactor, content completeness, reachability, review-state, and executable quality gates. It is ready for final inspection.'
+    ? 'The fixed snapshot satisfies the repository-local refactor, content completeness, reachability, review-state, four-week real-review stability, and executable quality gates. It is ready for final inspection.'
     : 'The fixed snapshot is not ready for final inspection. All open Blocker/Critical/Major findings must be remediated and the new SHA re-reviewed.',
   '',
 ].join('\n');
