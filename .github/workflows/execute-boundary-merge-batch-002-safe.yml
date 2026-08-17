@@ -1,0 +1,161 @@
+name: Execute Safe Canonical Boundary Merge Batch 002
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .boundary-merge-batch-002-safe-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    if: "${{ github.event.head_commit.message == 'chore: execute safe canonical boundary merge batch 002' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Freeze protected merge and pre-merge state
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=review/content_build/canonical_boundary_review/batch_002
+          node scripts/xhs.js canonical stats > "$out/canonical-stats-before-safe-merges.json"
+          cat > "$out/protected_merge.json" <<'JSON'
+          {
+            "schema_version": "canonical_protected_merge.v1",
+            "candidate_id": "boundary_cq_q_3c967c50a4bd11dff1090f6e011e872d_cq_topic_2494ec69",
+            "target": "cq_topic_2494ec69",
+            "source": "cq_q_3c967c50a4bd11dff1090f6e011e872d",
+            "decision": "merge",
+            "execution_status": "deferred_for_asset_migration",
+            "reason": "Target already has candidate/evidence/review assets. Apply only after candidate/evidence freshness and invalidation semantics are explicitly handled."
+          }
+          JSON
+
+      - name: Execute eight asset-safe reviewed merges
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=review/content_build/canonical_boundary_review/batch_002/merge_results
+          mkdir -p "$out"
+
+          node scripts/xhs.js canonical merge --target cq_q_6c4969d7501911e36aaf755387eb1dbf --source cq_q_2c3c4fa1085402b330b5eb2cbf14ce60 --reason 'Boundary review batch 002: same Redis distributed-lock implementation.' > "$out/01-redis-distributed-lock.json"
+          node scripts/xhs.js canonical merge --target cq_q_36ab1630843f456fa940c19962292fbe --source cq_q_4a4761c79b9ebbb35a45eaf3843caca0 --reason 'Boundary review batch 002: same two-stacks-implement-queue coding problem.' > "$out/02-two-stacks-queue.json"
+          node scripts/xhs.js canonical merge --target cq_q_3d5d13acdab083a156ef517c912f63ab --source cq_q_5c1699c7cf7b705eb01cafc6bdd48dfe --reason 'Boundary review batch 002: same Java thread-creation methods question.' > "$out/03-java-thread-creation.json"
+          node scripts/xhs.js canonical merge --target cq_q_405f5367d452cfc3e19f514578adef21 --source cq_q_ff4897f985ff6ed6678f7d1a1647571f --reason 'Boundary review batch 002: same Eureka-versus-Nacos comparison.' > "$out/04-eureka-nacos.json"
+          node scripts/xhs.js canonical merge --target cq_q_92bced868d60db4a3b27a97e5c21d612 --source cq_q_459c9ce67b30af74fd840fadf1a81777 --reason 'Boundary review batch 002: same object-oriented core-features question.' > "$out/05-oop-features.json"
+          node scripts/xhs.js canonical merge --target cq_q_749edd1b264c7f3a2e9fa03c8f784f3f --source cq_q_5ea01f4bcfdcbee565a8b166c60d2171 --reason 'Boundary review batch 002: same Spring-versus-Spring-Boot comparison.' > "$out/06-spring-springboot.json"
+          node scripts/xhs.js canonical merge --target cq_q_8d628ccd4f53104177c00bbca4528c1a --source cq_q_78495b0e35fd0d2cbf1880f79c74168d --reason 'Boundary review batch 002: same Java-versus-C++ comparison.' > "$out/07-java-cpp.json"
+          node scripts/xhs.js canonical merge --target cq_q_84293eb0fbaef6a59844fe11efd5079b --source cq_q_391a80e26ea1b198baf27e6c1d19942d --reason 'Boundary review batch 002: same Spring AOP implementation mechanism.' > "$out/08-spring-aop.json"
+
+      - name: Regenerate all merge-sensitive state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/audit_answer_types.js
+          node scripts/content/build_answer_rewrite_queue.js
+          node scripts/content/select_answer_pilot.js
+          node scripts/content/build_pilot_answer_audit.js
+          node scripts/content/build_pilot_human_review_plan.js
+          node scripts/content/audit_canonical_boundaries.js
+
+      - name: Verify safe merge invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=review/content_build/canonical_boundary_review/batch_002
+          node scripts/xhs.js canonical stats > "$out/canonical-stats-after-safe-merges.json"
+          node scripts/xhs.js canonical check --noWrite > "$out/canonical-check-after-safe-merges.json"
+          node - <<'NODE'
+          const fs = require('fs');
+          const stats = JSON.parse(fs.readFileSync('review/content_build/canonical_boundary_review/batch_002/canonical-stats-after-safe-merges.json', 'utf8'));
+          if (stats.canonical_count !== 9018) throw new Error(`expected canonical_count=9018, got ${stats.canonical_count}`);
+          const removed = [
+            'cq_q_2c3c4fa1085402b330b5eb2cbf14ce60',
+            'cq_q_4a4761c79b9ebbb35a45eaf3843caca0',
+            'cq_q_5c1699c7cf7b705eb01cafc6bdd48dfe',
+            'cq_q_ff4897f985ff6ed6678f7d1a1647571f',
+            'cq_q_459c9ce67b30af74fd840fadf1a81777',
+            'cq_q_5ea01f4bcfdcbee565a8b166c60d2171',
+            'cq_q_78495b0e35fd0d2cbf1880f79c74168d',
+            'cq_q_391a80e26ea1b198baf27e6c1d19942d'
+          ];
+          const rows = fs.readFileSync('data/questions/canonical_questions.jsonl', 'utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const ids = new Set(rows.map((row) => row.canonical_id));
+          for (const id of removed) {
+            if (ids.has(id)) throw new Error(`source canonical still present: ${id}`);
+            const archive = `review/archive/answers/${id}.md`;
+            if (!fs.existsSync(archive)) throw new Error(`source answer archive missing: ${archive}`);
+          }
+          if (!ids.has('cq_q_3c967c50a4bd11dff1090f6e011e872d')) throw new Error('protected source was unexpectedly merged');
+          if (!fs.existsSync('review/candidates/answers/cq_topic_2494ec69.md')) throw new Error('protected target candidate missing');
+          if (!fs.existsSync('review/evidence/cq_topic_2494ec69.json')) throw new Error('protected target evidence missing');
+          NODE
+
+      - name: Verify generated state and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/audit_answer_types.js --check
+          node scripts/content/build_answer_rewrite_queue.js --check
+          node scripts/content/select_answer_pilot.js --check
+          node scripts/content/build_pilot_answer_audit.js --check
+          node scripts/content/build_pilot_human_review_plan.js --check
+          node scripts/content/audit_canonical_boundaries.js --check
+          node scripts/xhs.js answer queue check --set data/manifests/quality/answer_pilot_set.json --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Record post-safe-merge boundary state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const rows = fs.readFileSync('data/manifests/canonical/long_tail_duplicate_candidates.jsonl', 'utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          fs.writeFileSync('review/content_build/canonical_boundary_review/batch_002/post_safe_merge_summary.json', `${JSON.stringify({
+            schema_version: 'canonical_boundary_batch_merge_summary.v1',
+            batch_id: 'batch_002',
+            executed_merge_count: 8,
+            protected_merge_count: 1,
+            remaining_candidate_count: rows.length,
+            remaining_pending_count: rows.filter((row) => row.reviewer_decision === 'pending').length,
+            reviewed_keep_separate_count: rows.filter((row) => row.reviewer_decision === 'keep_separate').length,
+          }, null, 2)}\n`);
+          NODE
+
+      - name: Commit safe reviewed merges
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git commit -m "content: apply safe canonical boundary merge batch 002"
+
+      - name: Remove temporary safe merge workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .boundary-merge-batch-002-safe-trigger .github/workflows/execute-boundary-merge-batch-002-safe.yml
+          git add -A
+          git commit -m "chore: remove safe canonical boundary merge batch 002 workflow"
+
+      - name: Push safe merged content state
+        shell: bash
+        run: git push origin HEAD:content/quality-completion
