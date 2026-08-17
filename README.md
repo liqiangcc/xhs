@@ -14,28 +14,25 @@ For current Canonical/Dedup commands and boundaries, use `docs/refactor/10_curre
 
 ## Current Status
 
-As of 2026-07-01, the M1-M8 core loop is implemented and the repository is in the content-coverage and real-review phase: migration, validation, indexing, canonical question management, answer metadata validation/sync, review progress, issue-card rendering, and quality reporting are all available.
+As of 2026-08-17, the M1-M8 core loop is implemented and the SoC/SRP architecture-role migration is closed. The active delivery line is semantic content completion: every recoverable interview Question must converge to a correct CanonicalQuestion, a qualified answer and ReviewProgress, with complete Question-to-review reachability. Intermediate count thresholds are sequencing milestones, not completion criteria.
 
-Current data snapshot:
+Do not copy a numeric snapshot into this README. Content counts and completion state change during canonical merges, answer audits and promotions, so current values must be obtained from the repository commands and generated manifests. In particular:
 
-- 9,620 question rows, 9,362 valid rows
-- 34 canonical questions
-- 134 assigned question rows
-- 34 review progress records
-- 34 ready answers; missing answers is now 0
-- P0 count: 12; P1 count: 22
-- 0 GitHub issue links synced so far
+- `docs/refactor/README.md` records the current architecture/refactor state and document priority.
+- `docs/refactor/08_content_building_goals.md` is the content-goal and DoD SSOT.
+- `docs/refactor/09_answer_content_standard.md` and `config/answer_quality.json` define semantic answer quality.
+- `tasks/TASK-20260711-0313-long-tail-answer-quality.md` is the active full-content completion task.
+- `data/manifests/quality/answer_rewrite_queue.jsonl`, `pilot_answer_audit.json` and the completion-audit manifests are checkpoints; regenerate/check them with the supported commands before using their counts.
 
-The current high-value batch is answer-complete. The active roadmap is content-first: calibrate the existing assets, widen canonical coverage, upgrade answers for experienced-hire oral delivery and follow-ups, then use real review results to drive the next batch. The intermediate milestones lead to full reviewability: every genuine interview question—including recoverable rows currently marked invalid—must bind to one CanonicalQuestion, have a ready answer and ReviewProgress, and be reachable from a query or review entrypoint. See `docs/refactor/08_content_building_goals.md`.
+The repository must remain fail-closed: a structurally valid answer is not automatically `ready/curated`; candidate evidence, independent review, applicable code/type gates and required review approval must pass before promotion.
 
 ## Next Steps
 
-1. Follow the C0-C10 goals in `docs/refactor/08_content_building_goals.md`.
-2. Calibrate the existing 34 canonical assets and attach synonymous questions before creating new records.
-3. Expand in closed batches of at most 10 assets; the first target is 60 canonical questions and 200+ assigned rows.
-4. Keep every new P0/P1 answer strict-valid and optimize it for experienced-hire oral delivery plus answered follow-ups.
-5. Before scaling to 100 canonical questions, complete a pilot covering at least 5 canonical questions and 10 real review marks.
-6. Continue through the long tail until every genuine interview question is assigned, answer-ready, and reachable from review; 60/200 and 100/300 are milestones, not the final scope.
+1. Continue the active long-tail quality task in closed batches of at most 10 Canonicals, starting with unfinished pilot and quality-calibration work.
+2. For every answer, keep the enforced flow: boundary check → primary-source research → candidate → evidence → isolated review → applicable deterministic/type/code gates → required approval → atomic promotion.
+3. Continue C7-C9 until every recoverable Question is uniquely assigned, every final Canonical has a qualified answer and ReviewProgress, every excluded/noise row has an explainable reason, and Question-to-review reachability is 100%.
+4. Run the repository completion checks (`answer queue status`, `answer closure check|audit`, `answer reachability`, `answer stability`, plus full CI) rather than treating 60/200, 100/300 or 200/600 as a final state.
+5. Complete the required real-review stability loop before declaring semantic content complete; only then freeze a candidate SHA for the final source-first independent repository review.
 
 ```bash
 # Detect pending relation candidates
