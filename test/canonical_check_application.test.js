@@ -23,8 +23,8 @@ test('CheckCanonicalIntegrity returns the report and publishes it by default', (
                 return report(false);
             },
         },
-        reportWriter: {
-            write(value) {
+        reportPublisher: {
+            publish(value) {
                 writes.push(structuredClone(value));
             },
         },
@@ -41,8 +41,8 @@ test('CheckCanonicalIntegrity suppresses report persistence when write_report is
     let writeCount = 0;
     const check = createCheckCanonicalIntegrityUseCase({
         integrityChecker: { check: () => report(true) },
-        reportWriter: {
-            write() {
+        reportPublisher: {
+            publish() {
                 writeCount += 1;
             },
         },
@@ -58,7 +58,7 @@ test('CheckCanonicalIntegrity preserves async checker compatibility without forc
     const writes = [];
     const check = createCheckCanonicalIntegrityUseCase({
         integrityChecker: { async check() { return report(true); } },
-        reportWriter: { write(value) { writes.push(value); } },
+        reportPublisher: { publish(value) { writes.push(value); } },
     });
 
     const result = await check();
@@ -71,21 +71,21 @@ test('CheckCanonicalIntegrity rejects invalid reports and missing outbound capab
     assert.throws(
         () => createCheckCanonicalIntegrityUseCase({
             integrityChecker: {},
-            reportWriter: { write() {} },
+            reportPublisher: { publish() {} },
         }),
         /CanonicalIntegrityChecker\.check\(\) is required/,
     );
     assert.throws(
         () => createCheckCanonicalIntegrityUseCase({
             integrityChecker: { check() {} },
-            reportWriter: {},
+            reportPublisher: {},
         }),
-        /CanonicalQualityReportWriter\.write\(\) is required/,
+        /CanonicalQualityReportPublisher\.publish\(\) is required/,
     );
 
     const check = createCheckCanonicalIntegrityUseCase({
         integrityChecker: { check: () => ({ schema_version: 'wrong', ok: true }) },
-        reportWriter: { write() {} },
+        reportPublisher: { publish() {} },
     });
     assert.throws(check, /schema_version must be canonical_quality_report\.v1/);
 });

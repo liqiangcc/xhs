@@ -4,8 +4,8 @@ const {
     assertCanonicalIntegrityChecker,
 } = require('../../ports/services/canonical-integrity-checker');
 const {
-    assertCanonicalQualityReportWriter,
-} = require('../../ports/services/canonical-quality-report-writer');
+    assertCanonicalQualityReportPublisher,
+} = require('../../ports/services/canonical-quality-report-publisher');
 
 function assertIntegrityReport(report) {
     if (!report || typeof report !== 'object') {
@@ -26,12 +26,12 @@ function isPromiseLike(value) {
 
 function createCheckCanonicalIntegrityUseCase(dependencies = {}) {
     const integrityChecker = assertCanonicalIntegrityChecker(dependencies.integrityChecker);
-    const reportWriter = assertCanonicalQualityReportWriter(dependencies.reportWriter);
+    const reportPublisher = assertCanonicalQualityReportPublisher(dependencies.reportPublisher);
 
     function finalize(report, input) {
         const checked = assertIntegrityReport(report);
         if (input.write_report === false) return checked;
-        const writeResult = reportWriter.write(checked);
+        const writeResult = reportPublisher.publish(checked);
         if (isPromiseLike(writeResult)) {
             return writeResult.then(() => checked);
         }

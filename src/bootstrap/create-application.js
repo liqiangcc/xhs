@@ -62,8 +62,8 @@ const {
 const { createFsAnswerRepository } = require('../infrastructure/filesystem/answer-repositories');
 const { createFsCanonicalIntegrityChecker } = require('../infrastructure/filesystem/canonical-integrity-checker');
 const {
-    createFsCanonicalQualityReportWriter,
-} = require('../infrastructure/filesystem/canonical-quality-report-writer');
+    createFsCanonicalQualityReportPublisher,
+} = require('../infrastructure/filesystem/canonical-quality-report-publisher');
 const {
     createFileCanonicalMutationGatewayAdapter,
 } = require('../infrastructure/filesystem/file-canonical-mutation-gateway-adapter');
@@ -106,7 +106,7 @@ function createApplication(options = {}) {
     });
     const answerRepository = createFsAnswerRepository({ root: options.root, paths });
     const integrityChecker = createFsCanonicalIntegrityChecker({ root: options.root, paths });
-    const qualityReportWriter = createFsCanonicalQualityReportWriter({ root: options.root, paths });
+    const qualityReportPublisher = createFsCanonicalQualityReportPublisher({ root: options.root, paths });
     const mutationGateway = createFileCanonicalMutationGatewayAdapter({ root: options.root, paths });
 
     const list = createListCanonicalsUseCase({ catalogRepository });
@@ -116,7 +116,7 @@ function createApplication(options = {}) {
     });
     const check = createCheckCanonicalIntegrityUseCase({
         integrityChecker,
-        reportWriter: qualityReportWriter,
+        reportPublisher: qualityReportPublisher,
     });
     const merge = createMergeCanonicalUseCase({
         canonicalRepository,

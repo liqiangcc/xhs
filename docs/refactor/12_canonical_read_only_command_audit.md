@@ -128,7 +128,7 @@ CheckCanonicalIntegrity Application
         ↓
 CanonicalIntegrityChecker
         +
-CanonicalQualityReportWriter
+CanonicalQualityReportPublisher
         ↑
 Filesystem adapters
 ```
@@ -141,7 +141,7 @@ Responsibilities are now separated:
 | Canonical + Question state loading | `CanonicalIntegrityChecker` Infrastructure adapter |
 | integrity rules | Domain `evaluateCanonicalIntegrity` SSOT |
 | whether a report is published | Application |
-| where/how report is written | `CanonicalQualityReportWriter` Infrastructure adapter |
+| where/how report is published | `CanonicalQualityReportPublisher` Infrastructure adapter |
 | returned `canonical_quality_report.v1` | Application contract |
 | process exit convention | Interface |
 
@@ -195,11 +195,11 @@ QuestionCatalogRepository
 CanonicalIntegrityChecker
   → global canonical_quality_report.v1 evaluation
 
-CanonicalQualityReportWriter
+CanonicalQualityReportPublisher
   → publish an already-produced quality report
 ```
 
-Ports stay narrow. The report writer does not decide whether writing is allowed; the checker does not write; catalog repositories do not perform DTO/query semantics.
+Ports stay narrow. The report publisher does not decide whether writing is allowed; the checker does not write; catalog repositories do not perform DTO/query semantics.
 
 ## 8. Completion criteria
 
@@ -212,7 +212,7 @@ canonical check CLI → app.canonical.check
 
 CLI has no Canonical/Question store imports
 CLI has no Canonical integrity Domain import
-CLI has no Canonical quality-report writer call
+CLI has no Canonical quality-report publisher call
 
 --noWrite keeps canonical check report-free
 check ok=false still exits zero
