@@ -162,7 +162,7 @@ function withDecisionLock(paths, callback) {
         fileDescriptor = fs.openSync(paths.relationDecisionLock, 'wx');
     } catch (error) {
         if (error?.code === 'EEXIST') {
-            throw new Error('Dedup relation decision store is busy');
+            throw new Error('Dedup relation decision gateway is busy');
         }
         throw error;
     }
@@ -197,7 +197,7 @@ function createFsDedupDecisionRepositories(options = {}) {
         },
     };
 
-    const relationDecisionStore = {
+    const relationDecisionGateway = {
         async record(decision, options = {}) {
             if (!decision || typeof decision !== 'object' || Array.isArray(decision)) {
                 throw new Error('relation decision is required');
@@ -224,7 +224,7 @@ function createFsDedupDecisionRepositories(options = {}) {
     return {
         relationCandidateRepository,
         relationDecisionRepository,
-        relationDecisionStore,
+        relationDecisionGateway,
     };
 }
 

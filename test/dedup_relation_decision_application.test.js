@@ -70,7 +70,7 @@ function decisionUseCase(adapters, overrides = {}) {
         relationCandidateRepository: adapters.relationCandidateRepository,
         indexRepository: adapters.indexRepository,
         questionRepository: adapters.questionRepository,
-        relationDecisionStore: overrides.relationDecisionStore || adapters.relationDecisionStore,
+        relationDecisionGateway: overrides.relationDecisionGateway || adapters.relationDecisionGateway,
     });
 }
 
@@ -126,19 +126,19 @@ test('record relation decision rejects a candidate whose Question source changed
     assert.deepEqual(adapters.snapshot().decisions, []);
 });
 
-test('decision store rejects a source race that happens after Application freshness validation', async () => {
+test('decision gateway rejects a source race that happens after Application freshness validation', async () => {
     const { adapters } = fixture();
     const suggestions = await suggest(adapters);
     const relationCandidateKey = suggestions.relation_candidates[0].relation_candidate_key;
     const racingStore = {
         async record(decision, options) {
             adapters.testSupport.replaceEntityRefs('Redis', []);
-            return adapters.relationDecisionStore.record(decision, options);
+            return adapters.relationDecisionGateway.record(decision, options);
         },
     };
 
     await assert.rejects(
-        decisionUseCase(adapters, { relationDecisionStore: racingStore })({
+        decisionUseCase(adapters, { relationDecisionGateway: racingStore })({
             relation_candidate_key: relationCandidateKey,
             relation: 'same',
             actor: { type: 'ai', id: 'review-agent' },
@@ -148,7 +148,7 @@ test('decision store rejects a source race that happens after Application freshn
     assert.deepEqual(adapters.snapshot().decisions, []);
 });
 
-test('decision store rejects a review queue race after the candidate was loaded', async () => {
+test('decision gateway rejects a review queue race after the candidate was loaded', async () => {
     const { adapters } = fixture();
     const suggestions = await suggest(adapters);
     const relationCandidateKey = suggestions.relation_candidates[0].relation_candidate_key;
@@ -157,12 +157,12 @@ test('decision store rejects a review queue race after the candidate was loaded'
         async record(decision, options) {
             const currentQueue = adapters.snapshot().queues[queueResource];
             await adapters.relationCandidatePublisher.replaceQueue(currentQueue);
-            return adapters.relationDecisionStore.record(decision, options);
+            return adapters.relationDecisionGateway.record(decision, options);
         },
     };
 
     await assert.rejects(
-        decisionUseCase(adapters, { relationDecisionStore: racingStore })({
+        decisionUseCase(adapters, { relationDecisionGateway: racingStore })({
             relation_candidate_key: relationCandidateKey,
             relation: 'related',
             actor: { type: 'human', id: 'reviewer-2' },

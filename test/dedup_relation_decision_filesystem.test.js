@@ -78,14 +78,14 @@ async function suggest(root) {
     return app.dedup.suggest({ mode: 'entity', seed: 'redis', limit: 10 });
 }
 
-function decisionUseCase(root, relationDecisionStoreOverride = null) {
+function decisionUseCase(root, relationDecisionGatewayOverride = null) {
     const suggestionRepositories = createFsDedupSuggestionRepositories({ root });
     const decisionRepositories = createFsDedupDecisionRepositories({ root });
     return createRecordRelationDecisionUseCase({
         relationCandidateRepository: decisionRepositories.relationCandidateRepository,
         indexRepository: suggestionRepositories.indexRepository,
         questionRepository: suggestionRepositories.questionRepository,
-        relationDecisionStore: relationDecisionStoreOverride || decisionRepositories.relationDecisionStore,
+        relationDecisionGateway: relationDecisionGatewayOverride || decisionRepositories.relationDecisionGateway,
     });
 }
 
@@ -135,7 +135,7 @@ test('production composition root records an explicit dedup decision in a separa
     }
 });
 
-test('filesystem decision store rejects a Question race after Application freshness validation', async () => {
+test('filesystem decision gateway rejects a Question race after Application freshness validation', async () => {
     const root = makeRoot('xhs-dedup-decision-question-race-');
     try {
         const { paths, q1, q2 } = writeFixture(root);
@@ -148,7 +148,7 @@ test('filesystem decision store rejects a Question race after Application freshn
                     q1,
                     { ...q2, original_question: 'Redis 为什么会这么快？' },
                 ]);
-                return decisionRepositories.relationDecisionStore.record(decision, options);
+                return decisionRepositories.relationDecisionGateway.record(decision, options);
             },
         };
 
@@ -167,7 +167,7 @@ test('filesystem decision store rejects a Question race after Application freshn
     }
 });
 
-test('filesystem decision store rejects a review queue race after the candidate was loaded', async () => {
+test('filesystem decision gateway rejects a review queue race after the candidate was loaded', async () => {
     const root = makeRoot('xhs-dedup-decision-queue-race-');
     try {
         const { paths } = writeFixture(root);
@@ -182,7 +182,7 @@ test('filesystem decision store rejects a review queue race after the candidate 
                     review_note: 'queue changed after candidate load',
                 };
                 writeJson(paths.relationCandidateQueues, manifest);
-                return decisionRepositories.relationDecisionStore.record(decision, options);
+                return decisionRepositories.relationDecisionGateway.record(decision, options);
             },
         };
 

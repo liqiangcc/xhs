@@ -157,7 +157,7 @@ test('filesystem DecisionStore CAS rejects hotspot-index race after Application 
         const wrappedStore = {
             async record(decision, options) {
                 mutateHotspotIndex(paths.hotspotIndex);
-                return decisionRepositories.relationDecisionStore.record(decision, options);
+                return decisionRepositories.relationDecisionGateway.record(decision, options);
             },
         };
         const recordDecision = createRecordRelationDecisionUseCase({
@@ -165,7 +165,7 @@ test('filesystem DecisionStore CAS rejects hotspot-index race after Application 
             indexRepository: suggestionRepositories.indexRepository,
             hotspotRepository: suggestionRepositories.hotspotRepository,
             questionRepository: suggestionRepositories.questionRepository,
-            relationDecisionStore: wrappedStore,
+            relationDecisionGateway: wrappedStore,
         });
 
         const suggestions = await suggest({ mode: 'hotspot' });

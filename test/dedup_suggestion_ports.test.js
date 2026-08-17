@@ -19,7 +19,7 @@ const {
     assertRelationDecisionRepository,
 } = require('../src/ports/repositories/relation-decision-repository');
 const { assertRelationCandidatePublisher } = require('../src/ports/relation-candidate-publisher');
-const { assertRelationDecisionStore } = require('../src/ports/relation-decision-store');
+const { assertRelationDecisionGateway } = require('../src/ports/relation-decision-gateway');
 const {
     createInMemoryDedupSuggestionAdapters,
 } = require('../src/infrastructure/in-memory/dedup-suggestion-adapters');
@@ -39,7 +39,7 @@ test('dedup suggestion and decision Ports stay narrow and reject missing capabil
     assert.equal(assertRelationCandidateRepository({ get() {} }).get instanceof Function, true);
     assert.equal(assertRelationDecisionRepository({ get() {} }).get instanceof Function, true);
     assert.equal(assertRelationCandidatePublisher({ replaceQueue() {} }).replaceQueue instanceof Function, true);
-    assert.equal(assertRelationDecisionStore({ record() {} }).record instanceof Function, true);
+    assert.equal(assertRelationDecisionGateway({ record() {} }).record instanceof Function, true);
 
     assert.throws(
         () => assertDedupIndexRetrievalRepository({}),
@@ -66,7 +66,7 @@ test('dedup suggestion and decision Ports stay narrow and reject missing capabil
         /replaceQueue\(\) is required/,
     );
     assert.throws(
-        () => assertRelationDecisionStore({}),
+        () => assertRelationDecisionGateway({}),
         /record\(\) is required/,
     );
 });
@@ -144,7 +144,7 @@ test('relation candidate publisher replaces one review queue without becoming a 
     assert.deepEqual(adapters.snapshot().queues[second.resource].relation_candidates, []);
 });
 
-test('relation decision store and repository are audit boundaries, not Apply boundaries', async () => {
+test('relation decision gateway and repository are audit boundaries, not Apply boundaries', async () => {
     const adapters = createInMemoryDedupSuggestionAdapters();
     const queue = await adapters.relationCandidatePublisher.replaceQueue({
         schema_version: 'dedup_relation_candidate_queue.v1',
@@ -160,7 +160,7 @@ test('relation decision store and repository are audit boundaries, not Apply bou
         relation: 'same',
         decision_state: 'explicit',
     };
-    const stored = await adapters.relationDecisionStore.record(decision, {
+    const stored = await adapters.relationDecisionGateway.record(decision, {
         expected_revisions: [{ resource: queue.resource, revision: queue.revision }],
     });
     const snapshot = await adapters.relationDecisionRepository.get(decision.relation_candidate_key);
@@ -171,11 +171,11 @@ test('relation decision store and repository are audit boundaries, not Apply bou
     assert.match(snapshot.revision, /^rev-/);
     assert.deepEqual(snapshot.decision, decision);
     assert.equal(adapters.snapshot().decisions.length, 1);
-    assert.equal(Object.hasOwn(adapters.relationDecisionStore, 'preflight'), false);
-    assert.equal(Object.hasOwn(adapters.relationDecisionStore, 'commit'), false);
-    assert.equal(Object.hasOwn(adapters.relationDecisionStore, 'merge'), false);
-    assert.equal(Object.hasOwn(adapters.relationDecisionStore, 'accept'), false);
-    assert.equal(Object.hasOwn(adapters.relationDecisionStore, 'apply'), false);
+    assert.equal(Object.hasOwn(adapters.relationDecisionGateway, 'preflight'), false);
+    assert.equal(Object.hasOwn(adapters.relationDecisionGateway, 'commit'), false);
+    assert.equal(Object.hasOwn(adapters.relationDecisionGateway, 'merge'), false);
+    assert.equal(Object.hasOwn(adapters.relationDecisionGateway, 'accept'), false);
+    assert.equal(Object.hasOwn(adapters.relationDecisionGateway, 'apply'), false);
     assert.equal(Object.hasOwn(adapters.relationDecisionRepository, 'record'), false);
     assert.equal(Object.hasOwn(adapters.relationDecisionRepository, 'apply'), false);
 });

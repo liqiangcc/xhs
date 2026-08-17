@@ -167,7 +167,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         },
     };
 
-    const relationDecisionStore = {
+    const relationDecisionGateway = {
         async record(decision, options = {}) {
             if (!decision || typeof decision !== 'object' || Array.isArray(decision)) {
                 throw new Error('relation decision is required');
@@ -224,7 +224,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         relationCandidatePublisher,
         relationCandidateRepository,
         relationDecisionRepository,
-        relationDecisionStore,
+        relationDecisionGateway,
         testSupport,
         snapshot,
     };

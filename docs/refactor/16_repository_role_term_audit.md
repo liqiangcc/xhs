@@ -1,12 +1,10 @@
-# 16 Repository Architecture Role Term Audit
+# 16 Repository Architecture Role Term Audit — Completed
 
-> Audited head: `7386a61f38176e23aa4b3237fdec95fba9f54c8f`. Scope: classify remaining architecture-role terms after the completed Review and Canonical naming migrations. This audit is behavior-free: it changes no production symbol, persisted schema, CLI contract, business rule, revision scope, or transaction behavior.
+> Scope: classify and close the active architecture-role naming debt after the Review and Canonical migrations. The implementation is behavior-preserving: persisted schemas, CLI contracts, Domain rules, revision coverage and transaction behavior remain unchanged.
 
-## 1. Purpose
+## 1. Approved vocabulary
 
-The repository now has a small approved architecture vocabulary, but older modules still contain generic role words such as `Store` and `Writer`. Those names must not be mass-renamed by spelling alone. The responsibility must be understood first, the separation point must be frozen, and only then may the role be renamed.
-
-Approved outbound roles remain:
+Current outbound roles are:
 
 ```text
 Repository
@@ -17,39 +15,90 @@ Reader
 Generator
 ```
 
-Words such as the following are migration debt when an approved role describes the responsibility more precisely:
+Role names are selected from responsibility, not folder names or spelling alone. Repository-local callers, tests, Composition Root wiring and documentation move atomically; no compatibility aliases remain merely to preserve old names.
+
+## 2. Completed migrations
+
+### 2.1 Canonical quality report publication
+
+Completed:
 
 ```text
-Store
-Writer
-Provider
-Loader
-Manager
-Helper
-Util
-Service
-Accessor
-Fetcher
+CanonicalQualityReportWriter      -> CanonicalQualityReportPublisher
+assertCanonicalQualityReportWriter -> assertCanonicalQualityReportPublisher
+write(report)                      -> publish(report)
 ```
 
-A path or folder name does not by itself decide the architecture role. Public/exported symbols must remain understandable outside their directory.
+Current files:
 
-## 2. Classification rules
+```text
+src/ports/services/canonical-quality-report-publisher.js
+src/infrastructure/filesystem/canonical-quality-report-publisher.js
+```
 
-Each observed term is classified into one of four groups:
+Application decides whether a `canonical_quality_report.v1` is published. The Publisher owns only the outbound publication capability; Infrastructure owns the path and filesystem encoding.
 
-1. **settled** — already uses an approved role and should not be renamed again without a responsibility change;
-2. **rename candidate** — responsibility is already clear enough for a behavior-free atomic rename;
-3. **boundary audit required** — the current component has consistency/concurrency semantics that must be characterized before renaming;
-4. **legacy technical module** — compatibility/script code that is not precedent for new architecture vocabulary and should be migrated or retired separately.
+### 2.2 Dedup relation candidate publication
 
-No compatibility alias should be introduced merely to make a rename easier. Repository-local callers, tests, Composition Root wiring, and documentation move in the same bounded slice.
+Completed:
+
+```text
+RelationCandidateStore -> RelationCandidatePublisher
+```
+
+Current Port:
+
+```text
+src/ports/relation-candidate-publisher.js
+RelationCandidatePublisher.replaceQueue(queue)
+```
+
+The read side remains separate:
+
+```text
+RelationCandidateRepository.get(relationCandidateKey)
+```
+
+The Publisher replaces one pending review queue for a scope/seed. It cannot authorize a relation decision or mutate Canonical state.
+
+### 2.3 Dedup relation decision consistency boundary
+
+The boundary was characterized before the final rename. Executable tests freeze:
+
+```text
+pending queue revision coverage
+Question / entity-index / hotspot-index source revision coverage
+lock ownership and busy rejection
+stale-state rejection before append
+atomic decision-log replacement
+lock cleanup after success or failure
+absence of Canonical Apply capabilities
+```
+
+Completed:
+
+```text
+RelationDecisionStore -> RelationDecisionGateway
+```
+
+Current Port:
+
+```text
+src/ports/relation-decision-gateway.js
+RelationDecisionGateway.record(decision, { expected_revisions })
+```
+
+The read side remains:
+
+```text
+RelationDecisionRepository.get(relationCandidateKey)
+```
+
+The Gateway compares the exact expected revision set while holding the decision lock and atomically appends the auditable decision. It does not perform Canonical Apply.
 
 ## 3. Settled naming
 
-### 3.1 Review
-
-Review now consistently distinguishes:
+Review remains:
 
 ```text
 ReviewQueueStateCoordinator
@@ -61,19 +110,11 @@ ReviewPlanPublisher
 ReviewMutationGateway
 ```
 
-`ReviewMutationGateway` is the cross-resource progress + session consistency boundary; `ReviewProgressRepository` owns the mutable progress aggregate; the Canonical-merge-specific `ReviewRepository` remains separate.
-
-### 3.2 Canonical Question-group lifecycle
-
-The completed lifecycle is:
+Canonical Question-group lifecycle remains:
 
 ```text
-Resolve → Prepare → Plan → Execute
-```
+Resolve -> Prepare -> Plan -> Execute
 
-with:
-
-```text
 ResolveQuestionGroupCanonicalizationUseCase
 QuestionGroupCanonicalizationPreparationCoordinator
 PlanQuestionGroupCanonicalizationMutationUseCase
@@ -82,126 +123,11 @@ CanonicalMutationGateway
 FileCanonicalMutationGatewayAdapter
 ```
 
-`CanonicalizationPlan` and `CanonicalMutationPlan` remain separate concepts and must not be collapsed.
+`CanonicalizationPlan` and `CanonicalMutationPlan` remain separate concepts.
 
-## 4. Active architecture naming debt
+## 4. Legacy technical modules
 
-### 4.1 P0 — CanonicalQualityReportWriter → CanonicalQualityReportPublisher
-
-Current Port:
-
-```text
-src/ports/services/canonical-quality-report-writer.js
-CanonicalQualityReportWriter
-assertCanonicalQualityReportWriter()
-write(report)
-```
-
-Observed responsibility:
-
-```text
-Application decides whether a Canonical quality report should be published
-Infrastructure decides how and where that report is persisted
-```
-
-This is publication, not generic writing. The target role is therefore:
-
-```text
-CanonicalQualityReportPublisher
-assertCanonicalQualityReportPublisher()
-publish(report)
-```
-
-Classification: **rename candidate**.
-
-Why P0:
-
-- the Port has one narrow outbound capability;
-- its existing documentation already describes publication semantics;
-- it has no transaction/concurrency protocol of its own;
-- Review already provides a proven `Publisher` precedent;
-- the rename can be mechanical and behavior-free.
-
-### 4.2 P1 — RelationCandidateStore → RelationCandidatePublisher
-
-Current write Port:
-
-```text
-src/ports/relation-candidate-store.js
-RelationCandidateStore
-replaceQueue(queue)
-```
-
-The read side is already separate:
-
-```text
-src/ports/repositories/relation-candidate-repository.js
-RelationCandidateRepository
-getPending(...)
-```
-
-The filesystem implementation replaces/publishes one pending review queue for a scope/seed. It does not represent a generic persistence Store and it does not own a multi-resource Canonical mutation transaction.
-
-Target role:
-
-```text
-RelationCandidatePublisher
-replaceQueue(queue)
-```
-
-`replaceQueue` may remain the operation name if its replacement semantics are useful at the call site; the architecture role is `Publisher`.
-
-Classification: **rename candidate**.
-
-This is P1 rather than P0 only to keep naming changes in small independently reviewable slices.
-
-### 4.3 P2 — RelationDecisionStore → RelationDecisionGateway
-
-Current write Port:
-
-```text
-src/ports/relation-decision-store.js
-RelationDecisionStore
-record(decision, {
-  expected_queue_revision,
-  expected_source_revisions
-})
-```
-
-The read side is already separate:
-
-```text
-src/ports/repositories/relation-decision-repository.js
-RelationDecisionRepository
-getLatest(...)
-```
-
-The filesystem write implementation is more than an audit-log writer. Before appending the decision it coordinates consistency checks across the pending review queue and the source facts used by the decision, revalidates opaque revisions, acquires a lock, and rejects stale state.
-
-Target role candidate:
-
-```text
-RelationDecisionGateway
-record(...)
-```
-
-Classification: **boundary audit required**.
-
-The likely role is `Gateway`, but it must not be renamed mechanically. A dedicated pre-rename slice must first freeze:
-
-```text
-queue revision semantics
-Question/index source revision semantics
-lock ownership and stale-state rejection
-audit append atomicity
-failure behavior
-```
-
-Only after those characteristics are executable tests should the Store → Gateway rename occur.
-
-## 5. Legacy technical modules — deferred, not vocabulary precedent
-
-The following `scripts/lib` modules remain legacy technical/compatibility modules:
+The following compatibility modules remain historical technical modules, not approved examples for new architecture naming:
 
 ```text
 scripts/lib/answer_store.js
@@ -212,72 +138,33 @@ scripts/lib/question_store.js
 scripts/lib/review_store.js
 ```
 
-They are not approved examples of the `Store` architecture role. Do not mass-rename them in this audit. Rename, migrate, or retire each only when its remaining callers and compatibility obligations are understood.
+Do not mass-rename them. Each is migrated or retired only with its remaining callers and compatibility obligations. Likewise, the directory name `src/ports/services` is not a reason to perform a bulk folder move; path restructuring is a separate concern.
 
-Likewise, the directory name `src/ports/services` is not a reason to perform a bulk folder move. Public symbol roles are governed first; path restructuring is a separate concern and must have its own benefit and migration boundary.
+## 5. Governance gate
 
-## 6. What this audit deliberately does not do
-
-This slice does not:
-
-```text
-rename production files or symbols
-add compatibility aliases
-change persisted schemas
-change CLI JSON or exit semantics
-change Domain rules
-change revision coverage
-change lock/journal/rollback behavior
-move src/ports/services as a directory
-rename scripts/lib compatibility modules
-```
-
-The purpose is to make the next changes predictable before touching code.
-
-## 7. Next bounded slice
-
-```text
-next_target: CanonicalQualityReportWriter -> CanonicalQualityReportPublisher
-```
-
-That is the next implementation slice because it has the clearest responsibility and the smallest behavioral surface.
-
-Expected atomic migration set:
-
-```text
-Port + assertion
-filesystem Adapter / factory names
-Composition Root wiring
-Application dependency name
-repository-local tests
-naming/audit documentation
-```
-
-The operation should become `publish(report)` if the current adapter/callers can be migrated mechanically in the same slice. No `write()` or Writer compatibility alias should remain solely for backward compatibility inside this repository.
-
-## 8. Subsequent sequence
-
-After the P0 slice is green:
-
-```text
-P1 RelationCandidateStore -> RelationCandidatePublisher
-P2 characterize RelationDecision consistency boundary
-P2 RelationDecisionStore -> RelationDecisionGateway only after characterization is green
-```
-
-One semantic rename per bounded commit. Do not combine the Decision consistency audit with an unrelated rename.
-
-## 9. Governance gate
-
-For future architecture-role cleanup:
+Future role changes follow:
 
 ```text
 understand responsibility
-→ freeze the separation point
-→ choose an approved role
-→ migrate all repository-local callers atomically
-→ remove old aliases
-→ prove behavior unchanged with CI
+-> freeze the separation point
+-> choose an approved role
+-> migrate all repository-local callers atomically
+-> remove old aliases
+-> prove behavior unchanged with CI
 ```
 
-The objective is semantic predictability, not fewer characters and not elimination of every historical occurrence of words such as `Store` or `Writer`.
+## 6. Completion evidence
+
+Completion requires all of the following to stay green:
+
+```text
+repository_role_term_audit.test.js
+canonical_check_application.test.js
+dedup_suggestion_ports.test.js
+dedup_relation_decision_application.test.js
+dedup_relation_decision_filesystem.test.js
+architecture_boundaries.test.js
+npm run ci:check
+```
+
+There is no remaining active `next_target` in this audit. New naming work requires a new responsibility audit rather than extending this completed migration implicitly.

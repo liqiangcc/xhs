@@ -186,7 +186,7 @@ function createApplication(options = {}) {
     } = createFsDedupSuggestionRepositories({ root: options.root, paths: dedupPaths });
     const {
         relationCandidateRepository,
-        relationDecisionStore,
+        relationDecisionGateway,
         relationDecisionRepository,
     } = createFsDedupDecisionRepositories({ root: options.root, paths: dedupPaths });
 
@@ -202,7 +202,7 @@ function createApplication(options = {}) {
         indexRepository: dedupIndexRepository,
         hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
-        relationDecisionStore,
+        relationDecisionGateway,
     });
     const prepareApply = createPrepareRelationApplyUseCase({
         relationDecisionRepository,

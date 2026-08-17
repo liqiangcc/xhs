@@ -4,7 +4,7 @@ const { createRelationDecision } = require('../../domain/dedup/relation-decision
 const {
     assertRelationCandidateRepository,
 } = require('../../ports/repositories/relation-candidate-repository');
-const { assertRelationDecisionStore } = require('../../ports/relation-decision-store');
+const { assertRelationDecisionGateway } = require('../../ports/relation-decision-gateway');
 const {
     revisionOf,
     assertSourcesFresh,
@@ -31,7 +31,7 @@ function createRecordRelationDecisionUseCase(dependencies = {}) {
     const relationCandidateRepository = assertRelationCandidateRepository(
         dependencies.relationCandidateRepository,
     );
-    const relationDecisionStore = assertRelationDecisionStore(dependencies.relationDecisionStore);
+    const relationDecisionGateway = assertRelationDecisionGateway(dependencies.relationDecisionGateway);
     const loadRelationSource = createRelationSourceLoader(dependencies);
 
     return async function recordRelationDecisionUseCase(input = {}) {
@@ -76,11 +76,11 @@ function createRecordRelationDecisionUseCase(dependencies = {}) {
             revisionOf(candidateSnapshot),
             ...candidateSnapshot.source_revisions,
         ];
-        const stored = await relationDecisionStore.record(decision, {
+        const stored = await relationDecisionGateway.record(decision, {
             expected_revisions: expectedRevisions,
         });
         if (!stored || stored.recorded !== true || !stored.resource || !stored.revision) {
-            throw new Error('RelationDecisionStore returned invalid record metadata');
+            throw new Error('RelationDecisionGateway returned invalid record metadata');
         }
 
         return {

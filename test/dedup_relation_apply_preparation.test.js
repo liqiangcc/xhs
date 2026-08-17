@@ -71,7 +71,7 @@ async function seedDecision(adapters, relation = 'same') {
         relationCandidateRepository: adapters.relationCandidateRepository,
         indexRepository: adapters.indexRepository,
         questionRepository: adapters.questionRepository,
-        relationDecisionStore: adapters.relationDecisionStore,
+        relationDecisionGateway: adapters.relationDecisionGateway,
     });
     await recordDecision({
         relation_candidate_key: relationCandidateKey,
@@ -181,7 +181,7 @@ test('prepare relation apply reads the latest persisted decision for one review 
         relationCandidateRepository: adapters.relationCandidateRepository,
         indexRepository: adapters.indexRepository,
         questionRepository: adapters.questionRepository,
-        relationDecisionStore: adapters.relationDecisionStore,
+        relationDecisionGateway: adapters.relationDecisionGateway,
     });
     await recordDecision({
         relation_candidate_key: relationCandidateKey,
