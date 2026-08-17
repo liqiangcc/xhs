@@ -1,0 +1,133 @@
+name: Complete XHS Content PR
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/complete-content-pr.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  checks: read
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Resolve content PR
+        id: pr
+        shell: bash
+        run: |
+          set -euo pipefail
+          PR_NUMBER="$(gh pr list --repo "$REPO" --head content/quality-completion --base master --state open --json number --jq '.[0].number')"
+          test -n "$PR_NUMBER"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for PR checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
+          for attempt in $(seq 1 60); do
+            STATE="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json statusCheckRollup --jq '
+              [.statusCheckRollup[]? |
+                if has("conclusion") then
+                  if (.status == "COMPLETED" or .conclusion != "") then
+                    (.conclusion // "")
+                  else
+                    "PENDING"
+                  end
+                else
+                  (.state // "PENDING")
+                end
+              ] | @json')"
+            if [ "$STATE" = "[]" ]; then
+              sleep 10
+              continue
+            fi
+            if echo "$STATE" | grep -Eq 'FAILURE|CANCELLED|TIMED_OUT|ACTION_REQUIRED|ERROR'; then
+              echo "PR checks failed: $STATE" >&2
+              exit 1
+            fi
+            if ! echo "$STATE" | grep -Eq 'PENDING|QUEUED|IN_PROGRESS|EXPECTED'; then
+              echo "PR checks completed successfully: $STATE"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for PR checks" >&2
+          exit 1
+
+      - name: Checkout fixed content head
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify fixed-snapshot review contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f review/reports/FINAL_SOURCE_FIRST_REVIEW.json
+          test -f review/reports/FINAL_SOURCE_FIRST_REVIEW.md
+          test -f review/reports/FINAL_SOURCE_FIRST_REVIEW_PASS
+          node - <<'NODE'
+          const fs = require('fs');
+          const { execFileSync } = require('child_process');
+          const report = JSON.parse(fs.readFileSync('review/reports/FINAL_SOURCE_FIRST_REVIEW.json', 'utf8'));
+          const marker = fs.readFileSync('review/reports/FINAL_SOURCE_FIRST_REVIEW_PASS', 'utf8').trim();
+          if (report.verdict !== 'PASS') throw new Error(`review verdict is ${report.verdict}`);
+          if (report.open_blocking_finding_count !== 0) throw new Error('open blocking findings remain');
+          if (marker !== report.audited_sha) throw new Error('pass marker does not match audited SHA');
+          execFileSync('git', ['cat-file', '-e', `${report.audited_sha}^{commit}`]);
+          const failedGates = (report.gates || []).filter((gate) => gate.status !== 'PASS');
+          if (failedGates.length) throw new Error(`failed recorded gates: ${failedGates.map((gate) => gate.name).join(', ')}`);
+          console.log(JSON.stringify({ audited_sha: report.audited_sha, verdict: report.verdict }));
+          NODE
+
+      - name: Re-run full completion gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+          git diff --exit-code
+
+      - name: Merge content PR at exact head
+        shell: bash
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          RESULT="$(gh api --method PUT "repos/$REPO/pulls/$PR_NUMBER/merge" \
+            -f sha="$HEAD_SHA" \
+            -f merge_method=merge \
+            -f commit_title='Merge content completion and final source-first review' \
+            -f commit_message='Complete repository-wide knowledge assets, fixed-snapshot review, and remediation verification.')"
+          echo "$RESULT" | jq -e '.merged == true'
+
+      - name: Remove one-off completion workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master
+          git checkout -B master origin/master
+          git config user.name "xhs-completion-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git rm .github/workflows/complete-content-pr.yml
+          git commit -m "chore: remove one-off content completion workflow"
+          git push origin HEAD:master
