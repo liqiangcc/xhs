@@ -139,3 +139,33 @@ jobs:
             answer_defects: answerFinding.evidence.by_defect,
           }));
           NODE
+
+      - name: Validate revised Redis AOF candidate before isolated rereview
+        shell: bash
+        run: |
+          node <<'NODE'
+          const path = require('path');
+          const { auditOneCandidate } = require('./scripts/lib/answer_quality');
+          const candidate = path.join(process.cwd(), 'review', 'candidates', 'answers', 'cq_aof_e522aa87.md');
+          const row = auditOneCandidate(candidate, { root: process.cwd(), noWrite: true });
+          console.log(JSON.stringify(row, null, 2));
+          if (row.candidate_sha256 !== '72f964208c4f40deebd44e96a9299c6e606f3cc1a28cd83b86a243b8eb29983b') {
+            throw new Error(`unexpected AOF candidate hash: ${row.candidate_sha256}`);
+          }
+          const forbiddenErrors = new Set([
+            'candidate_hash_mismatch',
+            'source_question_not_covered',
+            'legacy_template_detected',
+            'foreign_core_topic',
+            'followups_not_question_specific',
+            'claim_source_mapping_invalid',
+            'sources_required',
+            'claims_required'
+          ]);
+          const badErrors = row.errors.filter((error) => forbiddenErrors.has(error.error));
+          if (badErrors.length) throw new Error(`AOF candidate/evidence regression: ${JSON.stringify(badErrors)}`);
+          const unexpectedHardFailures = row.hard_failures.filter((id) => id !== 'missing_independent_review');
+          if (unexpectedHardFailures.length) throw new Error(`unexpected AOF hard failures: ${unexpectedHardFailures.join(',')}`);
+          if (!row.hard_failures.includes('missing_independent_review')) throw new Error('AOF candidate should remain pending isolated rereview');
+          console.log(JSON.stringify({ aof_candidate_ready_for_isolated_rereview: true }));
+          NODE
