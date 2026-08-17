@@ -1,0 +1,127 @@
+name: Canonical Boundary Review Batch 002
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .canonical-boundary-review-batch-002-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    if: "${{ github.event.head_commit.message == 'chore: capture canonical boundary review batch 002' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+
+      - name: Capture next ten pending boundary pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=review/content_build/canonical_boundary_review/batch_002
+          mkdir -p "$out/contexts"
+          node - <<'NODE'
+          const fs = require('fs');
+          const rows = fs.readFileSync('data/manifests/canonical/long_tail_duplicate_candidates.jsonl', 'utf8')
+            .split(/\r?\n/).filter(Boolean).map(JSON.parse)
+            .filter((row) => row.reviewer_decision === 'pending')
+            .slice(0, 10);
+          fs.writeFileSync('review/content_build/canonical_boundary_review/batch_002/candidates.json', `${JSON.stringify({
+            schema_version: 'canonical_boundary_review_batch.v1',
+            batch_id: 'batch_002',
+            count: rows.length,
+            candidates: rows,
+          }, null, 2)}\n`);
+          fs.writeFileSync('/tmp/boundary-batch-002.tsv', rows.flatMap((row) => row.canonical_ids.map((id) => `${row.candidate_id}\t${id}`)).join('\n') + '\n');
+          NODE
+          while IFS=$'\t' read -r candidate id; do
+            mkdir -p "$out/contexts/$candidate"
+            node scripts/xhs.js answer context --canonical-id "$id" --noWrite > "$out/contexts/$candidate/$id.json"
+          done < /tmp/boundary-batch-002.tsv
+
+      - name: Build source-only review summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const base = 'review/content_build/canonical_boundary_review/batch_002';
+          const batch = JSON.parse(fs.readFileSync(path.join(base, 'candidates.json'), 'utf8'));
+          const summaries = batch.candidates.map((candidate) => ({
+            candidate_id: candidate.candidate_id,
+            algorithm_evidence: candidate.evidence,
+            sides: candidate.canonical_ids.map((id) => {
+              const context = JSON.parse(fs.readFileSync(path.join(base, 'contexts', candidate.candidate_id, `${id}.json`), 'utf8'));
+              return {
+                canonical_id: id,
+                canonical_title: context.canonical.canonical_title,
+                aliases: context.canonical.aliases || [],
+                answer_status: context.canonical.answer_status,
+                frequency: context.canonical.frequency,
+                primary_domain: context.canonical.primary_domain,
+                primary_entities: context.canonical.primary_entities || [],
+                source_variants: context.source_variants || [],
+                source_questions: (context.source_questions || []).map((row) => ({
+                  question_id: row.question_id,
+                  original_question: row.original_question,
+                  question_type: row.question_type,
+                  cognitive_depth: row.cognitive_depth,
+                  company: row.company,
+                  source_note_id: row.source_note_id,
+                  source_question_index: row.source_question_index,
+                  tech_entities: row.tech_entities || [],
+                })),
+              };
+            }),
+          }));
+          fs.writeFileSync(path.join(base, 'source_summary.json'), `${JSON.stringify({
+            schema_version: 'canonical_boundary_review_source_summary.v1',
+            batch_id: 'batch_002',
+            reviewer_decisions_included: false,
+            count: summaries.length,
+            candidates: summaries,
+          }, null, 2)}\n`);
+          NODE
+
+      - name: Verify read-only capture and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run ci:check
+
+      - name: Commit source-first review inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add review/content_build/canonical_boundary_review/batch_002
+          git commit -m "content: capture canonical boundary review batch 002"
+
+      - name: Remove temporary capture workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .canonical-boundary-review-batch-002-trigger .github/workflows/canonical-boundary-review-batch-002.yml
+          git add -A
+          git commit -m "chore: remove canonical boundary review batch 002 workflow"
+
+      - name: Push review inputs
+        shell: bash
+        run: git push origin HEAD:content/quality-completion
