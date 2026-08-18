@@ -1,0 +1,184 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_synchronized_volatile_2801d05c",
+  "candidate_sha256": "f62d38a1cdf70d0db619c5bc3257a06957195efad9ba615059166360c92e8dba",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "synchronized-volatile-jls21.v1"
+  },
+  "sources": [
+    {
+      "source_id": "jls21-8-3-1-4-volatile",
+      "title": "Java Language Specification SE 21 §8.3.1.4 volatile Fields",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.3.1.4",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "jls21-14-19-synchronized",
+      "title": "Java Language Specification SE 21 §14.19 The synchronized Statement",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.19",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "jls21-17-memory-model",
+      "title": "Java Language Specification SE 21 Chapter 17 Threads and Locks",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "jls21-15-14-2-postincrement",
+      "title": "Java Language Specification SE 21 §15.14.2 Postfix Increment Operator ++",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.14.2",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "monitor-mutual-exclusion-and-release",
+      "text": "JLS SE 21 specifies that synchronized acquires a mutual-exclusion monitor lock; while the executing thread owns the lock no other thread may acquire that same lock, and normal or abrupt completion releases it.",
+      "source_ids": [
+        "jls21-14-19-synchronized",
+        "jls21-17-memory-model"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "volatile-and-monitor-happens-before",
+      "text": "JLS SE 21 classifies volatile reads/writes and monitor lock/unlock as synchronization actions; monitor unlock synchronizes-with later lock on the same monitor, and a volatile write synchronizes-with subsequent reads of the same volatile variable, yielding the corresponding happens-before relationships.",
+      "source_ids": [
+        "jls21-17-memory-model"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "volatile-consistent-field-without-lock-exclusivity",
+      "text": "JLS SE 21 defines volatile as a field-level synchronization mechanism for consistent visibility of the variable and contrasts it with exclusive lock use; volatile itself does not establish ownership of a mutual-exclusion critical section.",
+      "source_ids": [
+        "jls21-8-3-1-4-volatile",
+        "jls21-14-19-synchronized",
+        "jls21-17-memory-model"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "postincrement-is-read-modify-write",
+      "text": "JLS SE 21 specifies postfix increment as obtaining the variable value, adding one, and storing the sum back; combining that multi-step expression with volatile field semantics does not introduce the monitor mutual exclusion required to make the whole read-modify-write sequence a single critical section.",
+      "source_ids": [
+        "jls21-15-14-2-postincrement",
+        "jls21-17-memory-model",
+        "jls21-14-19-synchronized"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "same-lock-protocol-boundary",
+      "text": "JLS SE 21 notes that acquiring an object's lock does not itself prevent other threads from accessing fields or unsynchronized methods; mutual-exclusion correctness therefore depends on all relevant accesses following the same synchronization protocol.",
+      "source_ids": [
+        "jls21-14-19-synchronized"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "hardware-barrier-not-language-contract",
+      "text": "The JLS contract is expressed in synchronization actions, synchronization order, synchronizes-with, and happens-before relations; the candidate intentionally does not assert a fixed HotSpot or CPU instruction/barrier sequence as part of Java language semantics.",
+      "source_ids": [
+        "jls21-17-memory-model"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "206553ac44a9345f97edc050e8278ad5",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "a576d3b51e0df8ad9ea26efc87dd6862",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "易错点"]
+    },
+    {
+      "question_id": "b37ef27e56d46750c1de4681b5a5529e",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "b570977597b6bf08102213815bee662a",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "b91330a55918d79e465eaf132b304f6a",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "synchronized-volatile-independent-review",
+    "review_version": "synchronized-volatile.concept.review.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "候选按互斥、happens-before、复合原子性、适用条件和实现边界统一比较 synchronized 与 volatile，直接回答所有来源问法。",
+      "对唯一 L2 原理来源问法补足 monitor 与 volatile 发布的状态链路，并用 JLS 的 postfix increment 语义说明 volatile++ 的复合操作边界，而非依赖泛化博客结论。",
+      "内存屏障部分严格停留在 JMM 规范契约，未把特定 HotSpot/JIT/CPU 的屏障或指令序列写成跨版本事实；无硬失败。"
+    ]
+  }
+}
