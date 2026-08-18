@@ -1,0 +1,122 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_kafka_duplicate_0a558c94",
+  "candidate_sha256": "296a458d897be4fa2417c988f4ad0a4aac40122cac7573e7deed8cfcafc2236d",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "kafka-duplicate-apache-primary-sources.v1"
+  },
+  "sources": [
+    {
+      "source_id": "kafka-41-consumer-config",
+      "title": "Apache Kafka 4.1 Consumer Configs",
+      "locator": "https://kafka.apache.org/41/configuration/consumer-configs/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-41-consumer-api",
+      "title": "Apache Kafka 4.1.2 KafkaConsumer API",
+      "locator": "https://kafka.apache.org/41/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-41-producer-config",
+      "title": "Apache Kafka 4.1 Producer Configs",
+      "locator": "https://kafka.apache.org/41/configuration/producer-configs/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-41-producer-api",
+      "title": "Apache Kafka 4.1.2 KafkaProducer API",
+      "locator": "https://kafka.apache.org/41/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-41-design",
+      "title": "Apache Kafka 4.1 Design: Message Delivery Semantics and Transactions",
+      "locator": "https://kafka.apache.org/41/design/design/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "consumer-position-commit-failure-window",
+      "text": "Kafka distinguishes the current consumer position from the committed recovery position. If business processing succeeds but the offset is not committed before failure, recovery can redeliver the record. The candidate therefore treats duplicate delivery as an expected at-least-once failure window rather than a switch that can be disabled.",
+      "source_ids": ["kafka-41-consumer-api", "kafka-41-design"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "manual-commit-and-contiguous-watermark",
+      "text": "Kafka documents that the committed offset is the next record to consume, KafkaConsumer is not thread-safe, and decoupled processing requires explicit coordination so committed offsets do not move beyond unfinished work. The candidate correctly rejects committing the largest observed parallel offset and instead advances a contiguous completed prefix.",
+      "source_ids": ["kafka-41-consumer-api"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "async-commit-error-boundary",
+      "text": "Kafka 4.1.2 documents commitAsync as non-blocking and states that errors are passed to the callback when one is supplied or discarded otherwise. The candidate therefore requires callback/error handling rather than presenting async commit as a guaranteed durable recovery point.",
+      "source_ids": ["kafka-41-consumer-api"],
+      "answer_locations": ["关键细节"]
+    },
+    {
+      "claim_id": "producer-idempotence-scope",
+      "text": "Kafka 4.1 enables producer idempotence by default when no conflicting settings disable it and requires acks=all, retries>0, and max.in.flight.requests.per.connection<=5. The producer API also states that application-level re-sends cannot be deduplicated and idempotence is session-scoped. The candidate keeps producer retry deduplication separate from consumer/business idempotency.",
+      "source_ids": ["kafka-41-producer-config", "kafka-41-producer-api"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "易错点"]
+    },
+    {
+      "claim_id": "kafka-transaction-and-read-committed-scope",
+      "text": "Kafka documents sendOffsetsToTransaction for consume-transform-produce: offsets become committed only if the transaction commits, and read_committed consumers hide aborted or open transactional records according to LSO semantics. The candidate correctly scopes this exactly-once path to Kafka transactional processing rather than arbitrary external side effects.",
+      "source_ids": ["kafka-41-producer-api", "kafka-41-consumer-config", "kafka-41-design"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "external-side-effect-idempotency-boundary",
+      "text": "Kafka design documentation explicitly notes that exactly-once behavior for external destination systems generally requires cooperation with those systems. The candidate's stable eventId, unique constraint, inbox/outbox, conditional update, API idempotency-key and compensation choices are therefore appropriate scenario controls and are not misrepresented as Kafka transaction guarantees.",
+      "source_ids": ["kafka-41-design"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版"]
+    },
+    {
+      "claim_id": "poll-rebalance-capacity-and-validation",
+      "text": "Kafka exposes max.poll.interval.ms and max.poll.records to bound poll-loop timing and batch size. The candidate uses those documented controls together with explicitly hypothetical throughput/capacity examples, finite retries, DLQ/parking, observability and fault injection; these are presented as design choices rather than Kafka defaults or fabricated production facts.",
+      "source_ids": ["kafka-41-consumer-config", "kafka-41-consumer-api"],
+      "answer_locations": ["3 分钟版", "关键细节", "项目经验版", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "1d38b66d3e9caffbc0c749256959f202",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-kafka-duplicate-r1",
+    "review_version": "kafka-duplicate-apache-primary-sources-source-first.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 18,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate directly answers both source variants and correctly explains the DB-success/offset-not-committed redelivery window that makes business idempotency necessary.",
+      "Producer idempotence, consumer offset recovery, Kafka transactions and external-system side effects are kept as separate consistency boundaries; no end-to-end exactly-once guarantee is invented.",
+      "All throughput, partition and duplicate-rate numbers in the project-style section are explicitly hypothetical and do not imply personal production experience."
+    ]
+  }
+}
