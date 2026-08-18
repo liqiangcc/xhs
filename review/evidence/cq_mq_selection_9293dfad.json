@@ -1,0 +1,142 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_mq_selection_9293dfad",
+  "candidate_sha256": "6750ab70afa87c2714c7661f41d9c347d1cc8702f27174e8cbf24c39819906db",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "codex-content-builder-mq-selection-v3",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "kafka-design-4.3",
+      "title": "Apache Kafka 4.3 Design",
+      "locator": "https://kafka.apache.org/43/design/design/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "rocketmq-message-model-5.0",
+      "title": "Apache RocketMQ 5.0 Message Model",
+      "locator": "https://rocketmq.apache.org/docs/domainModel/05message/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "rocketmq-delay-5.0",
+      "title": "Apache RocketMQ 5.0 Delay Message",
+      "locator": "https://rocketmq.apache.org/docs/featureBehavior/02delaymessage/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "rocketmq-transaction-5.0",
+      "title": "Apache RocketMQ 5.0 Transaction Message",
+      "locator": "https://rocketmq.apache.org/zh/docs/featureBehavior/04transactionmessage/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "rocketmq-transaction-bridge-source",
+      "title": "Apache RocketMQ TransactionalMessageBridge",
+      "locator": "https://github.com/apache/rocketmq/blob/master/broker/src/main/java/org/apache/rocketmq/broker/transaction/queue/TransactionalMessageBridge.java",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "rabbitmq-exchanges-current",
+      "title": "RabbitMQ Exchanges",
+      "locator": "https://www.rabbitmq.com/docs/exchanges",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "rabbitmq-queues-4.2",
+      "title": "RabbitMQ 4.2 Queues",
+      "locator": "https://www.rabbitmq.com/docs/4.2/queues",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "rabbitmq-quorum-queues-4.2",
+      "title": "RabbitMQ 4.2 Quorum Queues",
+      "locator": "https://www.rabbitmq.com/docs/4.2/quorum-queues",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "kafka-retained-partition-log-and-replay",
+      "text": "Kafka persists records in partitioned logs, consumer groups assign a partition to one consumer in a group at a time, offsets can be rewound for replay, and retention is independent of a particular consumer having already read a record.",
+      "source_ids": ["kafka-design-4.3"],
+      "answer_locations": ["核心结论", "3 分钟版 / Kafka：日志/事件流和重放优先", "对比矩阵", "常见追问"]
+    },
+    {
+      "claim_id": "kafka-exactly-once-boundary",
+      "text": "Kafka transactions can atomically combine produced records and consumed offsets for Kafka read-process-write flows, while exactly-once effects in external destination systems require cooperation or coordinated offset/output storage.",
+      "source_ids": ["kafka-design-4.3"],
+      "answer_locations": ["3 分钟版 / Kafka：日志/事件流和重放优先", "核心数据流与一致性设计", "易错点"]
+    },
+    {
+      "claim_id": "rocketmq-message-types-and-ordering",
+      "text": "RocketMQ 5.0 documents FIFO, Delay and Transaction message types; FIFO order is scoped by message group and delay messages have type-specific topic and delivery-time constraints.",
+      "source_ids": ["rocketmq-message-model-5.0", "rocketmq-delay-5.0"],
+      "answer_locations": ["1 分钟版", "3 分钟版 / RocketMQ：业务消息高级语义优先", "对比矩阵", "易错点"]
+    },
+    {
+      "claim_id": "rocketmq-transaction-mechanism-and-boundary",
+      "text": "RocketMQ transaction messages couple producer-side local transaction resolution with transaction checking; the broker implementation uses an internal half-message path, but this does not make arbitrary downstream business side effects a global transaction or remove the need for consumer idempotency.",
+      "source_ids": ["rocketmq-transaction-5.0", "rocketmq-transaction-bridge-source"],
+      "answer_locations": ["3 分钟版 / RocketMQ：业务消息高级语义优先", "核心数据流与一致性设计", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "rabbitmq-routing-and-ack-model",
+      "text": "RabbitMQ AMQP 0-9-1 routes publications through exchanges and bindings; direct, topic and fanout are built-in exchange types, while queues support explicit consumer acknowledgements and prefetch control.",
+      "source_ids": ["rabbitmq-exchanges-current", "rabbitmq-queues-4.2"],
+      "answer_locations": ["1 分钟版", "3 分钟版 / RabbitMQ：路由/队列拓扑和确认模型优先", "对比矩阵"]
+    },
+    {
+      "claim_id": "rabbitmq-quorum-and-stream-boundaries",
+      "text": "RabbitMQ 4.2 quorum queues are replicated high-availability queues and publisher confirms are tied to quorum replication; official guidance says lowest-latency, very-long-backlog and large-fanout workloads may be better served by other queue types or streams.",
+      "source_ids": ["rabbitmq-quorum-queues-4.2", "rabbitmq-queues-4.2"],
+      "answer_locations": ["3 分钟版 / RabbitMQ：路由/队列拓扑和确认模型优先", "对比矩阵", "易错点"]
+    },
+    {
+      "claim_id": "selection-is-requirements-first",
+      "text": "The candidate treats product selection as a requirements and failure-model decision rather than an unconditional TPS ranking, and explicitly requires same-workload PoC, backlog recovery and failure injection before choosing a broker.",
+      "source_ids": ["kafka-design-4.3", "rocketmq-message-model-5.0", "rabbitmq-quorum-queues-4.2"],
+      "answer_locations": ["核心结论", "容量估算：先算量，再谈产品", "PoC、观测和上线门槛", "怎么做最终选择"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "5b44c76b84e2a273c15173dd6178adb5",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "对比矩阵", "怎么做最终选择"]
+    },
+    {
+      "question_id": "5c18a66ca96e32443b45a0ece3457c39",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "对比矩阵", "怎么做最终选择"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "codex-isolated-reviewer-mq-selection-r1",
+    "reviewer_version": "xhs-answer-reviewer.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "hard_failures": [],
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "revision_suggestions": []
+  }
+}
