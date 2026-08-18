@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_jvm_oom_5adc3ce1","version":4,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_jvm_oom_5adc3ce1","version":5,"status":"draft","updated_at":"2026-08-19","answer_type":"scenario","quality_tier":"candidate"} -->
 
 # JVM OOM 如何定位和处理？
 
@@ -110,32 +110,11 @@ Metaspace 位于 native memory，用来保存类元数据。动态类生成、�
 
 ## 常见追问
 
-### 1. OOM 后第一反应要不要重启？
-
-如果服务已经不可用，重启可能是必要止损，但尽量先获取已经自动落盘的 dump/JFR/GC/容器证据。不要为了留证无限拖延恢复；正确做法是提前配置自动证据，使“恢复”和“复盘”不冲突。
-
-### 2. Heap dump 很大，线上还能不能导？
-
-能不能导取决于实例剩余资源和 SLA。`jcmd GC.heap_dump` 是高影响操作，大 heap 下可能造成明显停顿；高流量实例应先摘流、确认磁盘，并避免把 dump 写满文件系统。
-
-### 3. `jmap -histo` / `jcmd GC.class_histogram` 看到 byte[] 最大，就是 byte[] 泄漏吗？
-
-不是。`byte[]`、`char[]` 往往只是实际业务对象的底层载体。要继续沿引用链、retained size 和业务 owner 找到“谁在长期持有这些数组”。
-
-### 4. 把 `-Xmx` 调大就能解决吗？
-
-如果确认是合理峰值容量不足，可以；如果是泄漏，只是延后爆炸。容器场景还必须考虑 `Xmx` 之外的 native/Metaspace/thread/direct/code cache 等空间，盲目接近容器 limit 反而可能更容易被 OOMKilled。
-
-### 5. NMT 能找到所有 native leak 吗？
-
-不能。NMT 主要追踪 HotSpot/JVM 的 native memory；官方明确指出第三方 native code 等分配不在完整覆盖范围内。它是缩小范围的证据，不是唯一真相源。
-
-### 6. 怎么给监控定阈值？
-
-不要只设“heap > 80%”这一条。至少把 Full GC 后 old-gen/live set 趋势、RSS 与容器 limit 距离、Metaspace、线程数、GC pause、allocation rate、OOMKilled、请求成功率与延迟联合起来。阈值应来自压测和历史基线，并围绕 SLO 留出处理窗口。
-
+- 问：`Java heap space` 和容器 `OOMKilled` 怎么快速区分？答：先结合完整 OOM 文本、heap/GC 证据和容器事件判断资源域；Java heap OOM 重点看 live set、heap dump 与 GC，而容器 OOMKilled 还要对比进程 RSS、cgroup limit、NMT 和非 heap/native 占用，不能只看 `-Xmx`。
+- 问：为什么 OOM 后不能第一时间只把 `-Xmx` 调大？答：如果是持续泄漏，扩 heap 只会推迟复发；如果是 native/thread/container 资源耗尽，增大 `-Xmx` 反而会挤压非 heap 余量。只有确认资源类型和增长模式后，容量调整才有意义。
+- 问：什么时候适合直接执行 `jcmd GC.heap_dump`，什么时候应先摘流？答：heap dump 和 class histogram 都可能是高影响诊断，大堆上会带来明显停顿和磁盘压力；高流量或严格 SLO 场景应优先摘流/隔离实例，并尽量依赖事故前预配的 heap dump、JFR、GC 日志和 NMT 证据。
+- 问：RSS 持续增长但 NMT 基本不涨，能否说明没有 native leak？答：不能。NMT 主要覆盖 HotSpot/JVM 自身 native memory，并不覆盖任意第三方 native/JNI 等全部分配；此时应继续结合 direct buffer、线程、OS/容器指标和第三方 native 证据缩小范围。
 ## 易错点
-
 - 看到 OOM 就直接增大 heap，没有先区分 heap、Metaspace、native、thread、container；
 - 事故后才想起配置 heap dump/JFR/NMT，结果关键证据拿不到；
 - 把一次 heap 快照当成泄漏结论，没有做时间序列、Full GC 后 live set 或 baseline/diff 对比；

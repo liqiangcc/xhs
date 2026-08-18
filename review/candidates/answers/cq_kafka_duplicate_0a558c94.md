@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_kafka_duplicate_0a558c94","version":4,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_kafka_duplicate_0a558c94","version":5,"status":"draft","updated_at":"2026-08-19","answer_type":"scenario","quality_tier":"candidate"} -->
 
 # Kafka 如何处理重复消费？
 
@@ -115,36 +115,14 @@ Consumer 从 Kafka 得到记录后，本地 `position` 已向前；业务数据�
 
 ## 常见追问
 
-### 1. 把 `enable.auto.commit` 关掉就不会重复了吗？
-
-不会。它只把 offset 提交时机交给应用；业务成功到手工提交成功之间仍然有故障窗口。真正控制业务重复副作用的是幂等或同事务状态设计。
-
-### 2. 手动 `commitSync()` 比 `commitAsync()` 更安全吗？
-
-`commitSync()` 会等待成功、不可恢复错误或超时，边界更直观；`commitAsync()` 不阻塞，错误通过 callback 返回。二者都不能把外部数据库写与 Kafka offset 自动变成一个事务，也都不能替代幂等。
-
-### 3. Kafka 开启 `enable.idempotence=true` 后，Consumer 就不会重复了吗？
-
-不是。idempotent producer 主要防止 producer retry 在 Kafka 日志里产生重复；consumer 在“业务完成但 offset 未提交”的故障窗口仍可能重新读取同一 record。
-
-### 4. Kafka transaction 能不能保证 MySQL 只写一次？
-
-不能自动保证。Kafka transaction 能原子协调 Kafka records 与 consumer offsets；MySQL 是另一个事务域。对 MySQL 仍应使用唯一约束/inbox/outbox/条件更新等方案，或采用经过明确验证的跨系统事务架构。
-
-### 5. Redis `SETNX` 能不能做消费幂等？
-
-低风险、短窗口场景可以作为辅助，但关键业务必须考虑 key 过期、淘汰、故障恢复和数据持久性。若 Redis 去重键比 Kafka 可重放窗口更早消失，旧消息一旦回放仍会重复执行。通常将去重记录和业务写放在同一数据库事务更容易得到强边界。
-
-### 6. 为什么并行消费后不能直接提交最大 offset？
-
-因为同 partition 内低 offset 可能仍未完成。如果 100 没完成而 101、102 完成后提交 103，实例崩溃后 100 会被跳过。必须提交“连续完成前缀”的下一 offset。
-
-### 7. 出现大量 duplicate-hit 是坏事吗？
-
-幂等命中本身说明保护生效，但突增通常是上游重复生产、consumer crash/rebalance、offset commit 失败或重放行为发生变化的信号。应把 duplicate-hit 当成观测指标，而不是静默吞掉后完全不管。
-
+- 问：把 `enable.auto.commit` 关掉就不会重复了吗？答：不会。它只把 offset 提交时机交给应用；业务成功到手工提交成功之间仍然有故障窗口。真正控制业务重复副作用的是幂等或同事务状态设计。
+- 问：手动 `commitSync()` 比 `commitAsync()` 更安全吗？答：`commitSync()` 会等待成功、不可恢复错误或超时，边界更直观；`commitAsync()` 不阻塞，错误通过 callback 返回。二者都不能把外部数据库写与 Kafka offset 自动变成一个事务，也都不能替代幂等。
+- 问：Kafka 开启 `enable.idempotence=true` 后，Consumer 就不会重复了吗？答：不是。idempotent producer 主要防止 producer retry 在 Kafka 日志里产生重复；consumer 在“业务完成但 offset 未提交”的故障窗口仍可能重新读取同一 record。
+- 问：Kafka transaction 能不能保证 MySQL 只写一次？答：不能自动保证。Kafka transaction 能原子协调 Kafka records 与 consumer offsets；MySQL 是另一个事务域。对 MySQL 仍应使用唯一约束/inbox/outbox/条件更新等方案，或采用经过明确验证的跨系统事务架构。
+- 问：Redis `SETNX` 能不能做消费幂等？答：低风险、短窗口场景可以作为辅助，但关键业务必须考虑 key 过期、淘汰、故障恢复和数据持久性。若 Redis 去重键比 Kafka 可重放窗口更早消失，旧消息一旦回放仍会重复执行。通常将去重记录和业务写放在同一数据库事务更容易得到强边界。
+- 问：为什么并行消费后不能直接提交最大 offset？答：因为同 partition 内低 offset 可能仍未完成。如果 100 没完成而 101、102 完成后提交 103，实例崩溃后 100 会被跳过。必须提交“连续完成前缀”的下一 offset。
+- 问：出现大量 duplicate-hit 是坏事吗？答：幂等命中本身说明保护生效，但突增通常是上游重复生产、consumer crash/rebalance、offset commit 失败或重放行为发生变化的信号。应把 duplicate-hit 当成观测指标，而不是静默吞掉后完全不管。
 ## 易错点
-
 - 把 at-least-once 误解成“Kafka 有 bug 才会重复”，没有把故障窗口当成正常语义设计；
 - 认为关闭自动提交或改用手动提交就彻底解决重复；
 - Producer 开启 idempotence 后仍在应用层收到模糊错误就重新构造并发送新消息，扩大重复来源；
