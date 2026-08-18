@@ -25,35 +25,75 @@ jobs:
       - name: Run fixed candidate evidence audits
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
+          mkdir -p "$RUNNER_TEMP/batch-0009-audits"
+          : > "$RUNNER_TEMP/batch-0009-audits/status.tsv"
           for id in \
             cq_cache_consistency_a83eeb36 \
             cq_jvm_oom_5adc3ce1 \
             cq_kafka_duplicate_0a558c94
           do
+            set +e
             node scripts/xhs.js answer audit \
               --candidate "review/candidates/answers/${id}.md" \
               --require-evidence \
-              --noManifest
+              --noManifest > "$RUNNER_TEMP/batch-0009-audits/${id}.log" 2>&1
+            code=$?
+            set -e
+            cat "$RUNNER_TEMP/batch-0009-audits/${id}.log"
+            printf '%s\t%s\n' "$id" "$code" >> "$RUNNER_TEMP/batch-0009-audits/status.tsv"
           done
           git diff --check
 
-      - name: Record completed deterministic audit stage
+      - name: Record deterministic audit checkpoint without fabricating approval
         shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
           const fs = require('fs');
+          const path = require('path');
           const taskPath = 'tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md';
-          let text = fs.readFileSync(taskPath, 'utf8');
+          const ids = [
+            'cq_cache_consistency_a83eeb36',
+            'cq_jvm_oom_5adc3ce1',
+            'cq_kafka_duplicate_0a558c94',
+          ];
+          const rows = ids.map((id) => {
+            const auditPath = path.join('review', 'candidates', 'audits', `${id}.json`);
+            if (!fs.existsSync(auditPath)) return { id, ok: false, missing: true, errors: ['audit_output_missing'] };
+            const audit = JSON.parse(fs.readFileSync(auditPath, 'utf8'));
+            return {
+              id,
+              ok: audit.ok === true,
+              hardFailures: audit.hard_failures || [],
+              errors: (audit.errors || []).map((item) => item.error || String(item)),
+              candidateSha256: audit.candidate_sha256 || null,
+            };
+          });
           const marker = '### Deterministic evidence audit checkpoint (2026-08-18)';
-          if (!text.includes(marker)) {
-            const insertion = `\n${marker}\n\n- \`cq_cache_consistency_a83eeb36\`: \`answer audit --require-evidence\` passed against the current fixed candidate/evidence pair; independent review remains bound, and pilot human approval/promotion remains pending.\n- \`cq_jvm_oom_5adc3ce1\`: \`answer audit --require-evidence\` passed against the current fixed candidate/evidence pair; pilot human approval/promotion remains pending.\n- \`cq_kafka_duplicate_0a558c94\`: \`answer audit --require-evidence\` passed against the current fixed candidate/evidence pair; pilot human approval/promotion remains pending.\n\nNo human review or promotion state is inferred or fabricated by this checkpoint.\n`;
-            const completion = '\n## Completion\n';
-            if (!text.includes(completion)) throw new Error('task completion marker not found');
-            text = text.replace(completion, insertion + completion);
-            fs.writeFileSync(taskPath, text, 'utf8');
+          const lines = [marker, ''];
+          for (const row of rows) {
+            if (row.ok) {
+              lines.push(`- \`${row.id}\`: \`answer audit --require-evidence\` PASS on candidate \`${row.candidateSha256}\`; pilot human approval/promotion remains pending.`);
+            } else {
+              const issues = [...new Set([...(row.hardFailures || []), ...(row.errors || [])])].slice(0, 12);
+              lines.push(`- \`${row.id}\`: \`answer audit --require-evidence\` FAIL; remediation remains required before promotion. Current deterministic issues: ${issues.length ? issues.map((x) => `\`${x}\``).join(', ') : '`unknown_audit_failure`'}.`);
+            }
           }
+          lines.push('', 'No human review or promotion state is inferred or fabricated by this checkpoint.', '');
+          let text = fs.readFileSync(taskPath, 'utf8');
+          const completion = '\n## Completion\n';
+          if (!text.includes(completion)) throw new Error('task completion marker not found');
+          const block = `${lines.join('\n')}\n`;
+          const markerIndex = text.indexOf(marker);
+          if (markerIndex >= 0) {
+            const completionIndex = text.indexOf('\n## Completion\n', markerIndex);
+            if (completionIndex < 0) throw new Error('completion marker missing after checkpoint');
+            text = text.slice(0, markerIndex) + block + text.slice(completionIndex);
+          } else {
+            text = text.replace(completion, `\n${block}${completion}`);
+          }
+          fs.writeFileSync(taskPath, text, 'utf8');
           NODE
           git diff --check
 
@@ -70,5 +110,5 @@ jobs:
             review/candidates/audits/cq_kafka_duplicate_0a558c94.json \
             tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md
           git diff --cached --check
-          git commit -m "content: audit batch 0009 evidence-backed candidates"
+          git commit -m "content: record batch 0009 deterministic audits"
           git push origin HEAD:content/quality-completion
