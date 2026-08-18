@@ -1,0 +1,133 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_cms_collector_c069b541",
+  "candidate_sha256": "cf1dc9ebdda56110a361fc6f9035c6fd94c0621397b4c52326e526463568874f",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "cms-jdk8-jdk14-boundary.v1"
+  },
+  "sources": [
+    {
+      "source_id": "oracle-jdk8-cms-tuning",
+      "title": "Java SE 8 HotSpot VM Garbage Collection Tuning Guide — Concurrent Mark Sweep (CMS) Collector",
+      "locator": "https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/cms.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "openjdk-jep-363",
+      "title": "JEP 363: Remove the Concurrent Mark Sweep (CMS) Garbage Collector",
+      "locator": "https://openjdk.org/jeps/363",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "cms-phase-stw-and-concurrency",
+      "text": "Oracle JDK 8 documents initial mark and remark as application pauses, concurrent tracing between them, concurrent sweeping after remark, and preclean/reset in CMS measurements.",
+      "source_ids": [
+        "oracle-jdk8-cms-tuning"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "cms-concurrent-mode-failure",
+      "text": "Oracle JDK 8 defines concurrent mode failure when CMS cannot finish before the tenured generation fills or when an allocation cannot be satisfied by the available free-space blocks; the application is then paused while collection completes.",
+      "source_ids": [
+        "oracle-jdk8-cms-tuning"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "cms-overhead-floating-garbage-trigger",
+      "text": "Oracle JDK 8 documents CPU competition during concurrent phases, floating garbage that may wait for the next cycle, and a version-sensitive initiating occupancy mechanism whose historical default is approximately 92 percent in that guide.",
+      "source_ids": [
+        "oracle-jdk8-cms-tuning"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "cms-young-gc-interleaving",
+      "text": "Oracle JDK 8 documents that minor collections can interleave with an ongoing CMS major cycle and stop application threads independently of CMS old-generation pauses.",
+      "source_ids": [
+        "oracle-jdk8-cms-tuning"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "cms-removed-jdk14",
+      "text": "OpenJDK JEP 363 removed CMS in JDK 14 and states that attempting to use UseConcMarkSweepGC is ignored while the VM continues with the default collector.",
+      "source_ids": [
+        "openjdk-jep-363"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "70885411f7bbc44573cbf3c35a228be2",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-cms-r1",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "revision_suggestions": []
+  }
+}
