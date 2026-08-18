@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_message_exactly_once_4aede2ce","version":3,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_message_exactly_once_4aede2ce","version":4,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
 # 如何实现消息处理的 exactly-once 业务效果？
 
 ## 核心结论
@@ -8,7 +8,7 @@
 ## 1 分钟版
 
 - 同一业务事件的每次重试必须沿用同一个 `event_id`；随机生成新的重试 ID 无法去重。
-- 消费者在一个数据库事务里写 `processed_event` 唯一键、业务状态和 outbox。唯一键已存在就返回既有结果，不重复执行业务。
+- 数据库层把 `consumer_scope`、`event_id` 都定义为 `NOT NULL`，并用 `PRIMARY KEY (consumer_scope, event_id)`（或等价的 `NOT NULL` + `UNIQUE`）作为去重不变量；在同一事务里完成去重占位、业务状态和 outbox。重复键命中就返回既有结果，不重复执行业务。
 - 数据库事务成功后再提交 offset/ack；“业务已提交但 offset 未提交”的故障窗口会产生重投，但会被去重状态吸收。
 - outbox relay 继续沿用同一事件 ID。第三方 API 若既没有幂等键、结果查询，也无法补偿，就不能承诺 exactly-once 业务效果。
 - Kafka 事务适合 Kafka→Kafka 的原子读写与 offset 协调；落到业务库或外部系统时仍需要目标存储配合。
@@ -17,7 +17,7 @@
 
 先固定语义和验收边界：这里的 exactly-once 指“同一 `event_id` 对本服务的已提交业务状态只产生一次可见效果”，不是网络消息只出现一次。方案评审前必须拿到峰值/突发流量与最大积压、可接受处理延迟、RPO/RTO、最长重放窗口和外部系统幂等能力；缺少这些输入时只能给出正确性方案，不能宣称满足具体 SLO。容量示例可假设峰值 2 万条/秒、重放窗口 30 天，则去重窗口约 518.4 亿条记录，真实容量必须按事件大小、索引、分区和保留策略重算。
 
-主链路是：收到消息 → 校验 schema 与稳定 `event_id` → 开数据库事务 → 插入 `processed_event(consumer,event_id)` 唯一键 → 更新业务状态 → 写 outbox → 提交事务 → 再提交 MQ offset。数据库提交前崩溃会整体回滚，消息重投后重新处理；数据库已提交但 offset 未提交时，重投命中唯一键并跳过业务写，因此不会二次生效。
+主链路是：收到消息 → 校验 schema 与稳定且非空的 `event_id` → 开数据库事务 → 插入 `processed_event(consumer_scope NOT NULL, event_id NOT NULL, PRIMARY KEY (consumer_scope,event_id))` → 更新业务状态 → 写带同一非空事件 ID 的 outbox → 提交事务 → 再提交 MQ offset。数据库提交前崩溃会整体回滚，消息重投后重新处理；数据库已提交但 offset 未提交时，重投命中主键/唯一约束并跳过业务写，因此不会二次生效。不能只依赖应用层“校验过不为空”：数据库约束也要把非空与唯一性固化，因为 MySQL 的普通 `UNIQUE` 索引允许多个 `NULL` 值。
 
 下游发送由 outbox relay 读取已提交记录并沿用同一 `event_id`。如果“发送成功但标记 delivered 前崩溃”，relay 可以重试，但下游也必须把事件 ID 当作幂等键；不可撤销外部 API 若只支持普通调用，则目标要降级为“至少一次调用 + 结果查询/对账/人工处置”，不能伪装成 exactly-once。
 
@@ -27,7 +27,7 @@ Kafka 4.3 的幂等 producer 会避免 producer retry 在 Kafka 日志中产生�
 
 ## 关键细节
 
-- `event_id` 的作用域要明确：同一 producer 重试必须不变；多 producer 可能生成同一业务事件时，应使用业务主键/版本或全局事件 ID，并保留 producer 与 schema 版本。
+- `event_id` 的作用域要明确：同一 producer 重试必须不变；多 producer 可能生成同一业务事件时，应使用业务主键/版本或全局事件 ID，并保留 producer 与 schema 版本。数据库中的 `consumer_scope` 与 `event_id` 必须 `NOT NULL`，复合主键/唯一键的作用域要与“同一业务动作只生效一次”的语义一致。
 - `processed_event` 的保留期必须覆盖消息最长延迟、重放和人工恢复窗口；过早清理会重新打开重复执行风险。
 - 去重记录、业务更新和 outbox 必须共享同一原子提交边界；短生命周期缓存最多用于削峰，不能作为正确性来源。
 - `read_committed` 只返回已提交事务消息，并会受 Last Stable Offset 限制；不能把未完成事务造成的读取停顿误判成普通 lag。
@@ -35,20 +35,20 @@ Kafka 4.3 的幂等 producer 会避免 producer retry 在 Kafka 日志中产生�
 
 ## 原理机制
 
-状态机是 `未见 event → 事务内占用 event_id → 业务状态 + outbox 同事务提交 → 已处理且可安全重放`。唯一约束解决并发重复事件的竞争；提交业务事务后再推进 offset，把不可避免的提交间隙转化为“可检测、可吸收的重复投递”。代价是每条消息增加一次去重索引写、事务成本、保留空间和 outbox relay 延迟，换来的是面对超时、重平衡、进程崩溃和模糊发送时仍有可恢复的状态机。
+状态机是 `未见 event → 事务内占用非空 dedup key → 业务状态 + outbox 同事务提交 → 已处理且可安全重放`。`NOT NULL` 的稳定业务键配合主键/唯一约束解决并发重复事件的竞争；提交业务事务后再推进 offset，把不可避免的提交间隙转化为“可检测、可吸收的重复投递”。代价是每条消息增加一次去重索引写、事务成本、保留空间和 outbox relay 延迟，换来的是面对超时、重平衡、进程崩溃和模糊发送时仍有可恢复的状态机。
 
 ## 项目经验版
 
-以下是一个**假设性落地示例，不代表真实个人项目经历**。假设订单事件消费者使用 MySQL 8.4 保存 `processed_event(consumer,event_id UNIQUE)`、订单状态和 outbox；三者在同一个 InnoDB 事务中提交。消息重复到达时，唯一键竞争把重复执行变成可识别分支；只有首次事务成功后才允许推进 Kafka 消费位点。
+以下是一个**假设性落地示例，不代表真实个人项目经历**。假设订单事件消费者使用 MySQL 8.4 保存 `processed_event(consumer_scope NOT NULL, event_id NOT NULL, PRIMARY KEY (consumer_scope,event_id))`、订单状态和带同一非空事件 ID 的 outbox；三者在同一个 InnoDB 事务中提交。消息重复到达时，主键竞争把重复执行变成可识别分支；只有首次事务成功后才允许推进 Kafka 消费位点。
 
-如果数据库事务已经提交、offset 提交前进程退出，Kafka 可以再次投递同一事件，但重复请求命中同一 `event_id` 后不再改业务状态。若 outbox relay 已调用第三方接口却在记录 delivered 前崩溃，则是否能安全重试取决于第三方是否接受稳定幂等键或提供结果查询/补偿；如果两者都没有，就必须明确降级为至少一次调用并用对账收敛，不能宣称跨系统 exactly-once。
+如果数据库事务已经提交、offset 提交前进程退出，Kafka 可以再次投递同一事件，但重复请求命中同一 dedup key 后不再改业务状态。若 outbox relay 已调用第三方接口却在记录 delivered 前崩溃，则是否能安全重试取决于第三方是否接受稳定幂等键或提供结果查询/补偿；如果两者都没有，就必须明确降级为至少一次调用并用对账收敛，不能宣称跨系统 exactly-once。
 
-回归验证应故障注入数据库提交前/后崩溃、offset 提交失败、同一消息并发重复、outbox 模糊发送、Kafka 事务 abort 与下游 `read_committed` 读取。验收按业务状态和稳定事件 ID 判断“一次逻辑效果”，同时观察 duplicate-hit、事务失败、consumer lag、outbox 最老未投递年龄、DLQ 和重放恢复耗时，而不是用“网络上只看到一次消息”作为证明。
+回归验证应故障注入数据库提交前/后崩溃、offset 提交失败、同一消息并发重复、空/缺失 `event_id`、outbox 模糊发送、Kafka 事务 abort 与下游 `read_committed` 读取。验收按业务状态和稳定事件 ID 判断“一次逻辑效果”，同时观察 duplicate-hit、事务失败、consumer lag、outbox 最老未投递年龄、DLQ 和重放恢复耗时，而不是用“网络上只看到一次消息”作为证明。
 
 ## 常见追问
 
 - 问：为什么不能先提交 offset？答：先提交后若在业务写入前崩溃，该消息可能不再被本组正常重取，形成业务丢失；先提交可去重业务事务，再提交 offset，失败最多转化为安全重投。
-- 问：唯一键冲突是不是异常？答：对重复投递而言是预期分支，应读取既有处理结果并记录重复指标，而不是再次执行业务。
+- 问：唯一键冲突是不是异常？答：对重复投递而言是预期分支，应读取既有处理结果并记录重复指标，而不是再次执行业务；同时 dedup key 的列必须 `NOT NULL`，否则 MySQL `UNIQUE` 对多个 `NULL` 不提供你想要的去重不变量。
 - 问：Kafka 开事务后还要去重表吗？答：只要最终副作用在数据库或外部系统，通常仍要；Kafka 事务不会自动原子提交任意外部副作用。
 - 问：去重表能永久保存吗？答：通常按最长可重放/恢复窗口分区保留；清理前必须证明更早事件不会再次进入可执行路径。
 
@@ -56,6 +56,7 @@ Kafka 4.3 的幂等 producer 会避免 producer retry 在 Kafka 日志中产生�
 
 - 不要把 exactly-once 说成“消息只投递一次”。
 - 不要给同一业务事件的重试生成新幂等键。
+- 不要只写 `UNIQUE(event_id)` 却允许关键列为 `NULL`；数据库约束必须真正表达稳定 dedup key。
 - 不要只处理消费者入站去重，却忽略 outbox relay 和下游副作用。
 - 不要把 Kafka producer 幂等、Kafka 事务和数据库业务幂等混成同一层保证。
 - 不要在缺少真实流量、延迟、RPO/RTO 和重放窗口时宣称方案已经完成容量或 SLO 验证。
