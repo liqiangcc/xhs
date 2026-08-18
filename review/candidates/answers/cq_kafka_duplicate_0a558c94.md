@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_kafka_duplicate_0a558c94","version":3,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_kafka_duplicate_0a558c94","version":4,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
 
 # Kafka 如何处理重复消费？
 
@@ -15,10 +15,9 @@ Kafka 的“重复消费”不能只靠调一个 Consumer 参数消除。只要�
 ## 1 分钟版
 
 - Consumer 的 `position` 会随着 `poll()` 前进，但 `committed position` 是故障恢复点；两者不是一回事。业务处理成功、offset 尚未提交时宕机，恢复后就会重放。
-- `enable.auto.commit=false` 只是让应用自己控制提交时机，**不是**“关闭重复消费开关”。手动提交同样存在“业务成功 → offset 提交成功”之间的故障窗口。
+- `enable.auto.commit=false` 只是让应用自己控制提交时机，**不是**“关闭重复消费开关”。手动提交同样存在“业务成功 → offset 提交成功”之间的故障窗口；并行消费时还必须只提交“已经连续完成”的最高 offset 的下一位，不能越过仍未完成的低 offset。
 - 对关键业务，给事件定义稳定 `eventId`/业务幂等键，在数据库里建立唯一约束或 inbox 记录，并把“首次处理判定”和业务写放进同一数据库事务；重复事件命中唯一约束后返回已处理结果。
-- 并行消费时只能提交“已经连续完成”的最高 offset 的下一位，不能因为高 offset 先处理完就越过仍未完成的低 offset。
-- Producer 侧保持 `enable.idempotence=true` 的兼容配置；Kafka 4.x 文档要求 idempotence 配合 `acks=all`、`retries>0`、`max.in.flight.requests.per.connection<=5`。不要再在应用层盲目二次 resend，因为新的应用级 send 不属于同一次 producer retry 去重范围。
+- Producer 侧保持 `enable.idempotence=true` 的兼容配置；Kafka 4.1 文档要求 idempotence 配合 `acks=all`、`retries>0`、`max.in.flight.requests.per.connection<=5`。不要再在应用层盲目二次 resend，因为新的应用级 send 不属于同一次 producer retry 去重范围。
 - 如果是 Kafka→Kafka 的 consume-transform-produce，可用 `transactional.id` + transaction + `sendOffsetsToTransaction`，并让下游 consumer 使用 `isolation.level=read_committed`。如果副作用是 MySQL/Redis/第三方 HTTP，则仍要单独设计幂等或 outbox/inbox。
 
 ## 3 分钟版
@@ -97,13 +96,13 @@ Consumer 从 Kafka 得到记录后，本地 `position` 已向前；业务数据�
 
 ## 项目经验版
 
-以“订单支付完成事件驱动积分发放”为例：topic 有 24 个 partition，正常峰值约 4,800 msg/s，consumer group 有 12 个实例。每条消息带 `eventId`、`orderId`、`eventType`、`occurredAt`。
+以下是一个**假设性设计示例，不代表真实个人项目经历**。以“订单支付完成事件驱动积分发放”为例：topic 有 24 个 partition，假设峰值约 4,800 msg/s，consumer group 有 12 个实例。每条消息带 `eventId`、`orderId`、`eventType`、`occurredAt`。
 
 数据库设计一个 `points_event_inbox(event_id UNIQUE, order_id, status, processed_at, ...)`。事务内先尝试插入 inbox；若唯一键冲突，查询已存在状态并直接返回成功；首次事件则执行积分状态机更新，并把 inbox 标为完成，再提交数据库事务。只有这一步成功后才推进该 partition 的连续 offset 水位。
 
 如果处理超时，消费者不会创建新的 eventId，而是按错误分类有限重试；数据库连接超时后先根据 `eventId` 查询是否已提交，避免“未知结果就再加一次积分”。超过重试预算进入 parking topic。回放工具同样保留原 eventId，因此人工重放不会绕过幂等。
 
-监控至少包括：consumer lag、records consumed rate、rebalance 次数/耗时、offset commit failure、处理 P95/P99、retry rate、幂等冲突/duplicate-hit rate、DLQ rate、parking backlog、数据库唯一冲突异常分类和业务成功率。告警不应只看 lag；例如 lag 为 0 但 duplicate-hit 突然从 0.01% 升到 8%，通常说明上游重发、consumer 重启/rebalance 或提交链路出现异常。
+监控至少包括：consumer lag、records consumed rate、rebalance 次数/耗时、offset commit failure、处理 P95/P99、retry rate、幂等冲突/duplicate-hit rate、DLQ rate、parking backlog、数据库唯一冲突异常分类和业务成功率。告警不应只看 lag；例如在这个假设场景中，lag 为 0 但 duplicate-hit 从基线 0.01% 突然升到 8%，应优先排查上游重发、consumer 重启/rebalance 或提交链路异常。
 
 上线前回归验证包括：
 
