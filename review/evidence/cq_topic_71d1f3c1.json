@@ -1,0 +1,185 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_topic_71d1f3c1",
+  "candidate_sha256": "9828a7a11f613b2b1a5f94195101f2e0ce667b67161717099a6785546de729d6",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "chatgpt-content-curator",
+    "writer_version": "distributed-scheduling-framework-selection.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xxl-job-official-doc",
+      "title": "XXL-JOB 官方文档",
+      "locator": "https://github.com/xuxueli/xxl-job/blob/master/doc/XXL-JOB%E5%AE%98%E6%96%B9%E6%96%87%E6%A1%A3.md",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "elasticjob-elastic-schedule",
+      "title": "Apache ShardingSphere ElasticJob - Elastic Schedule",
+      "locator": "https://shardingsphere.apache.org/elasticjob/current/en/features/elastic/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "elasticjob-failover",
+      "title": "Apache ShardingSphere ElasticJob - Failover",
+      "locator": "https://shardingsphere.apache.org/elasticjob/current/cn/features/failover/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "elasticjob-misfire",
+      "title": "Apache ShardingSphere ElasticJob - Misfire",
+      "locator": "https://shardingsphere.apache.org/elasticjob/current/en/features/misfire/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "elasticjob-configuration",
+      "title": "Apache ShardingSphere ElasticJob - Configuration",
+      "locator": "https://shardingsphere.apache.org/elasticjob/current/en/user-manual/configuration/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kubernetes-cronjob",
+      "title": "Kubernetes Documentation - CronJob",
+      "locator": "https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "framework-selection-requires-explicit-scheduling-semantics",
+      "text": "Official XXL-JOB, ElasticJob and Kubernetes CronJob documentation exposes distinct policies for missed schedules, overlapping/blocked runs, timeout/retry or related execution behavior, so evaluating only Cron-expression support is insufficient; the candidate correctly requires the exact state-transition semantics to be specified.",
+      "source_ids": [
+        "xxl-job-official-doc",
+        "elasticjob-misfire",
+        "elasticjob-configuration",
+        "kubernetes-cronjob"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "xxl-job-routing-blocking-retry-observability",
+      "text": "The current XXL-JOB official documentation describes routing strategies including failover and sharding broadcast, blocking strategies including serial/discard/replace, task timeout, failure retry, schedule/execution logs, task progress monitoring, and scheduler/executor HA.",
+      "source_ids": [
+        "xxl-job-official-doc"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "elasticjob-sharding-scale-and-failover",
+      "text": "ElasticJob documents sharding items distributed among job servers, re-sharding as servers join or leave, and failover that compensates unfinished work on another server; its failover documentation explicitly states that job idempotency is a prerequisite for correct failover.",
+      "source_ids": [
+        "elasticjob-elastic-schedule",
+        "elasticjob-failover"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "elasticjob-misfire-and-configurable-time-semantics",
+      "text": "ElasticJob documents misfire as re-executing overdue work after the prior execution completes, and its job configuration exposes cron, timeZone, failover, misfire, sharding count and reconciliation-related settings.",
+      "source_ids": [
+        "elasticjob-misfire",
+        "elasticjob-configuration"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "kubernetes-cronjob-concurrency-deadline-idempotency",
+      "text": "Kubernetes CronJob documents Allow/Forbid/Replace concurrency policies and startingDeadlineSeconds for delayed starts, and cautions that in some circumstances two Jobs can be created or none can be created, so Jobs should be idempotent.",
+      "source_ids": [
+        "kubernetes-cronjob"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "business-idempotency-is-separate-from-scheduling-level-deduplication",
+      "text": "The candidate's distinction between scheduling-level duplicate avoidance and business-effect idempotency is a source-supported engineering inference: ElasticJob requires idempotency for failover correctness, while Kubernetes CronJob explicitly allows rare duplicate or missed Job creation and therefore recommends idempotent Jobs.",
+      "source_ids": [
+        "elasticjob-failover",
+        "kubernetes-cronjob"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "a2a603ed96fc48d7914ac9498c48c21b",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "review": {
+    "reviewer_id": "chatgpt-source-first-independent-review",
+    "review_version": "distributed-scheduling-framework-selection.concept.review.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "候选直接回答“选用分布式调度框架要考虑什么”，并按调度语义、并发、扩展、失败恢复、业务正确性、可观测和治理组织，不再只是罗列 XXL-JOB/ElasticJob 功能。",
+      "XXL-JOB、ElasticJob 与 Kubernetes 的官方文档足以支撑候选中的路由/阻塞/misfire/failover/分片/并发策略和幂等边界；候选没有把某个产品的默认值错误推广为所有框架的共同语义。",
+      "候选把调度层去重与业务 exactly-once 明确分层，并用 ElasticJob failover 的幂等前提和 Kubernetes CronJob 的重复/漏建边界支撑该结论；未发现 unsupported_factual_claim 或 missing_evidence。",
+      "该题在 pilot SSOT 中主类型为 concept 且存在 mixed_source_question_type 风险；候选以评估维度和选型边界为主，同时保留必要的故障状态链机制，符合主类型而没有滑成泛化系统设计题。"
+    ]
+  }
+}
