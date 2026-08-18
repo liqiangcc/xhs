@@ -1,0 +1,165 @@
+name: Prepare JVM OOM Isolated Review
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/prepare-jvm-oom-isolated-review.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Tighten hypothetical boundary and capture fixed review inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+
+          const id = 'cq_jvm_oom_5adc3ce1';
+          const candidatePath = `review/candidates/answers/${id}.md`;
+          const outDir = `review/content_build/answer_batch_0009/${id}`;
+          fs.mkdirSync(outDir, { recursive: true });
+
+          let text = fs.readFileSync(candidatePath, 'utf8');
+          const replacements = [
+            ['"version":3,"status":"draft"', '"version":4,"status":"draft"'],
+            [
+              '线上我会预先建立一个 OOM runbook，并把诊断能力放在观测/运维边界，而不是业务 Controller 里临时塞一个 `/dumpHeap` 接口。',
+              '以下是方法论和**假设性事故样例，不代表真实个人事故经历**。生产环境应预先建立 OOM runbook，并把诊断能力放在观测/运维边界，而不是业务 Controller 里临时塞一个 `/dumpHeap` 接口。'
+            ],
+            [
+              '例如某 Java 服务在 8 GiB Pod 中运行，连续三天每天晚高峰后 RSS 增长 300–500 MiB，但 heap Full GC 后稳定。',
+              '假设某 Java 服务在 8 GiB Pod 中运行，连续三天每天晚高峰后 RSS 增长 300–500 MiB，但 heap Full GC 后稳定。'
+            ]
+          ];
+          for (const [from, to] of replacements) {
+            if (!text.includes(from)) throw new Error(`expected candidate text not found: ${from.slice(0, 90)}`);
+            text = text.replace(from, to);
+          }
+          if (!text.includes('假设性事故样例，不代表真实个人事故经历')) throw new Error('hypothetical boundary missing');
+          fs.writeFileSync(candidatePath, text, 'utf8');
+          const hash = crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+          fs.writeFileSync(`${outDir}/candidate_sha256.txt`, `${hash}\n`, 'utf8');
+
+          const packet = {
+            schema_version: 'isolated_answer_review_packet.v1',
+            canonical_id: id,
+            prepared_at: '2026-08-18',
+            candidate: { path: candidatePath, sha256: hash, answer_type: 'scenario', version: 4 },
+            context: {
+              path: `${outDir}/context.json`,
+              canonical_title: 'JVM OOM 如何定位和处理？'
+            },
+            review_contract: {
+              mode: 'source_first_isolated',
+              required_quality_contract: 'config/answer_quality.json',
+              required_content_standard: 'docs/refactor/09_answer_content_standard.md',
+              allowed_repository_inputs: [
+                `${outDir}/context.json`,
+                candidatePath,
+                'config/answer_quality.json',
+                'docs/refactor/09_answer_content_standard.md',
+                '.agents/skills/xhs-answer-curator/SKILL.md'
+              ],
+              forbidden_before_conclusion: [
+                `review/evidence/${id}.json`,
+                `review/candidates/audits/${id}.json`,
+                'review/reports/FINAL_SOURCE_FIRST_REVIEW.json',
+                'review/reports/FINAL_SOURCE_FIRST_REVIEW.md',
+                'historical review/remediation records',
+                'writer rationale or self-score'
+              ],
+              required_checks: [
+                'Verify heap, Metaspace, native/thread and container OOM boundaries against current primary Oracle/OpenJDK documentation.',
+                'Verify HeapDumpOnOutOfMemoryError scope and HeapDumpPath behavior; do not imply heap dumps exist for every resource exhaustion mode.',
+                'Verify jcmd command impact, NMT startup requirement, NMT baseline/diff semantics and NMT non-JVM-allocation coverage limits.',
+                'Verify JFR/GC/heap/native evidence workflow, capacity reasoning, restart/idempotency boundary, sensitive diagnostic artifact handling and rollout validation.',
+                'Verify every source question/variant is directly covered and the scenario answer contains assumptions, diagnosis, mitigation, observability, validation and trade-offs.',
+                'Reject any wording that implies fabricated personal incident experience or unsupported numeric production facts.'
+              ],
+              promotion_boundary: 'Do not promote or fabricate human approval. Pilot human review remains a separate mandatory gate when required by config.'
+            },
+            primary_sources_to_verify_independently: [
+              {
+                source_id: 'oracle-jdk25-memory-leaks',
+                title: 'Oracle JDK 25 Troubleshoot Memory Leaks',
+                locator: 'https://docs.oracle.com/en/java/javase/25/troubleshoot/troubleshooting-memory-leaks.html',
+                source_type: 'official_documentation',
+                claims_to_check: [
+                  'OutOfMemoryError has multiple causes including Java heap, native memory and GC overhead conditions',
+                  'heap dumps and JFR can support memory-leak diagnosis',
+                  'JFR must be running when the leak occurs and is designed for low-overhead production use'
+                ]
+              },
+              {
+                source_id: 'oracle-jdk25-java-man',
+                title: 'Oracle JDK 25 java Command',
+                locator: 'https://docs.oracle.com/en/java/javase/25/docs/specs/man/java.html',
+                source_type: 'official_documentation',
+                claims_to_check: [
+                  'HeapDumpOnOutOfMemoryError and HeapDumpPath behavior and scope',
+                  'diagnostic tools should match the target JDK version where required'
+                ]
+              },
+              {
+                source_id: 'oracle-jdk25-jcmd',
+                title: 'Oracle JDK 25 jcmd Command',
+                locator: 'https://docs.oracle.com/en/java/javase/25/docs/specs/man/jcmd.html',
+                source_type: 'official_documentation',
+                claims_to_check: [
+                  'GC.class_histogram and GC.heap_dump are high-impact operations',
+                  'VM.native_memory exposes summary/detail/baseline and diff operations',
+                  'VM.metaspace and thread diagnostics are available with documented impact'
+                ]
+              },
+              {
+                source_id: 'oracle-jdk25-diagnostic-tools',
+                title: 'Oracle JDK 25 Diagnostic Tools and Native Memory Tracking',
+                locator: 'https://docs.oracle.com/en/java/javase/25/troubleshoot/diagnostic-tools.html',
+                source_type: 'official_documentation',
+                claims_to_check: [
+                  'NMT tracks HotSpot VM internal native memory and does not track non-JVM code allocations',
+                  'NMT can be used with baseline and later comparisons to investigate growth'
+                ]
+              }
+            ],
+            expected_output: {
+              evidence_path: `review/evidence/${id}.json`,
+              audit_path: `review/candidates/audits/${id}.json`,
+              audit_command: `node scripts/xhs.js answer audit --candidate ${candidatePath} --require-evidence --noWrite`,
+              reviewer_must_not_equal_writer: true
+            }
+          };
+          fs.writeFileSync(`${outDir}/isolated_review_packet.json`, `${JSON.stringify(packet, null, 2)}\n`, 'utf8');
+          NODE
+          node scripts/xhs.js answer context --canonical-id cq_jvm_oom_5adc3ce1 --noWrite > review/content_build/answer_batch_0009/cq_jvm_oom_5adc3ce1/context.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const c = JSON.parse(fs.readFileSync('review/content_build/answer_batch_0009/cq_jvm_oom_5adc3ce1/context.json', 'utf8'));
+          if (!c.ok || c.canonical?.canonical_id !== 'cq_jvm_oom_5adc3ce1') throw new Error('unexpected JVM OOM context');
+          if (!c.source_questions?.length || !c.source_variants?.length) throw new Error('JVM OOM source context incomplete');
+          NODE
+      - name: Remove one-off workflow and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/prepare-jvm-oom-isolated-review.yml
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git commit -m "content: prepare JVM OOM isolated review packet"
+          git push origin HEAD:content/quality-completion
