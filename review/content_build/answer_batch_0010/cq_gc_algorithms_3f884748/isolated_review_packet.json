@@ -1,0 +1,120 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_gc_algorithms_3f884748",
+  "prepared_at": "2026-08-19",
+  "candidate": {
+    "path": "review/candidates/answers/cq_gc_algorithms_3f884748.md",
+    "sha256": "376228158d730d3d46e4bd06ee340d9f82ffc3f4975c0a7a517fd54af588ddc6",
+    "answer_type": "concept",
+    "version": 2
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0010/cq_gc_algorithms_3f884748/context.json",
+    "canonical_title": "JVM 常见垃圾回收算法",
+    "source_question_ids": [
+      "99c303951dfeb4cd39cae93ae0e53a5d"
+    ],
+    "source_rows": 2
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0010/cq_gc_algorithms_3f884748/context.json",
+      "review/candidates/answers/cq_gc_algorithms_3f884748.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_gc_algorithms_3f884748.json",
+      "review/candidates/audits/cq_gc_algorithms_3f884748.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Verify the candidate directly answers both restored source rows asking JVM garbage-collection algorithms and does not drift into a collector-only answer.",
+      "Verify textbook reclamation mechanisms are clearly separated from concrete HotSpot collectors so mark-sweep, evacuation/copying, compaction, generational organization, parallelism and concurrency are not falsely presented as one-to-one collector identities.",
+      "Verify current-version claims are bounded to Oracle JDK 25, including the supported collector set and the server-class default-selection boundary rather than stating G1 as an unconditional JVM default.",
+      "Verify Eden and two Survivor spaces are explicitly scoped to the Serial collector implementation example and are not generalized to every HotSpot collector.",
+      "Verify G1 is described as region-based, generational, mostly concurrent and evacuating, with stop-the-world evacuation pauses and concurrent work, rather than reduced to a single textbook algorithm label.",
+      "Verify collector selection and tuning are evidence-driven and discuss pause/latency, throughput, live set, allocation rate, heap, CPU and footprint tradeoffs without fabricated production metrics.",
+      "Verify Full GC troubleshooting does not claim a single universal cause; distinguish evacuation failure, concurrent-cycle progress, humongous-object pressure, explicit GC and other contextual causes where applicable.",
+      "Verify the concept-answer contract includes a concise definition, shared comparison dimensions, selection conditions, inapplicable boundaries, concrete confusions/counterexamples and at least three topic-specific answered follow-ups."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. This canonical is in the pilot review scope and requires the repository's mandatory human-review attestation after evidence and deterministic audit pass."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "oracle-jdk25-gc-introduction",
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Introduction to Garbage Collection Tuning",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/introduction-garbage-collection-tuning.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "HotSpot provides multiple collectors for different requirements and collector selection can require workload-specific tuning",
+        "HotSpot uses generational scavenging and aging, parallel or concurrent work, and compaction as implementation techniques"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-gc-implementation",
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Garbage Collector Implementation",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/garbage-collector-implementation.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "generational collection relies on the weak generational hypothesis and young collections are strongly affected by the live-object set",
+        "the Serial collector example uses Eden plus two Survivor spaces and copies survivors between spaces before aging into old",
+        "throughput, latency, footprint and promptness impose competing tuning goals"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-available-collectors",
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Available Collectors",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/available-collectors.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "the current documented collector choices include Serial, Parallel, G1 and ZGC",
+        "Serial is single-threaded, Parallel is throughput-oriented and generational, G1 is mostly concurrent and balances pauses with throughput, and ZGC is low-latency oriented"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-ergonomics",
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Ergonomics",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/ergonomics.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "server-class machines default to G1 while Serial is the fallback default outside that boundary",
+        "maximum pause-time and throughput goals compete and heap sizing also affects footprint and pause behavior"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-g1",
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Garbage-First (G1) Garbage Collector",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/garbage-first-g1-garbage-collector1.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "G1 is generational, incremental, parallel, mostly concurrent, stop-the-world and evacuating",
+        "G1 uses regions and performs incremental space reclamation with stop-the-world pauses while long whole-heap work can run concurrently"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-g1-tuning",
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Garbage-First Garbage Collector Tuning",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/garbage-first-garbage-collector-tuning.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "G1 tuning should start from defaults and diagnostics rather than indiscriminately applying old tuning options",
+        "Full GC and long-pause diagnosis can involve evacuation failure, humongous-object pressure and other specific causes rather than one universal explanation"
+      ]
+    }
+  ],
+  "expected_output": {
+    "isolated_review_result_path": "review/content_build/answer_batch_0010/cq_gc_algorithms_3f884748/isolated_review_result.json",
+    "evidence_path": "review/evidence/cq_gc_algorithms_3f884748.json",
+    "audit_path": "review/candidates/audits/cq_gc_algorithms_3f884748.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_gc_algorithms_3f884748.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  }
+}
