@@ -32,5 +32,10 @@ jobs:
       - name: Enforce answer semantic and evidence gates
         run: npm run ci:answer:semantic && npm run ci:answer:evidence && npm run ci:answer:code && npm run ci:answer:coverage
 
+      - name: Audit active answer-batch candidates
+        run: |
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_gc_algorithms_3f884748.md --require-evidence --noWrite
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_deep_copy_5cfb8eb4.md --require-evidence --noWrite
+
       - name: Verify no generated changes
         run: git diff --exit-code
