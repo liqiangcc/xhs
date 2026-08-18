@@ -1,0 +1,149 @@
+name: Remediate Short URL Batch 0009
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/remediate-short-url-batch-0009.yml
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply bounded short-URL scenario remediation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const path = require('path');
+
+          const id = 'cq_short_url_c0218e46';
+          const candidatePath = `review/candidates/answers/${id}.md`;
+          const sha256 = (text) => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+          const original = fs.readFileSync(candidatePath, 'utf8');
+          const previousSha = sha256(original);
+
+          const metaMatch = original.match(/^<!--\s*xhs-answer:\s*(\{.*\})\s*-->/);
+          if (!metaMatch) throw new Error('answer metadata missing');
+          const meta = JSON.parse(metaMatch[1]);
+          if (meta.canonical_id !== id || meta.answer_type !== 'scenario' || meta.status !== 'draft' || meta.quality_tier !== 'candidate') {
+            throw new Error(`unexpected candidate metadata: ${JSON.stringify(meta)}`);
+          }
+          meta.version = Math.max(2, Number(meta.version || 0) + 1);
+          meta.updated_at = '2026-08-19';
+          let text = original.replace(metaMatch[0], `<!-- xhs-answer: ${JSON.stringify(meta)} -->`);
+
+          const oldTarget = '先声明目标：本设计假设短码需要全局唯一、可长期保存、允许 6 位字母数字，创建峰值 10 万 QPS，5 年 100 亿条；若要自定义别名、删除后复用、跨租户相同 URL 去重或防枚举，数据模型和安全策略要另行补充。';
+          const newTarget = '先声明目标：本设计假设短码需要全局唯一、可长期保存、允许 6 位字母数字，创建峰值 10 万 QPS，5 年 100 亿条；为了把故障与降级说具体，再假设创建接口 P99 不超过 200 ms、缓存命中解析 P99 不超过 20 ms，这两个延迟只是假设的设计目标，真实系统必须替换成业务 SLO。若要自定义别名、删除后复用、跨租户相同 URL 去重或防枚举，数据模型和安全策略要另行补充。';
+          if (!text.includes(oldTarget)) throw new Error('target-assumption anchor missing');
+          text = text.replace(oldTarget, newTarget);
+
+          const oldStateModel = '状态机测试覆盖了“不重叠发段、故障留洞不回收、幂等重试返回同码”的设计不变量；生产系统仍必须以所选存储的线性化契约和故障演练验证它。';
+          const newStateModel = '可复现状态机测试覆盖“不重叠发段、故障留洞不回收、幂等重试返回同码”的设计不变量；它只证明这个抽象模型，不证明任意生产存储天然具备线性化领取语义，生产系统仍必须以所选存储的实际契约和故障演练验证。';
+          if (!text.includes(oldStateModel)) throw new Error('state-model anchor missing');
+          text = text.replace(oldStateModel, newStateModel);
+
+          const writeAnchor = 'ID 已领取但事务失败可以留下空洞；空洞不影响唯一性，不能把 ID 回收再发。';
+          const writeExpansion = `${writeAnchor}\n\n创建链路必须定义超时和降级边界：号段源短暂不可用时，实例只使用已经成功领取的本地号段并在低水位提前预取；本地号段耗尽后创建接口应 fail closed，返回可重试错误而不是切换到随机短码或复用旧 ID。映射库写超时属于“提交结果未知”，客户端用同一个幂等键重试，服务端先查询幂等记录；若没有已提交结果，再领取新的 ID，原来不确定的 ID 仍不回收。这样创建失败会影响可用性，但不会用牺牲唯一性换成功率，已有短码的解析链路可以继续独立服务。`;
+          if (!text.includes(writeAnchor)) throw new Error('write-path anchor missing');
+          text = text.replace(writeAnchor, writeExpansion);
+
+          const oldCache = '读路径是 CDN/边缘缓存 → Redis/本地缓存 → 分片主存储。缓存值包含目标 URL、状态版本和过期时间；禁用/过期链接的状态变更使对应缓存版本失配，回源必须检查当前状态后再返回跳转响应。灾难恢复的设计不变量是“映射主库与号段记录是权威、未提交映射的已领 ID 仍不可复用”；跨机房切换要么只有一个写主，要么选择能提供号段领取互斥语义的共识/线性化存储，不能让两个独立写主从同一 `max_id` 发号。';
+          const newCache = '读路径是 CDN/边缘缓存 → Redis/本地缓存 → 分片主存储。仅把 `status_version` 放进缓存并不能让命中请求自动知道它已过期，所以状态变更要在主库事务中递增版本并写可靠 outbox/变更事件，由失效消费者删除或更新 CDN、Redis 和本地缓存；版本用于丢弃乱序的旧失效事件，TTL 只作为漏事件后的陈旧上界。若业务要求“封禁后立即停止跳转”，读路径还需要查询独立的小型禁用/tombstone 状态或绕过普通缓存，不能只等 TTL。灾难恢复的设计不变量是“映射主库与号段记录是权威、未提交映射的已领 ID 仍不可复用”；跨机房切换要么只有一个写主，要么选择能提供号段领取互斥语义的共识/线性化存储，不能让两个独立写主从同一 `max_id` 发号。';
+          if (!text.includes(oldCache)) throw new Error('cache-state anchor missing');
+          text = text.replace(oldCache, newCache);
+
+          const rolloutAnchor = '验收为 short_code 无重复、同一幂等键只返回一条成功映射、未使用尾号不复用，并记录创建 p50/p99、号段领取延迟、唯一约束冲突率、缓存命中率、回源/状态失配和恢复耗时。';
+          const rolloutReplacement = '验收为 short_code 无重复、同一幂等键只返回一条成功映射、未使用尾号不复用，并验证假设的创建 P99/缓存命中解析 P99 SLO，同时记录号段领取延迟、唯一约束冲突率、缓存命中率、失效事件积压、回源/状态校验和恢复耗时。';
+          if (!text.includes(rolloutAnchor)) throw new Error('rollout anchor missing');
+          text = text.replace(rolloutAnchor, rolloutReplacement);
+
+          const currentSha = sha256(text);
+          if (currentSha === previousSha) throw new Error('candidate did not change');
+          fs.writeFileSync(candidatePath, text, 'utf8');
+
+          const dir = `review/content_build/answer_batch_0009/${id}`;
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, 'candidate_sha256.txt'), `${currentSha}\n`, 'utf8');
+          fs.writeFileSync(path.join(dir, 'remediation_checkpoint.json'), `${JSON.stringify({
+            schema_version: 'answer_remediation_checkpoint.v1',
+            canonical_id: id,
+            recorded_at: '2026-08-19',
+            previous_candidate_sha256: previousSha,
+            remediated_candidate_sha256: currentSha,
+            candidate_version: meta.version,
+            repaired_findings: [
+              'declare a concrete hypothetical latency/SLO target for the scenario contract',
+              'define fail-closed behavior for segment-source exhaustion and unknown mapping-write outcomes',
+              'define authoritative cache-status invalidation/version semantics instead of assuming a cache hit can discover staleness by itself'
+            ],
+            retained_boundaries: [
+              'Base62 injectivity is separated from global-ID uniqueness',
+              'range allocation requires an actually linearizable production store',
+              'unused IDs are never recycled after ambiguous failures',
+              'project-experience claims remain placeholders only'
+            ],
+            stale_prior_evidence_expected: true,
+            fresh_isolated_source_first_review_required: true,
+            fresh_evidence_rebind_required: true,
+            human_review_required: true
+          }, null, 2)}\n`, 'utf8');
+          console.log(JSON.stringify({previousSha, currentSha, version: meta.version}, null, 2));
+          NODE
+          git diff --check
+
+      - name: Record remediation task checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const taskPath = 'tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md';
+          let text = fs.readFileSync(taskPath, 'utf8');
+          const marker = '### Short-URL candidate remediation checkpoint (2026-08-19)';
+          if (!text.includes(marker)) {
+            const block = [
+              marker,
+              '',
+              '- `cq_short_url_c0218e46`: repaired the remaining scenario-contract gaps: explicit hypothetical latency SLOs, fail-closed segment-source/mapping-write timeout semantics, and a concrete authoritative cache invalidation/version boundary. The existing reproducible Base62/range/idempotency model test remains only model evidence, not a claim that every production store is linearizable.',
+              '- Candidate bytes changed, so the previous evidence/review is stale by construction. Fresh isolated source-first review, fresh evidence binding, deterministic audit and mandatory pilot human approval remain required before promotion.',
+              '',
+            ].join('\n');
+            const completion = '\n## Completion\n';
+            if (!text.includes(completion)) throw new Error('Completion anchor missing');
+            text = text.replace(completion, `\n${block}${completion}`);
+            fs.writeFileSync(taskPath, text, 'utf8');
+          }
+          NODE
+          git diff --check
+
+      - name: Commit remediation and retire one-off workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "xhs-completion-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git rm .github/workflows/remediate-short-url-batch-0009.yml
+          git add \
+            review/candidates/answers/cq_short_url_c0218e46.md \
+            review/content_build/answer_batch_0009/cq_short_url_c0218e46/candidate_sha256.txt \
+            review/content_build/answer_batch_0009/cq_short_url_c0218e46/remediation_checkpoint.json \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md
+          git diff --cached --check
+          git commit -m "content: remediate short URL scenario candidate"
+          git push origin HEAD:content/quality-completion
