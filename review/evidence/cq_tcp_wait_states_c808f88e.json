@@ -1,0 +1,89 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_tcp_wait_states_c808f88e",
+  "candidate_sha256": "e717d4bfc25687e2a8ea66485525ed29b5d8eb3ba1d61e235501b73b692904b5",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "rfc9293-rfc1337.v1"
+  },
+  "sources": [
+    {
+      "source_id": "rfc9293-tcp",
+      "title": "RFC 9293: Transmission Control Protocol (TCP)",
+      "locator": "https://www.rfc-editor.org/rfc/rfc9293.html",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "rfc1337-time-wait",
+      "title": "RFC 1337: TIME-WAIT Assassination Hazards in TCP",
+      "locator": "https://www.rfc-editor.org/rfc/rfc1337.html",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "tcp-close-wait-state-and-half-close",
+      "text": "RFC 9293 defines CLOSE-WAIT as waiting for the local user's termination request after the remote side has requested connection termination; receiving FIN in ESTABLISHED causes the TCP to signal the user, acknowledge the FIN and enter CLOSE-WAIT, while TCP half-close semantics allow the still-open direction to continue sending until the local application closes it.",
+      "source_ids": ["rfc9293-tcp"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "对比表", "关键细节", "排查方法", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "tcp-time-wait-two-msl-and-retransmitted-fin",
+      "text": "RFC 9293 requires an actively closed connection to linger in TIME-WAIT for 2 x MSL; when a retransmitted FIN is received in TIME-WAIT the TCP acknowledges it and restarts the 2MSL timeout, preserving closure reliability when the final ACK was not received by the peer.",
+      "source_ids": ["rfc9293-tcp"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "对比表", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "tcp-time-wait-old-duplicate-isolation",
+      "text": "RFC 9293 describes TIME-WAIT as preventing delayed segments from a previous connection incarnation from being accepted by a later connection, and RFC 1337 analyzes hazards in which prematurely terminating TIME-WAIT can expose a new incarnation to old duplicate segments and corrupt connection behavior.",
+      "source_ids": ["rfc9293-tcp", "rfc1337-time-wait"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "tcp-close-roles-reuse-and-simultaneous-close",
+      "text": "RFC 9293 defines close behavior by protocol state rather than client/server labels, documents simultaneous close progressing through CLOSING to TIME-WAIT, and permits reopening from TIME-WAIT only under stated sequence-number safeguards while pointing to timestamp-based improvements for high connection establishment rates.",
+      "source_ids": ["rfc9293-tcp"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "41c7a8aae8f42cdb0886e5bb7e604379",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "question_id": "438973e693d88fee7f6c90939d571514",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "对比表", "排查方法", "常见追问", "易错点"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "tcp-wait-states-source-first-review-r1",
+    "review_version": "rfc9293-rfc1337-independent.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Primary RFC 9293 evidence supports the candidate's CLOSE-WAIT transition, half-close boundary, active-close TIME-WAIT requirement, retransmitted-FIN handling, simultaneous-close path and guarded TIME-WAIT reuse statements.",
+      "RFC 9293 together with RFC 1337 supports the two distinct 2MSL purposes explained by the candidate: closure reliability and isolation from old duplicate segments; the answer avoids presenting any operating-system-specific TIME_WAIT duration as a protocol constant.",
+      "Both assigned source-question variants are directly covered: the TIME_WAIT/CLOSE_WAIT comparison and the reason for waiting 2MSL. Diagnostic guidance is framed as investigation strategy rather than fabricated incident evidence or a universal sysctl prescription.",
+      "The concept answer has shared comparison dimensions, applicability and counterexample boundaries, topic-specific follow-ups, and a speakable short path; no blocker, critical, major or actionable minor finding remains for this candidate."
+    ]
+  }
+}
