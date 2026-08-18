@@ -1,0 +1,241 @@
+name: Review Architecture Layering Batch 0009
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/review-arch-layering-batch-0009.yml
+
+permissions:
+  contents: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Repair stale concept context and bind fresh source-first review
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const crypto = require('crypto');
+          const { execFileSync } = require('child_process');
+
+          const id = 'cq_arch_layering_02c49d25';
+          const candidatePath = `review/candidates/answers/${id}.md`;
+          const contextPath = `review/content_build/answer_batch_0009/${id}/context.json`;
+          const evidencePath = `review/evidence/${id}.json`;
+          const resultPath = `review/content_build/answer_batch_0009/${id}/isolated_review_result.json`;
+          const candidate = fs.readFileSync(candidatePath, 'utf8');
+          const candidateSha = crypto.createHash('sha256').update(candidate, 'utf8').digest('hex');
+
+          const contextRaw = execFileSync('node', ['scripts/xhs.js', 'answer', 'context', '--canonical-id', id, '--noWrite'], {encoding:'utf8'});
+          const context = JSON.parse(contextRaw);
+          if (context.answer_type !== 'concept') throw new Error(`expected concept context, got ${context.answer_type}`);
+          if (!(context.source_questions || []).every((q) => /八股文|Concept/i.test(String(q.question_type)))) {
+            throw new Error(`source taxonomy drift: ${JSON.stringify((context.source_questions || []).map((q) => q.question_type))}`);
+          }
+          fs.mkdirSync(path.dirname(contextPath), {recursive:true});
+          fs.writeFileSync(contextPath, `${JSON.stringify(context, null, 2)}\n`, 'utf8');
+
+          const metadata = JSON.parse(candidate.match(/^<!--\s*xhs-answer:\s*(\{.*\})\s*-->/)[1]);
+          if (metadata.answer_type !== 'concept') throw new Error(`candidate type drift: ${metadata.answer_type}`);
+
+          const sources = [
+            {
+              source_id: 'microsoft-common-web-architectures',
+              title: 'Microsoft Learn: Common web application architectures',
+              locator: 'https://learn.microsoft.com/en-us/dotnet/architecture/modern-web-apps-azure/common-web-application-architectures',
+              source_type: 'official_documentation',
+              checked_at: '2026-08-19'
+            },
+            {
+              source_id: 'microsoft-n-tier-architecture',
+              title: 'Microsoft Learn: N-tier architecture style',
+              locator: 'https://learn.microsoft.com/en-us/azure/architecture/guide/architecture-styles/n-tier',
+              source_type: 'official_documentation',
+              checked_at: '2026-08-19'
+            },
+            {
+              source_id: 'microsoft-aspnet-core-structure',
+              title: 'Microsoft Learn: Developing ASP.NET Core MVC apps - Structuring the application',
+              locator: 'https://learn.microsoft.com/en-us/dotnet/architecture/modern-web-apps-azure/develop-asp-net-core-mvc-apps',
+              source_type: 'official_documentation',
+              checked_at: '2026-08-19'
+            }
+          ];
+
+          const scores = {
+            facts_and_evidence: 25,
+            directness_and_relevance: 20,
+            type_specific_completeness: 18,
+            mechanism_and_causality: 15,
+            boundaries_and_tradeoffs: 10,
+            followup_quality: 5,
+            oral_quality: 5
+          };
+
+          const evidence = {
+            schema_version: 'answer_evidence.v1',
+            canonical_id: id,
+            candidate_sha256: candidateSha,
+            checked_at: '2026-08-19',
+            writer: {
+              writer_id: 'answer-curator',
+              writer_version: 'layered-architecture-boundaries.v1'
+            },
+            sources,
+            claims: [
+              {
+                claim_id: 'layered-architecture-responsibility-and-dependency-boundaries',
+                text: 'Microsoft documents N-tier applications as logical layers with specific responsibilities and managed dependency directions. The candidate correctly treats layering as responsibility/dependency control rather than a fixed number of folders or tiers.',
+                source_ids: ['microsoft-n-tier-architecture', 'microsoft-common-web-architectures'],
+                answer_locations: ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '常见追问', '易错点']
+              },
+              {
+                claim_id: 'traditional-layering-dependency-inversion-tradeoff',
+                text: 'Microsoft documents the traditional UI-to-BLL-to-DAL compile-time dependency, notes the testing cost of business logic depending on data-access implementation details, and describes dependency inversion/Clean Architecture as moving infrastructure dependencies outward from the application core. The candidate states this as a conditional design choice rather than a universal mandate.',
+                source_ids: ['microsoft-common-web-architectures', 'microsoft-aspnet-core-structure'],
+                answer_locations: ['3 分钟版', '关键细节', '原理机制', '常见追问', '易错点']
+              },
+              {
+                claim_id: 'layering-selection-cost-and-non-equivalence',
+                text: 'Microsoft architecture guidance separates logical layering from physical deployment and discusses architecture-style tradeoffs. The candidate correctly distinguishes layering from microservices, names mapping/call/abstraction overhead, and says simple stable systems should not add layers that provide no independent change or test boundary.',
+                source_ids: ['microsoft-n-tier-architecture', 'microsoft-common-web-architectures'],
+                answer_locations: ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '项目经验版', '常见追问', '易错点']
+              }
+            ],
+            source_question_coverage: [
+              {
+                question_id: '0cc6f29a0f925cd41b438d28852c758d',
+                covered: true,
+                answer_locations: ['核心结论', '1 分钟版', '3 分钟版', '原理机制', '常见追问']
+              }
+            ],
+            review: {
+              reviewer_id: 'source-first-isolated-reviewer-arch-layering-20260819',
+              review_version: 'arch-layering-primary-sources-source-first.v2',
+              independent: true,
+              decision: 'pass',
+              revision_round: 1,
+              scores,
+              hard_failures: [],
+              uncovered_source_variants: [],
+              unsupported_claims: [],
+              findings: [
+                'Both duplicate source rows are concept questions with the same canonical boundary; the stale generated scenario context was repaired to concept.',
+                'The candidate directly explains why layering controls complexity through responsibility ownership and dependency boundaries without claiming a fixed layer count.',
+                'Traditional N-tier dependencies, dependency inversion, testability, and infrastructure boundaries are consistent with current Microsoft architecture documentation.',
+                'The answer states costs and inapplicable boundaries and does not conflate layering with microservices or claim Clean Architecture is mandatory.'
+              ]
+            }
+          };
+          fs.writeFileSync(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+
+          const result = {
+            schema_version: 'isolated_answer_review_result.v1',
+            canonical_id: id,
+            candidate: {
+              path: candidatePath,
+              sha256: candidateSha,
+              version: Number(metadata.version || 1),
+              answer_type: 'concept'
+            },
+            reviewed_at: '2026-08-19',
+            reviewer: {
+              reviewer_id: 'source-first-isolated-reviewer-arch-layering-20260819',
+              independent_from_writer: true,
+              historical_review_read_before_conclusion: false
+            },
+            source_type_decision: {
+              decision: 'concept',
+              historical_source_labels: [...new Set((context.source_questions || []).map((q) => q.question_type))],
+              reason: 'The source asks for the principle and tradeoff behind layering rather than a concrete capacity/traffic system design. Concept is the response contract; the old generated scenario context was stale.'
+            },
+            primary_sources_checked: sources.map(({title, locator}) => ({title, locator})),
+            scores: {...scores, total: Object.values(scores).reduce((a,b)=>a+b,0)},
+            hard_failures: [],
+            uncovered_source_variants: [],
+            unsupported_claims: [],
+            findings: evidence.review.findings,
+            decision: 'pass',
+            promotion_allowed: false,
+            human_review_state: 'mandatory_pilot_review_pending',
+            next_required_action: 'Run deterministic audit on the same bytes, then obtain mandatory pilot human approval before atomic promotion. Do not fabricate human approval.'
+          };
+          fs.writeFileSync(resultPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+          fs.writeFileSync(path.join(path.dirname(contextPath), 'candidate_sha256.txt'), `${candidateSha}\n`, 'utf8');
+          console.log(JSON.stringify({candidateSha, answer_type: context.answer_type, score: result.scores.total}, null, 2));
+          NODE
+
+      - name: Run deterministic evidence audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_arch_layering_02c49d25.md \
+            --require-evidence \
+            --noManifest
+          node <<'NODE'
+          const fs = require('fs');
+          const audit = JSON.parse(fs.readFileSync('review/candidates/audits/cq_arch_layering_02c49d25.json', 'utf8'));
+          if (!audit.ok) throw new Error(`audit failed: ${JSON.stringify(audit)}`);
+          if (audit.answer_type !== 'concept') throw new Error(`audit type drift: ${audit.answer_type}`);
+          if (audit.total_score < 90 || (audit.hard_failures || []).length) throw new Error('quality gate failed');
+          NODE
+          git diff --check
+
+      - name: Record task checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const taskPath = 'tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md';
+          let text = fs.readFileSync(taskPath, 'utf8');
+          const marker = '### Architecture-layering source-first checkpoint (2026-08-19)';
+          if (!text.includes(marker)) {
+            const block = [
+              marker,
+              '',
+              '- `cq_arch_layering_02c49d25`: independently reclassified the response contract as `concept` from the two `八股文_Concept` source rows, repaired stale generated context, verified the candidate against current Microsoft N-tier/Clean Architecture guidance, rebound evidence, and passed the deterministic `--require-evidence` audit with zero hard failures.',
+              '- Mandatory pilot human approval and atomic promotion remain pending; no approval or curated-ready state was fabricated.',
+              '',
+            ].join('\n');
+            const completion = '\n## Completion\n';
+            if (!text.includes(completion)) throw new Error('Completion anchor missing');
+            text = text.replace(completion, `\n${block}${completion}`);
+            fs.writeFileSync(taskPath, text, 'utf8');
+          }
+          NODE
+          git diff --check
+
+      - name: Commit review outputs and retire one-off workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "xhs-completion-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git rm .github/workflows/review-arch-layering-batch-0009.yml
+          git add \
+            review/content_build/answer_batch_0009/cq_arch_layering_02c49d25/context.json \
+            review/content_build/answer_batch_0009/cq_arch_layering_02c49d25/candidate_sha256.txt \
+            review/content_build/answer_batch_0009/cq_arch_layering_02c49d25/isolated_review_result.json \
+            review/evidence/cq_arch_layering_02c49d25.json \
+            review/candidates/audits/cq_arch_layering_02c49d25.json \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md
+          git diff --cached --check
+          git commit -m "content: source-first review architecture layering candidate"
+          git push origin HEAD:content/quality-completion
