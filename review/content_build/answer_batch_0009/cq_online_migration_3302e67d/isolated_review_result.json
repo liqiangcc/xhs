@@ -1,0 +1,73 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_online_migration_3302e67d",
+  "candidate": {
+    "path": "review/candidates/answers/cq_online_migration_3302e67d.md",
+    "sha256": "8a2c0f776a71f20211d9d7c347ed3ab28ff57de332919daea9f581432ad0f331",
+    "version": 1,
+    "answer_type": "scenario"
+  },
+  "reviewed_at": "2026-08-19",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-online-migration-r1",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "scenario",
+    "historical_source_labels": ["场景设计_Scenario"],
+    "reason": "Both source rows ask the same concrete zero-downtime production migration from 16 tables to 64 tables. The candidate therefore needs an executable migration design with scale assumptions, data-flow and cutover states, consistency and rollback boundaries, failure recovery, verification and rollout tradeoffs rather than generic sharding theory."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "Debezium Documentation: Connector for MySQL",
+      "locator": "https://debezium.io/documentation/reference/stable/connectors/mysql.html",
+      "verified_claims": [
+        "the connector performs an initial consistent snapshot, uses repeatable-read snapshot semantics, records the current binlog position, and after the snapshot streams from that position",
+        "connector/task restart can regenerate already processed events, so downstream processing must tolerate duplicates",
+        "if the required binlog position has been purged, the old streaming position cannot simply be resumed and a new snapshot/baseline may be required"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Reference Manual: Introduction to InnoDB",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-introduction.html",
+      "verified_claims": [
+        "InnoDB DML follows the ACID model with commit, rollback and crash-recovery capabilities"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Reference Manual: InnoDB and Online DDL",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-online-ddl.html",
+      "verified_claims": [
+        "ALTER TABLE ALGORITHM and LOCK clauses control the requested online-DDL behavior",
+        "LOCK=NONE is used when reads and writes must remain permitted and an unsupported requested concurrency level does not silently become a universal lock-free guarantee"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Reference Manual: Online DDL Operations",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-online-ddl-operations.html",
+      "verified_claims": [
+        "online-DDL support is operation-dependent: some operations permit concurrent DML while others rebuild/copy data or do not permit the same concurrency",
+        "INSTANT is the default algorithm in MySQL 8.4 when the operation supports it, which still does not make every DDL operation instant or lock-free"
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 18,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 98
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [],
+  "decision": "pass",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_evidence_and_deterministic_audit_pass",
+  "next_required_action": "Bind the verified claims to an answer_evidence sidecar and run the deterministic candidate audit with --require-evidence. If that passes, obtain the mandatory pilot human approval before atomic promotion. Do not fabricate human review or promotion state."
+}
