@@ -1,0 +1,112 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_kafka_duplicate_0a558c94",
+  "prepared_at": "2026-08-18",
+  "candidate": {
+    "path": "review/candidates/answers/cq_kafka_duplicate_0a558c94.md",
+    "sha256": "3374250839346b4ae6fb295ceeecc9a885a52f283e2787286b4d177ae66c74df",
+    "answer_type": "scenario"
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0009/cq_kafka_duplicate_0a558c94/context.json",
+    "canonical_title": "Kafka 如何处理重复消费？",
+    "source_variants": [
+      "Kafka 如何处理重复消费？",
+      "Kafka怎么避免重复消费"
+    ],
+    "source_question_ids": [
+      "1d38b66d3e9caffbc0c749256959f202"
+    ]
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0009/cq_kafka_duplicate_0a558c94/context.json",
+      "review/candidates/answers/cq_kafka_duplicate_0a558c94.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_kafka_duplicate_0a558c94.json",
+      "review/candidates/audits/cq_kafka_duplicate_0a558c94.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Verify every material Kafka factual/config/API claim against primary Apache Kafka sources, including version/default boundaries.",
+      "Verify both source-question rows and all source variants are directly answered.",
+      "Check scenario completeness: assumptions, failure windows, state/transaction boundaries, idempotency, retry/degradation/compensation, observability, capacity, rollout/validation, alternatives and trade-offs.",
+      "Check that hypothetical examples are clearly examples and do not imply fabricated personal/project experience.",
+      "Check oral usability, question-specific follow-ups, and absence of legacy template contamination.",
+      "Produce an explicit pass/revise/reject decision, dimension scores, hard failures, unsupported claims, uncovered variants and findings."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. Pilot human review remains a separate mandatory gate when required by config."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "kafka-41-consumer-config",
+      "title": "Apache Kafka 4.1 Consumer Configs",
+      "locator": "https://kafka.apache.org/41/generated/consumer_config.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "enable.auto.commit periodically commits offsets in the background and defaults to true",
+        "isolation.level=read_committed returns only committed transactional messages and withholds aborted/in-flight transactional data according to LSO semantics",
+        "max.poll.interval.ms bounds delay between poll invocations and can trigger group reassignment behavior",
+        "max.poll.records limits records returned from a single poll call"
+      ]
+    },
+    {
+      "source_id": "kafka-41-consumer-api",
+      "title": "Apache Kafka 4.1 KafkaConsumer API",
+      "locator": "https://kafka.apache.org/41/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "current position and committed position are distinct recovery concepts",
+        "committed offset should be the next record to consume",
+        "commitAsync is non-blocking and errors are passed to callback when supplied or discarded when absent",
+        "KafkaConsumer is not thread-safe and decoupled consumption/processing requires explicit offset coordination"
+      ]
+    },
+    {
+      "source_id": "kafka-41-producer-config",
+      "title": "Apache Kafka 4.1 Producer Configs",
+      "locator": "https://kafka.apache.org/41/configuration/producer-configs/",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "enable.idempotence defaults to true when there are no conflicting configs",
+        "idempotence requires acks=all, retries greater than 0 and max.in.flight.requests.per.connection less than or equal to 5"
+      ]
+    },
+    {
+      "source_id": "kafka-41-producer-api",
+      "title": "Apache Kafka 4.1 KafkaProducer API",
+      "locator": "https://kafka.apache.org/41/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "application-level re-sends are outside producer retry de-duplication and idempotence is session-bounded",
+        "sendOffsetsToTransaction marks offsets as part of the current transaction and they become committed only if the transaction commits",
+        "transactional.id enables transactional APIs and implies idempotence"
+      ]
+    },
+    {
+      "source_id": "kafka-41-design",
+      "title": "Apache Kafka 4.1 Design",
+      "locator": "https://kafka.apache.org/41/design/design/",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "Kafka exactly-once semantics are scoped to Kafka transactional processing boundaries and transaction-aware consumers"
+      ]
+    }
+  ],
+  "expected_output": {
+    "evidence_path": "review/evidence/cq_kafka_duplicate_0a558c94.json",
+    "audit_path": "review/candidates/audits/cq_kafka_duplicate_0a558c94.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_kafka_duplicate_0a558c94.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  }
+}
