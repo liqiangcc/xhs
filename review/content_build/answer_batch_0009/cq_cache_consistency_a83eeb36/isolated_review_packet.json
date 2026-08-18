@@ -1,0 +1,102 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_cache_consistency_a83eeb36",
+  "prepared_at": "2026-08-18",
+  "candidate": {
+    "path": "review/candidates/answers/cq_cache_consistency_a83eeb36.md",
+    "sha256": "f2fed77ca442690af439dc02bbe14a2bd4fcb7b811d0b8971d6cf4e00c701397",
+    "answer_type": "scenario",
+    "version": 2
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0009/cq_cache_consistency_a83eeb36/context.json",
+    "canonical_title": "如何保证 MySQL 与 Redis 的缓存一致性？"
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0009/cq_cache_consistency_a83eeb36/context.json",
+      "review/candidates/answers/cq_cache_consistency_a83eeb36.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_cache_consistency_a83eeb36.json",
+      "review/candidates/audits/cq_cache_consistency_a83eeb36.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Verify Redis cache-aside read/write invalidation and TTL-bounded-staleness semantics against current Redis official documentation.",
+      "Verify Redis DEL behavior and do not overstate repeated deletion as an end-to-end idempotency guarantee.",
+      "Verify MySQL 8.4 transaction/binary-log ordering and commit boundaries; distinguish database durability from downstream CDC delivery.",
+      "Verify the outbox/CDC claims against current Debezium official documentation and keep outbox, binlog and application worker responsibilities distinct.",
+      "Check stale-read race windows, delayed double-delete limitations, hot-key stampede handling, retry/dead-letter/replay, binlog-retention recovery, observability and capacity boundaries.",
+      "Verify all source variants are directly answered and hypothetical project examples cannot be read as fabricated personal experience."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. Pilot human review remains a separate mandatory gate when required by config."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "redis-cache-aside",
+      "title": "Redis cache-aside",
+      "locator": "https://redis.io/docs/latest/develop/use-cases/cache-aside/",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "cache-aside reads primary on miss and repopulates Redis",
+        "writes invalidate the cache key rather than assuming cache is always latest",
+        "TTL bounds stale-data lifetime and hot-key expiration can cause stampedes"
+      ]
+    },
+    {
+      "source_id": "redis-del",
+      "title": "Redis DEL command",
+      "locator": "https://redis.io/docs/latest/commands/del/",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "DEL removes keys and missing keys do not create a replacement value",
+        "repeated deletion is safe only for the cache-key side effect, not a proof of distributed exactly-once delivery"
+      ]
+    },
+    {
+      "source_id": "mysql-84-binary-log",
+      "title": "MySQL 8.4 The Binary Log",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/binary-log.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "transactional table changes are cached until COMMIT and the transaction is written to the binary log before COMMIT completes",
+        "binary logging is ordered with transaction completion but does not itself guarantee an external consumer has applied cache invalidation"
+      ]
+    },
+    {
+      "source_id": "mysql-84-transactions",
+      "title": "MySQL 8.4 START TRANSACTION, COMMIT, and ROLLBACK",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/commit.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "InnoDB transaction commit/rollback boundaries and transaction logging behavior"
+      ]
+    },
+    {
+      "source_id": "debezium-outbox",
+      "title": "Debezium Outbox Event Router",
+      "locator": "https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "outbox pattern stores service state and event state so CDC can reliably relay committed outbox changes",
+        "the Debezium connector captures outbox-table changes and applies the outbox event router"
+      ]
+    }
+  ],
+  "expected_output": {
+    "evidence_path": "review/evidence/cq_cache_consistency_a83eeb36.json",
+    "audit_path": "review/candidates/audits/cq_cache_consistency_a83eeb36.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_cache_consistency_a83eeb36.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  }
+}
