@@ -1,0 +1,74 @@
+name: Audit Batch 0009 Deterministic Candidates
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/audit-batch-0009-deterministic.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run fixed candidate evidence audits
+        shell: bash
+        run: |
+          set -euo pipefail
+          for id in \
+            cq_cache_consistency_a83eeb36 \
+            cq_jvm_oom_5adc3ce1 \
+            cq_kafka_duplicate_0a558c94
+          do
+            node scripts/xhs.js answer audit \
+              --candidate "review/candidates/answers/${id}.md" \
+              --require-evidence \
+              --noManifest
+          done
+          git diff --check
+
+      - name: Record completed deterministic audit stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const taskPath = 'tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md';
+          let text = fs.readFileSync(taskPath, 'utf8');
+          const marker = '### Deterministic evidence audit checkpoint (2026-08-18)';
+          if (!text.includes(marker)) {
+            const insertion = `\n${marker}\n\n- \`cq_cache_consistency_a83eeb36\`: \`answer audit --require-evidence\` passed against the current fixed candidate/evidence pair; independent review remains bound, and pilot human approval/promotion remains pending.\n- \`cq_jvm_oom_5adc3ce1\`: \`answer audit --require-evidence\` passed against the current fixed candidate/evidence pair; pilot human approval/promotion remains pending.\n- \`cq_kafka_duplicate_0a558c94\`: \`answer audit --require-evidence\` passed against the current fixed candidate/evidence pair; pilot human approval/promotion remains pending.\n\nNo human review or promotion state is inferred or fabricated by this checkpoint.\n`;
+            const completion = '\n## Completion\n';
+            if (!text.includes(completion)) throw new Error('task completion marker not found');
+            text = text.replace(completion, insertion + completion);
+            fs.writeFileSync(taskPath, text, 'utf8');
+          }
+          NODE
+          git diff --check
+
+      - name: Commit audit outputs and remove one-off workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "xhs-completion-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git rm .github/workflows/audit-batch-0009-deterministic.yml
+          git add \
+            review/candidates/audits/cq_cache_consistency_a83eeb36.json \
+            review/candidates/audits/cq_jvm_oom_5adc3ce1.json \
+            review/candidates/audits/cq_kafka_duplicate_0a558c94.json \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md
+          git diff --cached --check
+          git commit -m "content: audit batch 0009 evidence-backed candidates"
+          git push origin HEAD:content/quality-completion
