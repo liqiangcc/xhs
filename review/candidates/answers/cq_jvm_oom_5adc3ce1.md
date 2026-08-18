@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_jvm_oom_5adc3ce1","version":3,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_jvm_oom_5adc3ce1","version":4,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
 
 # JVM OOM 如何定位和处理？
 
@@ -93,9 +93,9 @@ Metaspace 位于 native memory，用来保存类元数据。动态类生成、�
 
 ## 项目经验版
 
-线上我会预先建立一个 OOM runbook，并把诊断能力放在观测/运维边界，而不是业务 Controller 里临时塞一个 `/dumpHeap` 接口。
+以下是方法论和**假设性事故样例，不代表真实个人事故经历**。生产环境应预先建立 OOM runbook，并把诊断能力放在观测/运维边界，而不是业务 Controller 里临时塞一个 `/dumpHeap` 接口。
 
-例如某 Java 服务在 8 GiB Pod 中运行，连续三天每天晚高峰后 RSS 增长 300–500 MiB，但 heap Full GC 后稳定。处置时先将高风险实例摘流，保存 JFR、GC 日志、容器 RSS 和 NMT baseline/diff，再对比线程数、Metaspace、NMT 分类。如果 NMT 的 Thread/Metaspace/Code 等分类也稳定，而 RSS 仍持续增长，就把排查范围转到 direct buffer、JNI/第三方 native 库和 OS 级证据，而不是继续围着 heap dump 转。
+假设某 Java 服务在 8 GiB Pod 中运行，连续三天每天晚高峰后 RSS 增长 300–500 MiB，但 heap Full GC 后稳定。处置时先将高风险实例摘流，保存 JFR、GC 日志、容器 RSS 和 NMT baseline/diff，再对比线程数、Metaspace、NMT 分类。如果 NMT 的 Thread/Metaspace/Code 等分类也稳定，而 RSS 仍持续增长，就把排查范围转到 direct buffer、JNI/第三方 native 库和 OS 级证据，而不是继续围着 heap dump 转。
 
 如果最终发现是无界业务缓存导致 heap live set 随 key 数量增长，就修缓存容量/TTL/淘汰策略，并给 key 数、hit rate、eviction、heap live set 建监控；如果发现只是促销把请求量和 in-flight object 推高，则基于真实分配率、并发和 GC 目标重新做容量规划。两类问题的“看起来都是内存满了”，修法完全不同。
 
