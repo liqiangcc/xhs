@@ -1,6 +1,6 @@
 # 首批 60 题试点：待人工签核清单
 
-当前有 32 题已完成 candidate、evidence、独立审查和候选审计；尚未写入正式答案。根据 `answer_quality.v1`，在首批 60 题全部完成人工签核前，不能用自动化或 Agent 代替人工批准。
+当前有 33 题已完成 candidate、evidence、独立审查和候选审计；尚未写入正式答案。根据 `answer_quality.v1`，在首批 60 题全部完成人工签核前，不能用自动化或 Agent 代替人工批准。
 
 ## 人工审查边界
 
@@ -28,7 +28,7 @@ node scripts/xhs.js answer human-review --canonical-id <canonical_id> --evidence
 node scripts/xhs.js answer promote --canonical-id <canonical_id> --candidate review/candidates/answers/<canonical_id>.md --evidence review/evidence/<canonical_id>.json
 ```
 
-## 待签核（32）
+## 待签核（33）
 
 | Canonical | 当前题型 | Candidate SHA-256 |
 |---|---|---|
@@ -55,7 +55,7 @@ node scripts/xhs.js answer promote --canonical-id <canonical_id> --candidate rev
 | `cq_bean_319a398d` | mechanism | `bbb7501ad35d4a226769a7ad2072fbafe80b8b030451b7a333c61952694adb90` |
 | `cq_cms_collector_c069b541` | mechanism | `cf1dc9ebdda56110a361fc6f9035c6fd94c0621397b4c52326e526463568874f` |
 | `cq_daemon_thread_a38b0a9b` | mechanism | `8066962d690463733589a9c9adf9a55d29e3b1206fe350a84b71e0680818c002` |
-| `cq_hash_table_286e0112` | mechanism | `e143cb816655ca128f26bea3df381da8d1f9332c58c3d16f98cfed8d084ecaa9` |
+| `cq_hash_table_286e01112` | mechanism | `e143cb816655ca128f26bea3df381da8d1f9332c58c3d16f98cfed8d084ecaa9` |
 | `cq_hashmap_4d9f15d2` | mechanism | `fdfa1eb69b9e430e1c9eceb169fb1b3dbdeed455d4bb81a4d3791079ff82848b` |
 | `cq_mysql_backup_0daa23c7` | mechanism | `67fc49381e1f3ab17299adfa9bfc17df78ecb7d8048c22e4f06c0ad12cc682b1` |
 | `cq_rag_2ff8f969` | mechanism | `55be5ee2eb5a56f7eb967630d1c95dce73b9bee33f59b775d100a045be58894d` |
@@ -63,6 +63,7 @@ node scripts/xhs.js answer promote --canonical-id <canonical_id> --candidate rev
 | `cq_tcp_handshake_39cc7c09` | mechanism | `ecf5e62414e3a678170ba53fd2337ffe8dccc8ff3be1958f268d9ff02b3558cc` |
 | `cq_topic_2494ec69` | mechanism | `9693fd181b2457fe647a12dfc6eca9bbc7e51cfe3b278aada5d51410fcad0e63` |
 | `cq_message_exactly_once_4aede2ce` | scenario | `d0ffb196270e5017f1b215fd63a2d18cb0dbb894bf60a547d40fe817f0e76ca6` |
+| `cq_mq_selection_9293dfad` | scenario | `6750ab70afa87c2714c7661f41d9c347d1cc8702f27174e8cbf24c39819906db` |
 | `cq_rocketmq_b7347b07` | scenario | `d40c372023871a318eaa84547d37cda56229f979af79397718217e000f728cfc` |
 
 候选与证据路径均按表中 Canonical ID 代入：`review/candidates/answers/<id>.md`、`review/evidence/<id>.json`。
