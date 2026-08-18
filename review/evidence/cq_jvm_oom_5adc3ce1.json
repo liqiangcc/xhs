@@ -1,0 +1,116 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_jvm_oom_5adc3ce1",
+  "candidate_sha256": "80e6d13f181c9eda45b7f6d273ec054e398b2b95db6d256d545bf3d6c82a089e",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "jvm-oom-oracle-primary-sources.v1"
+  },
+  "sources": [
+    {
+      "source_id": "oracle-jdk25-memory-leaks",
+      "title": "Oracle JDK 25: Troubleshoot Memory Leaks",
+      "locator": "https://docs.oracle.com/en/java/javase/25/troubleshoot/troubleshooting-memory-leaks.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "oracle-jdk25-java-man",
+      "title": "Oracle JDK 25: The java Command",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/specs/man/java.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "oracle-jdk25-jcmd",
+      "title": "Oracle JDK 25: The jcmd Command",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/specs/man/jcmd.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "oracle-jdk25-nmt",
+      "title": "Oracle JDK 25: Native Memory Tracking",
+      "locator": "https://docs.oracle.com/en/java/javase/25/vm/native-memory-tracking.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "oracle-jdk25-jfr-man",
+      "title": "Oracle JDK 25: The jfr Command",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/specs/man/jfr.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "oom-resource-classification-and-evidence",
+      "text": "Oracle troubleshooting guidance distinguishes Java-heap exhaustion from other memory/resource causes and supports using heap, GC and JFR evidence to determine whether growth is a leak or a capacity/sizing problem. The candidate therefore begins with resource classification and trend evidence instead of treating every OOM as a heap leak or immediately increasing Xmx.",
+      "source_ids": ["oracle-jdk25-memory-leaks"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "易错点"]
+    },
+    {
+      "claim_id": "heap-dump-scope-and-path",
+      "text": "Oracle JDK 25 documents that HeapDumpOnOutOfMemoryError applies to Java-heap exhaustion and not other resource exhaustion such as native-thread creation, and that HeapDumpPath controls the destination. The candidate explicitly preserves this scope instead of implying an automatic heap dump exists for every OOM mode.",
+      "source_ids": ["oracle-jdk25-java-man"],
+      "answer_locations": ["1 分钟版", "关键细节", "易错点"]
+    },
+    {
+      "claim_id": "jcmd-impact-boundary",
+      "text": "Oracle JDK 25 labels GC.class_histogram and GC.heap_dump as high-impact operations depending on Java heap size/content. The candidate correctly treats production diagnostic commands as potentially disruptive and requires traffic/SLO-aware execution rather than presenting them as free read-only operations.",
+      "source_ids": ["oracle-jdk25-jcmd"],
+      "answer_locations": ["关键细节", "易错点"]
+    },
+    {
+      "claim_id": "nmt-startup-scope-and-diff",
+      "text": "Oracle JDK 25 documents that NMT is off by default, is enabled with JVM startup options, cannot be started/restarted later with jcmd, supports baseline/diff investigation, and does not cover third-party native allocations or all JDK class-library memory. The candidate preserves these boundaries and does not treat an unchanged NMT report as proof that no native leak exists.",
+      "source_ids": ["oracle-jdk25-java-man", "oracle-jdk25-jcmd", "oracle-jdk25-nmt"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "项目经验版", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "jfr-preparation-and-sensitive-artifact-boundary",
+      "text": "Oracle recommends preparing continuous JFR evidence for troubleshooting, and JDK 25 provides a jfr scrub operation specifically to remove sensitive contents from recordings. The candidate's recommendation to preconfigure diagnostic evidence and protect dump/JFR artifacts is therefore aligned with primary documentation without claiming that every recording necessarily contains a particular credential or user datum.",
+      "source_ids": ["oracle-jdk25-memory-leaks", "oracle-jdk25-jfr-man"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节", "项目经验版"]
+    },
+    {
+      "claim_id": "scenario-incident-control-and-validation",
+      "text": "The candidate's isolate-or-limit, preserve-evidence, restart-with-idempotency-boundary, capacity estimation, observability, canary and regression steps are explicitly scenario controls rather than undocumented JVM defaults. Numeric examples are labeled hypothetical, and the project section explicitly denies fabricated personal incident experience.",
+      "source_ids": ["oracle-jdk25-memory-leaks", "oracle-jdk25-java-man", "oracle-jdk25-jcmd", "oracle-jdk25-nmt"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "项目经验版", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "5adc3ce1240c0170060e2fb957f9d25f",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-jvm-oom-r1",
+    "review_version": "jvm-oom-oracle-primary-sources-source-first.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 18,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate directly covers both source rows and the canonical OOM diagnostic scenario, including heap, Metaspace, native/thread and container boundaries.",
+      "HeapDumpOnOutOfMemoryError, jcmd impact and NMT startup/scope statements are version-bounded to current Oracle JDK documentation rather than generalized beyond their documented behavior.",
+      "Capacity and incident numbers are explicitly hypothetical, and the project section cannot reasonably be read as fabricated personal production experience."
+    ]
+  }
+}
