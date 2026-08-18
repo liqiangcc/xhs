@@ -1,0 +1,104 @@
+name: Prepare MySQL Backup Review
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/prepare-mysql-backup-review.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Tighten candidate and capture fixed review inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const id = 'cq_mysql_backup_0daa23c7';
+          const candidatePath = `review/candidates/answers/${id}.md`;
+          const outDir = `review/content_build/answer_batch_0009/${id}`;
+          fs.mkdirSync(outDir, { recursive: true });
+
+          let text = fs.readFileSync(candidatePath, 'utf8');
+          if (!text.includes('"version":2,"status":"draft"')) throw new Error('unexpected MySQL backup candidate version');
+          text = text.replace('"version":2,"status":"draft"', '"version":3,"status":"draft"');
+
+          const projectSection = `## 项目经验版\n\n以下是一个**假设性恢复演练示例，不代表真实个人生产事故经历**。假设实例以 InnoDB 为主，使用 MySQL 8.4 \`mysqldump --single-transaction --source-data\` 形成逻辑全量基线，并把备份文件、对应 binary-log file/position、校验清单和连续 binlog 归档一起纳入恢复资产。备份窗口冻结会影响一致性的 DDL；若存在 MyISAM/MEMORY 等非事务表，则单独使用可证明的一致性策略，而不是把 \`--single-transaction\` 当成全引擎保证。\n\n演练时先在隔离实例恢复全量备份，确认基线坐标后的 binlog 文件连续，再用时间范围定位误操作附近事件并审阅真实 event position，最后按明确 start/stop position 重放到事故前边界。恢复后验证关键表行数/校验和、约束和业务不变量，并记录实际恢复耗时、最老可恢复点和日志缺段检测结果；未完成这些验证前不直接把未经审阅的 \`mysqlbinlog\` 输出打到生产。\n\n故障注入至少覆盖：备份期间长事务导致初始全局读锁等待、备份期间并发 DDL、binlog 归档缺段、stop position 误包含事故事务、非事务表仍被修改、以及全量备份可读但不可成功恢复。验收目标是证明“基线快照 + 匹配坐标 + 连续日志 + 精确终点 + 恢复验证”完整，而不是只证明备份任务退出码为零。\n\n`;
+          const replaced = text.replace(/## 项目经验版\n\n[\s\S]*?\n## 常见追问\n/, `${projectSection}## 常见追问\n`);
+          if (replaced === text) throw new Error('project section replacement failed');
+          text = replaced;
+          if (!text.includes('假设性恢复演练示例，不代表真实个人生产事故经历')) throw new Error('hypothetical incident boundary missing');
+          if (/项目映射时只填真实事实/.test(text)) throw new Error('legacy project mapping placeholder remained');
+
+          fs.writeFileSync(candidatePath, text, 'utf8');
+          const hash = crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+          fs.writeFileSync(`${outDir}/candidate_sha256.txt`, `${hash}\n`, 'utf8');
+
+          const packet = {
+            schema_version: 'isolated_answer_review_packet.v1',
+            canonical_id: id,
+            prepared_at: '2026-08-18',
+            candidate: { path: candidatePath, sha256: hash, answer_type: 'mechanism', version: 3 },
+            context: { path: `${outDir}/context.json`, canonical_title: 'MySQL 备份与基于 binlog 的恢复流程' },
+            review_contract: {
+              mode: 'source_first_isolated',
+              required_quality_contract: 'config/answer_quality.json',
+              required_content_standard: 'docs/refactor/09_answer_content_standard.md',
+              allowed_repository_inputs: [
+                `${outDir}/context.json`, candidatePath, 'config/answer_quality.json', 'docs/refactor/09_answer_content_standard.md', '.agents/skills/xhs-answer-curator/SKILL.md'
+              ],
+              forbidden_before_conclusion: [
+                `review/evidence/${id}.json`, `review/candidates/audits/${id}.json`, 'review/reports/FINAL_SOURCE_FIRST_REVIEW.json', 'review/reports/FINAL_SOURCE_FIRST_REVIEW.md', 'historical review/remediation records', 'writer rationale or self-score'
+              ],
+              required_checks: [
+                'Resolve the source_type_overridden risk from authoritative source rows before deciding whether mechanism is the correct final answer type.',
+                'Verify MySQL 8.4 mysqldump --single-transaction and --source-data consistency/locking semantics, including nontransactional-table and concurrent-DDL boundaries.',
+                'Verify PITR prerequisites, binary-log continuity, mysqlbinlog time-vs-position usage and exact stop-boundary semantics from current MySQL primary documentation.',
+                'Verify physical-vs-logical and online-backup claims and reject any implication that copying a live InnoDB data directory is automatically a consistent backup.',
+                'Check restore verification, RPO/RTO evidence boundaries, retention/gap detection, isolation-instance workflow, rollback/cutover and sensitive backup handling.',
+                'Verify every source variant is directly answered and hypothetical recovery examples cannot be read as fabricated production experience.'
+              ],
+              promotion_boundary: 'Do not promote or fabricate human approval. Pilot human review remains a separate mandatory gate when required by config.'
+            },
+            primary_sources_to_verify_independently: [
+              { source_id: 'mysql-84-backup-policy', title: 'MySQL 8.4 Establishing a Backup Policy', locator: 'https://dev.mysql.com/doc/refman/8.4/en/backup-policy.html', source_type: 'official_documentation', claims_to_check: ['--source-data with --single-transaction acquires a global read lock initially, reads binary-log coordinates, then releases it while InnoDB dump continues', 'nontransactional tables must not change during the backup for consistency'] },
+              { source_id: 'mysql-84-backup-types', title: 'MySQL 8.4 Backup and Recovery Types', locator: 'https://dev.mysql.com/doc/refman/8.4/en/backup-types.html', source_type: 'official_documentation', claims_to_check: ['physical and logical backups have distinct portability/performance properties', 'online physical backups require appropriate locking or a backup tool that supplies consistency'] },
+              { source_id: 'mysql-84-pitr', title: 'MySQL 8.4 Point-in-Time Recovery', locator: 'https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery.html', source_type: 'official_documentation', claims_to_check: ['PITR starts from a full backup and applies subsequent binary-log changes incrementally'] },
+              { source_id: 'mysql-84-pitr-binlog', title: 'MySQL 8.4 Point-in-Time Recovery Using Binary Log', locator: 'https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery-binlog.html', source_type: 'official_documentation', claims_to_check: ['binary logging is required for PITR and is enabled by default in MySQL 8.4', 'mysqlbinlog supports selecting events by time and position'] },
+              { source_id: 'mysql-84-backup-lock', title: 'MySQL 8.4 LOCK INSTANCE FOR BACKUP', locator: 'https://dev.mysql.com/doc/refman/8.4/en/lock-instance-for-backup.html', source_type: 'official_documentation', claims_to_check: ['instance backup lock permits DML while preventing operations that could make an online snapshot inconsistent'] }
+            ],
+            expected_output: { evidence_path: `review/evidence/${id}.json`, audit_path: `review/candidates/audits/${id}.json`, audit_command: `node scripts/xhs.js answer audit --candidate ${candidatePath} --require-evidence --noWrite`, reviewer_must_not_equal_writer: true }
+          };
+          fs.writeFileSync(`${outDir}/isolated_review_packet.json`, `${JSON.stringify(packet, null, 2)}\n`, 'utf8');
+          NODE
+          node scripts/xhs.js answer context --canonical-id cq_mysql_backup_0daa23c7 --noWrite > review/content_build/answer_batch_0009/cq_mysql_backup_0daa23c7/context.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const c = JSON.parse(fs.readFileSync('review/content_build/answer_batch_0009/cq_mysql_backup_0daa23c7/context.json', 'utf8'));
+          if (!c.ok || c.canonical?.canonical_id !== 'cq_mysql_backup_0daa23c7') throw new Error('unexpected MySQL backup context');
+          if (!c.source_questions?.length || !c.source_variants?.length) throw new Error('MySQL backup source context incomplete');
+          NODE
+      - name: Remove one-off workflow and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/prepare-mysql-backup-review.yml
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git commit -m "content: prepare MySQL backup isolated review"
+          git push origin HEAD:content/quality-completion
