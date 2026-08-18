@@ -1,0 +1,103 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_message_exactly_once_4aede2ce",
+  "candidate": {
+    "path": "review/candidates/answers/cq_message_exactly_once_4aede2ce.md",
+    "sha256": "75c7a4e45ebcbde6da8fe817811ba11ea31c988cdede1fb62316b8868c57a180",
+    "version": 3,
+    "answer_type": "scenario"
+  },
+  "reviewed_at": "2026-08-18",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-message-exactly-once-r4",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "scenario",
+    "historical_source_labels": ["原理深度_UnderTheHood", "场景设计_Scenario"],
+    "reason": "The two source rows carry the same question_id and semantically identical wording, so the mixed taxonomy does not justify splitting the Canonical. The scenario contract is the stricter useful contract here: it directly answers the mechanism question while also requiring failure windows, persistence/idempotency boundaries, recovery and validation."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "Apache Kafka 4.3.1 KafkaProducer API",
+      "locator": "https://kafka.apache.org/43/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html",
+      "verified_claims": [
+        "idempotent producer retries do not introduce duplicate Kafka log records within the documented producer/session boundary, while application-level re-sends cannot be de-duplicated",
+        "transactional.id enables the transactional APIs and idempotence",
+        "sendOffsetsToTransaction makes consumer offsets part of the current transaction and those offsets are committed only if the transaction commits successfully",
+        "transactional end-to-end guarantees require consumers to read only committed messages"
+      ]
+    },
+    {
+      "title": "Apache Kafka 4.3 Producer Configs",
+      "locator": "https://kafka.apache.org/43/configuration/producer-configs/",
+      "verified_claims": [
+        "enable.idempotence defaults to true when there are no conflicting configs",
+        "idempotence requires acks=all, retries greater than zero and max.in.flight.requests.per.connection less than or equal to five"
+      ]
+    },
+    {
+      "title": "Apache Kafka 4.3 Consumer Configs",
+      "locator": "https://kafka.apache.org/43/configuration/consumer-configs/",
+      "verified_claims": [
+        "read_committed returns committed transactional messages and is bounded by the last stable offset while transactions remain open"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Introduction to InnoDB",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-introduction.html",
+      "verified_claims": [
+        "InnoDB DML follows the ACID model with commit, rollback and crash recovery"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 PRIMARY KEY and UNIQUE Index Constraints",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/constraint-primary-key.html",
+      "verified_claims": [
+        "duplicate unique-key changes produce constraint violations and InnoDB rolls back the violating statement"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 INFORMATION_SCHEMA COLUMNS",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html",
+      "verified_claims": [
+        "a UNIQUE index permits multiple NULL values, so a correctness-critical deduplication key must separately enforce non-null key columns"
+      ]
+    },
+    {
+      "title": "Debezium Outbox Event Router",
+      "locator": "https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html",
+      "verified_claims": [
+        "the default outbox event id is NOT NULL and is the unique event ID that can be used for duplicate removal",
+        "aggregate id is emitted as the event key and supports partition ordering"
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 24,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 15,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 94
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "major",
+      "code": "DEDUP_UNIQUE_NULLABILITY_GAP",
+      "message": "The answer makes processed_event UNIQUE the correctness boundary for concurrent duplicate delivery, but its schema shorthand never requires consumer/event_id to be NOT NULL. MySQL 8.4 explicitly permits multiple NULL values in a UNIQUE index, so application-level schema validation alone leaves the database invariant under-specified. Define a non-null stable dedup key (preferably an explicit composite PRIMARY KEY/UNIQUE over NOT NULL consumer scope + event_id) and keep the event-id scope statement aligned with that constraint.",
+      "quality_dimension": "type_specific_completeness",
+      "minimum_not_met": true
+    }
+  ],
+  "decision": "revise",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_isolated_revision_passes",
+  "next_required_action": "Revise only the recorded dedup-key nullability/invariant finding, refresh the candidate SHA and review packet, then perform a fresh isolated source-first re-review before evidence binding/audit or any pilot human approval."
+}
