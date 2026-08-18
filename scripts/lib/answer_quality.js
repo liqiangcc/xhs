@@ -36,13 +36,28 @@ function sha256(value) {
 }
 
 function inferAnswerType(questions = [], canonical = {}) {
-    const joined = questions.map((item) => item.question_type || '').join(' ').toLowerCase();
+    const sourceTypes = questions.map((item) => item.question_type || '').join(' ').toLowerCase();
     const title = String(canonical.canonical_title || '').toLowerCase();
-    if (/coding|算法手撕|sql/.test(joined)) return 'coding';
-    if (/项目|project|故障|线上排障/.test(joined + title)) return 'project';
-    if (/行为|behavior|自我介绍|职业|冲突|沟通/.test(joined + title)) return 'behavior';
-    if (/场景|system|设计|架构|方案/.test(joined + title)) return 'scenario';
-    if (/原理|mechanism|流程|过程|底层/.test(joined + title)) return 'mechanism';
+
+    // Source taxonomy is stronger evidence than title keywords. In
+    // particular, technical wording such as "无冲突" must not be
+    // mistaken for a behavioral-interview question merely because it
+    // contains the substring "冲突".
+    if (/coding|算法手撕|sql/.test(sourceTypes)) return 'coding';
+    if (/场景|scenario|system|设计|架构|方案/.test(sourceTypes)) return 'scenario';
+    if (/行为|behavior/.test(sourceTypes)) return 'behavior';
+    if (/项目|project/.test(sourceTypes)) return 'project';
+    if (/原理|mechanism|under.?the.?hood|流程|过程|底层/.test(sourceTypes)) return 'mechanism';
+    if (/concept|八股文/.test(sourceTypes)) return 'concept';
+
+    // Fall back to title semantics only when source taxonomy is absent
+    // or unrecognized. Keep behavioral phrases narrow enough that
+    // ordinary technical "conflict" terminology is not captured.
+    if (/算法|sql|手撕/.test(title)) return 'coding';
+    if (/自我介绍|职业规划|离职|行为面|团队冲突|同事冲突|上下级冲突|沟通经历/.test(title)) return 'behavior';
+    if (/项目|线上故障|事故复盘/.test(title)) return 'project';
+    if (/场景|系统设计|架构|方案|如何设计|迁移|扩容|高并发/.test(title)) return 'scenario';
+    if (/原理|流程|过程|底层|源码/.test(title)) return 'mechanism';
     return 'concept';
 }
 

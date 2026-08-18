@@ -75,6 +75,34 @@ test('context includes source variants and candidate rendering stays isolated', 
     fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('source scenario taxonomy wins over technical conflict wording in title', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-type-scenario-'));
+    writeJson(path.join(root, 'config', 'answer_quality.json'), QUALITY);
+    writeJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'), [{
+        schema_version: 'canonical_question.v1',
+        canonical_id: 'cq_short_url',
+        canonical_title: '百亿级短 URL 如何生成无冲突短码？',
+        aliases: ['场景：短URL生成器设计：百亿URL怎么做到无冲突？'],
+        question_ids: ['q-short-url'],
+        primary_domain: { l1: '系统设计', l2: '分布式ID与幂等' },
+        primary_entities: ['短链接', '无冲突'],
+        companies: ['阿里'],
+        frequency: 1,
+        review_priority: 'P2',
+        answer_status: 'needs_update',
+    }]);
+    writeJsonl(path.join(root, 'data', 'questions', 'questions.jsonl'), [{
+        question_id: 'q-short-url',
+        canonical_id: 'cq_short_url',
+        original_question: '场景：短URL生成器设计：百亿URL怎么做到无冲突？',
+        question_type: '场景设计_Scenario',
+        company: '阿里',
+    }]);
+    const context = buildAnswerContext({ root, canonicalId: 'cq_short_url' });
+    assert.equal(context.answer_type, 'scenario');
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('structured candidate rendering excludes generic type guidance', () => {
     const root = fixtureRoot();
     const specPath = path.join(root, 'structured-candidate.json');
