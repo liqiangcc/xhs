@@ -2,34 +2,169 @@
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_hash_table_286e0112",
   "candidate_sha256": "e143cb816655ca128f26bea3df381da8d1f9332c58c3d16f98cfed8d084ecaa9",
-  "checked_at": "2026-07-11",
-  "writer": {"writer_id": "answer-curator", "writer_version": "hash-collision-models.v1"},
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "hash-collision-primary-sources.v2"
+  },
   "sources": [
-    {"source_id": "hash-collision-model-tests", "title": "Reproducible separate-chaining, open-addressing and rehashing model tests", "locator": "review/evidence/tests/cq_hash_table_286e0112/hash_collision_models.test.js", "source_type": "executable_test_or_reproducible_experiment", "checked_at": "2026-07-11"}
+    {
+      "source_id": "hash-collision-model-tests",
+      "title": "Reproducible separate-chaining, open-addressing and rehashing model tests",
+      "locator": "review/evidence/tests/cq_hash_table_286e0112/hash_collision_models.test.js",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "jdk21-hashmap-api",
+      "title": "Java SE 21 HashMap API specification",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "openjdk21u-hashmap-source",
+      "title": "OpenJDK 21 Updates java.util.HashMap source",
+      "locator": "https://github.com/openjdk/jdk21u/blob/master/src/java.base/share/classes/java/util/HashMap.java",
+      "source_type": "official_source_code",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "cpython-dictobject-source",
+      "title": "CPython Objects/dictobject.c source",
+      "locator": "https://github.com/python/cpython/blob/main/Objects/dictobject.c",
+      "source_type": "official_source_code",
+      "checked_at": "2026-08-18"
+    }
   ],
   "claims": [
-    {"claim_id": "hash-table-collision-identity", "text": "The model test shows two distinct keys with the same initial bucket remain separately retrievable under separate chaining, supporting the candidate's distinction between hash-based location and key equality confirmation.", "source_ids": ["hash-collision-model-tests"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
-    {"claim_id": "open-addressing-tombstone", "text": "The model test shows an occupied key after a deleted colliding key remains findable only when deletion leaves a tombstone instead of a terminating empty slot.", "source_ids": ["hash-collision-model-tests"], "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
-    {"claim_id": "hash-table-rehashing", "text": "The model test reinserts every live entry into a differently sized table, counts one reinsert per live entry, and verifies every mapping remains present, supporting the candidate's rehashing explanation.", "source_ids": ["hash-collision-model-tests"], "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]},
-    {"claim_id": "hash-table-collision-work-boundary", "text": "The model test counts three key comparisons to find the third key in one collision bucket. The candidate limits this to a model-derived collision-work boundary and does not claim a library-specific average or worst-case complexity.", "source_ids": ["hash-collision-model-tests"], "answer_locations": ["3 分钟版", "关键细节", "原理机制", "易错点"]}
+    {
+      "claim_id": "hash-table-collision-identity",
+      "text": "The executable model keeps distinct keys that share an initial bucket separately retrievable, while OpenJDK HashMap compares both the stored hash and key equality before treating a candidate as the same mapping. This supports the candidate's distinction between hash-based location and key equality confirmation.",
+      "source_ids": [
+        "hash-collision-model-tests",
+        "openjdk21u-hashmap-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "separate-chaining-and-tree-bin-concrete-example",
+      "text": "OpenJDK 21 HashMap stores ordinary bin entries as Node objects linked through next and can convert sufficiently populated bins to TreeNode bins; the candidate presents this only as a concrete versioned example rather than a universal hash-table rule.",
+      "source_ids": [
+        "openjdk21u-hashmap-source"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "cpython-open-addressing-probe-and-dummy",
+      "text": "Current CPython dict source documents EMPTY/ACTIVE/DUMMY slot states, states that DUMMY cannot simply become UNUSED because that would break collision probing, and documents the perturb-based probe recurrence. This supports the candidate's concrete open-addressing deletion and probe example without generalizing CPython internals to every implementation.",
+      "source_ids": [
+        "cpython-dictobject-source"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "hash-table-rehashing-and-capacity-boundary",
+      "text": "The executable model rebuilds mappings after a capacity change and verifies reachability. Java SE 21 HashMap documents load factor as a capacity control and describes rehashing after the entry count exceeds load-factor times capacity; OpenJDK 21 source additionally shows that its power-of-two resize can split bins using cached hashes instead of blindly recomputing every user hash. The candidate explicitly preserves this implementation boundary.",
+      "source_ids": [
+        "hash-collision-model-tests",
+        "jdk21-hashmap-api",
+        "openjdk21u-hashmap-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "hash-table-collision-work-boundary",
+      "text": "The model counts three key comparisons to find the third key in one collision bucket. Java SE 21 HashMap documentation warns that many keys with the same hashCode slow hash-table performance, while OpenJDK source documents tree bins as a mitigation for overpopulated bins under stated key conditions. The candidate therefore limits complexity statements to implementation-specific conditions instead of claiming one universal average or worst-case bound.",
+      "source_ids": [
+        "hash-collision-model-tests",
+        "jdk21-hashmap-api",
+        "openjdk21u-hashmap-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "hashmap-concurrency-boundary",
+      "text": "Java SE 21 HashMap explicitly states that the implementation is not synchronized and requires external synchronization when concurrent access includes structural modification. This supports the candidate's statement that collision handling by itself does not imply a concurrency guarantee.",
+      "source_ids": [
+        "jdk21-hashmap-api"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "项目经验版"
+      ]
+    }
   ],
   "source_question_coverage": [
-    {"question_id": "67e6160037a8a253deaa3291fd1e272f", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}
+    {
+      "question_id": "67e6160037a8a253deaa3291fd1e272f",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
   ],
   "review": {
-    "reviewer_id": "isolated-reviewer",
-    "review_version": "r2",
+    "reviewer_id": "hash-table-primary-source-rereview",
+    "review_version": "hash-collision.mechanism.review.v3",
     "independent": true,
-    "decision": "revise",
-    "revision_round": 2,
-    "scores": {"facts_and_evidence": 18, "directness_and_relevance": 20, "type_specific_completeness": 17, "mechanism_and_causality": 14, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 5},
-    "hard_failures": ["unsupported_factual_claim", "missing_evidence"],
+    "decision": "pass",
+    "revision_round": 3,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
     "uncovered_source_variants": [],
-    "unsupported_claims": [
-      "开放寻址探测方法与其语义未逐项映射。",
-      "装载因子/性能外推和链接法选型结论未逐项映射。",
-      "hash 稳定性、相等关系及抽象并发边界未由现有模型测试覆盖。"
-    ],
-    "findings": ["候选覆盖来源问法但材料性事实证据不足，达到两轮上限。"]
+    "unsupported_claims": [],
+    "findings": [
+      "候选直接回答唯一来源问法，并按定位、碰撞继续查找、删除、扩容和性能边界给出完整状态链路。",
+      "此前缺失的实现性事实已分别映射到 Java SE 21 HashMap 官方 API、OpenJDK 21 Updates 源码和 CPython dict 官方源码；本地模型只承担可复现的抽象不变量，不再替代真实实现证据。",
+      "候选明确区分抽象哈希表、OpenJDK 21 HashMap 与当前 CPython dict 的版本/实现边界，也明确 HashMap 的并发契约不由冲突算法自动提供；未发现硬失败或未覆盖来源变体。"
+    ]
   }
 }
