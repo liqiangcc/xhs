@@ -1,0 +1,84 @@
+name: Audit Online Migration Batch 0009
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/audit-online-migration-batch-0009.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Audit fixed online-migration candidate with bound evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_online_migration_3302e67d.md \
+            --require-evidence \
+            --noManifest
+          test -f review/candidates/audits/cq_online_migration_3302e67d.json
+          node <<'NODE'
+          const fs = require('fs');
+          const audit = JSON.parse(fs.readFileSync('review/candidates/audits/cq_online_migration_3302e67d.json', 'utf8'));
+          if (audit.canonical_id !== 'cq_online_migration_3302e67d') throw new Error('canonical mismatch');
+          if (audit.ok !== true) throw new Error(`deterministic audit failed: ${JSON.stringify({hard_failures:audit.hard_failures, errors:audit.errors})}`);
+          if (audit.candidate_sha256 !== '8a2c0f776a71f20211d9d7c347ed3ab28ff57de332919daea9f581432ad0f331') {
+            throw new Error(`candidate hash drift: ${audit.candidate_sha256}`);
+          }
+          console.log(JSON.stringify({ok:audit.ok, score:audit.total_score, candidate_sha256:audit.candidate_sha256}));
+          NODE
+          git diff --check
+
+      - name: Record deterministic audit checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const taskPath = 'tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md';
+          const marker = '### Online-migration isolated review checkpoint (2026-08-19)';
+          let text = fs.readFileSync(taskPath, 'utf8');
+          if (!text.includes(marker)) {
+            const block = [
+              marker,
+              '',
+              '- `cq_online_migration_3302e67d`: fresh fixed-SHA source-first isolated review completed on candidate `8a2c0f776a71f20211d9d7c347ed3ab28ff57de332919daea9f581432ad0f331` using current Debezium MySQL and MySQL 8.4 primary documentation. Decision `pass`, score 98, zero hard failures; evidence is bound and `answer audit --require-evidence` passes on the same bytes.',
+              '- Mandatory pilot human approval and atomic promotion remain pending; no human state or curated-ready completion was inferred or fabricated.',
+              '',
+            ].join('\n');
+            const completion = '\n## Completion\n';
+            if (!text.includes(completion)) throw new Error('Completion anchor missing');
+            text = text.replace(completion, `\n${block}${completion}`);
+            fs.writeFileSync(taskPath, text, 'utf8');
+          }
+          NODE
+          git diff --check
+
+      - name: Commit audit output and retire one-off workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "xhs-completion-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git rm .github/workflows/audit-online-migration-batch-0009.yml
+          git add \
+            review/candidates/audits/cq_online_migration_3302e67d.json \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md
+          git diff --cached --check
+          git commit -m "content: audit online migration candidate"
+          git push origin HEAD:content/quality-completion
