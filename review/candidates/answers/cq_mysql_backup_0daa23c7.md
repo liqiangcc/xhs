@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_mysql_backup_0daa23c7","version":2,"status":"draft","updated_at":"2026-08-18","answer_type":"mechanism","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_mysql_backup_0daa23c7","version":3,"status":"draft","updated_at":"2026-08-18","answer_type":"mechanism","quality_tier":"candidate"} -->
 # MySQL 备份与基于 binlog 的恢复流程
 
 ## 核心结论
@@ -57,9 +57,11 @@
 
 ## 项目经验版
 
-项目映射时只填真实事实：MySQL 大版本、storage engine 分布、全量备份工具与参数、是否使用 `--single-transaction`/`--source-data`、备份频率、备份坐标保存位置、binlog 保留期、最近一次恢复演练、实测 RPO/RTO、校验项和切换/回滚责任人。
+以下是一个**假设性恢复演练示例，不代表真实个人生产事故经历**。假设实例以 InnoDB 为主，使用 MySQL 8.4 `mysqldump --single-transaction --source-data` 形成逻辑全量基线，并把备份文件、对应 binary-log file/position、校验清单和连续 binlog 归档一起纳入恢复资产。备份窗口冻结会影响一致性的 DDL；若存在 MyISAM/MEMORY 等非事务表，则单独使用可证明的一致性策略，而不是把 `--single-transaction` 当成全引擎保证。
 
-如果库里混有 MyISAM/MEMORY 或备份窗口仍允许 DDL，必须单独说明如何保证这些对象的一致性；如果没有演练过，就明确说这是“依据 MySQL 官方机制设计的恢复流程”，不要虚构生产恢复记录或指标。
+演练时先在隔离实例恢复全量备份，确认基线坐标后的 binlog 文件连续，再用时间范围定位误操作附近事件并审阅真实 event position，最后按明确 start/stop position 重放到事故前边界。恢复后验证关键表行数/校验和、约束和业务不变量，并记录实际恢复耗时、最老可恢复点和日志缺段检测结果；未完成这些验证前不直接把未经审阅的 `mysqlbinlog` 输出打到生产。
+
+故障注入至少覆盖：备份期间长事务导致初始全局读锁等待、备份期间并发 DDL、binlog 归档缺段、stop position 误包含事故事务、非事务表仍被修改、以及全量备份可读但不可成功恢复。验收目标是证明“基线快照 + 匹配坐标 + 连续日志 + 精确终点 + 恢复验证”完整，而不是只证明备份任务退出码为零。
 
 ## 常见追问
 
