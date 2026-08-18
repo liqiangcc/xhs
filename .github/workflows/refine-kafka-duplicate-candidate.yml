@@ -1,0 +1,111 @@
+name: Refine Kafka Duplicate Candidate
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/refine-kafka-duplicate-candidate.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply writer-side quality cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+
+          const candidatePath = 'review/candidates/answers/cq_kafka_duplicate_0a558c94.md';
+          const packetPath = 'review/content_build/answer_batch_0009/cq_kafka_duplicate_0a558c94/isolated_review_packet.json';
+          const hashPath = 'review/content_build/answer_batch_0009/cq_kafka_duplicate_0a558c94/candidate_sha256.txt';
+
+          let text = fs.readFileSync(candidatePath, 'utf8');
+          const replacements = [
+            [
+              '"version":3,"status":"draft"',
+              '"version":4,"status":"draft"'
+            ],
+            [
+              '- `enable.auto.commit=false` 只是让应用自己控制提交时机，**不是**“关闭重复消费开关”。手动提交同样存在“业务成功 → offset 提交成功”之间的故障窗口。\n- 对关键业务，给事件定义稳定 `eventId`/业务幂等键，在数据库里建立唯一约束或 inbox 记录，并把“首次处理判定”和业务写放进同一数据库事务；重复事件命中唯一约束后返回已处理结果。\n- 并行消费时只能提交“已经连续完成”的最高 offset 的下一位，不能因为高 offset 先处理完就越过仍未完成的低 offset。',
+              '- `enable.auto.commit=false` 只是让应用自己控制提交时机，**不是**“关闭重复消费开关”。手动提交同样存在“业务成功 → offset 提交成功”之间的故障窗口；并行消费时还必须只提交“已经连续完成”的最高 offset 的下一位，不能越过仍未完成的低 offset。\n- 对关键业务，给事件定义稳定 `eventId`/业务幂等键，在数据库里建立唯一约束或 inbox 记录，并把“首次处理判定”和业务写放进同一数据库事务；重复事件命中唯一约束后返回已处理结果。'
+            ],
+            [
+              'Kafka 4.x 文档要求 idempotence 配合 `acks=all`、`retries>0`、`max.in.flight.requests.per.connection<=5`。',
+              'Kafka 4.1 文档要求 idempotence 配合 `acks=all`、`retries>0`、`max.in.flight.requests.per.connection<=5`。'
+            ],
+            [
+              '以“订单支付完成事件驱动积分发放”为例：topic 有 24 个 partition，正常峰值约 4,800 msg/s，consumer group 有 12 个实例。每条消息带 `eventId`、`orderId`、`eventType`、`occurredAt`。',
+              '以下是一个**假设性设计示例，不代表真实个人项目经历**。以“订单支付完成事件驱动积分发放”为例：topic 有 24 个 partition，假设峰值约 4,800 msg/s，consumer group 有 12 个实例。每条消息带 `eventId`、`orderId`、`eventType`、`occurredAt`。'
+            ],
+            [
+              '例如 lag 为 0 但 duplicate-hit 突然从 0.01% 升到 8%，通常说明上游重发、consumer 重启/rebalance 或提交链路出现异常。',
+              '例如在这个假设场景中，lag 为 0 但 duplicate-hit 从基线 0.01% 突然升到 8%，应优先排查上游重发、consumer 重启/rebalance 或提交链路异常。'
+            ]
+          ];
+
+          for (const [from, to] of replacements) {
+            if (!text.includes(from)) throw new Error(`expected candidate text not found: ${from.slice(0, 80)}`);
+            text = text.replace(from, to);
+          }
+
+          const oneMinute = text.match(/## 1 分钟版\n\n([\s\S]*?)\n\n## 3 分钟版/);
+          if (!oneMinute) throw new Error('1-minute section missing');
+          const bulletCount = oneMinute[1].split(/\r?\n/).filter((line) => line.startsWith('- ')).length;
+          if (bulletCount !== 5) throw new Error(`expected exactly 5 one-minute bullets after cleanup, got ${bulletCount}`);
+          if (!text.includes('假设性设计示例，不代表真实个人项目经历')) throw new Error('hypothetical experience boundary missing');
+          if (!text.includes('Kafka 4.1 文档要求')) throw new Error('Kafka version boundary cleanup missing');
+
+          fs.writeFileSync(candidatePath, text, 'utf8');
+          const hash = crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+          fs.writeFileSync(hashPath, `${hash}\n`, 'utf8');
+
+          const packet = JSON.parse(fs.readFileSync(packetPath, 'utf8'));
+          packet.candidate.sha256 = hash;
+          packet.candidate.version = 4;
+          packet.writer_cleanup = {
+            completed_at: '2026-08-18',
+            changes: [
+              'reduced 1-minute answer to five bullets',
+              'tightened idempotence version wording to Kafka 4.1',
+              'made project-experience section explicitly hypothetical',
+              'made duplicate-hit numbers explicitly hypothetical'
+            ]
+          };
+          fs.writeFileSync(packetPath, `${JSON.stringify(packet, null, 2)}\n`, 'utf8');
+          console.log(hash);
+          NODE
+      - name: Validate narrow candidate shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id cq_kafka_duplicate_0a558c94 --noWrite >/tmp/context.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const context = JSON.parse(fs.readFileSync('/tmp/context.json', 'utf8'));
+          if (!context.ok || context.canonical?.canonical_id !== 'cq_kafka_duplicate_0a558c94') throw new Error('context validation failed');
+          if (!context.source_questions?.length || !context.source_variants?.length) throw new Error('source coverage context missing');
+          NODE
+      - name: Remove one-off workflow and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/refine-kafka-duplicate-candidate.yml
+          git config user.name "xhs-content-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git commit -m "content: tighten Kafka duplicate candidate boundaries"
+          git push origin HEAD:content/quality-completion
