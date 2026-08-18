@@ -1,0 +1,87 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_kafka_duplicate_0a558c94",
+  "candidate": {
+    "path": "review/candidates/answers/cq_kafka_duplicate_0a558c94.md",
+    "sha256": "296a458d897be4fa2417c988f4ad0a4aac40122cac7573e7deed8cfcafc2236d",
+    "version": 4,
+    "answer_type": "scenario"
+  },
+  "reviewed_at": "2026-08-18",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-kafka-duplicate-r1",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "scenario",
+    "historical_source_labels": ["场景设计_Scenario"],
+    "reason": "Both source rows ask how to avoid or handle duplicate Kafka consumption. A scenario contract is appropriate because the answer must explain the failure window, choose offset/idempotency/transaction boundaries, cover rebalance and retry behavior, define external side-effect handling, size the deduplication state, and specify observability and fault-injection validation."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "Apache Kafka 4.1 Consumer Configs",
+      "locator": "https://kafka.apache.org/41/configuration/consumer-configs/",
+      "verified_claims": [
+        "enable.auto.commit periodically commits offsets in the background and defaults to true",
+        "isolation.level=read_committed returns committed transactional data and withholds open or aborted transactional data according to last-stable-offset semantics",
+        "max.poll.interval.ms bounds the allowed delay between polls for group-managed consumers and max.poll.records bounds the records returned per poll"
+      ]
+    },
+    {
+      "title": "Apache Kafka 4.1.2 KafkaConsumer API",
+      "locator": "https://kafka.apache.org/41/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html",
+      "verified_claims": [
+        "consumer position and committed position are distinct, and the committed position is the recovery point after restart",
+        "a committed offset should be the next record the application will consume",
+        "KafkaConsumer is not thread-safe and decoupled processing requires explicit offset coordination so commits do not get ahead of completed work",
+        "commitAsync is non-blocking and commit errors are passed to the callback when provided or discarded when no callback is supplied"
+      ]
+    },
+    {
+      "title": "Apache Kafka 4.1 Producer Configs",
+      "locator": "https://kafka.apache.org/41/configuration/producer-configs/",
+      "verified_claims": [
+        "enable.idempotence defaults to true when no conflicting configuration disables it",
+        "idempotence requires acks=all, retries greater than zero, and max.in.flight.requests.per.connection less than or equal to five",
+        "transactional.id implies idempotence and enables transactional delivery semantics"
+      ]
+    },
+    {
+      "title": "Apache Kafka 4.1.2 KafkaProducer API",
+      "locator": "https://kafka.apache.org/41/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html",
+      "verified_claims": [
+        "application-level re-sends are outside the producer's idempotent retry de-duplication and idempotence is guaranteed only within a producer session",
+        "sendOffsetsToTransaction marks offsets as part of the current transaction, and those offsets are committed only if the transaction commits successfully",
+        "sendOffsetsToTransaction is intended for consume-transform-produce and the committed offset is the next message to consume"
+      ]
+    },
+    {
+      "title": "Apache Kafka 4.1 Design: Message Delivery Semantics and Transactions",
+      "locator": "https://kafka.apache.org/41/design/design/",
+      "verified_claims": [
+        "Kafka's default delivery model is at-least-once, so redelivery can occur",
+        "transactional producer plus read-committed consumer provides exactly-once processing for reading, processing and writing Kafka topics",
+        "exactly-once behavior for external destination systems generally requires cooperation with those systems rather than being automatically included in the Kafka transaction"
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 18,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 98
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [],
+  "decision": "pass",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_evidence_and_deterministic_audit_pass",
+  "next_required_action": "Bind the verified claims to an answer_evidence sidecar and run the deterministic candidate audit with --require-evidence. If that passes, obtain the mandatory pilot human approval before atomic promotion. Do not fabricate human review or promotion state."
+}
