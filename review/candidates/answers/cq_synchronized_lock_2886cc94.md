@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_synchronized_lock_2886cc94","version":1,"status":"draft","updated_at":"2026-08-18","answer_type":"mechanism","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_synchronized_lock_2886cc94","version":1,"status":"draft","updated_at":"2026-08-18","answer_type":"concept","quality_tier":"candidate"} -->
 # synchronized 和 Lock 的区别
 
 ## 核心结论
