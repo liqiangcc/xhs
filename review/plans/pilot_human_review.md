@@ -45,13 +45,13 @@ node scripts/xhs.js answer promote --canonical-id <canonical_id> --candidate rev
 | `cq_arch_layering_02c49d25` | concept | `59586af040ee42246bbe1affe1ae9ece2faf34ad20af486dd567068e0270e7aa` |
 | `cq_arraylist_9d3444a1` | concept | `6cfbb0fa8e4bf259baec17e72fe56928d648933e1c40700fcc39129182138d1e` |
 | `cq_http_c439559c` | concept | `a7204093c76b98913e56dec0f4334cffaafed2f46bbcb4a3a6ef0e243fdabc58` |
+| `cq_synchronized_lock_2886cc94` | concept | `56f9e4a95ce2b213862c8c157ca71e930dce847f077696e348aa3368649a95eb` |
 | `cq_tcp_e9932fa7` | concept | `974c16923b6b51651b0b188406f0ead976fb9921361ee0dffebb22f81fdc2933` |
 | `cq_topic_99ffa229` | concept | `75cbfb89d420b378fe7e67301017c3e9bb9c67370998c4f71d3ea85a305a1bdd` |
 | `cq_mysql_index_types_8ee09a1a` | concept | `1614aca4fca3832347421d3a3f2b98453bbd920f0e34aa3525c1a46035238f72` |
 | `cq_bean_319a398d` | mechanism | `bbb7501ad35d4a226769a7ad2072fbafe80b8b030451b7a333c61952694adb90` |
 | `cq_daemon_thread_a38b0a9b` | mechanism | `8066962d690463733589a9c9adf9a55d29e3b1206fe350a84b71e0680818c002` |
 | `cq_rag_2ff8f969` | mechanism | `55be5ee2eb5a56f7eb967630d1c95dce73b9bee33f59b775d100a045be58894d` |
-| `cq_synchronized_lock_2886cc94` | mechanism | `8ddad6bb0e299029d3752c435661fb33e7b882257d6c4d3f2fd66dba4360ef04` |
 | `cq_topic_2494ec69` | mechanism | `9693fd181b2457fe647a12dfc6eca9bbc7e51cfe3b278aada5d51410fcad0e63` |
 | `cq_rocketmq_b7347b07` | scenario | `d40c372023871a318eaa84547d37cda56229f979af79397718217e000f728cfc` |
 
