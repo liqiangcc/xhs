@@ -23,6 +23,25 @@ jobs:
         with:
           node-version: 20
 
+      - name: Regenerate stale short-URL answer context from current type inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/cq_short_url_c0218e46.context.json"
+          node scripts/xhs.js answer context --canonical-id cq_short_url_c0218e46 --noWrite > "$tmp"
+          node - "$tmp" <<'NODE'
+          const fs = require('fs');
+          const file = process.argv[2];
+          const context = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (context.canonical?.canonical_id !== 'cq_short_url_c0218e46') throw new Error('short-url canonical mismatch');
+          if (context.answer_type !== 'scenario') throw new Error(`short-url answer type must be scenario, got ${context.answer_type}`);
+          const sourceTypes = new Set((context.source_questions || []).map((q) => q.question_type));
+          if (![...sourceTypes].every((type) => /场景|Scenario/i.test(String(type)))) {
+            throw new Error(`unexpected short-url source taxonomy: ${JSON.stringify([...sourceTypes])}`);
+          }
+          NODE
+          cp "$tmp" review/content_build/answer_batch_0009/cq_short_url_c0218e46/context.json
+
       - name: Audit fixed online-migration candidate with bound evidence
         shell: bash
         run: |
@@ -44,32 +63,43 @@ jobs:
           NODE
           git diff --check
 
-      - name: Record deterministic audit checkpoint
+      - name: Record deterministic audit checkpoints
         shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
           const fs = require('fs');
           const taskPath = 'tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md';
-          const marker = '### Online-migration isolated review checkpoint (2026-08-19)';
           let text = fs.readFileSync(taskPath, 'utf8');
-          if (!text.includes(marker)) {
-            const block = [
-              marker,
+          const completion = '\n## Completion\n';
+          if (!text.includes(completion)) throw new Error('Completion anchor missing');
+          const blocks = [];
+          const onlineMarker = '### Online-migration isolated review checkpoint (2026-08-19)';
+          if (!text.includes(onlineMarker)) {
+            blocks.push([
+              onlineMarker,
               '',
               '- `cq_online_migration_3302e67d`: fresh fixed-SHA source-first isolated review completed on candidate `8a2c0f776a71f20211d9d7c347ed3ab28ff57de332919daea9f581432ad0f331` using current Debezium MySQL and MySQL 8.4 primary documentation. Decision `pass`, score 98, zero hard failures; evidence is bound and `answer audit --require-evidence` passes on the same bytes.',
               '- Mandatory pilot human approval and atomic promotion remain pending; no human state or curated-ready completion was inferred or fabricated.',
               '',
-            ].join('\n');
-            const completion = '\n## Completion\n';
-            if (!text.includes(completion)) throw new Error('Completion anchor missing');
-            text = text.replace(completion, `\n${block}${completion}`);
-            fs.writeFileSync(taskPath, text, 'utf8');
+            ].join('\n'));
           }
+          const typeMarker = '### Short-URL type-context repair checkpoint (2026-08-19)';
+          if (!text.includes(typeMarker)) {
+            blocks.push([
+              typeMarker,
+              '',
+              '- `cq_short_url_c0218e46`: regenerated the stale answer context with the current source-first type inference. Both source rows are `场景设计_Scenario`, and the canonical asks for a concrete hundred-billion-scale short-URL system design, so the current answer type is `scenario`; the old `behavior` context was stale generated state rather than an accepted boundary decision.',
+              '- Candidate review/promotion is still pending and no approval state was inferred.',
+              '',
+            ].join('\n'));
+          }
+          if (blocks.length) text = text.replace(completion, `\n${blocks.join('\n')}${completion}`);
+          fs.writeFileSync(taskPath, text, 'utf8');
           NODE
           git diff --check
 
-      - name: Commit audit output and retire one-off workflow
+      - name: Commit checkpoints and retire one-off workflow
         shell: bash
         run: |
           set -euo pipefail
@@ -78,7 +108,8 @@ jobs:
           git rm .github/workflows/audit-online-migration-batch-0009.yml
           git add \
             review/candidates/audits/cq_online_migration_3302e67d.json \
+            review/content_build/answer_batch_0009/cq_short_url_c0218e46/context.json \
             tasks/answer-batches/TASK-20260711-0313-answer-batch-0009.md
           git diff --cached --check
-          git commit -m "content: audit online migration candidate"
+          git commit -m "content: audit online migration and repair short URL context"
           git push origin HEAD:content/quality-completion
