@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_message_exactly_once_4aede2ce","version":2,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_message_exactly_once_4aede2ce","version":3,"status":"draft","updated_at":"2026-08-18","answer_type":"scenario","quality_tier":"candidate"} -->
 # 如何实现消息处理的 exactly-once 业务效果？
 
 ## 核心结论
@@ -39,7 +39,11 @@ Kafka 4.3 的幂等 producer 会避免 producer retry 在 Kafka 日志中产生�
 
 ## 项目经验版
 
-项目映射提示：填入真实 topic/分区、峰值与突发流量、最大积压、延迟 SLO、RPO/RTO、事件 ID 生成方、数据库事务范围、去重保留期、outbox 实现、外部 API 幂等能力和对账流程。没有这些事实时，不要声称“线上从未重复消费”或“已经达到 exactly-once”。
+以下是一个**假设性落地示例，不代表真实个人项目经历**。假设订单事件消费者使用 MySQL 8.4 保存 `processed_event(consumer,event_id UNIQUE)`、订单状态和 outbox；三者在同一个 InnoDB 事务中提交。消息重复到达时，唯一键竞争把重复执行变成可识别分支；只有首次事务成功后才允许推进 Kafka 消费位点。
+
+如果数据库事务已经提交、offset 提交前进程退出，Kafka 可以再次投递同一事件，但重复请求命中同一 `event_id` 后不再改业务状态。若 outbox relay 已调用第三方接口却在记录 delivered 前崩溃，则是否能安全重试取决于第三方是否接受稳定幂等键或提供结果查询/补偿；如果两者都没有，就必须明确降级为至少一次调用并用对账收敛，不能宣称跨系统 exactly-once。
+
+回归验证应故障注入数据库提交前/后崩溃、offset 提交失败、同一消息并发重复、outbox 模糊发送、Kafka 事务 abort 与下游 `read_committed` 读取。验收按业务状态和稳定事件 ID 判断“一次逻辑效果”，同时观察 duplicate-hit、事务失败、consumer lag、outbox 最老未投递年龄、DLQ 和重放恢复耗时，而不是用“网络上只看到一次消息”作为证明。
 
 ## 常见追问
 
