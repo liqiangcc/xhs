@@ -1,6 +1,6 @@
 # 首批 60 题试点：待人工签核清单
 
-当前有 20 题已完成 candidate、evidence、独立审查和候选审计；尚未写入正式答案。根据 `answer_quality.v1`，在首批 60 题全部完成人工签核前，不能用自动化或 Agent 代替人工批准。
+当前有 21 题已完成 candidate、evidence、独立审查和候选审计；尚未写入正式答案。根据 `answer_quality.v1`，在首批 60 题全部完成人工签核前，不能用自动化或 Agent 代替人工批准。
 
 ## 人工审查边界
 
@@ -28,10 +28,11 @@ node scripts/xhs.js answer human-review --canonical-id <canonical_id> --evidence
 node scripts/xhs.js answer promote --canonical-id <canonical_id> --candidate review/candidates/answers/<canonical_id>.md --evidence review/evidence/<canonical_id>.json
 ```
 
-## 待签核（20）
+## 待签核（21）
 
 | Canonical | 当前题型 | Candidate SHA-256 |
 |---|---|---|
+| `cq_concurrent_transfer_a35181e0` | coding | `cbf21783eb9428f4b3df90df92414eb9f2e7084737d2ae4cbdad29bb98b78033` |
 | `cq_linked_list_cycle_2b5bb46d` | coding | `7a712273da1aa0733ceb0264e8550e586cf59cbe23c632815c93a8d308b702d0` |
 | `cq_lru_cache_0ef78597` | coding | `ff07a810afc720cd07af39101d2a5d15d54db4ff91e474b421a838e2ba0099b1` |
 | `cq_merge_intervals_866286e5` | coding | `48a8eb838a93b0a37b73f6a6be588e710cf2cda6ee382dfe607560a14df8fc1a` |
