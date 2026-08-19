@@ -1,0 +1,113 @@
+{
+  "schema_version": "writer_source_packet.v1",
+  "canonical_id": "cq_linux_commands_76aadb5b",
+  "prepared_at": "2026-08-19",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "linux-troubleshooting.primary-source-refresh.v1"
+  },
+  "candidate": {
+    "path": "review/candidates/answers/cq_linux_commands_76aadb5b.md",
+    "sha256": "d58cfe61f4d0471d67e0019fcfa7bf96b85678afcc7ffcc84c0d34fbb2322f8e",
+    "answer_type": "concept",
+    "version": 3
+  },
+  "context_path": "review/content_build/answer_batch_0010/cq_linux_commands_76aadb5b/context.json",
+  "context_status": "pending_source_question_restore",
+  "source_question_ids": [],
+  "primary_sources": [
+    {
+      "source_id": "linux-kernel-procfs",
+      "title": "The /proc Filesystem — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/next/filesystems/proc.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "/proc exposes process and system state including task states, /proc/stat and /proc/loadavg",
+        "procs_running counts threads running or ready to run"
+      ]
+    },
+    {
+      "source_id": "linux-kernel-cpu-load",
+      "title": "CPU load — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/6.12/admin-guide/cpu-load.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "Linux exports CPU time accounting through /proc/stat and /proc/uptime for userland monitoring tools",
+        "CPU percentage fields must be interpreted as sampled time in states rather than as load average"
+      ]
+    },
+    {
+      "source_id": "linux-kernel-psi",
+      "title": "PSI - Pressure Stall Information — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/accounting/psi.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "CPU, memory and I/O pressure are exposed through /proc/pressure",
+        "cgroup v2 can expose per-cgroup pressure files for scoped resource-pressure diagnosis"
+      ]
+    },
+    {
+      "source_id": "linux-kernel-cgroup-v2",
+      "title": "Control Group v2 — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/admin-guide/cgroup-v2.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "cgroup v2 exposes memory.current, memory.events and memory.pressure for scoped memory accounting and pressure/event diagnosis"
+      ]
+    },
+    {
+      "source_id": "sysstat-iostat",
+      "title": "iostat manual — sysstat upstream",
+      "locator": "https://github.com/sysstat/sysstat/blob/master/man/iostat.in",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "the first iostat report normally covers time since boot and subsequent reports cover time since the previous report; -y omits the first report",
+        "%util near 100% can indicate saturation for serial request-serving devices but does not reflect performance limits for parallel devices such as RAID arrays and modern SSDs"
+      ]
+    },
+    {
+      "source_id": "sysstat-sar",
+      "title": "sar manual — sysstat upstream",
+      "locator": "https://github.com/sysstat/sysstat/blob/master/man/sar.in",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "sar can collect, save and later report system activity records, enabling historical incident-window analysis"
+      ]
+    },
+    {
+      "source_id": "procps-top",
+      "title": "top manual — procps-ng upstream",
+      "locator": "https://gitlab.com/procps-ng/procps/-/blob/master/man/top.1",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "top is a procps-ng process/system activity view and should be treated as one sampled view among multiple sources rather than a root-cause oracle"
+      ]
+    },
+    {
+      "source_id": "strace-upstream",
+      "title": "strace project documentation",
+      "locator": "https://strace.io/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "strace traces system calls and signals and is intended for scoped process-level diagnosis"
+      ]
+    }
+  ],
+  "writer_checks": [
+    "Replaced the prior cross-topic scenario-template contamination with a direct Linux troubleshooting answer organized by symptom, resource pressure, responsible process/thread and deep evidence.",
+    "Bound iostat sampling semantics and the modern SSD/RAID %util caveat to current sysstat upstream documentation.",
+    "Added Linux kernel PSI and cgroup-v2 boundaries so container/resource-pressure diagnosis is not inferred only from host totals.",
+    "Kept strace/perf as scoped deep-diagnosis tools rather than default global probes and explicitly called out production overhead/sensitive-output risks.",
+    "Did not invent personal incident metrics or production outcomes.",
+    "Source-question IDs still need to be restored from the authoritative Question/Canonical data before isolated review; no coverage PASS is claimed yet."
+  ],
+  "next_required_action": "Regenerate the authoritative current context/source-question variants for cq_linux_commands_76aadb5b, then perform an isolated source-first review on the fixed candidate bytes before consulting historical audit/remediation records; only after that bind answer evidence and run the deterministic candidate audit."
+}
