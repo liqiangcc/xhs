@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Audit and atomically promote reviewed candidates
+      - name: Audit and conditionally promote reviewed candidates
         shell: bash
         run: |
           set -euo pipefail
@@ -69,6 +69,25 @@ jobs:
             args=(answer audit --candidate "$candidate" --require-evidence --noWrite --noManifest)
             if [ "$require_code" = "true" ]; then args+=(--require-code); fi
             node scripts/xhs.js "${args[@]}"
+
+            # The first 60 promotions require a real human attestation by SSOT.
+            # Absence is a truthful not-ready state, not an automation failure.
+            if ! node - "$evidence" <<'NODE'
+          const fs = require('fs');
+          const evidence = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const review = evidence.human_review;
+          process.exit(review
+            && review.reviewer_type === 'human'
+            && review.decision === 'approved'
+            && review.reviewer_id
+            && review.reviewed_at
+            && review.attestation ? 0 : 1);
+          NODE
+            then
+              echo "${id}: machine/source-first audit passed; awaiting required human review; not promoted"
+              return
+            fi
+
             node scripts/xhs.js answer promote \
               --canonical-id "$id" \
               --candidate "$candidate" \
@@ -86,7 +105,7 @@ jobs:
           promote cq_q_3f52d557f29ac6552e5dc5f5e940f810 true
           promote cq_q_5856fb8727752874f2e1c6d8a3832d67 true
 
-      - name: Validate promoted state and full repository gates
+      - name: Validate repository gates without weakening completion criteria
         shell: bash
         run: |
           set -euo pipefail
@@ -126,16 +145,16 @@ jobs:
           console.log(JSON.stringify({changed}, null, 2));
           NODE
 
-      - name: Commit promoted batch
+      - name: Commit any human-approved promotions
         shell: bash
         run: |
           set -euo pipefail
           if git diff --quiet; then
-            echo "No promotion changes remain."
+            echo "No human-approved promotion changes in this batch."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/questions/canonical_questions.jsonl review/answers
-          git commit -m "content: promote reviewed answer batches 0010-0011"
+          git commit -m "content: promote human-approved answer batches 0010-0011"
           git push origin HEAD:content/quality-completion
