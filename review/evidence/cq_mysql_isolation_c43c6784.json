@@ -2,10 +2,10 @@
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_mysql_isolation_c43c6784",
   "candidate_sha256": "30a17dae22d8efff55259fbd0ebbdbf2af813be18cd6536526f95858e595b22b",
-  "checked_at": "2026-07-11",
+  "checked_at": "2026-08-19",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "mysql-8.4-isolation.v1"
+    "writer_version": "mysql-8.4-isolation.primary-source-refresh.v2"
   },
   "sources": [
     {
@@ -13,53 +13,104 @@
       "title": "MySQL 8.4 InnoDB transaction isolation levels",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-19"
     },
     {
       "source_id": "mysql-8-4-innodb-consistent-read",
       "title": "MySQL 8.4 InnoDB consistent nonlocking reads",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "mysql-8-4-set-transaction",
+      "title": "MySQL 8.4 SET TRANSACTION statement",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/set-transaction.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
     }
   ],
   "claims": [
     {
       "claim_id": "innodb-isolation-levels-and-default",
-      "text": "MySQL 8.4 documents that InnoDB supports READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, and SERIALIZABLE; its default isolation level is REPEATABLE READ. It also documents session and server-default configuration scopes.",
-      "source_ids": ["mysql-8-4-innodb-isolation-levels"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
+      "text": "MySQL 8.4 documents that InnoDB supports READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, and SERIALIZABLE; its default isolation level is REPEATABLE READ.",
+      "source_ids": [
+        "mysql-8-4-innodb-isolation-levels",
+        "mysql-8-4-set-transaction"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
     },
     {
       "claim_id": "innodb-isolation-level-read-and-lock-boundaries",
       "text": "MySQL 8.4 documents that READ UNCOMMITTED nonlocking reads can be dirty reads; READ COMMITTED gives each consistent read its own fresh snapshot and normally disables gap locking for locking reads, UPDATE, and DELETE except foreign-key and duplicate-key checks, so phantom-row problems can occur; REPEATABLE READ uses the snapshot established by the first consistent read in a transaction, locks a unique-index unique search as an index record and uses gap or next-key locks for other search conditions; and SERIALIZABLE is stricter, is used mainly in specialized situations such as XA and concurrency/deadlock troubleshooting, and with autocommit disabled implicitly converts plain SELECT to SELECT ... FOR SHARE.",
-      "source_ids": ["mysql-8-4-innodb-isolation-levels"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "source_ids": [
+        "mysql-8-4-innodb-isolation-levels"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
     },
     {
       "claim_id": "innodb-consistent-read-mvcc",
       "text": "MySQL 8.4 documents that consistent reads use multiversioning to present a point-in-time snapshot; REPEATABLE READ reuses the first consistent-read snapshot within a transaction, READ COMMITTED sets a fresh snapshot for each consistent read, and consistent reads do not set locks on accessed tables.",
-      "source_ids": ["mysql-8-4-innodb-consistent-read"],
-      "answer_locations": ["3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "source_ids": [
+        "mysql-8-4-innodb-consistent-read"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "mysql-isolation-configuration-scope",
+      "text": "MySQL 8.4 supports global, session, and next-transaction isolation-level scope. Session-level changes apply to subsequent transactions in that session and do not retroactively change the current transaction; global changes affect subsequent sessions rather than existing sessions.",
+      "source_ids": [
+        "mysql-8-4-set-transaction"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "易错点"
+      ]
     }
   ],
   "source_question_coverage": [
     {
       "question_id": "a02480184c54507fcc77cd5b7ff5d7bf",
       "covered": true,
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "常见追问"
+      ]
     }
   ],
   "review": {
-    "reviewer_id": "mysql_isolation_isolated_review_r2",
-    "review_version": "r2",
+    "reviewer_id": "source-first-isolated-reviewer-mysql-isolation-r3",
+    "review_version": "r3",
     "independent": true,
     "decision": "pass",
-    "revision_round": 2,
+    "revision_round": 3,
     "scores": {
-      "facts_and_evidence": 24,
+      "facts_and_evidence": 25,
       "directness_and_relevance": 20,
-      "type_specific_completeness": 19,
+      "type_specific_completeness": 20,
       "mechanism_and_causality": 14,
       "boundaries_and_tradeoffs": 10,
       "followup_quality": 5,
@@ -68,9 +119,14 @@
     "hard_failures": [],
     "uncovered_source_variants": [],
     "unsupported_claims": [],
+    "revision_suggestions": [
+      "Optional only: mention the one-next-transaction isolation scope if configuration scope becomes a follow-up topic; it is not required by the current source wording."
+    ],
     "findings": [
-      "候选限定为 MySQL 8.4 的 InnoDB，普通一致性读、锁定读/写入和 SERIALIZABLE 下的边界均有官方证据映射。",
-      "Concept 题覆盖统一比较维度、选择条件、反例边界及全部来源问法。"
+      "The fixed candidate remains factually aligned with current MySQL 8.4 primary documentation for all four InnoDB isolation levels and the default REPEATABLE READ setting.",
+      "The answer correctly separates nonlocking consistent reads from locking reads and writes, including READ COMMITTED snapshot/gap-lock behavior, REPEATABLE READ record-versus-range locking, and SERIALIZABLE autocommit semantics.",
+      "The Concept contract is complete: one comparison frame, selection conditions, failure boundaries, targeted follow-ups, and project-mapping language without fabricated production claims.",
+      "All restored source variants normalize to the same isolation-level canonical and are directly answerable by the candidate."
     ]
   }
 }
