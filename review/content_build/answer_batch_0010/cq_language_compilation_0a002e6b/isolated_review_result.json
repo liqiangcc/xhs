@@ -3,13 +3,13 @@
   "canonical_id": "cq_language_compilation_0a002e6b",
   "candidate": {
     "path": "review/candidates/answers/cq_language_compilation_0a002e6b.md",
-    "sha256": "aacd0956ec58df5c9701d3de0586fa7399ee3b8d94161d7a3cabcee7e90be5ce",
+    "sha256": "d19542ee2b3faea8e0de1e56e00b49c78057da12308c18d7876ece15731cd53b",
     "version": 3,
     "answer_type": "concept"
   },
   "reviewed_at": "2026-08-19",
   "reviewer": {
-    "reviewer_id": "source-first-isolated-reviewer-language-compilation-r1",
+    "reviewer_id": "source-first-isolated-reviewer-language-compilation-r2",
     "independent_from_writer": true,
     "historical_review_read_before_conclusion": false
   },
@@ -18,85 +18,52 @@
     "historical_source_labels": [
       "八股文_Concept"
     ],
-    "reason": "Both restored source rows ask the same language-compilation comparison question. The expected response is a concept/comparison answer that distinguishes translation targets and runtime execution strategies, compares portability and optimization on shared dimensions, and states implementation boundaries rather than prescribing one executable procedure."
+    "reason": "The source question asks for a conceptual comparison of C++, Java and Python compilation/execution models; a concept answer must compare the same dimensions and state implementation boundaries."
   },
   "primary_sources_checked": [
     {
-      "title": "Clang Driver Design & Internals",
-      "locator": "https://clang.llvm.org/docs/DriverInternals.html",
+      "title": "Clang Driver Design & Internals / Cross-compilation using Clang",
+      "locators": [
+        "https://clang.llvm.org/docs/DriverInternals.html",
+        "https://clang.llvm.org/docs/CrossCompilation.html"
+      ],
       "verified_claims": [
-        "Clang models well-known compilation phases including preprocess, compile, assemble and link",
-        "the driver separates actions and binds them to tools for a target toolchain"
+        "typical compilation phases",
+        "target-specific code generation and target boundary"
       ]
     },
     {
-      "title": "Cross-compilation using Clang",
-      "locator": "https://clang.llvm.org/docs/CrossCompilation.html",
+      "title": "javac / JVM Specification / HotSpot overview",
+      "locators": [
+        "https://docs.oracle.com/en/java/javase/24/docs/specs/man/javac.html",
+        "https://docs.oracle.com/en/java/javase/26/docs/specs/jvms/jvms-2.html",
+        "https://docs.oracle.com/en/java/javase/24/vm/java-virtual-machine-technology-overview.html"
+      ],
       "verified_claims": [
-        "Clang code generation is target-specific and target triples describe architecture, system and environment/ABI dimensions",
-        "source can be rebuilt for different targets rather than implying one native binary is universally portable"
+        "javac produces class files",
+        "JVM implementation may interpret/JIT",
+        "HotSpot adaptive compilation is an implementation strategy"
       ]
     },
     {
-      "title": "The javac Command, Java SE 24",
-      "locator": "https://docs.oracle.com/en/java/javase/24/docs/specs/man/javac.html",
+      "title": "Python 3.14 py_compile / dis / import",
+      "locators": [
+        "https://docs.python.org/3/library/py_compile.html",
+        "https://docs.python.org/3/library/dis.html",
+        "https://docs.python.org/3/reference/import.html"
+      ],
       "verified_claims": [
-        "javac reads Java source declarations and compiles them into class files that run on the JVM"
-      ]
-    },
-    {
-      "title": "Java Virtual Machine Specification 26, Chapter 2",
-      "locator": "https://docs.oracle.com/en/java/javase/26/docs/specs/jvms/jvms-2.html",
-      "verified_claims": [
-        "JVM executable code is represented in a hardware- and operating-system-independent class-file format",
-        "a JVM implementation may translate JVM code at load time or during execution into host native instructions using JIT code generation",
-        "the JVM specification deliberately permits different implementation strategies rather than requiring one interpreter/JIT pipeline"
-      ]
-    },
-    {
-      "title": "Java Virtual Machine Technology Overview, Java SE 24",
-      "locator": "https://docs.oracle.com/en/java/javase/24/vm/java-virtual-machine-technology-overview.html",
-      "verified_claims": [
-        "HotSpot starts with an interpreter, analyzes running code for hot spots and compiles performance-critical portions adaptively"
-      ]
-    },
-    {
-      "title": "HotSpot Glossary of Terms",
-      "locator": "https://openjdk.org/groups/hotspot/docs/HotSpotGlossary.html",
-      "verified_claims": [
-        "HotSpot documentation defines deoptimization and describes JIT compilation after interpreter warm-up, supporting the candidate's bounded warm-up/deoptimization cost statement"
-      ]
-    },
-    {
-      "title": "Python 3.14 py_compile — Compile Python source files",
-      "locator": "https://docs.python.org/3/library/py_compile.html",
-      "verified_claims": [
-        "Python source can be compiled to byte-code cache files ending in .pyc under the normal cache path"
-      ]
-    },
-    {
-      "title": "Python 3.14 dis — Disassembler for Python bytecode",
-      "locator": "https://docs.python.org/3/library/dis.html",
-      "verified_claims": [
-        "dis analyzes CPython bytecode and code objects returned by compile()",
-        "CPython bytecode is an implementation detail with no cross-version or cross-VM compatibility guarantee"
-      ]
-    },
-    {
-      "title": "Python 3.14 import system",
-      "locator": "https://docs.python.org/3/reference/import.html",
-      "verified_claims": [
-        "the import system may load cached bytecode from .pyc files after validating the cache against source metadata"
-      ]
-    },
-    {
-      "title": "Python 3.14 gc — Garbage Collector interface",
-      "locator": "https://docs.python.org/3/library/gc.html",
-      "verified_claims": [
-        "CPython's garbage collector supplements reference counting, supporting the candidate's scoped runtime-memory-management statement"
+        "CPython bytecode and .pyc cache",
+        "CPython bytecode is implementation-specific"
       ]
     }
   ],
+  "deterministic_failure_remediation": {
+    "previous_candidate_sha256": "aacd0956ec58df5c9701d3de0586fa7399ee3b8d94161d7a3cabcee7e90be5ce",
+    "finding": "The candidate used bold Markdown question bullets in 常见追问, while the deterministic quality contract recognizes '- 问：...答：...' rows. The semantic follow-ups were topic-specific, but their syntax made followup_count zero.",
+    "fix": "Normalize six follow-ups to the repository's recognized 问/答 row syntax and refresh evidence/hash bindings; do not weaken the validator.",
+    "regression_expectation": "answer audit should report at least three topic-specific follow-ups and no generic_followups hard failure."
+  },
   "scores": {
     "facts_and_evidence": 24,
     "directness_and_relevance": 20,
@@ -113,32 +80,27 @@
   "findings": [
     {
       "severity": "note",
-      "id": "LANG-COMP-SF-001",
-      "finding": "The candidate directly rejects the misleading compiled-versus-interpreted binary and compares all three languages using the same translation-target and runtime-execution dimensions."
+      "id": "LANG-COMP-R2-001",
+      "finding": "The source-first rereview was completed before consulting the prior review record."
     },
     {
       "severity": "note",
-      "id": "LANG-COMP-SF-002",
-      "finding": "C++ statements are explicitly scoped to a typical Clang/GCC-style AOT toolchain and the answer separately acknowledges JIT/plugin/dynamic-code cases, so the common pipeline is not presented as a language mandate."
+      "id": "LANG-COMP-R2-002",
+      "finding": "The candidate directly answers the language-compilation comparison and keeps C++, JVM/HotSpot, and CPython implementation boundaries explicit."
     },
     {
       "severity": "note",
-      "id": "LANG-COMP-SF-003",
-      "finding": "Java correctly separates javac class-file compilation from JVM execution, bounds HotSpot profiling/JIT behavior as an implementation strategy, and treats warm-up/deoptimization as possible runtime costs rather than universal language semantics."
+      "id": "LANG-COMP-R2-003",
+      "finding": "The prior CI failure was a deterministic follow-up-format contract mismatch; the candidate now conforms to the contract without relaxing quality gates."
     },
     {
       "severity": "note",
-      "id": "LANG-COMP-SF-004",
-      "finding": "Python claims are scoped to CPython, distinguish code objects/bytecode/.pyc caches from native AOT binaries, and explicitly warn that CPython bytecode is not a stable cross-implementation ISA."
-    },
-    {
-      "severity": "note",
-      "id": "LANG-COMP-SF-005",
-      "finding": "Portability and performance claims remain conditional on target/toolchain/runtime/workload factors, the answer contains multiple topic-specific follow-ups, and no absolute C++/Java/Python speed ranking or fabricated personal project result is asserted."
+      "id": "LANG-COMP-R2-004",
+      "finding": "Primary official sources support the material factual claims and no fabricated project experience or unconditional performance ranking is present."
     }
   ],
   "decision": "pass",
   "promotion_allowed": false,
   "human_review_state": "not_requested_until_evidence_and_deterministic_audit_pass",
-  "next_required_action": "Bind this fixed candidate SHA to a refreshed answer_evidence sidecar, run the deterministic candidate audit with --require-evidence, then obtain the mandatory pilot human approval before atomic promotion. Do not fabricate approval or promotion state."
+  "next_required_action": "Run the deterministic candidate audit with --require-evidence. If it passes, continue the mandatory pilot human-review and population closure workflow; do not treat this candidate as repository completion."
 }
