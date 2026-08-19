@@ -1,0 +1,94 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_q_3f52d557f29ac6552e5dc5f5e940f810",
+  "candidate": {
+    "path": "review/candidates/answers/cq_q_3f52d557f29ac6552e5dc5f5e940f810.md",
+    "sha256": "80891ff6418311978a0584e90829a973efd352e2ff16b2d28b766f754df45486",
+    "version": 1,
+    "answer_type": "coding"
+  },
+  "reviewed_at": "2026-08-20",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-coin-change-20260820",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "coding",
+    "historical_source_labels": [
+      "算法手撕_Coding"
+    ],
+    "reason": "The restored source asks for the coin-change dynamic-programming problem, and the Canonical entities explicitly identify dynamic programming, unbounded-knapsack semantics, and coin change. The expected artifact is a concrete minimum-coin algorithm, implementation, complexity, and boundary analysis."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "LeetCode 322 — Coin Change",
+      "locator": "https://leetcode.com/problems/coin-change/",
+      "verified_claims": [
+        "The input is an integer array of coin denominations and a target amount.",
+        "The required result is the fewest number of coins needed to make the amount, or -1 if no combination can make it.",
+        "Each denomination may be used an unlimited number of times.",
+        "The official examples are [1,2,5],11 -> 3; [2],3 -> -1; and [1],0 -> 0.",
+        "The official constraints include positive denominations and amount in 0..10000."
+      ]
+    },
+    {
+      "title": "CoinChange deterministic Java validation",
+      "locator": "review/content_build/answer_batch_0011/cq_q_3f52d557f29ac6552e5dc5f5e940f810/code_validation.json",
+      "verified_claims": [
+        "The candidate implementation compiles under javac 21.0.11.",
+        "It returns all three official example results and the documented oversized-denomination boundary result.",
+        "It matches an independent breadth-first-search shortest-path oracle on 961 generated cases covering every non-empty subset of {1,2,3,4,5} and amounts 0..30."
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 100
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "note",
+      "id": "COIN-CHANGE-SF-001",
+      "finding": "The candidate directly answers the minimum-coin objective and does not confuse LeetCode 322 with the combination-count objective of Coin Change II."
+    },
+    {
+      "severity": "note",
+      "id": "COIN-CHANGE-SF-002",
+      "finding": "The state definition dp[x], dp[0] base case, unreachable sentinel, last-coin recurrence, and ascending-amount dependency order are mutually consistent and correctly exploit the official positive-denomination constraint."
+    },
+    {
+      "severity": "note",
+      "id": "COIN-CHANGE-SF-003",
+      "finding": "Using amount+1 as the unreachable sentinel is valid under the official contract: any reachable amount uses at most amount coins because every denomination is a positive integer."
+    },
+    {
+      "severity": "note",
+      "id": "COIN-CHANGE-SF-004",
+      "finding": "The stated O(amount * coins.length) time and O(amount) auxiliary-space bounds match the implementation, while null and negative-amount checks are explicitly identified as repository-local defensive behavior rather than LeetCode input requirements."
+    },
+    {
+      "severity": "note",
+      "id": "COIN-CHANGE-SF-005",
+      "finding": "The reproducible validation is structurally independent of the DP implementation because it uses BFS as a shortest-path oracle across 961 generated cases, in addition to all official examples."
+    },
+    {
+      "severity": "note",
+      "id": "COIN-CHANGE-SF-006",
+      "finding": "The follow-ups are problem-specific and test unbounded reuse, base-state semantics, unreachable-state handling, the 322-vs-518 distinction, and the BFS alternative; the project section avoids fabricated experience."
+    }
+  ],
+  "decision": "pass",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_evidence_and_deterministic_audit_pass",
+  "next_required_action": "Bind this fixed candidate SHA to an answer_evidence sidecar, run the deterministic candidate audit with --require-evidence and the coding gate, then obtain the mandatory pilot human approval before atomic promotion. Do not fabricate approval or promotion state."
+}
