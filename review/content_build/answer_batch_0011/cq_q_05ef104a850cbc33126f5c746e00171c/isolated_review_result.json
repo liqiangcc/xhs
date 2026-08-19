@@ -1,0 +1,88 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_q_05ef104a850cbc33126f5c746e00171c",
+  "candidate": {
+    "path": "review/candidates/answers/cq_q_05ef104a850cbc33126f5c746e00171c.md",
+    "sha256": "a0f7386983a4130b1507f5d99aec07ec3af7082232bc47e30fe4120ef6ec11af",
+    "version": 1,
+    "answer_type": "coding"
+  },
+  "reviewed_at": "2026-08-20",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-lps-20260820",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "coding",
+    "historical_source_labels": [
+      "算法手撕_Coding"
+    ],
+    "reason": "All three restored source variants ask the same longest-palindromic-subsequence coding problem, and two explicitly identify LeetCode 516 / DP. The expected artifact is a concrete algorithm, implementation, complexity, and boundary analysis rather than a conceptual-only answer."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "LeetCode 516 — Longest Palindromic Subsequence",
+      "locator": "https://leetcode.com/problems/longest-palindromic-subsequence/description/",
+      "verified_claims": [
+        "The task asks for the length of the longest palindromic subsequence.",
+        "A subsequence may delete characters while preserving the relative order of those retained.",
+        "The official examples are bbbab -> 4 and cbbd -> 2.",
+        "The official constraints are 1 <= s.length <= 1000 and lowercase English letters only."
+      ]
+    },
+    {
+      "title": "LongestPalindromicSubsequence deterministic Java validation",
+      "locator": "review/content_build/answer_batch_0011/cq_q_05ef104a850cbc33126f5c746e00171c/code_validation.json",
+      "verified_claims": [
+        "The candidate implementation compiles under javac 21.0.11.",
+        "It returns the official example results and the documented explicit boundary results.",
+        "It matches an independent brute-force subsequence-enumeration oracle for all 9,841 strings over {a,b,c} of lengths 0..8."
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 100
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "note",
+      "id": "LPS-SF-001",
+      "finding": "The candidate directly answers the LeetCode 516 boundary shared by all three source variants and clearly distinguishes subsequence from substring."
+    },
+    {
+      "severity": "note",
+      "id": "LPS-SF-002",
+      "finding": "The interval-DP state, base case, equal-endpoint and unequal-endpoint recurrences, dependency order, final state, and O(n^2) time / O(n^2) space bounds are internally consistent with the Java implementation."
+    },
+    {
+      "severity": "note",
+      "id": "LPS-SF-003",
+      "finding": "The candidate covers implementation boundaries beyond the official contract without confusing them with LeetCode requirements: null and empty input are explicitly repository-local defensive behavior."
+    },
+    {
+      "severity": "note",
+      "id": "LPS-SF-004",
+      "finding": "The reproducible validation is materially stronger than example-only checking because it compares the DP result with an independently implemented brute-force oracle across all short strings in a fixed alphabet."
+    },
+    {
+      "severity": "note",
+      "id": "LPS-SF-005",
+      "finding": "The follow-ups are problem-specific and cover recurrence justification, O(n) space compression, sequence reconstruction, substring-vs-subsequence distinction, and the LCS formulation; the project section avoids fabricated production experience."
+    }
+  ],
+  "decision": "pass",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_evidence_and_deterministic_audit_pass",
+  "next_required_action": "Bind this fixed candidate SHA to an answer_evidence sidecar, run the deterministic candidate audit with --require-evidence and the coding gate, then obtain the mandatory pilot human approval before atomic promotion. Do not fabricate approval or promotion state."
+}
