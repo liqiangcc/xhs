@@ -1,0 +1,57 @@
+name: Refresh pilot answer audit ledger
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - review/candidates/answers/**
+      - review/candidates/audits/**
+      - review/evidence/**
+      - data/manifests/quality/answer_pilot_set.json
+      - scripts/content/build_pilot_answer_audit.js
+      - .github/workflows/content-refresh-pilot-audit.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-refresh-pilot-audit
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Fast-forward to latest branch state
+        run: git pull --ff-only origin content/quality-completion
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rebuild and verify pilot audit ledger
+        run: |
+          node scripts/content/build_pilot_answer_audit.js
+          node scripts/content/build_pilot_answer_audit.js --check
+
+      - name: Commit ledger refresh when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/manifests/quality/pilot_answer_audit.json; then
+            echo "Pilot audit ledger is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/manifests/quality/pilot_answer_audit.json
+          git commit -m "content: refresh pilot answer audit ledger"
+          git push origin HEAD:content/quality-completion
