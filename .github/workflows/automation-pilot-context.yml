@@ -1,0 +1,51 @@
+name: Automation Pilot Context
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/automation-pilot-context.yml
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Capture pending scenario contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const {execFileSync} = require('child_process');
+          const fs = require('fs');
+          const ids = [
+            'cq_short_video_bcbcf234',
+            'cq_topic_20fba961',
+            'cq_topic_89b69343',
+          ];
+          const rows = ids.map((id) => {
+            const out = execFileSync('node', ['scripts/xhs.js', 'answer', 'context', '--canonical-id', id, '--noWrite'], {encoding:'utf8'});
+            return JSON.parse(out);
+          });
+          fs.mkdirSync('review/reports', {recursive:true});
+          fs.writeFileSync('review/reports/AUTOMATION_PILOT_CONTEXT.json', JSON.stringify({generated_at:new Date().toISOString(), rows}, null, 2) + '\n');
+          NODE
+      - name: Commit context report
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add review/reports/AUTOMATION_PILOT_CONTEXT.json
+          git commit -m "chore: capture pending pilot scenario contexts"
+          git push origin HEAD:content/quality-completion
