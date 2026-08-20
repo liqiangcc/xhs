@@ -181,4 +181,22 @@ jobs:
           NODE
 
       - name: Validate source-first rereview regression manifest
-        run: node scripts/audit/verify_rereview_regressions.js
+        shell: bash
+        run: |
+          set +e
+          node scripts/audit/verify_rereview_regressions.js > "$RUNNER_TEMP/rereview-regression.log" 2>&1
+          REREVIEW_EXIT=$?
+          set -e
+          cat "$RUNNER_TEMP/rereview-regression.log"
+          printf '%s\n' "$REREVIEW_EXIT" > "$RUNNER_TEMP/rereview-regression.status"
+          exit "$REREVIEW_EXIT"
+
+      - name: Upload source-first rereview diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-first-rereview-diagnostic
+          path: |
+            ${{ runner.temp }}/rereview-regression.log
+            ${{ runner.temp }}/rereview-regression.status
+          if-no-files-found: warn
