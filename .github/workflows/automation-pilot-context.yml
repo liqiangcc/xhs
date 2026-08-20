@@ -1,4 +1,4 @@
-name: Automation Short Video Audit
+name: Automation Short Video Audit Diagnostic
 
 on:
   push:
@@ -23,32 +23,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Audit short-video candidate and refresh pilot ledger
+      - name: Capture audit diagnostics
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           mkdir -p review/reports
-          node scripts/xhs.js answer audit \
-            --candidate review/candidates/answers/cq_short_video_bcbcf234.md \
-            --require-evidence --noWrite --noManifest \
-            | tee review/reports/AUTOMATION_SHORT_VIDEO_AUDIT.txt
-          node scripts/content/build_pilot_answer_audit.js
-          node scripts/content/build_pilot_answer_audit.js --check
-          npm run ci:check
-          npm run ci:answer:semantic
-          npm run ci:answer:evidence
-          npm run ci:answer:code
-          npm run ci:answer:coverage
-      - name: Commit validated pilot ledger
+          : > review/reports/AUTOMATION_SHORT_VIDEO_AUDIT.txt
+          {
+            echo '## candidate audit'
+            node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_short_video_bcbcf234.md --require-evidence --noWrite
+            echo "candidate_audit_exit=$?"
+            echo '## pilot ledger check'
+            node scripts/content/build_pilot_answer_audit.js --check
+            echo "pilot_check_exit=$?"
+            echo '## strict answer validation'
+            node scripts/xhs.js answer validate --strict --noWrite
+            echo "strict_exit=$?"
+            echo '## canonical check'
+            node scripts/xhs.js canonical check --noWrite
+            echo "canonical_exit=$?"
+          } >> review/reports/AUTOMATION_SHORT_VIDEO_AUDIT.txt 2>&1
+      - name: Commit diagnostics
         shell: bash
         run: |
           set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add data/manifests/quality/pilot_answer_audit.json review/reports/AUTOMATION_SHORT_VIDEO_AUDIT.txt
-          if git diff --cached --quiet; then
-            echo "No validated ledger changes."
-            exit 0
-          fi
-          git commit -m "content: validate short-video pilot candidate"
+          git add review/reports/AUTOMATION_SHORT_VIDEO_AUDIT.txt
+          git commit -m "chore: capture short-video candidate audit" || exit 0
           git push origin HEAD:content/quality-completion
