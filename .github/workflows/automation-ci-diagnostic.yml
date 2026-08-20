@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Capture CI diagnostics
+      - name: Capture concise CI diagnostics
         shell: bash
         run: |
           set +e
@@ -29,10 +29,16 @@ jobs:
           : > "$REPORT"
           run_cmd() {
             name="$1"; shift
-            printf '\n===== %s =====\n' "$name" >> "$REPORT"
-            "$@" >> "$REPORT" 2>&1
+            log="$RUNNER_TEMP/${name}.log"
+            "$@" > "$log" 2>&1
             code=$?
-            printf '\nEXIT_CODE=%s\n' "$code" >> "$REPORT"
+            if [ "$code" -eq 0 ]; then
+              printf '%s=PASS\n' "$name" >> "$REPORT"
+            else
+              printf '\n===== %s FAILED exit=%s =====\n' "$name" "$code" >> "$REPORT"
+              tail -n 120 "$log" >> "$REPORT"
+              printf '\n===== end %s =====\n' "$name" >> "$REPORT"
+            fi
           }
           run_cmd ci_check npm run ci:check
           run_cmd pilot_audit node scripts/content/build_pilot_answer_audit.js --check
@@ -61,5 +67,5 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add review/reports/AUTOMATION_CI_DIAGNOSTIC.txt
-          git commit -m "ci: refresh current content CI diagnostics"
+          git commit -m "ci: summarize current content CI diagnostics"
           git push origin HEAD:content/quality-completion
