@@ -51,16 +51,6 @@ public final class ReverseBetweenTest {
         }
     }
 
-    private static ReverseBetween.ListNode list(int[] input) {
-        ReverseBetween.ListNode dummy = new ReverseBetween.ListNode(0);
-        ReverseBetween.ListNode tail = dummy;
-        for (int value : input) {
-            tail.next = new ReverseBetween.ListNode(value);
-            tail = tail.next;
-        }
-        return dummy.next;
-    }
-
     public static void main(String[] args) {
         List<int[]> fixedInputs = new ArrayList<>();
         fixedInputs.add(new int[]{1, 2, 3, 4, 5});
