@@ -72,5 +72,12 @@ jobs:
         working-directory: review/content_build/answer_batch_0013/cq_q_0b2b60b3fcf31abae6c4bff516b07ade
         run: javac PathSum.java PathSumTest.java && java PathSumTest
 
+      - name: Audit JavaScript this-binding candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0c1e11f63f195e0539750aec00ec460a.md --require-evidence --require-code --noWrite
+
+      - name: Run JavaScript this-binding fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_0c1e11f63f195e0539750aec00ec460a
+        run: node this_binding_test.js
+
       - name: Verify no generated changes
         run: git diff --exit-code
