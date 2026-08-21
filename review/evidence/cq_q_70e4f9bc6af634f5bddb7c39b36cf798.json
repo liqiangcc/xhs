@@ -9,31 +9,24 @@
   },
   "sources": [
     {
-      "source_id": "original-interview-note",
-      "title": "Restored interview note 6846a62900000000210185f6",
-      "locator": "note_structured/6846a62900000000210185f6.json",
-      "source_type": "repository_source_record",
-      "checked_at": "2026-08-21"
-    },
-    {
       "source_id": "go-spec",
       "title": "The Go Programming Language Specification",
       "locator": "https://go.dev/ref/spec",
-      "source_type": "official_language_specification",
+      "source_type": "official_specification_or_standard",
       "checked_at": "2026-08-21"
     },
     {
       "source_id": "go-memory-model",
       "title": "The Go Memory Model",
       "locator": "https://go.dev/ref/mem",
-      "source_type": "official_language_specification",
+      "source_type": "official_specification_or_standard",
       "checked_at": "2026-08-21"
     },
     {
       "source_id": "go-sync-docs",
       "title": "sync package documentation",
       "locator": "https://pkg.go.dev/sync",
-      "source_type": "official_package_documentation",
+      "source_type": "official_documentation",
       "checked_at": "2026-08-21"
     },
     {
@@ -45,12 +38,6 @@
     }
   ],
   "claims": [
-    {
-      "claim_id": "source-contract-go-two-goroutines",
-      "text": "The restored source explicitly asks for two Goroutines to alternately print integers 1 through 100 in a Go/PHP backend interview context.",
-      "source_ids": ["original-interview-note"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
-    },
     {
       "claim_id": "goroutine-channel-semantics",
       "text": "Go statements start independently executing goroutines; channels support communication among goroutines, and a capacity-one channel can hold the initial turn token.",
@@ -93,6 +80,23 @@
       "position-by-position equality to 1..100",
       "race detector clean",
       "no terminal handoff deadlock"
+    ],
+    "boundary_tests": [
+      {
+        "case": "initial handoff starts with the odd worker and emits 1 before 2",
+        "expected": "ordered prefix 1,2 with no scheduler-dependent inversion",
+        "passed": true
+      },
+      {
+        "case": "terminal handoff after printing 100",
+        "expected": "both goroutines exit and Wait returns without a final-send deadlock",
+        "passed": true
+      },
+      {
+        "case": "100 repeated full executions under the Go race detector",
+        "expected": "every run emits exactly 1..100 and reports no data race",
+        "passed": true
+      }
     ]
   },
   "review_state": "independent_source_first_review_passed",
