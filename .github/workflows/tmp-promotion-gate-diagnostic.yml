@@ -1,0 +1,72 @@
+name: Temporary Promotion Gate Diagnostic
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/tmp-promotion-gate-diagnostic.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Fast-forward
+        run: git pull --ff-only origin content/quality-completion
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run promotion gates independently
+        shell: bash
+        run: |
+          set -u
+          report=review/reports/TEMP_PROMOTION_GATE_DIAGNOSTIC.txt
+          mkdir -p review/reports
+          : > "$report"
+          run_gate() {
+            local name="$1"
+            shift
+            local tmp
+            tmp="$(mktemp)"
+            set +e
+            "$@" >"$tmp" 2>&1
+            local rc=$?
+            set -e
+            {
+              echo "=== ${name} ==="
+              echo "exit=${rc}"
+              tail -n 120 "$tmp"
+              echo
+            } >> "$report"
+            rm -f "$tmp"
+          }
+          set -e
+          run_gate answer_validate node scripts/xhs.js answer validate --strict --noWrite --noManifest
+          run_gate canonical_check node scripts/xhs.js canonical check --noWrite --noManifest
+          run_gate ci_check npm run ci:check
+          run_gate answer_semantic npm run ci:answer:semantic
+          run_gate answer_evidence npm run ci:answer:evidence
+          run_gate answer_code npm run ci:answer:code
+          run_gate answer_coverage npm run ci:answer:coverage
+
+      - name: Commit diagnostic report
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "xhs-diagnostic-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add review/reports/TEMP_PROMOTION_GATE_DIAGNOSTIC.txt
+          git commit -m "chore: capture promotion gate diagnostic"
+          git push origin HEAD:content/quality-completion
