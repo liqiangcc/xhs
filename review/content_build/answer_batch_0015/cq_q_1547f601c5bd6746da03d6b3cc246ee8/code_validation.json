@@ -1,0 +1,30 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_1547f601c5bd6746da03d6b3cc246ee8",
+  "checked_at": "2026-08-22",
+  "language": "java",
+  "runtime": "OpenJDK 21.0.11",
+  "command": "javac FibonacciString.java FibonacciStringTest.java && java FibonacciStringTest",
+  "result": "pass",
+  "stdout": "PASS fixed=8 randomized=5000 oracle=recursive-all-partitions big_integer=true full_consumption=true",
+  "implementation_contract": {
+    "input_alphabet": "characters 1-9 only",
+    "partition": "the entire string must be consumed by at least three contiguous decimal numbers",
+    "recurrence": "each term from the third onward equals the sum of the previous two",
+    "numeric_strategy": "java.math.BigInteger to avoid introducing an unstated fixed-width overflow boundary",
+    "null": "fail fast with NullPointerException",
+    "out_of_domain_character": "fail fast with IllegalArgumentException"
+  },
+  "checks": [
+    "three-term minimum success",
+    "multi-term Fibonacci sequence",
+    "multi-digit term boundaries",
+    "full-input consumption rather than accepting a valid prefix",
+    "negative cases with no valid complete partition",
+    "input too short for three terms",
+    "arbitrary-precision case beyond long range",
+    "5000 deterministic randomized strings against a recursive all-partitions oracle",
+    "null fail-fast candidate behavior",
+    "zero/out-of-domain character fail-fast candidate behavior"
+  ]
+}
