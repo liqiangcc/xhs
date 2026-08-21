@@ -1,0 +1,54 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_085f9d4fb37c28311af8525abbfe36a7",
+  "candidate_sha256": "563caec2b93690a2903d81ffb324ffffa34164e94407ac70e32a08ad1de32041",
+  "checked_at": "2026-08-21",
+  "writer": {"writer_id": "automation-content-builder-counterclockwise-matrix-v1", "writer_version": "xhs-answer-curator.v1"},
+  "sources": [
+    {"source_id": "xhs-note-68b85f51-desc", "title": "Recovered interview note describing the counterclockwise-matrix coding prompt", "locator": "note_desc/68b85f51000000001c0338c8.txt", "source_type": "repository_source_record", "checked_at": "2026-08-21"},
+    {"source_id": "xhs-note-68b85f51-structured", "title": "Structured interview note containing the counterclockwise-matrix prompt", "locator": "note_structured/68b85f51000000001c0338c8.json", "source_type": "repository_source_record", "checked_at": "2026-08-21"},
+    {"source_id": "xhs-question-085f9d4f", "title": "Tagged repository question record for counterclockwise matrix traversal", "locator": "note_tagged/68b85f51000000001c0338c8.json#question_id=085f9d4fb37c28311af8525abbfe36a7", "source_type": "repository_structured_source", "checked_at": "2026-08-21"},
+    {"source_id": "counterclockwise-matrix-validation", "title": "Deterministic Java validation against an independent direction/visited oracle", "locator": "review/content_build/answer_batch_0013/cq_q_085f9d4fb37c28311af8525abbfe36a7/code_validation.json", "source_type": "executable_test_or_reproducible_experiment", "checked_at": "2026-08-21"}
+  ],
+  "claims": [
+    {"claim_id": "source-contract", "text": "The recovered source asks only to hand-write counterclockwise matrix printing; it does not state a starting corner or first movement direction, so the candidate explicitly fixes a top-left/downward contract before coding.", "source_ids": ["xhs-note-68b85f51-desc", "xhs-note-68b85f51-structured", "xhs-question-085f9d4f"], "answer_locations": ["核心结论", "3 分钟版", "常见追问", "易错点"]},
+    {"claim_id": "boundary-shrink-implementation", "text": "The exact Java implementation traverses a rectangular matrix with four shrinking boundaries in the declared counterclockwise order and rechecks boundary validity after each consumed edge.", "source_ids": ["counterclockwise-matrix-validation"], "answer_locations": ["1 分钟版", "关键细节", "原理机制"]},
+    {"claim_id": "independent-oracle", "text": "The deterministic fixture compares the boundary-shrinking implementation with a structurally different per-cell direction/visited simulation for 3000 fixed-seed rectangular matrices.", "source_ids": ["counterclockwise-matrix-validation"], "answer_locations": ["原理机制"]},
+    {"claim_id": "edge-contract", "text": "The fixture covers null, zero-row, zero-column, single-row, single-column, 2x2, rectangular matrices in both orientations, and explicitly rejects ragged or null-row arrays.", "source_ids": ["counterclockwise-matrix-validation"], "answer_locations": ["关键细节", "原理机制"]},
+    {"claim_id": "complexity", "text": "For a rectangular matrix, each element is emitted once by the four-boundary implementation; aside from the returned output list, the implementation keeps only constant-size boundary state.", "source_ids": ["counterclockwise-matrix-validation"], "answer_locations": ["核心结论", "关键细节"]}
+  ],
+  "source_question_coverage": [{"question_id": "085f9d4fb37c28311af8525abbfe36a7", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}],
+  "validation": {
+    "command": "javac CounterClockwiseMatrix.java CounterClockwiseMatrixTest.java && java CounterClockwiseMatrixTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=8 randomized=3000 oracle=direction-visited ragged=rejected",
+    "checks": ["declared top-left/down counterclockwise contract on fixed examples", "single-row and single-column no-duplication behavior", "3000 fixed-seed rectangles match independent direction/visited oracle", "ragged and null-row inputs are rejected"],
+    "boundary_tests": [
+      {"case": "single row and single column", "expected": "every element is emitted exactly once in the declared traversal order", "passed": true},
+      {"case": "3x4 and 4x3 rectangular matrices", "expected": "outer and inner layers follow the top-left/down counterclockwise contract without omission or duplication", "passed": true},
+      {"case": "ragged matrix or null row", "expected": "IllegalArgumentException is thrown instead of indexing inconsistent row shapes", "passed": true},
+      {"case": "3000 fixed-seed non-empty rectangles", "expected": "four-boundary output equals the independent direction/visited oracle", "passed": true}
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-counterclockwise-matrix-20260821",
+    "review_version": "counterclockwise-matrix.boundary-contract.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {"facts_and_evidence": 25, "directness_and_relevance": 20, "type_specific_completeness": 20, "mechanism_and_causality": 15, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 5},
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate treats the unspecified start corner as a source-boundary ambiguity rather than pretending counterclockwise alone determines one unique output sequence.",
+      "The chosen top-left/downward contract is stated before implementation and exercised by fixed examples.",
+      "Boundary rechecks address the core single-row/single-column duplicate-output failure mode.",
+      "The randomized oracle uses a direction/visited state machine rather than duplicating the four-boundary algorithm.",
+      "Rectangular-input and ragged-input behavior are explicit, so Java int[][] shape assumptions are not hidden.",
+      "No project metrics or production experience are invented.",
+      "Required human approval remains a separate promotion gate."
+    ]
+  }
+}
