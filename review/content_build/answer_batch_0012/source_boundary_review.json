@@ -39,6 +39,23 @@
       ],
       "reason": "A single combined Answer would preserve an extraction error and violate the repository's one bounded answer contract per Canonical. Canonical split alone cannot fix this because the underlying Question row itself contains four distinct questions.",
       "required_next_action": "Split the source Question into four deterministic Question rows first, bind each to its own or an existing matching Canonical, migrate ReviewProgress/reachability, regenerate the rewrite queue, and only then curate answers."
+    },
+    {
+      "canonical_id": "cq_q_034542908e9cc6712821aa75e2c5ab7d",
+      "current_title": "算法：三个线程循环打印 0-10",
+      "decision": "block_candidate_until_ordering_contract_clarified_or_recovered",
+      "severity": "major",
+      "source_records": [
+        "note_img_txt/67d7e67c000000001e007c89.txt",
+        "note_tagged/67d7e67c000000001e007c89.json"
+      ],
+      "evidence": [
+        "The source image text contains only the shorthand '算法: 三个线程循环打印0-10'.",
+        "It does not state whether 0 through 10 are printed once in total or repeatedly, which thread owns which numbers, whether threads must alternate in a fixed order, or what the termination rule is.",
+        "The tagged record adds synchronization entities such as wait/notify and Condition, but it does not recover the missing observable output and ordering contract."
+      ],
+      "reason": "A concrete concurrency implementation must choose an ordering, ownership and termination invariant. Different plausible interpretations of the shorthand require different synchronization protocols, so selecting one silently would fabricate source detail rather than curate the recorded question.",
+      "required_next_action": "Recover a source artifact that states the required print order/ownership/termination semantics. If none exists, dispose the row as insufficient-source/noise or create a separately labeled practice contract rather than presenting an invented interpretation as the original interview question."
     }
   ],
   "batch_policy": "Blocked findings stay out of formal answer promotion. They must be resolved at the Question/Canonical boundary before candidate creation so source ambiguity is not converted into fabricated content."
