@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  candidate-code-gates:
+  candidate-gates:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -36,8 +36,8 @@ jobs:
         working-directory: review/content_build/answer_batch_0014/cq_q_10b16ccc8b909fb29e93c5d4a67ddf71
         run: javac LinkedListBigIntegerAdd.java LinkedListBigIntegerAddTest.java && java LinkedListBigIntegerAddTest
 
-      - name: Capture linked-list candidate hash
-        run: sha256sum review/candidates/answers/cq_q_10b16ccc8b909fb29e93c5d4a67ddf71.md
+      - name: Audit linked-list big-integer candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_10b16ccc8b909fb29e93c5d4a67ddf71.md --require-evidence --require-code --noWrite
 
       - name: Verify no generated changes
         run: git diff --exit-code
