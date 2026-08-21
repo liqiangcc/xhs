@@ -1,54 +1,32 @@
 name: Automation Short Video Audit Diagnostic
 
 on:
-  push:
-    branches:
-      - content/quality-completion
-    paths:
-      - .github/workflows/automation-pilot-context.yml
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: content/quality-completion
-          fetch-depth: 0
-      - name: Fast-forward to latest branch state
-        run: git pull --ff-only origin content/quality-completion
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Capture audit diagnostics
+      - name: Run audit diagnostics without mutating the branch
         shell: bash
         run: |
           set -u
-          mkdir -p review/reports
-          : > review/reports/AUTOMATION_SHORT_VIDEO_AUDIT.txt
-          {
-            echo '## candidate audit'
-            node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_short_video_bcbcf234.md --require-evidence --noWrite
-            echo "candidate_audit_exit=$?"
-            echo '## pilot ledger check'
-            node scripts/content/build_pilot_answer_audit.js --check
-            echo "pilot_check_exit=$?"
-            echo '## strict answer validation'
-            node scripts/xhs.js answer validate --strict --noWrite
-            echo "strict_exit=$?"
-            echo '## canonical check'
-            node scripts/xhs.js canonical check --noWrite
-            echo "canonical_exit=$?"
-          } >> review/reports/AUTOMATION_SHORT_VIDEO_AUDIT.txt 2>&1
-      - name: Commit diagnostics
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add review/reports/AUTOMATION_SHORT_VIDEO_AUDIT.txt
-          git commit -m "chore: capture short-video candidate audit" || exit 0
-          git push origin HEAD:content/quality-completion
+          echo '## candidate audit'
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_short_video_bcbcf234.md --require-evidence --noWrite
+          echo "candidate_audit_exit=$?"
+          echo '## pilot ledger check'
+          node scripts/content/build_pilot_answer_audit.js --check
+          echo "pilot_check_exit=$?"
+          echo '## strict answer validation'
+          node scripts/xhs.js answer validate --strict --noWrite
+          echo "strict_exit=$?"
+          echo '## canonical check'
+          node scripts/xhs.js canonical check --noWrite
+          echo "canonical_exit=$?"
