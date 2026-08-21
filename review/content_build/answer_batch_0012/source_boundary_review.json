@@ -1,0 +1,45 @@
+{
+  "schema_version": "answer_batch_source_boundary_review.v1",
+  "batch_id": "TASK-20260711-0313-answer-batch-0012",
+  "reviewed_at": "2026-08-21",
+  "source_first": true,
+  "historical_review_records_read_before_conclusion": false,
+  "findings": [
+    {
+      "canonical_id": "cq_q_003d76f0ea8f268ee5caca371f028eb8",
+      "current_title": "算法：DP",
+      "decision": "block_candidate_until_source_contract_recovered_or_record_disposition",
+      "severity": "major",
+      "source_records": [
+        "note_tagged/680e66cb0000000023012aa3.json",
+        "note_desc/680e66cb0000000023012aa3.txt",
+        "note_images/680e66cb0000000023012aa3_urls.txt"
+      ],
+      "evidence": [
+        "The tagged source contains only the question text '算法：DP' and the generic entity '动态规划'; it does not identify the actual problem, input/output contract, constraints, or expected result.",
+        "The repository text description for the note contains only interview dates/summary and does not recover the coding problem statement.",
+        "The source note references four image assets, but the current repository text SSOT does not contain a more specific textual coding contract for this question."
+      ],
+      "reason": "Writing a concrete DP implementation would necessarily invent the missing problem statement. A generic explanation of dynamic programming would not satisfy a Coding answer contract either.",
+      "required_next_action": "Recover the original problem contract from a stable source artifact if available; otherwise mark the Question as insufficient-source/noise with an explicit explainable reason and remove it from curated-ready Coding coverage rather than fabricating an answer."
+    },
+    {
+      "canonical_id": "cq_q_01eb7504533c120cd1401f8909417eca",
+      "current_title": "算法与 SQL：1) 爬楼梯（动态规划）；2) 合并两个有序链表；3) 重排链表（LeetCode 143）；4) SQL 查询平均成绩大于 80 分的学生记录",
+      "decision": "block_candidate_pending_question_split",
+      "severity": "major",
+      "source_records": [
+        "note_desc/680a4561000000000b014784.txt",
+        "note_tagged/680a4561000000000b014784.json"
+      ],
+      "evidence": [
+        "The raw interview note lists climbing stairs, merge two sorted linked lists, reorder list, and an average-score SQL query as separate interview items (items 4 through 7).",
+        "The tagged source incorrectly collapses those four distinct output contracts into one Question row and one Canonical.",
+        "The four tasks require different implementations, edge cases, complexity arguments, and even different execution languages (Java-style algorithm code versus SQL)."
+      ],
+      "reason": "A single combined Answer would preserve an extraction error and violate the repository's one bounded answer contract per Canonical. Canonical split alone cannot fix this because the underlying Question row itself contains four distinct questions.",
+      "required_next_action": "Split the source Question into four deterministic Question rows first, bind each to its own or an existing matching Canonical, migrate ReviewProgress/reachability, regenerate the rewrite queue, and only then curate answers."
+    }
+  ],
+  "batch_policy": "Blocked findings stay out of formal answer promotion. They must be resolved at the Question/Canonical boundary before candidate creation so source ambiguity is not converted into fabricated content."
+}
