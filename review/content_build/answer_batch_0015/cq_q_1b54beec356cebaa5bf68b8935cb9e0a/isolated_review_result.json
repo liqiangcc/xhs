@@ -1,0 +1,43 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_1b54beec356cebaa5bf68b8935cb9e0a",
+  "candidate_sha256": "11c47aa6f4d18ab932196c2386b92971bf2906e412a84fd62b8c15ba80053ef1",
+  "reviewed_at": "2026-08-22",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-react-useprevious-ui-20260822",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "note_desc/68ca70d2000000000e00f5bb.txt",
+    "review/content_build/answer_batch_0015/source_boundary_audit.md",
+    "https://react.dev/reference/react/useRef",
+    "https://react.dev/reference/react/useState",
+    "review/content_build/answer_batch_0015/cq_q_1b54beec356cebaa5bf68b8935cb9e0a/code_validation.json"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 100
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The recovered source contains both the base usePrevious request and the follow-up that changes to the stored previous value must be able to update the UI; the candidate keeps both parts in scope.",
+    "React official documentation states that changing ref.current does not trigger a re-render and that information used for rendering should be state, which directly supports moving render-visible history out of a ref-only design.",
+    "The candidate avoids the naive setPrevious(value) trap by storing both current and previous, so a state-triggered rerender does not overwrite the meaning of previous with the current input.",
+    "React useState documentation explicitly permits the rare conditional set-during-render pattern for storing information from previous renders, provided it updates only the currently rendering component and the condition terminates.",
+    "The Object.is guard makes the render-time state adjustment terminating for stable inputs and aligns with React's state equality semantics.",
+    "The executable fixture separately validates the pure history transition invariant for initial, changed, unchanged, NaN and signed-zero cases; React-specific render behavior remains grounded in the official docs rather than a fake runtime.",
+    "The answer labels initial undefined, return shape, equality rule and object-reference behavior as candidate API choices rather than recovered source facts.",
+    "No production project history or hidden React-version claim is fabricated."
+  ],
+  "promotion_blockers": [
+    "human_approval_required_for_pilot_promotion"
+  ]
+}
