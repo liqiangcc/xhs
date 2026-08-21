@@ -96,6 +96,20 @@ jobs:
         working-directory: review/content_build/answer_batch_0012/cq_q_03b72a8c6a1f37b231a8275207d927a1
         run: python3 student_total_score_test.py
 
+      - name: Audit batch 0013 binary-tree diameter candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_055a106e79b4b8651c11ddb5633f467d.md --require-evidence --require-code --noWrite
+
+      - name: Run batch 0013 binary-tree diameter test
+        working-directory: review/content_build/answer_batch_0013/cq_q_055a106e79b4b8651c11ddb5633f467d
+        run: javac BinaryTreeDiameter.java BinaryTreeDiameterTest.java && java BinaryTreeDiameterTest
+
+      - name: Audit batch 0013 parallel independent-task candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_05d294848031e3626b66c720bb2273f1.md --require-evidence --require-code --noWrite
+
+      - name: Run batch 0013 parallel independent-task test
+        working-directory: review/content_build/answer_batch_0013/cq_q_05d294848031e3626b66c720bb2273f1
+        run: javac ParallelIndependentTasks.java ParallelIndependentTasksTest.java && java ParallelIndependentTasksTest
+
       - name: Audit batch 0012 goroutine alternating-print candidate
         shell: bash
         run: |
@@ -137,7 +151,7 @@ jobs:
           GO111MODULE: 'off'
         run: go test -race -count=1 ./review/content_build/answer_batch_0012/cq_q_70e4f9bc6af634f5bddb7c39b36cf798
 
-      - name: Capture batch 0011-0012 audit diagnostics
+      - name: Capture batch 0011-0013 audit diagnostics
         if: always()
         run: |
           mkdir -p audit-diagnostics
@@ -151,12 +165,14 @@ jobs:
           node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_00bbcd5ca6d9fb646ab0192c8603e542.md --require-evidence --require-code --noWrite > audit-diagnostics/constrained-color-sequence.json || true
           node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_03b72a8c6a1f37b231a8275207d927a1.md --require-evidence --require-code --noWrite > audit-diagnostics/student-total-score-sql.json || true
           node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_70e4f9bc6af634f5bddb7c39b36cf798.md --require-evidence --noWrite > audit-diagnostics/goroutine-alternating-print.json || true
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_055a106e79b4b8651c11ddb5633f467d.md --require-evidence --require-code --noWrite > audit-diagnostics/binary-tree-diameter.json || true
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_05d294848031e3626b66c720bb2273f1.md --require-evidence --require-code --noWrite > audit-diagnostics/parallel-independent-tasks.json || true
 
-      - name: Upload batch 0011-0012 audit diagnostics
+      - name: Upload batch 0011-0013 audit diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: batch-0011-0012-audit-diagnostics
+          name: batch-0011-0013-audit-diagnostics
           path: audit-diagnostics
 
       - name: Verify no generated changes
