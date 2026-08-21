@@ -23,6 +23,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
       - name: Run tests and read-only checks
         run: npm run ci:check
 
@@ -68,7 +73,15 @@ jobs:
       - name: Audit batch 0011 swap-nodes-in-pairs candidate
         run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0fdff883609d352de9fa841f0a635925.md --require-evidence --require-code --noWrite
 
-      - name: Capture batch 0011 audit diagnostics
+      - name: Audit batch 0012 goroutine alternating-print candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_70e4f9bc6af634f5bddb7c39b36cf798.md --require-evidence --require-code --noWrite
+
+      - name: Run batch 0012 Go race/order test
+        env:
+          GO111MODULE: 'off'
+        run: go test -race -count=1 ./review/content_build/answer_batch_0012/cq_q_70e4f9bc6af634f5bddb7c39b36cf798
+
+      - name: Capture batch 0011-0012 audit diagnostics
         if: always()
         run: |
           mkdir -p audit-diagnostics
@@ -76,12 +89,13 @@ jobs:
           node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_3f52d557f29ac6552e5dc5f5e940f810.md --require-evidence --require-code --noWrite > audit-diagnostics/coin-change.json || true
           node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_5856fb8727752874f2e1c6d8a3832d67.md --require-evidence --require-code --noWrite > audit-diagnostics/reorder-list.json || true
           node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0fdff883609d352de9fa841f0a635925.md --require-evidence --require-code --noWrite > audit-diagnostics/swap-pairs.json || true
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_70e4f9bc6af634f5bddb7c39b36cf798.md --require-evidence --require-code --noWrite > audit-diagnostics/goroutine-alternating-print.json || true
 
-      - name: Upload batch 0011 audit diagnostics
+      - name: Upload batch 0011-0012 audit diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: batch-0011-audit-diagnostics
+          name: batch-0011-0012-audit-diagnostics
           path: audit-diagnostics
 
       - name: Verify no generated changes
