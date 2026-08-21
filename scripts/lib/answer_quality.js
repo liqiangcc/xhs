@@ -314,7 +314,7 @@ function validateAnswerEvidence(evidence, candidate, context, config) {
 
 function extractCodeBlocks(content) {
     const blocks = [];
-    const regex = /(?:```|~~~)(java|sql)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
+    const regex = /(?:```|~~~)(java|sql|javascript|js)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
     let match;
     while ((match = regex.exec(content))) blocks.push({ language: match[1].toLowerCase(), code: match[2].trim() });
     return blocks;
@@ -329,6 +329,20 @@ function compileJava(code) {
         fs.writeFileSync(filePath, code, 'utf8');
         const result = childProcess.spawnSync('javac', ['-encoding', 'UTF-8', '-d', tempDir, filePath], { encoding: 'utf8', timeout: 15000 });
         return { ok: result.status === 0, error: result.status === 0 ? null : (result.stderr || result.stdout || 'javac_failed').slice(0, 2000) };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+function parseJavaScript(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-node-check-'));
+    try {
+        const filePath = path.join(tempDir, 'candidate.js');
+        fs.writeFileSync(filePath, code, 'utf8');
+        childProcess.execFileSync(process.execPath, ['--check', filePath], { stdio: 'pipe' });
+        return { ok: true };
+    } catch (error) {
+        return { ok: false, error: String(error.stderr || error.message || 'javascript_syntax_error').trim() };
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -392,7 +406,11 @@ function validateSpecializedCandidate(candidate, evidence, context) {
             errors.push({ error: 'coding_block_required' });
         }
         for (const block of blocks) {
-            const validation = block.language === 'java' ? compileJava(block.code) : parseSql(block.code);
+            const validation = block.language === 'java'
+                ? compileJava(block.code)
+                : block.language === 'sql'
+                    ? parseSql(block.code)
+                    : parseJavaScript(block.code);
             if (!validation.ok) {
                 addHardFailure(hardFailures, /placeholder|required/.test(validation.error || '') ? 'placeholder_implementation' : 'unrunnable_implementation');
                 errors.push({ error: `${block.language}_validation_failed`, detail: validation.error });
@@ -554,7 +572,7 @@ function runAnswerAudit(options = {}) {
         const title = (answer.content.match(/^#\s+(.+)$/m) || [])[1] || answer.metadata.canonical_id;
         if (types.size && !types.has(answer.metadata.answer_type || inferAnswerType([], { canonical_title: title }))) return false;
         if (setIds && !setIds.has(answer.metadata.canonical_id)) return false;
-        if (options['require-code'] && !/(?:```|~~~)(?:java|sql)\b/i.test(answer.content)) return false;
+        if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js)\b/i.test(answer.content)) return false;
         return true;
     });
     const rows = selectedPaths.map((filePath) => auditOneCandidate(filePath, { ...options, allowFormal: options.tier === 'curated' })).filter((row) => {
