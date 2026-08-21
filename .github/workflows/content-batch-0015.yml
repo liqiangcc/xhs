@@ -28,6 +28,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.26.6'
+          cache: false
 
       - name: Validate reverse-between candidate fixture
         working-directory: review/content_build/answer_batch_0015/cq_q_12ddfcc24143adac1b20b63f547516e7
@@ -103,18 +104,25 @@ jobs:
         run: |
           go test -race -count=20 OrderedPrint.go OrderedPrint_test.go
 
-      - name: Verify ordered goroutine concurrency review
+      - name: Verify ordered goroutine source-language and concurrency gates
         run: |
           node - <<'NODE'
           const crypto = require('node:crypto');
           const fs = require('node:fs');
           const candidatePath = 'review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md';
+          const evidencePath = 'review/evidence/cq_q_187c619f3c62046184546a4f04cc40f2.json';
           const reviewPath = 'review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2/concurrency_review_result.json';
-          const candidateHash = crypto.createHash('sha256').update(fs.readFileSync(candidatePath, 'utf8')).digest('hex');
+          const candidate = fs.readFileSync(candidatePath, 'utf8');
+          const candidateHash = crypto.createHash('sha256').update(candidate).digest('hex');
+          const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
           const review = JSON.parse(fs.readFileSync(reviewPath, 'utf8'));
+          if (!/(?:```|~~~)go\b/i.test(candidate)) throw new Error('runnable Go code fence missing');
+          if (evidence.candidate_sha256 !== candidateHash) throw new Error('evidence candidate hash mismatch');
+          if (evidence.validation?.result !== 'pass') throw new Error('Go validation evidence did not pass');
+          if (!String(evidence.validation?.command || '').includes('go test -race')) throw new Error('Go race command missing from evidence');
           if (review.schema_version !== 'concurrency_review.v1') throw new Error('invalid concurrency review schema');
           if (review.canonical_id !== 'cq_q_187c619f3c62046184546a4f04cc40f2') throw new Error('canonical mismatch');
-          if (review.candidate_sha256 !== candidateHash) throw new Error('candidate hash mismatch');
+          if (review.candidate_sha256 !== candidateHash) throw new Error('concurrency review candidate hash mismatch');
           if (review.decision !== 'pass') throw new Error('concurrency review did not pass');
           if (!Array.isArray(review.open_findings) || review.open_findings.length !== 0) throw new Error('open concurrency findings remain');
           if (review.concurrency_model?.race_detector !== 'pass') throw new Error('race detector evidence missing');
@@ -122,10 +130,13 @@ jobs:
 
       - name: Audit completed ordered goroutine candidate
         run: |
+          # answer audit's generic --require-code selector currently recognizes
+          # Java/SQL/JavaScript fences only. This source is explicitly Go, so
+          # executable Go+race validation is enforced above instead of
+          # mislabeling the source-language implementation.
           node scripts/xhs.js answer audit \
             --candidate review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md \
             --require-evidence \
-            --require-code \
             --noWrite
 
       - name: Verify candidate inputs are immutable under validation
