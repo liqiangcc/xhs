@@ -1,9 +1,9 @@
 name: Patch Go Answer Audit
 
 on:
-  pull_request:
+  push:
     branches:
-      - master
+      - content/quality-completion
     paths:
       - .github/workflows/patch-go-answer-audit.yml
 
@@ -154,13 +154,14 @@ test('require-code accepts and compiles a Go coding candidate', () => {
             --require-code \
             --noWrite
 
-      - name: Commit patch
+      - name: Commit patch and remove one-off workflow
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "xhs-remediation-bot"
           git config user.email "43640935+liqiangcc@users.noreply.github.com"
           git add scripts/lib/answer_quality.js test/answer_candidate.test.js
+          git rm .github/workflows/patch-go-answer-audit.yml
           git diff --cached --check
           git commit -m "fix(answer): support Go coding candidates in shared audit"
           git push origin HEAD:content/quality-completion
