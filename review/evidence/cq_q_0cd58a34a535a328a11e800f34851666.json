@@ -1,0 +1,127 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_0cd58a34a535a328a11e800f34851666",
+  "candidate_sha256": "33e5ee18afcd0eae0475961233671199a6effa521f81b6065b65806ac1e25943",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-array-reverse-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-note-684031c5-structured",
+      "title": "Structured interview note containing the array reversal prompt",
+      "locator": "note_structured/684031c5000000002300f808.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "xhs-question-0cd58a34",
+      "title": "Tagged repository question record for array reversal",
+      "locator": "note_tagged/684031c5000000002300f808.json#question_id=0cd58a34a535a328a11e800f34851666",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "array-reverse-validation",
+      "title": "Deterministic Java validation against independent reverse-index mapping",
+      "locator": "review/content_build/answer_batch_0013/cq_q_0cd58a34a535a328a11e800f34851666/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The recovered source says only array reversal and does not specify whether the input may be mutated, whether a new array is required, the element type, or null behavior; the candidate states those missing constraints instead of inventing them.",
+      "source_ids": ["xhs-note-684031c5-structured", "xhs-question-0cd58a34"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "in-place-contract",
+      "text": "Under the explicitly chosen mutable-array contract, swapping symmetric positions with left and right pointers until left >= right produces the reverse order in place.",
+      "source_ids": ["array-reverse-validation"],
+      "answer_locations": ["核心结论", "1 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "loop-invariant",
+      "text": "After each in-place swap, the newly consumed left and right positions equal their final reverse-index values, so the processed prefix and suffix remain correct while the unprocessed interval strictly shrinks.",
+      "source_ids": ["array-reverse-validation"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "claim_id": "copy-contract",
+      "text": "When mutation is disallowed, a separate result array using result[i] = input[n-1-i] preserves the source array and returns the same reversed sequence.",
+      "source_ids": ["array-reverse-validation"],
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "Both variants inspect or place O(n) elements; the in-place variant uses O(1) additional space, while the copy variant uses O(n) result space.",
+      "source_ids": ["array-reverse-validation"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+    },
+    {
+      "claim_id": "deterministic-validation",
+      "text": "Fixed cases and 5000 fixed-seed arrays match an independent reverse-index oracle; reversing in place twice restores the original array, the copy variant leaves its input unchanged, and the implementation's explicit null fail-fast choice is tested.",
+      "source_ids": ["array-reverse-validation"],
+      "answer_locations": ["原理机制", "常见追问", "关键细节"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "0cd58a34a535a328a11e800f34851666",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "javac ReverseArray.java ReverseArrayTest.java && java ReverseArrayTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=7 randomized=5000 oracle=index-mapping involution=true null=fail-fast",
+    "checks": [
+      "empty, singleton, odd, even, duplicate, and integer-boundary fixed inputs",
+      "5000 fixed-seed arrays match an independent n-1-i index oracle",
+      "two in-place reversals restore the original array",
+      "copy variant does not mutate its source",
+      "null behavior is an explicit implementation choice and fails fast"
+    ],
+    "boundary_tests": [
+      {"case": "empty and singleton arrays", "expected": "unchanged and valid", "passed": true},
+      {"case": "odd-length array", "expected": "center element remains at its reverse-mapped position", "passed": true},
+      {"case": "5000 fixed-seed random arrays", "expected": "both implementations equal independent reverse-index mapping", "passed": true},
+      {"case": "reverse twice", "expected": "original array is restored", "passed": true},
+      {"case": "copy variant", "expected": "source remains unchanged", "passed": true}
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-array-reverse-20260821",
+    "review_version": "array-reverse.contract-and-invariant.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The source boundary is preserved: the prompt is only array reversal, so mutation, output allocation, element type, and null handling are not falsely attributed to the interview source.",
+      "The candidate gives a directly usable in-place two-pointer solution and separately handles the non-mutating contract instead of conflating the two APIs.",
+      "The loop invariant establishes why each symmetric swap fixes two final positions and why odd-length centers need no action.",
+      "The validation oracle is based on independent reverse-index mapping rather than duplicating the swap implementation.",
+      "The reverse-twice involution check and copy-no-mutation check cover useful behavioral properties beyond example cases.",
+      "The null fail-fast behavior is explicitly labeled as an implementation decision outside the recovered source contract.",
+      "No project or production claims are fabricated.",
+      "Required human approval remains a separate promotion gate."
+    ]
+  }
+}
