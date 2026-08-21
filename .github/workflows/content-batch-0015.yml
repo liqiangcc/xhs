@@ -24,6 +24,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Go 1.26.6
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.6'
+
       - name: Validate reverse-between candidate fixture
         working-directory: review/content_build/answer_batch_0015/cq_q_12ddfcc24143adac1b20b63f547516e7
         run: |
@@ -93,6 +98,36 @@ jobs:
             --require-code \
             --noWrite
 
+      - name: Validate ordered goroutine candidate fixture
+        working-directory: review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2
+        run: |
+          go test -race -count=20 OrderedPrint.go OrderedPrint_test.go
+
+      - name: Verify ordered goroutine concurrency review
+        run: |
+          node - <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const candidatePath = 'review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md';
+          const reviewPath = 'review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2/concurrency_review_result.json';
+          const candidateHash = crypto.createHash('sha256').update(fs.readFileSync(candidatePath, 'utf8')).digest('hex');
+          const review = JSON.parse(fs.readFileSync(reviewPath, 'utf8'));
+          if (review.schema_version !== 'concurrency_review.v1') throw new Error('invalid concurrency review schema');
+          if (review.canonical_id !== 'cq_q_187c619f3c62046184546a4f04cc40f2') throw new Error('canonical mismatch');
+          if (review.candidate_sha256 !== candidateHash) throw new Error('candidate hash mismatch');
+          if (review.decision !== 'pass') throw new Error('concurrency review did not pass');
+          if (!Array.isArray(review.open_findings) || review.open_findings.length !== 0) throw new Error('open concurrency findings remain');
+          if (review.concurrency_model?.race_detector !== 'pass') throw new Error('race detector evidence missing');
+          NODE
+
+      - name: Audit completed ordered goroutine candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
       - name: Verify candidate inputs are immutable under validation
         run: |
           git diff --exit-code -- \
@@ -101,9 +136,11 @@ jobs:
             review/candidates/answers/cq_q_1547f601c5bd6746da03d6b3cc246ee8.md \
             review/candidates/answers/cq_q_17b558215583de1ad3b47eda00479a00.md \
             review/candidates/answers/cq_q_1b54beec356cebaa5bf68b8935cb9e0a.md \
+            review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md \
             review/content_build/answer_batch_0015 \
             review/evidence/cq_q_12ddfcc24143adac1b20b63f547516e7.json \
             review/evidence/cq_q_149617b44a4092a42317fcdc4912ca2d.json \
             review/evidence/cq_q_1547f601c5bd6746da03d6b3cc246ee8.json \
             review/evidence/cq_q_17b558215583de1ad3b47eda00479a00.json \
-            review/evidence/cq_q_1b54beec356cebaa5bf68b8935cb9e0a.json
+            review/evidence/cq_q_1b54beec356cebaa5bf68b8935cb9e0a.json \
+            review/evidence/cq_q_187c619f3c62046184546a4f04cc40f2.json

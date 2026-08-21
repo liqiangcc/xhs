@@ -1,0 +1,46 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_187c619f3c62046184546a4f04cc40f2",
+  "candidate_sha256": "057741b01f037aa4caac0aad4f39d4c02d4e98e650ca0c8e9e5391d2df8e56e6",
+  "reviewed_at": "2026-08-22",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-go-ordered-print-20260822",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "note_desc/6878ac580000000010026c75.txt",
+    "review/content_build/answer_batch_0015/source_boundary_audit.md",
+    "https://go.dev/ref/mem",
+    "https://go.dev/ref/spec",
+    "https://go.dev/doc/effective_go",
+    "https://go.dev/wiki/CodeReviewComments",
+    "review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2/code_validation.json",
+    "review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2/concurrency_review_result.json"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 100
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The candidate answers the recovered Go coding prompt directly and does not reuse the irrelevant long-tail baseline.",
+    "It distinguishes recovered facts (Go context, 100 goroutines, ordered 1..100 output) from candidate API and synchronization choices.",
+    "The ordering argument is causal rather than scheduler-based: write(i) precedes send(i), channel synchronization precedes receive completion, and receive precedes write(i+1).",
+    "The implementation is runnable Go, the declared fixture passed repeated execution and the race detector, and writer-error behavior is exercised.",
+    "The answer explains completion and goroutine lifetime rather than only output order, which is necessary for a concurrent implementation.",
+    "Alternatives and failure boundaries are concrete: WaitGroup alone does not order work, sleep is not synchronization, and a permanently blocking Writer needs a different cancellation contract.",
+    "No production story, scheduler timing guarantee, or hidden requirement is fabricated.",
+    "The repository's generic Coding contract says Java, while this source is explicitly Go/goroutine-specific. Source-language fidelity is necessary to answer the Canonical; this exception remains visible to the required pilot human reviewer."
+  ],
+  "promotion_blockers": [
+    "human_approval_required_for_pilot_promotion"
+  ]
+}

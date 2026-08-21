@@ -1,0 +1,49 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_187c619f3c62046184546a4f04cc40f2",
+  "checked_at": "2026-08-22",
+  "language": "go",
+  "runtime": "Go 1.23.2 local pre-commit race validation; GitHub Actions pinned to Go 1.26.6",
+  "command": "go test -race -count=20 OrderedPrint.go OrderedPrint_test.go",
+  "result": "pass",
+  "stdout": "ok command-line-arguments",
+  "implementation_contract": {
+    "source_language": "Go (supported by the surrounding GMP/goroutine source context)",
+    "worker_count": 100,
+    "input": "io.Writer output sink; no runtime problem input",
+    "output": "integers 1 through 100, one per line, in strict ascending order",
+    "synchronization_choice": "one unbuffered predecessor/successor token channel per step",
+    "completion": "the caller waits for the final token before collecting write errors and returning",
+    "writer_error": "a returned Write error is reported after all workers finish; a Writer that blocks forever is outside this candidate contract"
+  },
+  "checks": [
+    "exact ordered output 1..100",
+    "50 repeated deterministic runs",
+    "writer error does not break the token chain",
+    "normal completion reaches the final token within the test timeout",
+    "Go race detector",
+    "100 fixed worker loop and 101 unbuffered token channels"
+  ],
+  "boundary_tests": [
+    {
+      "case": "normal output",
+      "expected": "exactly 100 ascending lines",
+      "passed": true
+    },
+    {
+      "case": "50 repeated runs",
+      "expected": "no scheduler-dependent reordering",
+      "passed": true
+    },
+    {
+      "case": "writer starts returning errors after 10 writes",
+      "expected": "function still terminates and returns non-nil error",
+      "passed": true
+    },
+    {
+      "case": "race detector over 20 test counts",
+      "expected": "no data race",
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_187c619f3c62046184546a4f04cc40f2",
+  "candidate_sha256": "057741b01f037aa4caac0aad4f39d4c02d4e98e650ca0c8e9e5391d2df8e56e6",
+  "checked_at": "2026-08-22",
+  "writer": {
+    "writer_id": "automation-content-builder-go-ordered-print-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-6878ac58",
+      "title": "Go interview note containing GMP/goroutine context and ordered-print prompt",
+      "locator": "note_desc/6878ac580000000010026c75.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "batch-0015-source-boundary-audit",
+      "title": "Answer Batch 0015 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0015/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "go-memory-model",
+      "title": "The Go Memory Model",
+      "locator": "https://go.dev/ref/mem",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "go-language-spec",
+      "title": "The Go Programming Language Specification",
+      "locator": "https://go.dev/ref/spec",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "effective-go-concurrency",
+      "title": "Effective Go — Concurrency",
+      "locator": "https://go.dev/doc/effective_go#concurrency",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "go-code-review-goroutine-lifetimes",
+      "title": "Go Wiki: Go Code Review Comments — Goroutine Lifetimes",
+      "locator": "https://go.dev/wiki/CodeReviewComments#goroutine-lifetimes",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "ordered-print-executable-validation",
+      "title": "Executable Go race and boundary validation for ordered printing",
+      "locator": "review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "ordered-print-concurrency-review",
+      "title": "Source-first concurrency review for ordered goroutine token chain",
+      "locator": "review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2/concurrency_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "ordered-print-isolated-review",
+      "title": "Source-first isolated answer review for ordered goroutine printing",
+      "locator": "review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recovered source is in a Go GMP/goroutine interview context and asks for 100 goroutines to print 1 through 100 in order.",
+      "source_ids": [
+        "xhs-raw-note-6878ac58",
+        "batch-0015-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "channel-synchronization",
+      "text": "Go channel communication establishes synchronization between the send and its corresponding receive, allowing the predecessor write, token send, successor receive and successor write to form a transitive ordering chain.",
+      "source_ids": [
+        "go-memory-model",
+        "ordered-print-concurrency-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "unbuffered-rendezvous",
+      "text": "A zero-capacity or capacity-omitted Go channel is unbuffered and communication succeeds only when both sender and receiver are ready.",
+      "source_ids": [
+        "go-language-spec",
+        "effective-go-concurrency"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "goroutine-lifetime",
+      "text": "Concurrent Go code should make goroutine exit conditions clear because goroutines blocked on channel operations can leak; the candidate's final-token wait makes the normal completion boundary explicit.",
+      "source_ids": [
+        "go-code-review-goroutine-lifetimes",
+        "ordered-print-concurrency-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "项目经验版",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "fixture-result",
+      "text": "The candidate implementation produced exact ordered output across repeated runs, terminated after writer errors, and passed Go's race detector in the declared executable fixture.",
+      "source_ids": [
+        "ordered-print-executable-validation"
+      ],
+      "answer_locations": [
+        "项目经验版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "187c619f3c62046184546a4f04cc40f2",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "go test -race -count=20 OrderedPrint.go OrderedPrint_test.go",
+    "result": "pass",
+    "reported_stdout": "ok command-line-arguments",
+    "runtime": "Go 1.23.2 local pre-commit; CI pinned to Go 1.26.6",
+    "checks": [
+      "exact ordered 1..100 output",
+      "repeated scheduler-independent output",
+      "writer-error termination",
+      "normal completion",
+      "race detector"
+    ],
+    "boundary_tests": [
+      {
+        "case": "normal output",
+        "expected": "exactly 100 ascending lines",
+        "passed": true
+      },
+      {
+        "case": "50 repeated runs",
+        "expected": "no scheduler-dependent reordering",
+        "passed": true
+      },
+      {
+        "case": "writer starts returning errors after 10 writes",
+        "expected": "function still terminates and returns non-nil error",
+        "passed": true
+      },
+      {
+        "case": "race detector over 20 test counts",
+        "expected": "no data race",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-go-ordered-print-20260822",
+    "review_version": "go-ordered-print.token-chain.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "revision_suggestions": [],
+    "findings": [
+      "The candidate answers the recovered Go coding prompt directly and does not reuse the irrelevant long-tail baseline.",
+      "It distinguishes recovered facts (Go context, 100 goroutines, ordered 1..100 output) from candidate API and synchronization choices.",
+      "The ordering argument is causal rather than scheduler-based: write(i) precedes send(i), channel synchronization precedes receive completion, and receive precedes write(i+1).",
+      "The implementation is runnable Go, the declared fixture passed repeated execution and the race detector, and writer-error behavior is exercised.",
+      "The answer explains completion and goroutine lifetime rather than only output order, which is necessary for a concurrent implementation.",
+      "Alternatives and failure boundaries are concrete: WaitGroup alone does not order work, sleep is not synchronization, and a permanently blocking Writer needs a different cancellation contract.",
+      "No production story, scheduler timing guarantee, or hidden requirement is fabricated.",
+      "The repository's generic Coding contract says Java, while this source is explicitly Go/goroutine-specific. Source-language fidelity is necessary to answer the Canonical; this exception remains visible to the required pilot human reviewer."
+    ]
+  }
+}
