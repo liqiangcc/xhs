@@ -74,8 +74,8 @@ test('answer audit recognizes and syntax-checks JavaScript coding fences when re
         assert.equal(report.candidate_count, 1);
         assert.equal(report.rows.length, 1);
         assert.equal(report.rows[0].errors.some((row) => row.error === 'coding_block_required'), false);
+        assert.equal(report.rows[0].errors.some((row) => row.error === 'js_validation_failed'), false);
         assert.equal(report.rows[0].hard_failures.includes('placeholder_implementation'), false);
-        assert.equal(report.rows[0].hard_failures.includes('unrunnable_implementation'), false);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
@@ -88,6 +88,7 @@ test('answer audit reports invalid JavaScript syntax as an unrunnable implementa
         fs.writeFileSync(candidatePath, broken, 'utf8');
         const report = runAnswerAudit({ root, candidate: candidatePath, noWrite: true, 'require-code': true });
         assert.equal(report.candidate_count, 1);
+        assert.equal(report.rows[0].errors.some((row) => row.error === 'js_validation_failed'), true);
         assert.equal(report.rows[0].hard_failures.includes('unrunnable_implementation'), true);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
