@@ -1,0 +1,112 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_q_70e4f9bc6af634f5bddb7c39b36cf798",
+  "candidate": {
+    "path": "review/candidates/answers/cq_q_70e4f9bc6af634f5bddb7c39b36cf798.md",
+    "sha256": "c9663d78208c10543df80c5cb4886ade5ec075c7eb75fb6095d84d24461119f7",
+    "version": 1,
+    "answer_type": "coding"
+  },
+  "reviewed_at": "2026-08-21",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-go-alternating-print-20260821",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "coding",
+    "historical_source_labels": ["并发手撕", "Go/PHP 后端面试"],
+    "reason": "The restored source asks for a concrete Go concurrency implementation using two goroutines to alternately print 1 through 100; the expected artifact is executable synchronization code plus ordering/deadlock/race reasoning."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "Original restored interview note 6846a62900000000210185f6",
+      "locator": "note_structured/6846a62900000000210185f6.json",
+      "verified_claims": [
+        "The source asks: 使用两个协程（Goroutines）交替打印 1-100.",
+        "The source context is a Go/PHP backend interview, so a Go implementation is the correct language boundary."
+      ]
+    },
+    {
+      "title": "The Go Programming Language Specification",
+      "locator": "https://go.dev/ref/spec",
+      "verified_claims": [
+        "A go statement starts a function call as an independently executing goroutine.",
+        "Channels created with make support send and receive; a channel may be used by multiple goroutines for communication.",
+        "A channel with capacity one can hold the single initial turn token without requiring a simultaneous receiver."
+      ]
+    },
+    {
+      "title": "The Go Memory Model",
+      "locator": "https://go.dev/ref/mem",
+      "verified_claims": [
+        "Channel operations are synchronization operations.",
+        "A send on a channel is synchronized before completion of its corresponding receive, which supports the candidate's cross-goroutine ordering argument.",
+        "Programs with shared mutable data should serialize access using channels or other synchronization primitives."
+      ]
+    },
+    {
+      "title": "sync package documentation",
+      "locator": "https://pkg.go.dev/sync",
+      "verified_claims": [
+        "WaitGroup.Wait blocks until the task counter reaches zero.",
+        "Done decrements the task counter.",
+        "Positive Add calls that start from a zero counter should occur before Wait and are typically issued before starting the goroutine being waited for.",
+        "WaitGroup.Go was added in Go 1.25, so Add/Done remains the more backward-compatible interview form."
+      ]
+    },
+    {
+      "title": "Deterministic Go race/order validation",
+      "locator": "review/content_build/answer_batch_0012/cq_q_70e4f9bc6af634f5bddb7c39b36cf798/code_validation.json",
+      "verified_claims": [
+        "The exact implementation and test bytes pass go test -race under Go 1.23.2 in an isolated module.",
+        "The test repeats the exercise 100 times and checks every output position is exactly 1 through 100.",
+        "No race is reported and no run deadlocks."
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 100
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "note",
+      "id": "GO-ALT-001",
+      "finding": "The candidate answers the source in Go rather than reusing the repository's old Java placeholder, preserving the language-specific Goroutine/channel boundary."
+    },
+    {
+      "severity": "note",
+      "id": "GO-ALT-002",
+      "finding": "The two turn channels encode a single-token invariant, so each output is preceded by an explicit handoff instead of relying on scheduler timing or sleep."
+    },
+    {
+      "severity": "note",
+      "id": "GO-ALT-003",
+      "finding": "The terminal condition is correct: after printing 100, the even worker does not send another odd token, avoiding the classic final-send deadlock."
+    },
+    {
+      "severity": "note",
+      "id": "GO-ALT-004",
+      "finding": "WaitGroup is correctly separated from ordering: Add/Done/Wait control completion while channel communication controls turn order."
+    },
+    {
+      "severity": "note",
+      "id": "GO-ALT-005",
+      "finding": "The reproducible test checks exact sequence across 100 runs and enables the Go race detector; this materially exceeds one-shot visual output checking."
+    }
+  ],
+  "decision": "pass",
+  "promotion_allowed": false,
+  "human_review_state": "required_before_promotion",
+  "next_required_action": "Bind this fixed candidate SHA to answer evidence, run the repository deterministic candidate audit/coding gate, then obtain the required human approval before atomic promotion. Do not fabricate approval or promote the formal answer before that gate."
+}
