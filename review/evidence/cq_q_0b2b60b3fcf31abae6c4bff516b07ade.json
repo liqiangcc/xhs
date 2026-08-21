@@ -1,0 +1,197 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_0b2b60b3fcf31abae6c4bff516b07ade",
+  "candidate_sha256": "2fac69eb75f82a9034fff6da5f459ed3e54a5e8416862788126edacc50ba79ae",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-path-sum-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-note-686cf6ea-structured",
+      "title": "Structured interview note containing the binary-tree Path Sum prompt",
+      "locator": "note_structured/686cf6ea000000001c03308d.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "xhs-question-0b2b60b3",
+      "title": "Tagged repository question record mapping Path Sum to LeetCode 112",
+      "locator": "note_tagged/686cf6ea000000001c03308d.json#question_id=0b2b60b3fcf31abae6c4bff516b07ade",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "leetcode-112-official",
+      "title": "LeetCode 112 Path Sum official problem page",
+      "locator": "https://leetcode.com/problems/path-sum/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "path-sum-validation",
+      "title": "Deterministic Java validation against independent root-to-leaf sum enumeration",
+      "locator": "review/content_build/answer_batch_0013/cq_q_0b2b60b3fcf31abae6c4bff516b07ade/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary-and-mapping",
+      "text": "The recovered interview note names only Path Sum, while the tagged repository record maps this question to LeetCode 112; the candidate makes that mapping explicit instead of silently conflating Path Sum variants.",
+      "source_ids": [
+        "xhs-note-686cf6ea-structured",
+        "xhs-question-0b2b60b3"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "leetcode-112-contract",
+      "text": "Under LeetCode 112 semantics, the result is true only when a root-to-leaf path has values summing to targetSum, and a leaf has no children.",
+      "source_ids": [
+        "leetcode-112-official"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "empty-and-negative-boundaries",
+      "text": "The official 112 constraints allow an empty tree and negative node values; therefore empty input has no root-to-leaf path and monotonic sum pruning is invalid in general.",
+      "source_ids": [
+        "leetcode-112-official",
+        "path-sum-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "implementation-contract",
+      "text": "The exact Java implementation provides recursive residual-sum DFS and an equivalent explicit-stack DFS, and both enforce success only at leaves.",
+      "source_ids": [
+        "path-sum-validation"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "independent-oracle",
+      "text": "The deterministic fixture compares both implementations with a structurally different BFS enumeration of all root-to-leaf path sums on 3000 fixed-seed random trees and separately verifies a 5000-node deep chain with the iterative implementation.",
+      "source_ids": [
+        "path-sum-validation"
+      ],
+      "answer_locations": [
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "Both implementations visit each reachable tree node at most once; recursive state occupies O(h) call-stack space and iterative state occupies O(h) explicit-stack space in the worst case.",
+      "source_ids": [
+        "path-sum-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "0b2b60b3fcf31abae6c4bff516b07ade",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac PathSum.java PathSumTest.java && java PathSumTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=7 randomized=3000 oracle=root-to-leaf-sum-enumeration deep_iterative=5000",
+    "checks": [
+      "root-to-leaf leaf-only contract on fixed examples",
+      "empty and negative-value boundaries",
+      "3000 fixed-seed trees match independent BFS path-sum enumeration",
+      "5000-node deep chain succeeds with explicit-stack implementation"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty tree with target zero",
+        "expected": "false because no root-to-leaf path exists",
+        "passed": true
+      },
+      {
+        "case": "internal prefix equals target but node is not a leaf",
+        "expected": "false because LeetCode 112 requires the path to end at a leaf",
+        "passed": true
+      },
+      {
+        "case": "negative-valued root-to-leaf path",
+        "expected": "matching negative sum is accepted without monotonic pruning",
+        "passed": true
+      },
+      {
+        "case": "3000 fixed-seed random trees",
+        "expected": "recursive and iterative results equal independent BFS root-to-leaf sum enumeration",
+        "passed": true
+      },
+      {
+        "case": "5000-node single chain",
+        "expected": "iterative implementation finds the leaf-only sum without relying on JVM recursion depth",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-path-sum-20260821",
+    "review_version": "path-sum.leetcode-112-boundary.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate preserves the source boundary: the interview note itself says only Path Sum, and the LeetCode 112 contract is adopted because the repository tagged record explicitly supplies that mapping.",
+      "The leaf-only success condition is stated before the implementation and covered by a non-leaf-prefix regression case.",
+      "Negative input values are handled without an invalid monotonic pruning assumption.",
+      "The randomized oracle enumerates completed root-to-leaf sums with BFS rather than reproducing the residual-sum recursion.",
+      "The iterative variant covers the deep-tree operational boundary without claiming JVM recursion depth is guaranteed by the algorithmic contract.",
+      "Path Sum II and Path Sum III are distinguished as different contracts rather than silently mixed into the answer.",
+      "No production experience or project metrics are fabricated.",
+      "Required human approval remains a separate promotion gate."
+    ]
+  }
+}
