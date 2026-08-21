@@ -1,0 +1,128 @@
+name: Remediate Content Go Answer Audit on PR
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.6'
+          cache: false
+
+      - name: Patch shared Go answer audit support
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/lib/answer_quality.js')
+          text = path.read_text()
+
+          if '(java|sql|javascript|js|go)' not in text:
+              old = '(java|sql|javascript|js)'
+              if old not in text:
+                  raise SystemExit('extractCodeBlocks language group not found')
+              text = text.replace(old, '(java|sql|javascript|js|go)', 1)
+
+          if 'function compileGo(code)' not in text:
+              marker = '\nfunction parseSql(code) {'
+              if marker not in text:
+                  raise SystemExit('parseSql insertion point not found')
+              compile_go = r'''
+
+function compileGo(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-go-'));
+    try {
+        const filePath = path.join(tempDir, 'answer.go');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('go', ['test', filePath], {
+            encoding: 'utf8',
+            timeout: 10000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'go_not_available' };
+        if (result.error) return { ok: false, error: 'go_compile_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'go_compile_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 1200),
+            };
+        }
+        return { ok: true };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+'''
+              text = text.replace(marker, compile_go + marker, 1)
+
+          old_dispatch = """            const validation = block.language === 'java'
+                ? compileJava(block.code)
+                : block.language === 'sql'
+                    ? parseSql(block.code)
+                    : parseJavaScript(block.code);"""
+          if old_dispatch in text:
+              new_dispatch = """            const validation = block.language === 'java'
+                ? compileJava(block.code)
+                : block.language === 'sql'
+                    ? parseSql(block.code)
+                    : block.language === 'go'
+                        ? compileGo(block.code)
+                        : parseJavaScript(block.code);"""
+              text = text.replace(old_dispatch, new_dispatch, 1)
+          elif "block.language === 'go'" not in text:
+              raise SystemExit('coding validation dispatch not found')
+
+          selector = '(?:java|sql|javascript|js)'
+          if selector in text:
+              text = text.replace(selector, '(?:java|sql|javascript|js|go)', 1)
+          elif '(?:java|sql|javascript|js|go)' not in text:
+              raise SystemExit('require-code selector language group not found')
+
+          path.write_text(text)
+          PY
+
+      - name: Verify Go candidate through shared gate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Commit remediation to content branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- scripts/lib/answer_quality.js; then
+            echo 'Go answer-audit support already committed.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add scripts/lib/answer_quality.js
+          git diff --cached --check
+          git commit -m "fix(answer): support Go coding candidates in shared audit"
+          git push origin HEAD:content/quality-completion
