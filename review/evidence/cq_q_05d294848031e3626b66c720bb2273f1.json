@@ -1,10 +1,10 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_q_05d294848031e3626b66c720bb2273f1",
-  "candidate_sha256": "96270d73c995e300c3f92f5a5ae8e1bcdf52754ee11a5ca8ba6781605c54df03",
+  "candidate_sha256": "d504fdf1d4cb5b277fb3780de5952139d06e1b08fd3e4f113942e33ae6f97bbe",
   "checked_at": "2026-08-21",
   "writer": {
-    "writer_id": "automation-content-builder-parallel-independent-tasks-v1",
+    "writer_id": "automation-content-builder-parallel-independent-tasks-v2",
     "writer_version": "xhs-answer-curator.v1"
   },
   "sources": [
@@ -83,12 +83,13 @@
     },
     {
       "claim_id": "parallel-start-validation",
-      "text": "The exact implementation is tested with a three-thread executor and a start/release latch so all three tasks must enter before any can finish; the test also verifies aggregate completion, exceptional completion, sibling execution and null guards without relying on a fragile wall-clock speed threshold.",
+      "text": "The exact standalone ParallelIndependentTasks implementation is tested with a three-thread executor and a start/release latch so all three tasks must enter before any can finish; the test also verifies aggregate completion, exceptional completion, sibling execution and null guards without relying on a fragile wall-clock speed threshold.",
       "source_ids": [
         "parallel-independent-tasks-validation"
       ],
       "answer_locations": [
         "3 分钟版",
+        "Java 复习实现",
         "关键细节",
         "项目经验版"
       ]
@@ -150,11 +151,11 @@
   },
   "review_state": "independent_source_first_review_passed",
   "review": {
-    "reviewer_id": "source-first-isolated-reviewer-parallel-independent-tasks-20260821",
-    "review_version": "parallel-independent-tasks.completablefuture-jdk21.v1",
+    "reviewer_id": "source-first-isolated-reviewer-parallel-independent-tasks-standalone-20260821",
+    "review_version": "parallel-independent-tasks.completablefuture-jdk21.standalone.v2",
     "independent": true,
     "decision": "pass",
-    "revision_round": 1,
+    "revision_round": 2,
     "scores": {
       "facts_and_evidence": 25,
       "directness_and_relevance": 20,
@@ -172,6 +173,8 @@
       "It keeps the approximately-10-second parallel critical-path result conditional on executor capacity and absence of another shared serial bottleneck, instead of presenting it as a guaranteed SLA.",
       "CompletableFuture runAsync/allOf and exception behavior are grounded in current Java SE 21 API documentation.",
       "The deterministic latch test proves concurrent entry without using a flaky elapsed-time assertion and separately verifies exceptional completion.",
+      "Only the complete ParallelIndependentTasks compilation unit is marked as an auditable Java block; short caller fragments remain clearly illustrative text and no longer masquerade as standalone compilation units.",
+      "The authoritative Java block compiles standalone and matches the implementation exercised by the repository concurrency fixture.",
       "Executor ownership and lifecycle boundaries are stated explicitly; the candidate does not prescribe per-request pool creation as production practice.",
       "No project metric or production outcome is fabricated; required human approval remains a separate promotion gate."
     ]
