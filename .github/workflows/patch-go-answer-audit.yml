@@ -41,11 +41,10 @@ jobs:
           path = Path('scripts/lib/answer_quality.js')
           text = path.read_text()
 
-          old = r"const regex = /(?:```|~~~)(java|sql|javascript|js)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
-          new = r"const regex = /(?:```|~~~)(java|sql|javascript|js|go)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
+          old = '(java|sql|javascript|js)'
           if old not in text:
-              raise SystemExit('extractCodeBlocks language regex not found')
-          text = text.replace(old, new, 1)
+              raise SystemExit('extractCodeBlocks language group not found')
+          text = text.replace(old, '(java|sql|javascript|js|go)', 1)
 
           marker = '\nfunction parseSql(code) {'
           if marker not in text:
@@ -78,33 +77,32 @@ function compileGo(code) {
 '''
           text = text.replace(marker, compile_go + marker, 1)
 
-          old = """            const validation = block.language === 'java'
+          old_dispatch = """            const validation = block.language === 'java'
                 ? compileJava(block.code)
                 : block.language === 'sql'
                     ? parseSql(block.code)
                     : parseJavaScript(block.code);"""
-          new = """            const validation = block.language === 'java'
+          new_dispatch = """            const validation = block.language === 'java'
                 ? compileJava(block.code)
                 : block.language === 'sql'
                     ? parseSql(block.code)
                     : block.language === 'go'
                         ? compileGo(block.code)
                         : parseJavaScript(block.code);"""
-          if old not in text:
+          if old_dispatch not in text:
               raise SystemExit('coding validation dispatch not found')
-          text = text.replace(old, new, 1)
+          text = text.replace(old_dispatch, new_dispatch, 1)
 
-          old = r"if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js)\\b/i.test(answer.content)) return false;"
-          new = r"if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js|go)\\b/i.test(answer.content)) return false;"
-          if old not in text:
-              raise SystemExit('require-code selector not found')
-          text = text.replace(old, new, 1)
+          selector = '(?:java|sql|javascript|js)'
+          if selector not in text:
+              raise SystemExit('require-code selector language group not found')
+          text = text.replace(selector, '(?:java|sql|javascript|js|go)', 1)
           path.write_text(text)
 
           test_path = Path('test/answer_candidate.test.js')
           tests = test_path.read_text()
-          marker = "test('require-code accepts and compiles a Go coding candidate'"
-          if marker not in tests:
+          test_marker = "test('require-code accepts and compiles a Go coding candidate'"
+          if test_marker not in tests:
               tests += r'''
 
 test('require-code accepts and compiles a Go coding candidate', () => {
@@ -121,19 +119,23 @@ test('require-code accepts and compiles a Go coding candidate', () => {
     const candidateDir = path.join(root, 'review', 'candidates', 'answers');
     ensureDir(candidateDir);
     const candidatePath = path.join(candidateDir, 'cq_go.md');
-    const content = [
+    const sections = ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '项目经验版', '常见追问', '易错点'];
+    const lines = [
         '<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_go","version":1,"status":"draft","quality_tier":"candidate","answer_type":"coding","updated_at":"2026-08-22"} -->',
         '# 100 个 goroutine 依次打印 1-100',
-        ...['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '项目经验版', '常见追问', '易错点'].flatMap((title) => ['', `## ${title}`, '', title === '3 分钟版' ? '```go\\npackage orderedprint\\nfunc Value() int { return 100 }\\n```' : `${title}的 Go 并发题目专属内容。`]),
-        '',
-    ].join('\\n');
-    fs.writeFileSync(candidatePath, content, 'utf8');
+    ];
+    for (const title of sections) {
+        lines.push('', `## ${title}`, '');
+        if (title === '3 分钟版') lines.push('```go', 'package orderedprint', 'func Value() int { return 100 }', '```');
+        else lines.push(`${title}的 Go 并发题目专属内容。`);
+    }
+    fs.writeFileSync(candidatePath, `${lines.join('\n')}\n`, 'utf8');
 
     const report = runAnswerAudit({ root, candidate: candidatePath, noWrite: true, 'require-code': true });
     assert.equal(report.candidate_count, 1);
     assert.equal(report.rows.length, 1);
     assert.equal(report.rows[0].errors.some((row) => row.error === 'coding_block_required'), false);
-    assert.equal(report.rows[0].errors.some((row) => row.error === 'go_compile_failed'), false);
+    assert.equal(report.rows[0].errors.some((row) => row.error === 'go_validation_failed'), false);
     assert.equal(report.rows[0].hard_failures.includes('placeholder_implementation'), false);
     fs.rmSync(root, { recursive: true, force: true });
 });
