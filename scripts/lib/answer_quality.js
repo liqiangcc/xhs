@@ -314,7 +314,7 @@ function validateAnswerEvidence(evidence, candidate, context, config) {
 
 function extractCodeBlocks(content) {
     const blocks = [];
-    const regex = /(?:```|~~~)(java|sql|javascript|js)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
+    const regex = /(?:```|~~~)(java|sql|javascript|js|go)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
     let match;
     while ((match = regex.exec(content))) blocks.push({ language: match[1].toLowerCase(), code: match[2].trim() });
     return blocks;
@@ -343,6 +343,31 @@ function parseJavaScript(code) {
         return { ok: true };
     } catch (error) {
         return { ok: false, error: String(error.stderr || error.message || 'javascript_syntax_error').trim() };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+
+function compileGo(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-go-'));
+    try {
+        const filePath = path.join(tempDir, 'answer.go');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('go', ['test', filePath], {
+            encoding: 'utf8',
+            timeout: 10000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'go_not_available' };
+        if (result.error) return { ok: false, error: 'go_compile_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'go_compile_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 1200),
+            };
+        }
+        return { ok: true };
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -410,7 +435,9 @@ function validateSpecializedCandidate(candidate, evidence, context) {
                 ? compileJava(block.code)
                 : block.language === 'sql'
                     ? parseSql(block.code)
-                    : parseJavaScript(block.code);
+                    : block.language === 'go'
+                        ? compileGo(block.code)
+                        : parseJavaScript(block.code);
             if (!validation.ok) {
                 addHardFailure(hardFailures, /placeholder|required/.test(validation.error || '') ? 'placeholder_implementation' : 'unrunnable_implementation');
                 errors.push({ error: `${block.language}_validation_failed`, detail: validation.error });
@@ -572,7 +599,7 @@ function runAnswerAudit(options = {}) {
         const title = (answer.content.match(/^#\s+(.+)$/m) || [])[1] || answer.metadata.canonical_id;
         if (types.size && !types.has(answer.metadata.answer_type || inferAnswerType([], { canonical_title: title }))) return false;
         if (setIds && !setIds.has(answer.metadata.canonical_id)) return false;
-        if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js)\b/i.test(answer.content)) return false;
+        if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js|go)\b/i.test(answer.content)) return false;
         return true;
     });
     const rows = selectedPaths.map((filePath) => auditOneCandidate(filePath, { ...options, allowFormal: options.tier === 'curated' })).filter((row) => {
