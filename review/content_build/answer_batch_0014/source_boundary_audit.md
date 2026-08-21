@@ -22,17 +22,19 @@ This audit is intentionally source-first. It records what the repository source 
 
 - Source: `note_structured/67e1143d000000001d0387d5.json` and `note_tagged/67e1143d000000001d0387d5.json`.
 - Recovered wording: `算法：难度为 Easy/Medium 的题目。`
+- Raw-source check: `note_desc/67e1143d000000001d0387d5.txt` contains only topic hashtags and therefore does not recover any hidden coding statement beneath the structured/tagged summary. No repository-local text inspected in this source chain supplies an input/output contract, operation, objective, example, or named problem.
 - Boundary result: **not a recoverable coding question**. It describes only the difficulty/category of an unspecified algorithm question and preserves no problem statement, input/output, operation, objective, example, or named problem that could identify the missing contract.
 - Quality finding: the tagged source currently marks this record `is_valid_for_library=true`, and a Canonical plus placeholder answer were created from it. That conflicts with the content SSOT rule that only real, recoverable questions remain valid.
-- Required remediation: reclassify the Question SSOT record as invalid with `exclusion_reason=not_a_question` (or another repository-approved reason only if later source evidence shows the actual problem text), clear/remove its Canonical assignment according to the canonical maintenance procedure, and remove/retire the orphan Canonical/Answer/ReviewProgress atomically. Do **not** write a fabricated coding answer for this item.
+- Required remediation: reclassify the Question SSOT record as invalid with `exclusion_reason=not_a_question`, clear/remove its Canonical assignment according to the canonical maintenance procedure, and remove/retire the orphan Canonical/Answer/ReviewProgress atomically. Do **not** write a fabricated coding answer for this item.
 
 ## `cq_q_0f228d6d7628cae5c8a2b224451eb8f2`
 
-- Source: `note_structured/6744571d00000000060179e9.json`.
-- Recovered wording: `算法：智能水龙头流量控制算法（逻辑设计/实现）`.
+- Source: `note_structured/6744571d00000000060179e9.json`, `note_desc/6744571d00000000060179e9.txt`, and the embedded note text in `note_json/6744571d00000000060179e9.json`.
+- Recovered wording: the raw note itself says only `算法：智能水龙头`; the structured layer expands the label to `算法：智能水龙头流量控制算法（逻辑设计/实现）` but does not add a recoverable contract.
+- Raw-source check: the surrounding first-round note lists project discussion, a privacy-compliance scenario, then exactly `算法：智能水龙头`; it immediately proceeds to the second-round list. There are no omitted parameters, examples, constraints, or follow-up lines describing the algorithm.
 - Boundary result: the topic is identifiable, but the actual algorithm contract is **not recoverable** from the stored source. There is no definition of sensors/inputs, actuator/output, flow objective, time model, safety constraints, target volume/rate, feedback behavior, or examples. Many mutually incompatible algorithms could fit this label.
-- Required remediation: do not promote a candidate that invents control rules. Unless an earlier/raw source can recover the missing contract, classify the underlying Question as `incomplete_or_unreadable`, record why the problem cannot be reconstructed, and retire the resulting orphan Canonical/Answer/ReviewProgress through the supported atomic maintenance flow.
+- Required remediation: classify the underlying Question as `incomplete_or_unreadable`, record that the raw stored note contains only the label and cannot reconstruct the problem, and retire the resulting orphan Canonical/Answer/ReviewProgress through the supported atomic maintenance flow. Do **not** promote a candidate that invents control rules.
 
 ## Gate impact
 
-Batch 0014 cannot be treated as “10 coding answers to fill”. At least two entries already fail the source-boundary gate and need Question/Canonical remediation instead of answer generation. This is required by C7/C8/C9 final DoD: true questions must be fully reachable; extraction/meta/incomplete records must have explicit exclusion reasons rather than synthetic answers.
+Batch 0014 cannot be treated as “10 coding answers to fill”. Two entries have now been checked through the repository-local raw source and fail the source-boundary gate; they need Question/Canonical remediation instead of answer generation. This is required by C7/C8/C9 final DoD: true questions must be fully reachable; extraction/meta/incomplete records must have explicit exclusion reasons rather than synthetic answers.
