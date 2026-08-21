@@ -65,5 +65,12 @@ jobs:
         working-directory: review/content_build/answer_batch_0013/cq_q_08a054b37d559194555ce32cf4b65130
         run: node formatBankCardNumberTest.js
 
+      - name: Audit Path Sum candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0b2b60b3fcf31abae6c4bff516b07ade.md --require-evidence --require-code --noWrite
+
+      - name: Run Path Sum fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_0b2b60b3fcf31abae6c4bff516b07ade
+        run: javac PathSum.java PathSumTest.java && java PathSumTest
+
       - name: Verify no generated changes
         run: git diff --exit-code
