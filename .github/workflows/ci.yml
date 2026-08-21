@@ -68,6 +68,22 @@ jobs:
       - name: Audit batch 0011 swap-nodes-in-pairs candidate
         run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0fdff883609d352de9fa841f0a635925.md --require-evidence --require-code --noWrite
 
+      - name: Capture short-video audit diagnostics
+        if: always()
+        run: |
+          mkdir -p short-video-diagnostics
+          cp review/candidates/answers/cq_short_video_bcbcf234.md short-video-diagnostics/candidate.md
+          cp review/evidence/cq_short_video_bcbcf234.json short-video-diagnostics/evidence.json
+          sha256sum review/candidates/answers/cq_short_video_bcbcf234.md > short-video-diagnostics/candidate.sha256
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_short_video_bcbcf234.md --require-evidence --noWrite > short-video-diagnostics/audit.json || true
+
+      - name: Upload short-video audit diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: short-video-audit-diagnostics
+          path: short-video-diagnostics
+
       - name: Capture batch 0011 audit diagnostics
         if: always()
         run: |
