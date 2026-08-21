@@ -1,0 +1,89 @@
+name: Fix JavaScript answer audit
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch JavaScript coding audit support
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('scripts/lib/answer_quality.js')
+          text = path.read_text()
+
+          old = "const regex = /(?:```|~~~)(java|sql)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
+          new = "const regex = /(?:```|~~~)(java|sql|javascript|js)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
+          if old not in text:
+              raise SystemExit('extractCodeBlocks pattern not found')
+          text = text.replace(old, new, 1)
+
+          marker = "function parseSql(code) {"
+          if marker not in text:
+              raise SystemExit('parseSql marker not found')
+          js_validator = """function parseJavaScript(code) {
+              const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-node-check-'));
+              try {
+                  const filePath = path.join(tempDir, 'candidate.js');
+                  fs.writeFileSync(filePath, code, 'utf8');
+                  childProcess.execFileSync(process.execPath, ['--check', filePath], { stdio: 'pipe' });
+                  return { ok: true };
+              } catch (error) {
+                  return { ok: false, error: String(error.stderr || error.message || 'javascript_syntax_error').trim() };
+              } finally {
+                  fs.rmSync(tempDir, { recursive: true, force: true });
+              }
+          }
+
+          """
+          text = text.replace(marker, js_validator + marker, 1)
+
+          old_dispatch = "const validation = block.language === 'java' ? compileJava(block.code) : parseSql(block.code);"
+          new_dispatch = "const validation = block.language === 'java'\n                ? compileJava(block.code)\n                : block.language === 'sql'\n                    ? parseSql(block.code)\n                    : parseJavaScript(block.code);"
+          if old_dispatch not in text:
+              raise SystemExit('code validation dispatch not found')
+          text = text.replace(old_dispatch, new_dispatch, 1)
+
+          old_filter = "if (options['require-code'] && !/(?:```|~~~)(?:java|sql)\\b/i.test(answer.content)) return false;"
+          new_filter = "if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js)\\b/i.test(answer.content)) return false;"
+          if old_filter not in text:
+              raise SystemExit('require-code filter not found')
+          text = text.replace(old_filter, new_filter, 1)
+
+          path.write_text(text)
+
+      - name: Run focused regression tests
+        run: node --test test/answer_javascript_audit.test.js test/answer_candidate.test.js test/answer_code_validation.test.js
+
+      - name: Re-run Promise.all candidate audit
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0758303ae6a5334a56c9c6239f2787ab.md --require-evidence --require-code --noWrite
+
+      - name: Run Promise.all deterministic fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_0758303ae6a5334a56c9c6239f2787ab
+        run: node promise_all_test.js
+
+      - name: Commit bounded fix and remove migration workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-audit-fix-bot
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/fix-js-answer-audit.yml
+          git add scripts/lib/answer_quality.js test/answer_javascript_audit.test.js
+          git commit -m "fix: audit JavaScript coding candidates"
+          git pull --rebase origin content/quality-completion
+          git push origin HEAD:content/quality-completion
