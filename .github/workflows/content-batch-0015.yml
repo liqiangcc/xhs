@@ -66,13 +66,28 @@ jobs:
             --require-code \
             --noWrite
 
+      - name: Validate per-day Top 2 SQL candidate fixture
+        working-directory: review/content_build/answer_batch_0015/cq_q_17b558215583de1ad3b47eda00479a00
+        run: |
+          python3 Top2PerDayTest.py
+
+      - name: Audit completed per-day Top 2 SQL candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_17b558215583de1ad3b47eda00479a00.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
       - name: Verify candidate inputs are immutable under validation
         run: |
           git diff --exit-code -- \
             review/candidates/answers/cq_q_12ddfcc24143adac1b20b63f547516e7.md \
             review/candidates/answers/cq_q_149617b44a4092a42317fcdc4912ca2d.md \
             review/candidates/answers/cq_q_1547f601c5bd6746da03d6b3cc246ee8.md \
+            review/candidates/answers/cq_q_17b558215583de1ad3b47eda00479a00.md \
             review/content_build/answer_batch_0015 \
             review/evidence/cq_q_12ddfcc24143adac1b20b63f547516e7.json \
             review/evidence/cq_q_149617b44a4092a42317fcdc4912ca2d.json \
-            review/evidence/cq_q_1547f601c5bd6746da03d6b3cc246ee8.json
+            review/evidence/cq_q_1547f601c5bd6746da03d6b3cc246ee8.json \
+            review/evidence/cq_q_17b558215583de1ad3b47eda00479a00.json
