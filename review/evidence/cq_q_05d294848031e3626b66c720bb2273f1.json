@@ -1,0 +1,179 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_05d294848031e3626b66c720bb2273f1",
+  "candidate_sha256": "96270d73c995e300c3f92f5a5ae8e1bcdf52754ee11a5ca8ba6781605c54df03",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-parallel-independent-tasks-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-67f50f4b",
+      "title": "Meituan interview image text containing the independent A/B/C optimization problem",
+      "locator": "note_img_txt/67f50f4b000000000f032e63.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "xhs-tagged-question-67f50f4b",
+      "title": "Structured repository question for parallelizing independent A/B/C methods",
+      "locator": "note_tagged/67f50f4b000000000f032e63.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "jdk21-completablefuture",
+      "title": "Java SE 21 CompletableFuture API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "jdk21-executorservice",
+      "title": "Java SE 21 ExecutorService API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "parallel-independent-tasks-validation",
+      "title": "Deterministic Java validation for concurrent start, join and failure propagation",
+      "locator": "review/content_build/answer_batch_0013/cq_q_05d294848031e3626b66c720bb2273f1/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The raw interview image text states that method a serially executes A, B and C, each takes about ten seconds, the three have no mutual dependency, and the goal is to improve execution efficiency by removing unnecessary serialization.",
+      "source_ids": [
+        "xhs-raw-note-67f50f4b",
+        "xhs-tagged-question-67f50f4b"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "runasync-executor",
+      "text": "Java SE 21 CompletableFuture.runAsync(Runnable, Executor) runs the action asynchronously using the supplied executor; asynchronous methods without an explicit executor use CompletableFuture's default asynchronous execution facility, commonly ForkJoinPool.commonPool().",
+      "source_ids": [
+        "jdk21-completablefuture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "allof-semantics",
+      "text": "CompletableFuture.allOf completes when all supplied futures complete, and if any child completes exceptionally the aggregate future also completes exceptionally with a CompletionException carrying a cause.",
+      "source_ids": [
+        "jdk21-completablefuture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "parallel-start-validation",
+      "text": "The exact implementation is tested with a three-thread executor and a start/release latch so all three tasks must enter before any can finish; the test also verifies aggregate completion, exceptional completion, sibling execution and null guards without relying on a fragile wall-clock speed threshold.",
+      "source_ids": [
+        "parallel-independent-tasks-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "executor-lifecycle",
+      "text": "ExecutorService exposes lifecycle methods such as shutdown; ownership determines who should close or shut down an executor, so the candidate distinguishes a locally owned example pool from container-managed/shared executors.",
+      "source_ids": [
+        "jdk21-executorservice"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "Java 复习实现"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "05d294848031e3626b66c720bb2273f1",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "Java 复习实现",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac ParallelIndependentTasks.java ParallelIndependentTasksTest.java && java ParallelIndependentTasksTest",
+    "result": "pass",
+    "reported_stdout": "PASS concurrent_start=3 join_completion=verified exceptional_completion=verified null_guards=verified",
+    "checks": [
+      "three independent tasks can all start before a shared release gate",
+      "aggregate future waits for all normal completions",
+      "child failure propagates as exceptional aggregate completion",
+      "independent sibling tasks still execute",
+      "null executor/task input rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "three tasks blocked after concurrent start",
+        "expected": "allOf not completed before release",
+        "passed": true
+      },
+      {
+        "case": "one child throws IllegalStateException('boom')",
+        "expected": "aggregate CompletionException cause is IllegalStateException('boom')",
+        "passed": true
+      },
+      {
+        "case": "null executor or any null task",
+        "expected": "NullPointerException",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-parallel-independent-tasks-20260821",
+    "review_version": "parallel-independent-tasks.completablefuture-jdk21.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate answers the source's actual optimization target by changing the dependency graph rather than discussing unrelated AQS internals.",
+      "It keeps the approximately-10-second parallel critical-path result conditional on executor capacity and absence of another shared serial bottleneck, instead of presenting it as a guaranteed SLA.",
+      "CompletableFuture runAsync/allOf and exception behavior are grounded in current Java SE 21 API documentation.",
+      "The deterministic latch test proves concurrent entry without using a flaky elapsed-time assertion and separately verifies exceptional completion.",
+      "Executor ownership and lifecycle boundaries are stated explicitly; the candidate does not prescribe per-request pool creation as production practice.",
+      "No project metric or production outcome is fabricated; required human approval remains a separate promotion gate."
+    ]
+  }
+}
