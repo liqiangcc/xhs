@@ -1,0 +1,26 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_22931d194fbc9e4559ca98bc675b3677",
+  "validated_at": "2026-08-23",
+  "runtime": "OpenJDK 21",
+  "command": "javac OddEvenMonotonicListSort.java OddEvenMonotonicListSortTest.java && java OddEvenMonotonicListSortTest",
+  "result": "pass",
+  "stdout": "PASS fixed=9 randomized=5000 oracle=full-sort identity=preserved",
+  "implementation_contract": {
+    "input": "singly linked int nodes; odd 1-based positions are nondecreasing and even 1-based positions are nonincreasing",
+    "mutation": "reuses the original nodes and rewires next pointers in place",
+    "result": "one globally nondecreasing list containing exactly the original nodes",
+    "null_and_single": "returned unchanged",
+    "duplicate_policy": "duplicates are allowed; on equal merge keys the odd-position sublist wins the tie"
+  },
+  "checks": [
+    "empty and single-node lists",
+    "two-node lists in already-sorted and cross-sublist order",
+    "eight-node canonical odd-ascending/even-descending interleave",
+    "duplicate values across and within sublists",
+    "negative values and integer extremes",
+    "output contains exactly the original node identities",
+    "output is acyclic and preserves node count",
+    "5000 deterministic randomized valid-input lists checked against an independent full-sort oracle"
+  ]
+}
