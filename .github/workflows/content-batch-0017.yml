@@ -38,9 +38,30 @@ jobs:
             --require-code \
             --noWrite
 
-      - name: Verify candidate inputs are immutable under validation
+      - name: Verify sorted-matrix candidate inputs are immutable under validation
         run: |
           git diff --exit-code -- \
             review/candidates/answers/cq_q_23224fdbc8bddfe239dc7f0da36fd480.md \
             review/content_build/answer_batch_0017/cq_q_23224fdbc8bddfe239dc7f0da36fd480 \
             review/evidence/cq_q_23224fdbc8bddfe239dc7f0da36fd480.json
+
+      - name: Validate spiral-traversal candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_2366a87ab109eca0a9aac3ebad1db2f9
+        run: |
+          javac SpiralMatrixTraversal.java SpiralMatrixTraversalTest.java
+          java SpiralMatrixTraversalTest
+
+      - name: Audit completed spiral-traversal candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_2366a87ab109eca0a9aac3ebad1db2f9.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify spiral-traversal candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_2366a87ab109eca0a9aac3ebad1db2f9.md \
+            review/content_build/answer_batch_0017/cq_q_2366a87ab109eca0a9aac3ebad1db2f9 \
+            review/evidence/cq_q_2366a87ab109eca0a9aac3ebad1db2f9.json
