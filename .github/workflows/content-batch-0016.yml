@@ -38,9 +38,26 @@ jobs:
             --require-code \
             --noWrite
 
+      - name: Validate mirror binary-tree candidate fixture
+        working-directory: review/content_build/answer_batch_0016/cq_q_21a9060b741ad865a51b0d12f1a80372
+        run: |
+          javac MirrorBinaryTree.java MirrorBinaryTreeTest.java
+          java MirrorBinaryTreeTest
+
+      - name: Audit completed mirror binary-tree candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_21a9060b741ad865a51b0d12f1a80372.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
       - name: Verify candidate inputs are immutable under validation
         run: |
           git diff --exit-code -- \
             review/candidates/answers/cq_q_1f1bcfca5e814405d8f577ae7f3bab1e.md \
             review/content_build/answer_batch_0016/cq_q_1f1bcfca5e814405d8f577ae7f3bab1e \
-            review/evidence/cq_q_1f1bcfca5e814405d8f577ae7f3bab1e.json
+            review/evidence/cq_q_1f1bcfca5e814405d8f577ae7f3bab1e.json \
+            review/candidates/answers/cq_q_21a9060b741ad865a51b0d12f1a80372.md \
+            review/content_build/answer_batch_0016/cq_q_21a9060b741ad865a51b0d12f1a80372 \
+            review/evidence/cq_q_21a9060b741ad865a51b0d12f1a80372.json
