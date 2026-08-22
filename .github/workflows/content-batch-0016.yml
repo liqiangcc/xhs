@@ -66,6 +66,20 @@ jobs:
             --require-code \
             --noWrite
 
+      - name: Validate odd/even monotonic-list candidate fixture
+        working-directory: review/content_build/answer_batch_0016/cq_q_22931d194fbc9e4559ca98bc675b3677
+        run: |
+          javac OddEvenMonotonicListSort.java OddEvenMonotonicListSortTest.java
+          java OddEvenMonotonicListSortTest
+
+      - name: Audit completed odd/even monotonic-list candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_22931d194fbc9e4559ca98bc675b3677.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
       - name: Verify candidate inputs are immutable under validation
         run: |
           git diff --exit-code -- \
@@ -77,4 +91,7 @@ jobs:
             review/evidence/cq_q_21a9060b741ad865a51b0d12f1a80372.json \
             review/candidates/answers/cq_q_2252853d112b2d159896cf5fb9f0a32b.md \
             review/content_build/answer_batch_0016/cq_q_2252853d112b2d159896cf5fb9f0a32b \
-            review/evidence/cq_q_2252853d112b2d159896cf5fb9f0a32b.json
+            review/evidence/cq_q_2252853d112b2d159896cf5fb9f0a32b.json \
+            review/candidates/answers/cq_q_22931d194fbc9e4559ca98bc675b3677.md \
+            review/content_build/answer_batch_0016/cq_q_22931d194fbc9e4559ca98bc675b3677 \
+            review/evidence/cq_q_22931d194fbc9e4559ca98bc675b3677.json
