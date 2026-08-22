@@ -65,3 +65,24 @@ jobs:
             review/candidates/answers/cq_q_2366a87ab109eca0a9aac3ebad1db2f9.md \
             review/content_build/answer_batch_0017/cq_q_2366a87ab109eca0a9aac3ebad1db2f9 \
             review/evidence/cq_q_2366a87ab109eca0a9aac3ebad1db2f9.json
+
+      - name: Validate power-of-two-reduction candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_24dba68ff950ae9989f218f7f4e3d55d
+        run: |
+          javac MinPowerOfTwoOperations.java MinPowerOfTwoOperationsTest.java
+          java MinPowerOfTwoOperationsTest
+
+      - name: Audit completed power-of-two-reduction candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_24dba68ff950ae9989f218f7f4e3d55d.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify power-of-two-reduction candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_24dba68ff950ae9989f218f7f4e3d55d.md \
+            review/content_build/answer_batch_0017/cq_q_24dba68ff950ae9989f218f7f4e3d55d \
+            review/evidence/cq_q_24dba68ff950ae9989f218f7f4e3d55d.json
