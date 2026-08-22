@@ -1,0 +1,354 @@
+name: Build Content Batch 0018 Multiply Strings
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Write source-bounded candidate and fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cid = 'cq_q_297402fd71887dbeb07d182f057a1858'
+          root = Path('review/content_build/answer_batch_0018') / cid
+          root.mkdir(parents=True, exist_ok=True)
+          Path('review/candidates/answers').mkdir(parents=True, exist_ok=True)
+
+          answer = r'''<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_297402fd71887dbeb07d182f057a1858","version":1,"status":"draft","updated_at":"2026-08-23","quality_tier":"candidate","answer_type":"coding"} -->
+          # 大数相乘：显式采用十进制非负数字符串 API 的竖式乘法
+
+          ## 核心结论
+
+          仓库原始面经只保留了“算法：大数相乘”。它没有保存输入类型、进制、符号、前导零、是否禁用大整数库或具体语言。因此这里**不把熟悉的在线判题题面当作原题**；候选明确选择一个可验证的接口：输入两个只含十进制数字的非空字符串，允许前导零，输出规范化的十进制乘积字符串；负号、小数点、空串和其他字符拒绝。实现本身不使用 `BigInteger`，而是模拟竖式乘法；`BigInteger` 只在测试夹具里作为独立 oracle。
+
+          对长度分别为 `m`、`n` 的两个数字，最多需要 `m+n` 个十进制位。把每一对数字位的乘积累加到结果数组的对应权位，再从低位向高位统一进位即可。时间复杂度 `O(m*n)`，结果数组额外空间 `O(m+n)`。
+
+          ## 1 分钟版
+
+          先把题源边界说清楚：原文只有“大数相乘”，所以我主动定义候选 API 为**非负十进制数字字符串**，不声称这是原题已经给出的条件。
+
+          算法就是竖式乘法。若左侧第 `i` 位和右侧第 `j` 位从高位开始编号，它们的乘积应该累加到结果数组 `i+j+1` 这个低位位置。所有位积累加完后，从数组末尾向前做一次 `carry = cell / 10`、`cell %= 10`，把进位加到前一格。最后跳过前导零；全零结果返回 `"0"`。
+
+          每个输入位对只处理一次，所以是 `O(m*n)`；数组长度 `m+n`，额外空间 `O(m+n)`。实现不用任意精度乘法库；测试会用 `BigInteger` 做 4000 组确定性随机差分验证。
+
+          ## 3 分钟版
+
+          设字符串 `a` 长度为 `m`，`b` 长度为 `n`。十进制第 `i`、`j` 位数字分别为 `x`、`y`。如果直接按竖式展开，`x*y` 对最终数值贡献的十进制权位恰好对应一个长度 `m+n` 的结果数组中的 `i+j+1` 位置。先不急着每次乘法都立刻进位，而是把所有 `x*y` 都累加到对应单元。
+
+          累加结束后，数组单元可能大于 9。此时从最低位往最高位扫描：对 `k` 从末尾到 1，执行 `result[k-1] += result[k] / 10`，再令 `result[k] %= 10`。因为所有更低位已经完成归一化，当前产生的进位只需要向左传播；最终每个位置都成为合法十进制数字。最高位也会被全部低位的进位汇总，且乘积最多 `m+n` 位，所以数组容量足够。
+
+          候选使用 `long[]` 存中间累加值，避免在合理内存范围内因为同一权位累加多个 `9*9` 而过早触发 `int` 溢出。接口先检查 `null`、空串和非数字字符。前导零不需要单独修改输入；生成结果时跳过数组前导零即可，因此 `"00012" * "003"` 返回 `"36"`。
+
+          正确性可以分两层看：第一层，每个输入数字位对的乘积都被放到与十进制权重一致的槽位，因此未归一化数组表示的总数值与数学乘积相同；第二层，从右向左把 `10*q+r` 替换为左侧增加 `q`、当前位保留 `r`，不会改变总数值。两步合起来得到正确乘积。
+
+          ## 关键细节
+
+          - **题源边界**：原始材料只有“大数相乘”；十进制字符串、非负、输出字符串都是候选 API 选择，不冒充来源事实。
+          - **输入契约**：两个输入必须非 `null`、非空且每个字符都在 `0..9`；否则抛 `IllegalArgumentException`。
+          - **前导零**：允许输入有前导零，输出统一去除；全零结果只返回一个 `0`。
+          - **不使用大整数库实现**：生产实现只做字符转数字、位积累加和进位。
+          - **测试 oracle 独立**：测试代码用 `java.math.BigInteger` 计算预期结果，这与被测实现的内部算法不同。
+          - **中间存储**：用 `long[]` 而非 `int[]`，降低单一权位大量累加时的溢出风险；实际可接受最大长度仍受 JVM 数组内存限制。
+          - **复杂度**：双层循环处理 `m*n` 个位对，进位和输出各 `O(m+n)`，总时间 `O(m*n)`、额外空间 `O(m+n)`。
+          - **不修改输入**：Java `String` 本身不可变，被测方法只读取字符。
+
+          ## 原理机制
+
+          ```java
+          public final class MultiplyDecimalStrings {
+              private MultiplyDecimalStrings() {}
+
+              public static String multiply(String left, String right) {
+                  requireDigits(left, "left");
+                  requireDigits(right, "right");
+
+                  int m = left.length();
+                  int n = right.length();
+                  long[] digits = new long[m + n];
+
+                  for (int i = 0; i < m; i++) {
+                      int a = left.charAt(i) - '0';
+                      for (int j = 0; j < n; j++) {
+                          int b = right.charAt(j) - '0';
+                          digits[i + j + 1] += (long) a * b;
+                      }
+                  }
+
+                  for (int k = digits.length - 1; k > 0; k--) {
+                      digits[k - 1] += digits[k] / 10;
+                      digits[k] %= 10;
+                  }
+
+                  int first = 0;
+                  while (first < digits.length - 1 && digits[first] == 0) {
+                      first++;
+                  }
+                  StringBuilder out = new StringBuilder(digits.length - first);
+                  for (int i = first; i < digits.length; i++) {
+                      out.append((char) ('0' + digits[i]));
+                  }
+                  return out.toString();
+              }
+
+              private static void requireDigits(String value, String name) {
+                  if (value == null || value.isEmpty()) {
+                      throw new IllegalArgumentException(name + " must be a non-empty decimal string");
+                  }
+                  for (int i = 0; i < value.length(); i++) {
+                      char c = value.charAt(i);
+                      if (c < '0' || c > '9') {
+                          throw new IllegalArgumentException(name + " must contain only decimal digits");
+                      }
+                  }
+              }
+          }
+          ```
+
+          固定用例覆盖零、全前导零、单位元、单数字乘法、普通竖式、连续进位和较大九位数字；非法用例覆盖 `null`、空串、负号、小数点、空白与字母。随后用固定随机种子生成 4000 对 1～80 位十进制字符串（包含前导零），每一对都与 `BigInteger` 的结果比较，同时验证交换律。夹具成功时输出 `PASS fixed=14 randomized=4000 oracle=BigInteger commutative=true`。
+
+          ## 项目经验版
+
+          这是算法面试题，仓库来源没有生产项目背景，因此不编造项目经验。工程中若真要提供任意精度数值类型，还要单独决定符号、进制、规范化、超长输入的资源限制、乘法算法切换阈值（例如更大规模时是否采用更快算法）以及错误模型；这些都不属于当前来源已经给出的事实。
+
+          ## 常见追问
+
+          - 问：为什么结果数组长度是 `m+n`？答：两个 `m` 位和 `n` 位非负十进制整数的乘积最多 `m+n` 位；例如 `99*99=9801`。
+          - 问：为什么先累加再统一进位也正确？答：每个槽位代表固定十进制权重，先累加保留了完整数值；把某槽的 `10*q+r` 改写成前一槽加 `q`、当前槽留 `r` 只是十进制等值变换。
+          - 问：为什么测试可以用 `BigInteger`？答：限制针对被演示的实现；测试需要一个算法独立的 oracle，使用标准库大整数能降低“测试重复实现同一个 bug”的风险。
+          - 问：负数怎么办？答：原题源没有保存符号契约；当前候选明确只接受数字字符。若要支持符号，应在接口层先解析符号，再复用无符号核心并规范化 `-0`。
+          - 问：前导零怎么办？答：允许输入存在，结果构造时统一跳过前导零，全零保留一个 `0`。
+          - 问：能不能把字符串转成 `long` 再乘？答：那会重新引入固定宽度上限，失去“大数”场景的意义。
+
+          ## 易错点
+
+          - 看见“大数相乘”就把某个在线判题站的完整题面、数据范围和禁用规则当成仓库来源事实。
+          - 位权索引错一位，把 `i+j+1` 与进位位置混淆。
+          - 忘记处理全零结果，返回空串或多个零。
+          - 只在普通样例上测试，没有覆盖长进位链、前导零和非法字符。
+          - 被测实现和测试 oracle 都复制同一种竖式算法，导致同源 bug 无法被差分测试发现。
+          - 用固定宽度整数解析整个输入，使“大数”一旦超过 `long` 就失效。
+          '''
+          answer = '\n'.join(line[10:] if line.startswith('          ') else line for line in answer.splitlines()) + '\n'
+          Path('review/candidates/answers/' + cid + '.md').write_text(answer, encoding='utf-8')
+
+          impl = r'''public final class MultiplyDecimalStrings {
+              private MultiplyDecimalStrings() {}
+
+              public static String multiply(String left, String right) {
+                  requireDigits(left, "left");
+                  requireDigits(right, "right");
+
+                  int m = left.length();
+                  int n = right.length();
+                  long[] digits = new long[m + n];
+
+                  for (int i = 0; i < m; i++) {
+                      int a = left.charAt(i) - '0';
+                      for (int j = 0; j < n; j++) {
+                          int b = right.charAt(j) - '0';
+                          digits[i + j + 1] += (long) a * b;
+                      }
+                  }
+
+                  for (int k = digits.length - 1; k > 0; k--) {
+                      digits[k - 1] += digits[k] / 10;
+                      digits[k] %= 10;
+                  }
+
+                  int first = 0;
+                  while (first < digits.length - 1 && digits[first] == 0) {
+                      first++;
+                  }
+                  StringBuilder out = new StringBuilder(digits.length - first);
+                  for (int i = first; i < digits.length; i++) {
+                      out.append((char) ('0' + digits[i]));
+                  }
+                  return out.toString();
+              }
+
+              private static void requireDigits(String value, String name) {
+                  if (value == null || value.isEmpty()) {
+                      throw new IllegalArgumentException(name + " must be a non-empty decimal string");
+                  }
+                  for (int i = 0; i < value.length(); i++) {
+                      char c = value.charAt(i);
+                      if (c < '0' || c > '9') {
+                          throw new IllegalArgumentException(name + " must contain only decimal digits");
+                      }
+                  }
+              }
+          }
+          '''
+          impl = '\n'.join(line[10:] if line.startswith('          ') else line for line in impl.splitlines()) + '\n'
+          (root / 'MultiplyDecimalStrings.java').write_text(impl, encoding='utf-8')
+
+          test = r'''import java.math.BigInteger;
+          import java.util.Random;
+
+          public final class MultiplyDecimalStringsTest {
+              private static int fixedChecks;
+
+              public static void main(String[] args) {
+                  expect("0", "0", "0");
+                  expect("0000", "12345", "0");
+                  expect("1", "999999999999", "999999999999");
+                  expect("9", "9", "81");
+                  expect("123", "456", "56088");
+                  expect("999", "999", "998001");
+                  expect("123456789", "987654321", "121932631112635269");
+                  expectInvalid(null, "1");
+                  expectInvalid("1", null);
+                  expectInvalid("", "1");
+                  expectInvalid("1", "");
+                  expectInvalid("-1", "2");
+                  expectInvalid("1.5", "2");
+                  expectInvalid("12a3", "2");
+
+                  Random random = new Random(20260823L);
+                  int randomized = 4000;
+                  for (int i = 0; i < randomized; i++) {
+                      String left = randomDigits(random, 1 + random.nextInt(80));
+                      String right = randomDigits(random, 1 + random.nextInt(80));
+                      String expected = new BigInteger(left).multiply(new BigInteger(right)).toString();
+                      String actual = MultiplyDecimalStrings.multiply(left, right);
+                      if (!expected.equals(actual)) {
+                          throw new AssertionError("oracle mismatch: " + left + " * " + right
+                                  + " expected=" + expected + " actual=" + actual);
+                      }
+                      String reversed = MultiplyDecimalStrings.multiply(right, left);
+                      if (!actual.equals(reversed)) {
+                          throw new AssertionError("commutativity mismatch: " + left + " * " + right);
+                      }
+                  }
+                  System.out.println("PASS fixed=" + fixedChecks
+                          + " randomized=" + randomized
+                          + " oracle=BigInteger commutative=true");
+              }
+
+              private static void expect(String left, String right, String expected) {
+                  fixedChecks++;
+                  String actual = MultiplyDecimalStrings.multiply(left, right);
+                  if (!expected.equals(actual)) {
+                      throw new AssertionError(left + " * " + right + ": expected "
+                              + expected + " but got " + actual);
+                  }
+              }
+
+              private static void expectInvalid(String left, String right) {
+                  fixedChecks++;
+                  try {
+                      MultiplyDecimalStrings.multiply(left, right);
+                      throw new AssertionError("expected IllegalArgumentException for left=" + left
+                              + " right=" + right);
+                  } catch (IllegalArgumentException expected) {
+                      // expected
+                  }
+              }
+
+              private static String randomDigits(Random random, int length) {
+                  StringBuilder out = new StringBuilder(length);
+                  for (int i = 0; i < length; i++) {
+                      out.append((char) ('0' + random.nextInt(10)));
+                  }
+                  return out.toString();
+              }
+          }
+          '''
+          test = '\n'.join(line[10:] if line.startswith('          ') else line for line in test.splitlines()) + '\n'
+          (root / 'MultiplyDecimalStringsTest.java').write_text(test, encoding='utf-8')
+          PY
+
+      - name: Validate candidate implementation
+        id: validate
+        working-directory: review/content_build/answer_batch_0018/cq_q_297402fd71887dbeb07d182f057a1858
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac MultiplyDecimalStrings.java MultiplyDecimalStringsTest.java
+          stdout="$(java MultiplyDecimalStringsTest)"
+          echo "$stdout"
+          test "$stdout" = "PASS fixed=14 randomized=4000 oracle=BigInteger commutative=true"
+          printf '%s\n' "$stdout" > validation.stdout
+
+      - name: Record validation result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cid = 'cq_q_297402fd71887dbeb07d182f057a1858'
+          root = Path('review/content_build/answer_batch_0018') / cid
+          stdout = (root / 'validation.stdout').read_text(encoding='utf-8').strip()
+          payload = {
+              'schema_version': 'code_validation.v1',
+              'canonical_id': cid,
+              'validated_at': '2026-08-23',
+              'runtime': 'Temurin OpenJDK 21 (GitHub Actions)',
+              'command': 'javac MultiplyDecimalStrings.java MultiplyDecimalStringsTest.java && java MultiplyDecimalStringsTest',
+              'result': 'pass',
+              'stdout': stdout,
+              'implementation_contract': {
+                  'left': 'non-empty string containing only decimal digits; leading zeros allowed',
+                  'right': 'non-empty string containing only decimal digits; leading zeros allowed',
+                  'result': 'canonical nonnegative decimal product string with no leading zeros except 0',
+                  'invalid_input': 'null, empty or non-digit input throws IllegalArgumentException',
+                  'implementation_library_boundary': 'production implementation does not use arbitrary-precision multiplication',
+              },
+              'checks': [
+                  'zero and all-leading-zero normalization',
+                  'identity and single-digit multiplication',
+                  'carry chains including 999*999',
+                  'known 9-digit multiplication result',
+                  'null, empty, sign, decimal point and alphabetic rejection',
+                  '4000 deterministic random pairs of 1-80 digit decimal strings checked against java.math.BigInteger',
+                  'commutativity checked for every randomized pair',
+              ],
+          }
+          (root / 'code_validation.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          (root / 'validation.stdout').unlink()
+          PY
+
+      - name: Commit validated candidate fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          paths=(
+            review/candidates/answers/cq_q_297402fd71887dbeb07d182f057a1858.md
+            review/content_build/answer_batch_0018/cq_q_297402fd71887dbeb07d182f057a1858/MultiplyDecimalStrings.java
+            review/content_build/answer_batch_0018/cq_q_297402fd71887dbeb07d182f057a1858/MultiplyDecimalStringsTest.java
+            review/content_build/answer_batch_0018/cq_q_297402fd71887dbeb07d182f057a1858/code_validation.json
+          )
+          if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then
+            echo 'Validated candidate already matches repository state.'
+            exit 0
+          fi
+          git config user.name "xhs-content-builder-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add "${paths[@]}"
+          git diff --cached --check
+          git commit -m "content: stage batch 0018 multiply-strings candidate"
+          git push origin HEAD:content/quality-completion
