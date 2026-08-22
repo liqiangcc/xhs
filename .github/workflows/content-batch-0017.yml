@@ -86,3 +86,45 @@ jobs:
             review/candidates/answers/cq_q_24dba68ff950ae9989f218f7f4e3d55d.md \
             review/content_build/answer_batch_0017/cq_q_24dba68ff950ae9989f218f7f4e3d55d \
             review/evidence/cq_q_24dba68ff950ae9989f218f7f4e3d55d.json
+
+      - name: Validate rand39-to-rand51 candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_271dea4873c463bfe83f5ef2f5d26004
+        run: |
+          javac Rand39ToRand51.java Rand39ToRand51Test.java
+          java Rand39ToRand51Test
+
+      - name: Audit completed rand39-to-rand51 candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_271dea4873c463bfe83f5ef2f5d26004.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify rand39-to-rand51 candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_271dea4873c463bfe83f5ef2f5d26004.md \
+            review/content_build/answer_batch_0017/cq_q_271dea4873c463bfe83f5ef2f5d26004 \
+            review/evidence/cq_q_271dea4873c463bfe83f5ef2f5d26004.json
+
+      - name: Validate strict-double-index candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68
+        run: |
+          javac StrictDoubleDominantIndex.java StrictDoubleDominantIndexTest.java
+          java StrictDoubleDominantIndexTest
+
+      - name: Audit completed strict-double-index candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify strict-double-index candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68.md \
+            review/content_build/answer_batch_0017/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68 \
+            review/evidence/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68.json

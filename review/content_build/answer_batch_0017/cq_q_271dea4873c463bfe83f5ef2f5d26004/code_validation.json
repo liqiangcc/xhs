@@ -1,0 +1,24 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_271dea4873c463bfe83f5ef2f5d26004",
+  "validated_at": "2026-08-23",
+  "runtime": "OpenJDK 21.0.11",
+  "command": "javac Rand39ToRand51.java Rand39ToRand51Test.java && java Rand39ToRand51Test",
+  "result": "pass",
+  "stdout": "PASS exhaustive=1521 accepted=1479 rejected=42 perBucket=29 sampled=510000",
+  "implementation_contract": {
+    "source": "each rand39 call independently and uniformly returns an int in [0,38]",
+    "result": "an int in [0,50], uniformly distributed under the stated source contract",
+    "rejection": "samples 1479..1520 are discarded and a fresh two-draw round is started",
+    "invalid_source": "null is rejected; source values outside [0,38] throw IllegalStateException"
+  },
+  "checks": [
+    "all 1521 ordered rand39 input pairs enumerated",
+    "exact accepted-state count 1479 and rejected-state count 42",
+    "each of 51 output buckets has exactly 29 accepted preimages",
+    "implementation checked for every accepted pair",
+    "forced rejection then resampling path",
+    "null and out-of-range source handling",
+    "510000 deterministic samples from an iid seeded rand39 source stay in range and within a loose 5% frequency sanity bound"
+  ]
+}

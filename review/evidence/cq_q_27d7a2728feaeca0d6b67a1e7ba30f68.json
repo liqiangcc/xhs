@@ -1,0 +1,167 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_27d7a2728feaeca0d6b67a1e7ba30f68",
+  "candidate_sha256": "a9112e020a267f9b71cf7bab046d192547990c40ed216b9e0dcfa92193537a02",
+  "checked_at": "2026-08-23",
+  "writer": {
+    "writer_id": "automation-content-builder-strict-double-index-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-630e2e22",
+      "title": "Interview note containing the strict greater-than-twice array-index problem",
+      "locator": "note_desc/630e2e22000000001103c490.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "batch-0017-source-boundary-audit",
+      "title": "Answer Batch 0017 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0017/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "strict-double-index-validation",
+      "title": "Deterministic Java validation against a quadratic definition oracle",
+      "locator": "review/content_build/answer_batch_0017/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "strict-double-index-isolated-review",
+      "title": "Source-first isolated review for the strict double-dominant index candidate",
+      "locator": "review/content_build/answer_batch_0017/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source asks for an array index whose value is strictly greater than twice every other number, otherwise -1.",
+      "source_ids": [
+        "xhs-raw-note-630e2e22",
+        "batch-0017-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "max-other-reduction",
+      "text": "For each candidate index it is sufficient to compare with twice the maximum value among all other positions, and the top two positions provide that value in O(1) per candidate.",
+      "source_ids": [
+        "strict-double-index-validation",
+        "strict-double-index-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "arbitrary-int-boundary",
+      "text": "With arbitrary signed ints, a nonmaximum element can qualify and multiple indices can qualify; widened long multiplication preserves the strict predicate without overflow.",
+      "source_ids": [
+        "strict-double-index-validation",
+        "strict-double-index-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The Java implementation passes 16 fixed cases and 20000 deterministic random arbitrary-int arrays against a direct O(n^2) predicate oracle while preserving input.",
+      "source_ids": [
+        "strict-double-index-validation"
+      ],
+      "answer_locations": [
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "27d7a2728feaeca0d6b67a1e7ba30f68",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac StrictDoubleDominantIndex.java StrictDoubleDominantIndexTest.java && java StrictDoubleDominantIndexTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=16 randomized=20000 oracle=quadratic-definition input=unmodified",
+    "checks": [
+      "strict > boundary",
+      "negative and duplicate behavior",
+      "null/empty/singleton policies",
+      "int overflow boundaries",
+      "20000 random arrays",
+      "quadratic definition oracle",
+      "input immutability"
+    ],
+    "boundary_tests": [
+      {
+        "case": "[3,6,1]",
+        "expected": "-1 because 6 is equal to, not greater than, twice 3",
+        "passed": true
+      },
+      {
+        "case": "[-3,-2]",
+        "expected": "0 under first-qualifying-index policy",
+        "passed": true
+      },
+      {
+        "case": "[5,5,1]",
+        "expected": "-1 because the other maximum remains 5",
+        "passed": true
+      },
+      {
+        "case": "[Integer.MAX_VALUE, 1073741824]",
+        "expected": "-1 using widened arithmetic rather than overflowing 2*x",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-strict-double-index-20260823",
+    "review_version": "strict-double-index.max-other.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The source's strict comparison is preserved.",
+      "Missing domain and multiple-solution behavior are explicit candidate choices.",
+      "The optimized implementation is differentially checked against the quantified source predicate.",
+      "Formal promotion remains blocked only by the human-approval gate."
+    ]
+  }
+}
