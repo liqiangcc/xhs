@@ -24,13 +24,17 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
       - name: Retire source-ambiguous batch 0015 assets
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json
-          import os
           import pathlib
           import shutil
 
@@ -77,7 +81,6 @@ jobs:
               qid = canonical_id.removeprefix('cq_q_')
               canonical = canonical_by_id.get(canonical_id)
               if canonical is None:
-                  # Idempotent rerun: already retired is acceptable only if no active binding/answer/progress remains.
                   active_rows = [r for r in question_rows_by_id.get(qid, []) if r.get('canonical_id') == canonical_id]
                   if active_rows:
                       raise SystemExit(f'{canonical_id}: canonical missing but active question binding remains')
@@ -123,7 +126,6 @@ jobs:
                   decisions_by_ref[ref] = replacement
                   changed = True
 
-              # Remove the unsupported Canonical and its active review state.
               canonicals = [c for c in canonicals if c.get('canonical_id') != canonical_id]
               before_progress = len(progress.get('items', []))
               progress['items'] = [i for i in progress.get('items', []) if i.get('canonical_id') != canonical_id]
@@ -152,7 +154,6 @@ jobs:
           audit['audited_at'] = '2026-08-22'
           audit['include_count'] = sum(1 for d in decisions if d.get('decision') == 'include')
           audit['exclude_count'] = sum(1 for d in decisions if d.get('decision') == 'exclude')
-          # source_invalid_row_count is historical input metadata, not total current exclusions.
           write_json(audit_path, audit)
           write_jsonl(canonical_path, sorted(canonicals, key=lambda c: c['canonical_id']))
           progress['updated_at'] = '2026-08-22'
