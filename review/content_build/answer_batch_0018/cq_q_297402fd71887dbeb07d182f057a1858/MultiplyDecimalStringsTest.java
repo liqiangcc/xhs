@@ -23,48 +23,48 @@ public final class MultiplyDecimalStringsTest {
         Random random = new Random(20260823L);
         int randomized = 4000;
         for (int i = 0; i < randomized; i++) {
-  String left = randomDigits(random, 1 + random.nextInt(80));
-  String right = randomDigits(random, 1 + random.nextInt(80));
-  String expected = new BigInteger(left).multiply(new BigInteger(right)).toString();
-  String actual = MultiplyDecimalStrings.multiply(left, right);
-  if (!expected.equals(actual)) {
-      throw new AssertionError("oracle mismatch: " + left + " * " + right
-              + " expected=" + expected + " actual=" + actual);
-  }
-  String reversed = MultiplyDecimalStrings.multiply(right, left);
-  if (!actual.equals(reversed)) {
-      throw new AssertionError("commutativity mismatch: " + left + " * " + right);
-  }
+            String left = randomDigits(random, 1 + random.nextInt(80));
+            String right = randomDigits(random, 1 + random.nextInt(80));
+            String expected = new BigInteger(left).multiply(new BigInteger(right)).toString();
+            String actual = MultiplyDecimalStrings.multiply(left, right);
+            if (!expected.equals(actual)) {
+                throw new AssertionError("oracle mismatch: " + left + " * " + right
+                        + " expected=" + expected + " actual=" + actual);
+            }
+            String reversed = MultiplyDecimalStrings.multiply(right, left);
+            if (!actual.equals(reversed)) {
+                throw new AssertionError("commutativity mismatch: " + left + " * " + right);
+            }
         }
         System.out.println("PASS fixed=" + fixedChecks
-      + " randomized=" + randomized
-      + " oracle=BigInteger commutative=true");
+                + " randomized=" + randomized
+                + " oracle=BigInteger commutative=true");
     }
 
     private static void expect(String left, String right, String expected) {
         fixedChecks++;
         String actual = MultiplyDecimalStrings.multiply(left, right);
         if (!expected.equals(actual)) {
-  throw new AssertionError(left + " * " + right + ": expected "
-          + expected + " but got " + actual);
+            throw new AssertionError(left + " * " + right + ": expected "
+                    + expected + " but got " + actual);
         }
     }
 
     private static void expectInvalid(String left, String right) {
         fixedChecks++;
         try {
-  MultiplyDecimalStrings.multiply(left, right);
-  throw new AssertionError("expected IllegalArgumentException for left=" + left
-          + " right=" + right);
+            MultiplyDecimalStrings.multiply(left, right);
+            throw new AssertionError("expected IllegalArgumentException for left=" + left
+                    + " right=" + right);
         } catch (IllegalArgumentException expected) {
-  // expected
+            // expected
         }
     }
 
     private static String randomDigits(Random random, int length) {
         StringBuilder out = new StringBuilder(length);
         for (int i = 0; i < length; i++) {
-  out.append((char) ('0' + random.nextInt(10)));
+            out.append((char) ('0' + random.nextInt(10)));
         }
         return out.toString();
     }
