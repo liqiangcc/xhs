@@ -1,0 +1,137 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_1f1bcfca5e814405d8f577ae7f3bab1e",
+  "candidate_sha256": "a9b418439f36f4ca4ec2b523755a5274c6940891abddfaa53dd91edcf8c2e453",
+  "checked_at": "2026-08-23",
+  "writer": {
+    "writer_id": "automation-content-builder-file-top-k-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-681767b2",
+      "title": "Interview note containing the file-backed Top-10 question",
+      "locator": "note_desc/681767b20000000023014f2f.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "batch-0016-source-boundary-audit",
+      "title": "Answer Batch 0016 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0016/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "file-top-k-validation",
+      "title": "Deterministic Java validation against a full-sort-prefix oracle",
+      "locator": "review/content_build/answer_batch_0016/cq_q_1f1bcfca5e814405d8f577ae7f3bab1e/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "file-top-k-isolated-review",
+      "title": "Source-first isolated review for the file Top-K candidate",
+      "locator": "review/content_build/answer_batch_0016/cq_q_1f1bcfca5e814405d8f577ae7f3bab1e/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recovered source asks how to find the largest 10 numbers in a file of N numbers, while number format, duplicate semantics, malformed-row handling and N < 10 behavior are not preserved.",
+      "source_ids": ["xhs-raw-note-681767b2", "batch-0016-source-boundary-audit"],
+      "answer_locations": ["核心结论", "关键细节"]
+    },
+    {
+      "claim_id": "min-heap-invariant",
+      "text": "Maintaining at most K values in a min-heap and replacing the heap root only when a larger value arrives preserves the largest min(K, i) values of every processed input prefix.",
+      "source_ids": ["file-top-k-validation", "file-top-k-isolated-review"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "space-and-time",
+      "text": "The implementation scans the file once, performs at most one O(log K) heap update per value and retains at most K numeric candidates, giving O(N log K) time and O(K) candidate state.",
+      "source_ids": ["file-top-k-validation", "file-top-k-isolated-review"],
+      "answer_locations": ["核心结论", "关键细节", "常见追问"]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java implementation passes seven fixed boundary families and 5000 deterministic randomized files against a full-sort-prefix oracle, plus malformed-row and invalid-K fail-fast checks.",
+      "source_ids": ["file-top-k-validation"],
+      "answer_locations": ["原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "1f1bcfca5e814405d8f577ae7f3bab1e",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "javac FileTopK.java FileTopKTest.java && java FileTopKTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=7 randomized=5000 oracle=full-sort-prefix duplicate_semantics=occurrence-preserving",
+    "checks": [
+      "empty file, fewer-than-K and exactly-K inputs",
+      "duplicate values preserve multiplicity",
+      "negative values and signed-long extremes",
+      "blank and whitespace-padded lines",
+      "5000 deterministic randomized files against a full-sort-prefix oracle",
+      "malformed numeric row fail-fast behavior",
+      "k <= 0 fail-fast behavior"
+    ],
+    "boundary_tests": [
+      {
+        "case": "fewer than K values",
+        "expected": "return all valid values in descending order",
+        "passed": true
+      },
+      {
+        "case": "duplicate values",
+        "expected": "retain repeated occurrences when they belong to Top K",
+        "passed": true
+      },
+      {
+        "case": "malformed numeric row",
+        "expected": "fail fast with NumberFormatException under the candidate parsing policy",
+        "passed": true
+      },
+      {
+        "case": "large signed numeric boundaries",
+        "expected": "Long.MIN_VALUE and Long.MAX_VALUE compare correctly without arithmetic overflow",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-file-top-k-20260823",
+    "review_version": "file-top-k.min-heap.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate is source-bounded and separates recovered requirements from selected file/API policies.",
+      "The min-heap invariant and complexity claims match the Java implementation.",
+      "The independent oracle checks fixed edge cases and 5000 deterministic randomized inputs without reusing the heap algorithm.",
+      "Distinct-value semantics remain an explicit alternative policy instead of being silently imported into the source contract.",
+      "No unsupported production, online-judge or hidden-size claims were introduced.",
+      "Formal promotion remains blocked only by the pilot human-approval gate."
+    ]
+  }
+}
