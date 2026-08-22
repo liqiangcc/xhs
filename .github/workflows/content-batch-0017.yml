@@ -1,0 +1,46 @@
+name: Content Batch 0017
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate sorted-matrix candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_23224fdbc8bddfe239dc7f0da36fd480
+        run: |
+          javac SearchSortedMatrix.java SearchSortedMatrixTest.java
+          java SearchSortedMatrixTest
+
+      - name: Audit completed sorted-matrix candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_23224fdbc8bddfe239dc7f0da36fd480.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_23224fdbc8bddfe239dc7f0da36fd480.md \
+            review/content_build/answer_batch_0017/cq_q_23224fdbc8bddfe239dc7f0da36fd480 \
+            review/evidence/cq_q_23224fdbc8bddfe239dc7f0da36fd480.json
