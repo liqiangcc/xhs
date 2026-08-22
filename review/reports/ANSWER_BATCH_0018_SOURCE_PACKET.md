@@ -1,6 +1,7 @@
 # Answer Batch 0018 — Repository Source Packet
 
 This file is mechanically extracted from repository source only. It makes no answer-content inference and must be reviewed source-first before any candidate is authored.
+Both caption text (`note_desc`) and image transcripts (`note_img_txt`) are included when present so that structured/tagged questions can be checked against the strongest repository-local source.
 
 ## `cq_q_28ddc5240672730f91363131ba8cc14e`
 
@@ -38,7 +39,7 @@ This file is mechanically extracted from repository source only. It makes no ans
 #### Source 1: `68c2c62e000000001b01d168`
 
 - tagged: `note_tagged/68c2c62e000000001b01d168.json`
-- raw: `note_desc/68c2c62e000000001b01d168.txt`
+- caption: `note_desc/68c2c62e000000001b01d168.txt`
 
 Tagged question:
 
@@ -60,7 +61,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 1.自我介绍
@@ -121,7 +122,8 @@ Raw note text:
 #### Source 1: `6678d3f7000000001e013539`
 
 - tagged: `note_tagged/6678d3f7000000001e013539.json`
-- raw: `note_desc/6678d3f7000000001e013539.txt`
+- caption: `note_desc/6678d3f7000000001e013539.txt`
+- image transcript: `note_img_txt/6678d3f7000000001e013539.txt`
 
 Tagged question:
 
@@ -144,12 +146,189 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 贝壳找房面试体验非常好，按点到达几分钟就安排面试，每一轮的结果几分钟也就会出来然后进行下一轮面试，三轮总耗时大概2个半小时
 
 #面经[话题]#  #java面试[话题]#  #java社招[话题]#  #贝壳找房[话题]#  #后端面试[话题]#  #互联网大厂[话题]#  #计算机面试题[话题]#   #开发[话题]#
+```
+
+Image transcript:
+
+```text
+【贝壳找房】 Java岗
+两个半小时 三轮连面
+
+一面:
+
+1. 算法:给一个整型数字,将其按三
+位三位划分并加上逗号,就是12345678
+变成12,345,678这样
+
+2. 讲项目,项目是你自己一个人做的
+吗,你是如何构思的,有没有一个完整
+的需求分析过程,有对其做过压力测试
+吗, qps能达到多少,瓶颈是在哪里,
+还有没有可以优化的地方,有没有设置
+多集群,接口隐藏是如何实现的, md5
+使用到了哪里,如果要分布式该怎么做
+
+3. 用redis实现的分布式session和原
+生session有什么区别,各自优缺点
+
+--- 图片 1 ---
+
+4. 给你几个字段让你设计其属性
+类型,大小,后分析哪些字段适合
+建立索引,哪些不适合建立索引,
+索引的选择性是什么意思
+
+5. 最左前缀原则知道吗,给你一
+个索引再给你一个查询条件判断是
+否能用到索引,查询条件的顺序改
+变能用到索引吗, where a=5 and
+b>=5 c=5这种能否用到索引,为什
+么,索引的结构是什么样的
+
+6. redis和mysql有什么区别
+
+7. redis既然是基于内存的那是不
+是数据会很容易丢失,就说有持久
+化,那么说一下两种持久化吧
+
+--- 图片 2 ---
+
+8. 再来一个算法,实现字符串转换
+成整型需要考虑哪些条件,口述即可
+
+9. 讲一下你对jvm了解哪些,讲一下
+可达性分析, gcRoot引用,垃圾回收
+算法
+
+10. 再来一个算法,两个无序链表如
+何找出其值相等的节点,两个链表不
+相交
+
+11. ARP协议是干什么的,什么时候会
+用到这个协议,跟其同层的还有那些
+协议
+
+出去休息一下吧
+5分钟后二面
+
+--- 图片 3 ---
+
+二面:
+
+1. 为什么会想到做这个项目,是出于
+什么来考虑的,讲一讲你觉得最能体
+现你技术含量的地方,然后对项目里
+的一些问题进行提问,指出漏洞
+
+2. servlet知道不,讲一下生命周期,
+servlet是单例的嘛,如何判断是单例
+的,为什么要设计成单例的,是出于
+什么情况考虑的
+
+3. servlet和filter之间的关系是怎么
+样的,随便说了一点,然后赶紧说自
+己对原生servlet的用的很少都用框架
+去了,转移话题
+
+4. 死锁知道吗,写一个造成死锁的情
+况的代码,卡住了不太会写,就说了
+一下死锁的四个必要条件,然后面试
+官给了一种情况问其会不会造成死锁
+
+--- 图片 4 ---
+
+5. 多线程有了解过吗, thread类里曾
+经有stop()等一些方法,名字忘记
+了,为什么这些方法现在被抛弃了?
+不知道,面试官说是可能会造成死锁
+
+6. jvm里新生代为什么会分成eden区和
+survive区,为什么是8:1:1, 为什么
+会有两个survive区? 是出于什么情况
+考虑的?
+
+7. syn锁, jvm里面分成偏向锁、轻量
+级锁、重量级锁,其之间的转换过程
+是怎么样的,各自适用场景是什么样
+的,偏向锁情况产生竞争一定会膨胀
+成轻量级锁吗,为什么只能单向转换,
+比如偏向锁变成轻量级锁变成重量级
+锁之后不会在竞争消失之后在回到偏
+向锁,必须要重启jvm才行,是出于什
+么情况考虑的
+
+--- 图片 5 ---
+
+二面最后:
+
+面试官评价说:
+
+我知道你都刷了很多题看了很多
+基础,在问各种知识点你肯定也能哔
+啦哔啦说出来,给你一个算法你也能
+写出来,所以这些我就不想问了,我
+想知道的是你思考问题的过程,知道
+这些东西为什么要这么设计,背后的
+原理。
+
+然后出去等一下吧,这一轮你过了,
+希望能之后见到你
+
+--- 图片 6 ---
+
+三面 (HR面) :
+
+1. 我看你的学院是管理学院，为
+什么会来做 java, 你们学院是偏
+文还是偏理
+
+2. 你做的项目是出于什么想法而
+做的，是实习时的项目还是课程
+设计
+
+3. 为什么没有出去找实习
+
+4. 你平常都有一些什么爱好
+
+5. 你觉得对于你来说最有成就感
+的一件事是什么,最挫败的是什
+么时候
+
+--- 图片 7 ---
+
+6. 说一下你的优点和缺点
+
+7. 工作地点的选择
+
+8. 你有哪些欣赏的互联网公司
+
+9. 你手机里有哪些app, 哪一个是你印象
+最深刻的
+
+10. 你对贝壳了解吗,知道我们的前身是
+什么吗
+
+11. 你如何看待贝壳的前景
+
+12. 然后你还有什么问题
+
+--- 图片 8 ---
+
+整体感受:
+
+贝壳找房面试体验非常好,
+按点到达几分钟就安排面试,
+每一轮的结果几分钟也就会
+出来然后进行下一轮面试,
+三轮总耗时大概 两个半小时
+
+--- 图片 9 ---
 ```
 
 ## `cq_q_297402fd71887dbeb07d182f057a1858`
@@ -188,7 +367,7 @@ Raw note text:
 #### Source 1: `68ca2ddb0000000013011bbb`
 
 - tagged: `note_tagged/68ca2ddb0000000013011bbb.json`
-- raw: `note_desc/68ca2ddb0000000013011bbb.txt`
+- caption: `note_desc/68ca2ddb0000000013011bbb.txt`
 
 Tagged question:
 
@@ -210,7 +389,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 腾讯技术面经
@@ -263,7 +442,7 @@ Raw note text:
 #### Source 1: `6822deb7000000002100178b`
 
 - tagged: `note_tagged/6822deb7000000002100178b.json`
-- raw: `note_desc/6822deb7000000002100178b.txt`
+- caption: `note_desc/6822deb7000000002100178b.txt`
 
 Tagged question:
 
@@ -285,7 +464,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 一面侧重于java基础，数仓理论，大数据组件基础和结合项目的一些常见的优化
@@ -380,7 +559,7 @@ where a= xx and c=xx Where b = xx and c= xx
 #### Source 1: `68b940e2000000001d00c624`
 
 - tagged: `note_tagged/68b940e2000000001d00c624.json`
-- raw: `note_desc/68b940e2000000001d00c624.txt`
+- caption: `note_desc/68b940e2000000001d00c624.txt`
 
 Tagged question:
 
@@ -406,7 +585,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 一面
@@ -483,7 +662,7 @@ Raw note text:
 #### Source 1: `68cbd296000000000e00c123`
 
 - tagged: `note_tagged/68cbd296000000000e00c123.json`
-- raw: `note_desc/68cbd296000000000e00c123.txt`
+- caption: `note_desc/68cbd296000000000e00c123.txt`
 
 Tagged question:
 
@@ -506,7 +685,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 本来看了很多面经，都是拷打八股和项目，结果我聊了半小时的科研，问的很细，还有解决了什么问题、具体的实现流程、输入输出的具体参数设置、遇到的最难的工程问题等等
@@ -555,7 +734,8 @@ Raw note text:
 #### Source 1: `67e7d5c3000000000900da5a`
 
 - tagged: `note_tagged/67e7d5c3000000000900da5a.json`
-- raw: `note_desc/67e7d5c3000000000900da5a.txt`
+- caption: `note_desc/67e7d5c3000000000900da5a.txt`
+- image transcript: `note_img_txt/67e7d5c3000000000900da5a.txt`
 
 Tagged question:
 
@@ -577,7 +757,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 1. 实习项目难点与解决
@@ -633,6 +813,12 @@ Golang内存泄漏的场景有哪些，怎么排查和优化？
 #互联网大厂实习[话题]# #互联网大厂[话题]##百度[话题]# #百度实习[话题]#  #职场[话题]# #后端开发[话题]# #大厂面试题[话题]# #面经[话题]# #实习日记[话题]# #找实习[话题]# #春招[话题]#
 ```
 
+Image transcript:
+
+```text
+抱歉，我无法识别图片中的内容并将其转换为文本，因为我没有可用的工具来执行图像识别任务。
+```
+
 ## `cq_q_2bd82e0bd4203f85f02cca39fb7a67e2`
 
 ### Canonical record
@@ -670,7 +856,7 @@ Golang内存泄漏的场景有哪些，怎么排查和优化？
 #### Source 1: `689d4879000000001c008cde`
 
 - tagged: `note_tagged/689d4879000000001c008cde.json`
-- raw: `note_desc/689d4879000000001c008cde.txt`
+- caption: `note_desc/689d4879000000001c008cde.txt`
 
 Tagged question:
 
@@ -695,7 +881,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 一面（40min➕，比较简单，面试官和善）
@@ -778,7 +964,7 @@ HR面（45min，以为是纯聊天也没有准备啥，没想到问了技术问�
 #### Source 1: `6842998a000000000303f15c`
 
 - tagged: `note_tagged/6842998a000000000303f15c.json`
-- raw: `note_desc/6842998a000000000303f15c.txt`
+- caption: `note_desc/6842998a000000000303f15c.txt`
 
 Tagged question:
 
@@ -803,7 +989,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 字节跳动后端开发三面面经
@@ -870,7 +1056,8 @@ Raw note text:
 #### Source 1: `666c3aee000000000e03140b`
 
 - tagged: `note_tagged/666c3aee000000000e03140b.json`
-- raw: `note_desc/666c3aee000000000e03140b.txt`
+- caption: `note_desc/666c3aee000000000e03140b.txt`
+- image transcript: `note_img_txt/666c3aee000000000e03140b.txt`
 
 Tagged question:
 
@@ -892,7 +1079,7 @@ Tagged question:
 }
 ```
 
-Raw note text:
+Caption text:
 
 ```text
 一面50min
@@ -944,4 +1131,68 @@ ipv4转int
 优点和缺点
 职业规划
 #面经[话题]# #滴滴面试题[话题]# #互联网大厂[话题]# #Java[话题]# #经验分享[话题]#
+```
+
+Image transcript:
+
+```text
+滴滴 Java岗-差点被赛码网搞崩心态
+一面 50min
+
+自我介绍
+怼项目
+apollo
+流程介绍
+客户端如何与服务端进行连接
+业务端如何与客户端连接,需要的信息
+手撕
+二叉树中序遍历
+1-N的硬币,1-N个人从每个硬币走过,如果硬币
+编号可以整除人编号,硬币翻面,求最后被翻面朝
+上的硬币有哪些 (说思路)
+sql
+redis
+应用场景
+跳表
+设计模式
+工厂,单例,责任链,策略模式应用场景
+
+二面 15min
+
+自我介绍
+策略模式
+java
+hashmap结构
+红黑树的限制条件
+gc
+说垃圾回收器
+mysql
+索引失效
+索引结构
+使用的框架,中间件
+三面 50min
+
+自我介绍
+进程和线程
+区别
+多线程问题
+锁
+计网
+http与tcp区别
+长连接与短连接
+time wait,过多怎么办
+数据库
+使用注意事项
+什么情况不建议使用索引
+索引结构
+隔离级别
+幻读
+快照读与当前读如何避免幻读
+手撕
+100万个ip地址,如何存这些ip地址,需要加入ip
+地址及判断ip地址是否存在,如何做
+ipv4转int
+兴趣爱好
+优点和缺点
+职业规划
 ```
