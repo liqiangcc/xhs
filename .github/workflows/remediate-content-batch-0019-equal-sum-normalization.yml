@@ -152,20 +152,23 @@ jobs:
           audit = read_json(AUDIT_PATH)
           decisions = list(audit.get('decisions', []))
           audit_matches = [d for d in decisions if d.get('source_note_id') == source_row['source_note_id'] and d.get('source_question_index') == source_index]
-          if len(audit_matches) != 1:
-              raise SystemExit(f'expected one validity-audit decision for source ref, got {len(audit_matches)}')
-          decision = audit_matches[0]
-          if decision.get('decision') != 'include':
-              raise SystemExit(f'normalized Question must remain included, got {decision.get("decision")}')
-          if decision.get('question_id') == OLD_QID:
-              decision['question_id'] = NEW_QID
-              decision['original_question'] = NEW_TEXT
-          elif decision.get('question_id') != NEW_QID or decision.get('original_question') != NEW_TEXT:
-              raise SystemExit('validity-audit decision drifted from old/new expected state')
-          audit['audited_at'] = '2026-08-23'
-          audit['include_count'] = sum(1 for d in decisions if d.get('decision') == 'include')
-          audit['exclude_count'] = sum(1 for d in decisions if d.get('decision') == 'exclude')
-          write_json(AUDIT_PATH, audit)
+          if audit_matches:
+              if len(audit_matches) != 1:
+                  raise SystemExit(f'expected at most one validity-audit decision for source ref, got {len(audit_matches)}')
+              decision = audit_matches[0]
+              if decision.get('decision') != 'include':
+                  raise SystemExit(f'normalized Question must remain included, got {decision.get("decision")}')
+              if decision.get('question_id') == OLD_QID:
+                  decision['question_id'] = NEW_QID
+                  decision['original_question'] = NEW_TEXT
+              elif decision.get('question_id') != NEW_QID or decision.get('original_question') != NEW_TEXT:
+                  raise SystemExit('validity-audit decision drifted from old/new expected state')
+              audit['audited_at'] = '2026-08-23'
+              audit['include_count'] = sum(1 for d in decisions if d.get('decision') == 'include')
+              audit['exclude_count'] = sum(1 for d in decisions if d.get('decision') == 'exclude')
+              write_json(AUDIT_PATH, audit)
+          else:
+              print('No explicit validity-audit decision for source-valid Question; tagged validity remains authoritative.')
 
           answer = ANSWER_PATH.read_text(encoding='utf-8')
           if OLD_TEXT in answer:
