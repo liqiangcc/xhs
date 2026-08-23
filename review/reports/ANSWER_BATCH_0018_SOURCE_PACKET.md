@@ -3,6 +3,81 @@
 This file is mechanically extracted from repository source only. It makes no answer-content inference and must be reviewed source-first before any candidate is authored.
 Both caption text (`note_desc`) and image transcripts (`note_img_txt`) are included when present so that structured/tagged questions can be checked against the strongest repository-local source.
 
+## `cq_q_297402fd71887dbeb07d182f057a1858`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法手撕：大数相乘（Multiply Strings）。"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_297402fd71887dbeb07d182f057a1858",
+  "canonical_title": "算法手撕：大数相乘（Multiply Strings）。",
+  "companies": [
+    "腾讯"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "操作系统",
+    "l2": "其他"
+  },
+  "primary_entities": [
+    "字符串"
+  ],
+  "question_ids": [
+    "297402fd71887dbeb07d182f057a1858"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `68ca2ddb0000000013011bbb`
+
+- tagged: `note_tagged/68ca2ddb0000000013011bbb.json`
+- caption: `note_desc/68ca2ddb0000000013011bbb.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "297402fd71887dbeb07d182f057a1858",
+  "original_question": "算法手撕：大数相乘（Multiply Strings）。",
+  "domain": {
+    "l1": "计算机基础",
+    "l2": "算法"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L1_Principle",
+  "tech_entities": [
+    "字符串"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+腾讯技术面经
+1、自我介绍 3min
+2、讲讲Java、Python、Go三者区别
+3、Python比Java快吗，比Go快吗
+4、讲讲解释型语言和编译型语言的区别
+5、GMP模型
+6、Redis ： 一台机器256GB，很多台机器，一共有1T数据，怎么存
+7、Redis： 原来访问量1000w QPS，已经最高，现在2000w，怎么优化
+8、除了读写分离呢？（可以加资源）
+9、数组和链表的区别，体现在内存读取和cpu计算上
+算法：大数相乘
+#java面试[话题]# #java学习[话题]# #java[话题]# #后端开发[话题]# #计算机专业[话题]# #软件开发[话题]# #java八股文[话题]# #面经[话题]# #面试技巧[话题]# #java培训[话题]# #java白泽[话题]#
+```
+
 ## `cq_q_28ddc5240672730f91363131ba8cc14e`
 
 ### Canonical record
@@ -329,81 +404,6 @@ survive区,为什么是8:1:1, 为什么
 三轮总耗时大概 两个半小时
 
 --- 图片 9 ---
-```
-
-## `cq_q_297402fd71887dbeb07d182f057a1858`
-
-### Canonical record
-
-```json
-{
-  "aliases": [
-    "算法手撕：大数相乘（Multiply Strings）。"
-  ],
-  "answer_status": "needs_update",
-  "canonical_id": "cq_q_297402fd71887dbeb07d182f057a1858",
-  "canonical_title": "算法手撕：大数相乘（Multiply Strings）。",
-  "companies": [
-    "腾讯"
-  ],
-  "frequency": 1,
-  "primary_domain": {
-    "l1": "操作系统",
-    "l2": "其他"
-  },
-  "primary_entities": [
-    "字符串"
-  ],
-  "question_ids": [
-    "297402fd71887dbeb07d182f057a1858"
-  ],
-  "review_priority": "P2",
-  "schema_version": "canonical_question.v1"
-}
-```
-
-### Source hits (1)
-
-#### Source 1: `68ca2ddb0000000013011bbb`
-
-- tagged: `note_tagged/68ca2ddb0000000013011bbb.json`
-- caption: `note_desc/68ca2ddb0000000013011bbb.txt`
-
-Tagged question:
-
-```json
-{
-  "question_id": "297402fd71887dbeb07d182f057a1858",
-  "original_question": "算法手撕：大数相乘（Multiply Strings）。",
-  "domain": {
-    "l1": "计算机基础",
-    "l2": "算法"
-  },
-  "question_type": "算法手撕_Coding",
-  "cognitive_depth": "L1_Principle",
-  "tech_entities": [
-    "字符串"
-  ],
-  "business_context": [],
-  "is_valid_for_library": true
-}
-```
-
-Caption text:
-
-```text
-腾讯技术面经
-1、自我介绍 3min
-2、讲讲Java、Python、Go三者区别
-3、Python比Java快吗，比Go快吗
-4、讲讲解释型语言和编译型语言的区别
-5、GMP模型
-6、Redis ： 一台机器256GB，很多台机器，一共有1T数据，怎么存
-7、Redis： 原来访问量1000w QPS，已经最高，现在2000w，怎么优化
-8、除了读写分离呢？（可以加资源）
-9、数组和链表的区别，体现在内存读取和cpu计算上
-算法：大数相乘
-#java面试[话题]# #java学习[话题]# #java[话题]# #后端开发[话题]# #计算机专业[话题]# #软件开发[话题]# #java八股文[话题]# #面经[话题]# #面试技巧[话题]# #java培训[话题]# #java白泽[话题]#
 ```
 
 ## `cq_q_2979c00d6ff6c1582ecb289775522412`
