@@ -324,6 +324,127 @@ survive区,为什么是8:1:1, 为什么
 --- 图片 9 ---
 ```
 
+## `cq_q_2a97bfeb868fc672fcabeb1182608de4`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法：手写实现二叉树的右视图（Right Side View）"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_2a97bfeb868fc672fcabeb1182608de4",
+  "canonical_title": "算法：手写实现二叉树的右视图（Right Side View）",
+  "companies": [
+    "百度"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "算法与数据结构",
+    "l2": "树"
+  },
+  "primary_entities": [
+    "right side view"
+  ],
+  "question_ids": [
+    "2a97bfeb868fc672fcabeb1182608de4"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `67e7d5c3000000000900da5a`
+
+- tagged: `note_tagged/67e7d5c3000000000900da5a.json`
+- caption: `note_desc/67e7d5c3000000000900da5a.txt`
+- image transcript: `note_img_txt/67e7d5c3000000000900da5a.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "2a97bfeb868fc672fcabeb1182608de4",
+  "original_question": "算法：手写实现二叉树的右视图（Right Side View）",
+  "domain": {
+    "l1": "算法",
+    "l2": "树"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "right side view"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+1. 实习项目难点与解决
+问题背景+解决思路+最终效果
+
+2. Redis高并发优化
+项目中如何使用Redis的？现在如果并发很大，Redis扛不住的话可以怎么优化？
+
+3. 多层缓存一致性
+多层缓存的数据一致性怎么解决？还有其他方案吗？
+
+4. MySQL索引原理
+讲讲MySQL的索引的原理，其他引擎或者是其他数据库的索引有没有了解？
+
+5. MySQL主从延迟处理
+MySql主从同步有延迟应该怎么处理？
+
+6. MySQL查询压力优化
+如果MySQL查询压力大怎么做？
+
+7. 慢SQL排查与优化
+慢sql是怎么排查和优化的？
+
+8. 高效索引创建
+如何创建正确高效的索引？
+
+9. 大索引数据量问题
+索引数据量庞大会造成什么问题？从数据插入和更新的角度来说一下？
+
+10. RabbitMQ vs Kafka
+RabbitMQ跟Kafka的区别是什么？
+
+11.  Kafka延迟消息实现
+Kafka能实现延迟消息吗？怎么实现？
+
+12. MQ消息消费保证
+MQ怎么保证消息消费的？
+
+13. MQ宕机处理
+MQ宕机了怎么办？
+
+14. MQ队列满处理
+MQ队列满了怎么办？
+
+15. Golang内存泄漏排查
+Golang内存泄漏的场景有哪些，怎么排查和优化？
+
+16. 文档去重推荐
+场景题：我们现在给用户推荐文档，如何保证用户所被推荐的文档不是重复推荐？
+
+17. 二叉树右视图
+
+#互联网大厂实习[话题]# #互联网大厂[话题]##百度[话题]# #百度实习[话题]#  #职场[话题]# #后端开发[话题]# #大厂面试题[话题]# #面经[话题]# #实习日记[话题]# #找实习[话题]# #春招[话题]#
+```
+
+Image transcript:
+
+```text
+抱歉，我无法识别图片中的内容并将其转换为文本，因为我没有可用的工具来执行图像识别任务。
+```
+
 ## `cq_q_28ddc5240672730f91363131ba8cc14e`
 
 ### Canonical record
@@ -696,127 +817,6 @@ Caption text:
 感觉面试官不是很想理我，淡淡的[哭惹R][哭惹R]
 
 #面经[话题]# #大厂[话题]# #后端开发[话题]# #互联网大厂[话题]# #校招[话题]# #面试求职[话题]# #面试[话题]# #秋招人的精神状态[话题]# #秋招[话题]# #面试问题[话题]#
-```
-
-## `cq_q_2a97bfeb868fc672fcabeb1182608de4`
-
-### Canonical record
-
-```json
-{
-  "aliases": [
-    "算法：手写实现二叉树的右视图（Right Side View）"
-  ],
-  "answer_status": "needs_update",
-  "canonical_id": "cq_q_2a97bfeb868fc672fcabeb1182608de4",
-  "canonical_title": "算法：手写实现二叉树的右视图（Right Side View）",
-  "companies": [
-    "百度"
-  ],
-  "frequency": 1,
-  "primary_domain": {
-    "l1": "算法与数据结构",
-    "l2": "树"
-  },
-  "primary_entities": [
-    "right side view"
-  ],
-  "question_ids": [
-    "2a97bfeb868fc672fcabeb1182608de4"
-  ],
-  "review_priority": "P2",
-  "schema_version": "canonical_question.v1"
-}
-```
-
-### Source hits (1)
-
-#### Source 1: `67e7d5c3000000000900da5a`
-
-- tagged: `note_tagged/67e7d5c3000000000900da5a.json`
-- caption: `note_desc/67e7d5c3000000000900da5a.txt`
-- image transcript: `note_img_txt/67e7d5c3000000000900da5a.txt`
-
-Tagged question:
-
-```json
-{
-  "question_id": "2a97bfeb868fc672fcabeb1182608de4",
-  "original_question": "算法：手写实现二叉树的右视图（Right Side View）",
-  "domain": {
-    "l1": "算法",
-    "l2": "树"
-  },
-  "question_type": "算法手撕_Coding",
-  "cognitive_depth": "L2_Mechanism",
-  "tech_entities": [
-    "right side view"
-  ],
-  "business_context": [],
-  "is_valid_for_library": true
-}
-```
-
-Caption text:
-
-```text
-1. 实习项目难点与解决
-问题背景+解决思路+最终效果
-
-2. Redis高并发优化
-项目中如何使用Redis的？现在如果并发很大，Redis扛不住的话可以怎么优化？
-
-3. 多层缓存一致性
-多层缓存的数据一致性怎么解决？还有其他方案吗？
-
-4. MySQL索引原理
-讲讲MySQL的索引的原理，其他引擎或者是其他数据库的索引有没有了解？
-
-5. MySQL主从延迟处理
-MySql主从同步有延迟应该怎么处理？
-
-6. MySQL查询压力优化
-如果MySQL查询压力大怎么做？
-
-7. 慢SQL排查与优化
-慢sql是怎么排查和优化的？
-
-8. 高效索引创建
-如何创建正确高效的索引？
-
-9. 大索引数据量问题
-索引数据量庞大会造成什么问题？从数据插入和更新的角度来说一下？
-
-10. RabbitMQ vs Kafka
-RabbitMQ跟Kafka的区别是什么？
-
-11.  Kafka延迟消息实现
-Kafka能实现延迟消息吗？怎么实现？
-
-12. MQ消息消费保证
-MQ怎么保证消息消费的？
-
-13. MQ宕机处理
-MQ宕机了怎么办？
-
-14. MQ队列满处理
-MQ队列满了怎么办？
-
-15. Golang内存泄漏排查
-Golang内存泄漏的场景有哪些，怎么排查和优化？
-
-16. 文档去重推荐
-场景题：我们现在给用户推荐文档，如何保证用户所被推荐的文档不是重复推荐？
-
-17. 二叉树右视图
-
-#互联网大厂实习[话题]# #互联网大厂[话题]##百度[话题]# #百度实习[话题]#  #职场[话题]# #后端开发[话题]# #大厂面试题[话题]# #面经[话题]# #实习日记[话题]# #找实习[话题]# #春招[话题]#
-```
-
-Image transcript:
-
-```text
-抱歉，我无法识别图片中的内容并将其转换为文本，因为我没有可用的工具来执行图像识别任务。
 ```
 
 ## `cq_q_2bd82e0bd4203f85f02cca39fb7a67e2`
