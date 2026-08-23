@@ -1,0 +1,153 @@
+name: Remediate Content Batch 0017 Duplicate Canonicals
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Merge source-confirmed duplicate Canonicals through supported consistency boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          merge_if_source_exists() {
+            local target="$1"
+            local source="$2"
+            local reason="$3"
+            if python3 - "$target" "$source" <<'PY'
+          import json
+          import pathlib
+          import sys
+          target, source = sys.argv[1:3]
+          rows = [json.loads(line) for line in pathlib.Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          ids = {row.get('canonical_id') for row in rows}
+          if target not in ids:
+              raise SystemExit(f'target canonical missing: {target}')
+          raise SystemExit(0 if source in ids else 1)
+          PY
+            then
+              node scripts/xhs.js canonical merge \
+                --target "$target" \
+                --source "$source" \
+                --reason "$reason"
+            else
+              echo "Source $source already retired; treating merge as idempotently complete."
+            fi
+          }
+
+          merge_if_source_exists \
+            cq_q_6c3e7f9d826622bce0c25df5beee24a0 \
+            cq_q_271d5e7c97e9f51b7b5ab4fdc1331411 \
+            'Batch 0017 source-first boundary audit found both Canonicals represent LeetCode 115 Distinct Subsequences; preserve all source Question bindings under one existing Canonical.'
+
+          merge_if_source_exists \
+            cq_q_8f04cfa510fe868afcf072c93499a8ea \
+            cq_q_27f9476e6f17473bae89a7a3c05db42f \
+            'Batch 0017 source-first boundary audit found both Canonicals represent the same two-thread alternating AB print problem; preserve all source Question bindings under one existing Canonical.'
+
+      - name: Verify duplicate sources are retired and target ownership preserved
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          rows = [json.loads(line) for line in pathlib.Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          by_id = {row['canonical_id']: row for row in rows}
+          pairs = [
+              ('cq_q_6c3e7f9d826622bce0c25df5beee24a0', 'cq_q_271d5e7c97e9f51b7b5ab4fdc1331411'),
+              ('cq_q_8f04cfa510fe868afcf072c93499a8ea', 'cq_q_27f9476e6f17473bae89a7a3c05db42f'),
+          ]
+          for target, source in pairs:
+              if source in by_id:
+                  raise SystemExit(f'duplicate source still active after merge: {source}')
+              target_row = by_id.get(target)
+              if target_row is None:
+                  raise SystemExit(f'merge target missing after merge: {target}')
+              source_qid = source.removeprefix('cq_q_')
+              owned = set(target_row.get('question_ids') or [])
+              if source_qid not in owned:
+                  raise SystemExit(f'{target}: merged source Question {source_qid} not preserved in target ownership')
+          PY
+
+      - name: Regenerate index projections
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify full repository gates
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Record duplicate-normalization progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0017.md')
+          text = path.read_text(encoding='utf-8')
+          old = '- [ ] Duplicate normalization remains for `cq_q_271d5e7c97e9f51b7b5ab4fdc1331411` (LeetCode 115) and `cq_q_27f9476e6f17473bae89a7a3c05db42f` (two-thread alternating print); these must be merged through the supported Canonical consistency boundary before the batch can close.'
+          new = '- [x] Duplicate normalization is resolved through `canonical merge`: `cq_q_271d5e7c97e9f51b7b5ab4fdc1331411` is merged into `cq_q_6c3e7f9d826622bce0c25df5beee24a0`, and `cq_q_27f9476e6f17473bae89a7a3c05db42f` is merged into `cq_q_8f04cfa510fe868afcf072c93499a8ea`; source Question ownership is preserved and merge-side Answer/ReviewProgress invalidation follows the repository consistency policy.'
+          if old in text:
+              text = text.replace(old, new)
+          elif new not in text:
+              text = text.rstrip() + '\n\n## Duplicate normalization progress\n\n' + new + '\n'
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit duplicate normalization to content branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No duplicate-normalization changes to commit.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: merge duplicate batch 0017 canonicals"
+          git push origin HEAD:content/quality-completion

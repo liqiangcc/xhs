@@ -1,0 +1,216 @@
+name: Remediate Content Batch 0015 Ambiguous Questions
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Retire source-ambiguous batch 0015 assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import shutil
+
+          ROOT = pathlib.Path('.')
+          TARGETS = {
+              'cq_q_151d0e35bf49f36b6d51c686a232a636': '题干仅保留“算法题: 对角线打印矩阵”，未保留起点、方向、是否 zig-zag、矩阵形状或输出序列，无法唯一还原编码契约。',
+              'cq_q_154efbda1c72ac4419f349acb9b14438': '题干仅保留“求两个json 数据的diff”，未保留递归/浅层、数组语义或输出格式，无法唯一还原编码契约。',
+              'cq_q_18099a746a57ce6990cd550546739ac6': '原始题干仅保留“算法：二叉树的最大路径和”，未定义合法路径端点；现有 LeetCode 124 归因不在原始来源中，不能据此扩写契约。',
+              'cq_q_1b6ddacfba9a37a4613f02dad96d8fe9': 'OCR 中“3a4[bc] -> aaabcbcbc”示例与重复次数/所示实现相互矛盾，且未保留完整解码语法，无法可靠还原确定性编码契约。',
+          }
+
+          def read_json(path):
+              return json.loads(path.read_text(encoding='utf-8'))
+
+          def write_json(path, value):
+              path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          def read_jsonl(path):
+              return [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+
+          def write_jsonl(path, rows):
+              path.write_text(''.join(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n' for row in rows), encoding='utf-8')
+
+          canonical_path = ROOT / 'data/questions/canonical_questions.jsonl'
+          question_path = ROOT / 'data/questions/questions.jsonl'
+          progress_path = ROOT / 'review/progress.json'
+          audit_path = ROOT / 'config/question_validity_audit.json'
+
+          canonicals = read_jsonl(canonical_path)
+          questions = read_jsonl(question_path)
+          progress = read_json(progress_path)
+          audit = read_json(audit_path)
+
+          canonical_by_id = {row['canonical_id']: row for row in canonicals}
+          question_rows_by_id = {}
+          for row in questions:
+              question_rows_by_id.setdefault(row['question_id'], []).append(row)
+
+          decisions = list(audit.get('decisions', []))
+          decisions_by_ref = {(d['source_note_id'], d['source_question_index']): d for d in decisions}
+          changed = False
+
+          for canonical_id, explanation in TARGETS.items():
+              qid = canonical_id.removeprefix('cq_q_')
+              canonical = canonical_by_id.get(canonical_id)
+              if canonical is None:
+                  active_rows = [r for r in question_rows_by_id.get(qid, []) if r.get('canonical_id') == canonical_id]
+                  if active_rows:
+                      raise SystemExit(f'{canonical_id}: canonical missing but active question binding remains')
+                  if (ROOT / 'review/answers' / f'{canonical_id}.md').exists():
+                      raise SystemExit(f'{canonical_id}: canonical missing but active answer remains')
+                  if any(item.get('canonical_id') == canonical_id for item in progress.get('items', [])):
+                      raise SystemExit(f'{canonical_id}: canonical missing but ReviewProgress remains')
+                  continue
+
+              owned = list(canonical.get('question_ids') or [])
+              if owned != [qid]:
+                  raise SystemExit(f'{canonical_id}: expected exactly one owned question {qid}, got {owned}')
+              if int(canonical.get('frequency', 0)) != 1:
+                  raise SystemExit(f'{canonical_id}: expected frequency=1, got {canonical.get("frequency")}')
+
+              rows = question_rows_by_id.get(qid, [])
+              if len(rows) != 1:
+                  raise SystemExit(f'{canonical_id}: expected exactly one Question row, got {len(rows)}')
+              row = rows[0]
+              if row.get('canonical_id') != canonical_id:
+                  raise SystemExit(f'{canonical_id}: Question binding mismatch: {row.get("canonical_id")}')
+              if row.get('is_valid_for_library') is not True:
+                  raise SystemExit(f'{canonical_id}: Question already invalid before remediation')
+
+              ref = (row['source_note_id'], row['source_question_index'])
+              replacement = {
+                  'source_note_id': row['source_note_id'],
+                  'source_question_index': row['source_question_index'],
+                  'question_id': qid,
+                  'original_question': row['original_question'],
+                  'decision': 'exclude',
+                  'exclusion_reason': 'incomplete_or_unreadable',
+                  'exclusion_note': explanation,
+              }
+              previous = decisions_by_ref.get(ref)
+              if previous is None:
+                  decisions.append(replacement)
+                  decisions_by_ref[ref] = replacement
+                  changed = True
+              elif previous != replacement:
+                  idx = decisions.index(previous)
+                  decisions[idx] = replacement
+                  decisions_by_ref[ref] = replacement
+                  changed = True
+
+              canonicals = [c for c in canonicals if c.get('canonical_id') != canonical_id]
+              before_progress = len(progress.get('items', []))
+              progress['items'] = [i for i in progress.get('items', []) if i.get('canonical_id') != canonical_id]
+              if len(progress['items']) != before_progress - 1:
+                  raise SystemExit(f'{canonical_id}: expected exactly one ReviewProgress item')
+
+              active_answer = ROOT / 'review/answers' / f'{canonical_id}.md'
+              archive_answer = ROOT / 'review/archive/answers' / f'{canonical_id}.md'
+              if not active_answer.exists():
+                  raise SystemExit(f'{canonical_id}: active answer missing')
+              archive_answer.parent.mkdir(parents=True, exist_ok=True)
+              if archive_answer.exists():
+                  if archive_answer.read_bytes() != active_answer.read_bytes():
+                      raise SystemExit(f'{canonical_id}: existing answer archive differs from active answer')
+                  active_answer.unlink()
+              else:
+                  shutil.move(str(active_answer), str(archive_answer))
+              changed = True
+
+          if not changed:
+              print('Batch 0015 ambiguity remediation already applied.')
+              raise SystemExit(0)
+
+          decisions.sort(key=lambda d: (str(d.get('source_note_id', '')), int(d.get('source_question_index', 0))))
+          audit['decisions'] = decisions
+          audit['audited_at'] = '2026-08-22'
+          audit['include_count'] = sum(1 for d in decisions if d.get('decision') == 'include')
+          audit['exclude_count'] = sum(1 for d in decisions if d.get('decision') == 'exclude')
+          write_json(audit_path, audit)
+          write_jsonl(canonical_path, sorted(canonicals, key=lambda c: c['canonical_id']))
+          progress['updated_at'] = '2026-08-22'
+          progress['items'] = sorted(progress.get('items', []), key=lambda i: i.get('canonical_id', ''))
+          write_json(progress_path, progress)
+          PY
+
+      - name: Regenerate Question and index projections
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify full repository gates
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Update batch 0015 completion record
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0015.md')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '- [ ] Remediation-path items are resolved through Question/Canonical SSOT with orphan Answer/ReviewProgress handling.',
+              '- [x] Remediation-path items are resolved through Question/Canonical SSOT with explicit `incomplete_or_unreadable` decisions; unsupported singleton Canonicals were retired, active Answers archived, and ReviewProgress removed without inventing deterministic contracts.'
+          )
+          text = text.replace(
+              '- [ ] No remediation item is replaced by an invented deterministic contract.',
+              '- [x] No remediation item is replaced by an invented deterministic contract.'
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit remediation to content branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No remediation changes to commit.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: retire unrecoverable batch 0015 questions"
+          git push origin HEAD:content/quality-completion

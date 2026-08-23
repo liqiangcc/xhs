@@ -1,0 +1,63 @@
+name: Content Batch 0018 Tree Substructure Gate
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate tree-substructure fixture
+        working-directory: review/content_build/answer_batch_0018/cq_q_2c267f2f448a08e8b1f1e1590ce6df72
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac BinaryTreeSubstructure.java BinaryTreeSubstructureTest.java
+          stdout="$(java BinaryTreeSubstructureTest)"
+          echo "$stdout"
+          test "$stdout" = "PASS fixed=9 randomized=5000 oracle=enumerate-roots-and-match emptyB=false mutation=none"
+
+      - name: Verify evidence and isolated review binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          evidence = json.loads(Path('review/evidence/cq_q_2c267f2f448a08e8b1f1e1590ce6df72.json').read_text(encoding='utf-8'))
+          review = json.loads(Path('review/content_build/answer_batch_0018/cq_q_2c267f2f448a08e8b1f1e1590ce6df72/isolated_review_result.json').read_text(encoding='utf-8'))
+          validation = json.loads(Path('review/content_build/answer_batch_0018/cq_q_2c267f2f448a08e8b1f1e1590ce6df72/code_validation.json').read_text(encoding='utf-8'))
+          assert validation['result'] == 'pass'
+          assert validation['stdout'] == 'PASS fixed=9 randomized=5000 oracle=enumerate-roots-and-match emptyB=false mutation=none'
+          assert evidence['schema_version'] == 'answer_evidence.v1'
+          assert evidence['review_state'] == 'independent_source_first_review_passed'
+          assert review['schema_version'] == 'isolated_review.v1'
+          assert review['decision'] == 'pass'
+          assert review['promotion_blockers'] == ['human_approval_required_for_pilot_promotion']
+          assert evidence['candidate_sha256'] == review['candidate_sha256']
+          PY
+
+      - name: Verify source-first boundary artifact exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f review/content_build/answer_batch_0018/source_boundary_audit.md
+          grep -Fq 'cq_q_2c267f2f448a08e8b1f1e1590ce6df72' review/content_build/answer_batch_0018/source_boundary_audit.md
