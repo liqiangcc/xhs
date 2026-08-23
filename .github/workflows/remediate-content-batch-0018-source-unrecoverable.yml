@@ -11,12 +11,17 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: content-batch-0018-source-remediation
+  cancel-in-progress: false
+
 jobs:
   remediate:
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'content/quality-completion') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/content/quality-completion')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout content branch
         uses: actions/checkout@v4
