@@ -445,6 +445,100 @@ Image transcript:
 抱歉，我无法识别图片中的内容并将其转换为文本，因为我没有可用的工具来执行图像识别任务。
 ```
 
+## `cq_q_2c267f2f448a08e8b1f1e1590ce6df72`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法：判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_2c267f2f448a08e8b1f1e1590ce6df72",
+  "canonical_title": "算法：判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构",
+  "companies": [
+    "字节跳动"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "算法与数据结构",
+    "l2": "树"
+  },
+  "primary_entities": [
+    "递归",
+    "二叉树",
+    "二分查找",
+    "子结构"
+  ],
+  "question_ids": [
+    "2c267f2f448a08e8b1f1e1590ce6df72"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `6842998a000000000303f15c`
+
+- tagged: `note_tagged/6842998a000000000303f15c.json`
+- caption: `note_desc/6842998a000000000303f15c.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "2c267f2f448a08e8b1f1e1590ce6df72",
+  "original_question": "算法：判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构",
+  "domain": {
+    "l1": "算法",
+    "l2": "树"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "二分查找",
+    "二叉树",
+    "子结构",
+    "递归"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+字节跳动后端开发三面面经
+时间线：
+5.23投递
+5.26约一面
+5.28一面
+5.30约了6.3二面
+6.4约了6.5三面
+三面面试官迟到了5分钟，问八股和项目只有15~20分钟的样子，然后两道算法题，写完第一道算法题后，感觉面试官也是想拖时间，就给了第二道算法题，写完后相互提问快十分钟。
+1、讲一下进程、线程、协程（一面和三面面试官都问了这个，可能是因为字节用go开发的原因）
+2、用协程做高并发需要注意什么？
+3、协程是用户态的如何被操作系统调度？
+4、讲一下CAS？
+5、项目中使用MySQL、MQ、Redis是怎么考虑的？
+6、项目中的压测是如何做的？
+7、如何确定你测试得到的TPS是机器的性能瓶颈呢？
+8、为什么想到用“采用布隆过滤器判断短链接是否已存在，替代传统分布式锁+查询数据库方案”？
+算法题：
+1、判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构
+2、接雨水 力扣
+问答环节：
+1、问了我觉得自己最大的优点是什么？追问让我举例说说。
+2、你觉得自己有什么缺点吗？
+3、做过基于大模型的项目吗？
+4、讲一下MCP？
+#后端开发[话题]# #java[话题]# #面经[话题]# #暑期实习[话题]#
+```
+
 ## `cq_q_28ddc5240672730f91363131ba8cc14e`
 
 ### Canonical record
@@ -923,100 +1017,6 @@ HR面（45min，以为是纯聊天也没有准备啥，没想到问了技术问�
 总的来说，hr面主要拷打实习的产出和实习的一些细节
 
 还有一些其他问题忘记了，想起来再补#互联网大厂[话题]# #大数据开发[话题]#
-```
-
-## `cq_q_2c267f2f448a08e8b1f1e1590ce6df72`
-
-### Canonical record
-
-```json
-{
-  "aliases": [
-    "算法：判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构"
-  ],
-  "answer_status": "needs_update",
-  "canonical_id": "cq_q_2c267f2f448a08e8b1f1e1590ce6df72",
-  "canonical_title": "算法：判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构",
-  "companies": [
-    "字节跳动"
-  ],
-  "frequency": 1,
-  "primary_domain": {
-    "l1": "算法与数据结构",
-    "l2": "树"
-  },
-  "primary_entities": [
-    "递归",
-    "二叉树",
-    "二分查找",
-    "子结构"
-  ],
-  "question_ids": [
-    "2c267f2f448a08e8b1f1e1590ce6df72"
-  ],
-  "review_priority": "P2",
-  "schema_version": "canonical_question.v1"
-}
-```
-
-### Source hits (1)
-
-#### Source 1: `6842998a000000000303f15c`
-
-- tagged: `note_tagged/6842998a000000000303f15c.json`
-- caption: `note_desc/6842998a000000000303f15c.txt`
-
-Tagged question:
-
-```json
-{
-  "question_id": "2c267f2f448a08e8b1f1e1590ce6df72",
-  "original_question": "算法：判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构",
-  "domain": {
-    "l1": "算法",
-    "l2": "树"
-  },
-  "question_type": "算法手撕_Coding",
-  "cognitive_depth": "L2_Mechanism",
-  "tech_entities": [
-    "二分查找",
-    "二叉树",
-    "子结构",
-    "递归"
-  ],
-  "business_context": [],
-  "is_valid_for_library": true
-}
-```
-
-Caption text:
-
-```text
-字节跳动后端开发三面面经
-时间线：
-5.23投递
-5.26约一面
-5.28一面
-5.30约了6.3二面
-6.4约了6.5三面
-三面面试官迟到了5分钟，问八股和项目只有15~20分钟的样子，然后两道算法题，写完第一道算法题后，感觉面试官也是想拖时间，就给了第二道算法题，写完后相互提问快十分钟。
-1、讲一下进程、线程、协程（一面和三面面试官都问了这个，可能是因为字节用go开发的原因）
-2、用协程做高并发需要注意什么？
-3、协程是用户态的如何被操作系统调度？
-4、讲一下CAS？
-5、项目中使用MySQL、MQ、Redis是怎么考虑的？
-6、项目中的压测是如何做的？
-7、如何确定你测试得到的TPS是机器的性能瓶颈呢？
-8、为什么想到用“采用布隆过滤器判断短链接是否已存在，替代传统分布式锁+查询数据库方案”？
-算法题：
-1、判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构
-2、接雨水 力扣
-问答环节：
-1、问了我觉得自己最大的优点是什么？追问让我举例说说。
-2、你觉得自己有什么缺点吗？
-3、做过基于大模型的项目吗？
-4、讲一下MCP？
-#后端开发[话题]# #java[话题]# #面经[话题]# #暑期实习[话题]#
 ```
 
 ## `cq_q_2d08f15b8ffa1ba609ca2b53d287984e`
