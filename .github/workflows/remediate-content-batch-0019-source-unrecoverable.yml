@@ -18,8 +18,9 @@ concurrency:
 jobs:
   remediate:
     if: >-
-      (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'content/quality-completion') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/content/quality-completion')
+      github.actor != 'github-actions[bot]' &&
+      ((github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'content/quality-completion') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/content/quality-completion'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -46,29 +47,71 @@ jobs:
           go-version: '1.23.x'
 
       - name: Retire source-unrecoverable batch 0019 singleton assets
-        run: python3 scripts/content/remediate_batch_0019_unrecoverable.py
+        id: retire
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .ci
+          : > .ci/batch-0019-remediation-diagnostics.log
+          python3 scripts/content/remediate_batch_0019_unrecoverable.py 2>&1 | tee -a .ci/batch-0019-remediation-diagnostics.log
 
       - name: Regenerate Question and index projections
+        id: regenerate
+        if: steps.retire.outcome == 'success'
+        continue-on-error: true
+        shell: bash
         run: |
-          set -euo pipefail
-          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
-          node scripts/xhs.js index build --noManifest
+          set -o pipefail
+          {
+            node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+            node scripts/xhs.js index build --noManifest
+          } 2>&1 | tee -a .ci/batch-0019-remediation-diagnostics.log
 
       - name: Verify full repository gates
+        id: verify
+        if: steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            node scripts/content/check_question_coverage.js --check
+            node scripts/xhs.js canonical check --noWrite
+            node scripts/xhs.js answer validate --strict --noWrite
+            node scripts/xhs.js validate all --noWrite
+            npm test
+            npm run ci:check
+            npm run ci:answer:semantic
+            npm run ci:answer:evidence
+            npm run ci:answer:code
+            npm run ci:answer:coverage
+          } 2>&1 | tee -a .ci/batch-0019-remediation-diagnostics.log
+
+      - name: Persist remediation diagnostics on failure
+        if: >-
+          github.event_name == 'push' &&
+          (steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure')
+        shell: bash
         run: |
           set -euo pipefail
-          node scripts/content/check_question_coverage.js --check
-          node scripts/xhs.js canonical check --noWrite
-          node scripts/xhs.js answer validate --strict --noWrite
-          node scripts/xhs.js validate all --noWrite
-          npm test
-          npm run ci:check
-          npm run ci:answer:semantic
-          npm run ci:answer:evidence
-          npm run ci:answer:code
-          npm run ci:answer:coverage
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add .ci/batch-0019-remediation-diagnostics.log
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: record batch 0019 remediation failure"
+            git push origin HEAD:content/quality-completion
+          fi
+
+      - name: Fail after persisting diagnostics
+        if: >-
+          steps.retire.outcome == 'failure' ||
+          steps.regenerate.outcome == 'failure' ||
+          steps.verify.outcome == 'failure'
+        run: exit 1
 
       - name: Record bounded batch 0019 remediation progress
+        if: steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success' && steps.verify.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -89,9 +132,15 @@ jobs:
           PY
 
       - name: Commit remediation to content branch
+        if: >-
+          github.event_name == 'push' &&
+          steps.retire.outcome == 'success' &&
+          steps.regenerate.outcome == 'success' &&
+          steps.verify.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
+          rm -f .ci/batch-0019-remediation-diagnostics.log
           if git diff --quiet; then
             echo 'No remediation changes to commit.'
             exit 0
