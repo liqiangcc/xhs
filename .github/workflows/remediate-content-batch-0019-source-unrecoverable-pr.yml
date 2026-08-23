@@ -2,7 +2,7 @@ name: Remediate Content Batch 0019 Source-Unrecoverable Questions
 
 # One-off bounded remediation runner; remove the push trigger after batch 0019 closes.
 # Expanded to the four source-unrecoverable singleton contracts identified by the source-first audit.
-# Retriggered 2026-08-23T10:43Z after the expanded target set was committed.
+# Raised the timeout after two bounded runs exhausted the prior 45-minute envelope while executing the full repository gate set.
 on:
   pull_request:
     branches:
@@ -20,7 +20,7 @@ jobs:
   remediate:
     if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     steps:
       - name: Checkout content branch
         uses: actions/checkout@v4
