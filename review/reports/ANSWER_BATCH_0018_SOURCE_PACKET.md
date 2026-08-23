@@ -539,6 +539,184 @@ Caption text:
 #后端开发[话题]# #java[话题]# #面经[话题]# #暑期实习[话题]#
 ```
 
+## `cq_q_2d08f15b8ffa1ba609ca2b53d287984e`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法：二叉树中序遍历"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_2d08f15b8ffa1ba609ca2b53d287984e",
+  "canonical_title": "算法：二叉树中序遍历",
+  "companies": [
+    "滴滴"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "算法与数据结构",
+    "l2": "树"
+  },
+  "primary_entities": [
+    "二叉树",
+    "in-order traversal"
+  ],
+  "question_ids": [
+    "2d08f15b8ffa1ba609ca2b53d287984e"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `666c3aee000000000e03140b`
+
+- tagged: `note_tagged/666c3aee000000000e03140b.json`
+- caption: `note_desc/666c3aee000000000e03140b.txt`
+- image transcript: `note_img_txt/666c3aee000000000e03140b.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "2d08f15b8ffa1ba609ca2b53d287984e",
+  "original_question": "算法：二叉树中序遍历",
+  "domain": {
+    "l1": "算法",
+    "l2": "树"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "二叉树",
+    "in-order traversal"
+  ],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+一面50min
+自我介绍
+怼项目
+apollo
+流程介绍
+客户端如何与服务端进行连接
+业务端如何与客户端连接，需要的信息手撕
+二叉树中序遍历
+1-N的硬币，1-N个人从每个硬币走过，如果硬币编号可以整除人编号，硬币翻面，求最后被翻面朝上的硬币有哪些(说思路)
+sql
+redis
+应用场景
+跳表
+设计模式
+工厂，单例，责任链，策略模式应用场景
+二面 15min
+自我介绍
+策略模式
+java
+hashmap结构
+红黑树的限制条件
+gc
+说垃圾回收器
+mysql
+索引失效
+索引结构
+使用的框架，中间件
+三面 50min
+自我介绍
+进程和线程区别
+多线程问题锁
+计网
+http与tcp区别
+长连接与短连接
+time wait，过多怎么办
+数据库
+使用注意事项
+什么情况不建议使用索引
+索引结构
+隔离级别
+幻读
+快照读与当前读如何避免幻读
+手撕
+100万个ip地址，如何存这些ip地址，需要加入ip地址及判断ip地址是否存在，如何做
+ipv4转int
+兴趣爱好
+优点和缺点
+职业规划
+#面经[话题]# #滴滴面试题[话题]# #互联网大厂[话题]# #Java[话题]# #经验分享[话题]#
+```
+
+Image transcript:
+
+```text
+滴滴 Java岗-差点被赛码网搞崩心态
+一面 50min
+
+自我介绍
+怼项目
+apollo
+流程介绍
+客户端如何与服务端进行连接
+业务端如何与客户端连接,需要的信息
+手撕
+二叉树中序遍历
+1-N的硬币,1-N个人从每个硬币走过,如果硬币
+编号可以整除人编号,硬币翻面,求最后被翻面朝
+上的硬币有哪些 (说思路)
+sql
+redis
+应用场景
+跳表
+设计模式
+工厂,单例,责任链,策略模式应用场景
+
+二面 15min
+
+自我介绍
+策略模式
+java
+hashmap结构
+红黑树的限制条件
+gc
+说垃圾回收器
+mysql
+索引失效
+索引结构
+使用的框架,中间件
+三面 50min
+
+自我介绍
+进程和线程
+区别
+多线程问题
+锁
+计网
+http与tcp区别
+长连接与短连接
+time wait,过多怎么办
+数据库
+使用注意事项
+什么情况不建议使用索引
+索引结构
+隔离级别
+幻读
+快照读与当前读如何避免幻读
+手撕
+100万个ip地址,如何存这些ip地址,需要加入ip
+地址及判断ip地址是否存在,如何做
+ipv4转int
+兴趣爱好
+优点和缺点
+职业规划
+```
+
 ## `cq_q_28ddc5240672730f91363131ba8cc14e`
 
 ### Canonical record
@@ -1017,182 +1195,4 @@ HR面（45min，以为是纯聊天也没有准备啥，没想到问了技术问�
 总的来说，hr面主要拷打实习的产出和实习的一些细节
 
 还有一些其他问题忘记了，想起来再补#互联网大厂[话题]# #大数据开发[话题]#
-```
-
-## `cq_q_2d08f15b8ffa1ba609ca2b53d287984e`
-
-### Canonical record
-
-```json
-{
-  "aliases": [
-    "算法：二叉树中序遍历"
-  ],
-  "answer_status": "needs_update",
-  "canonical_id": "cq_q_2d08f15b8ffa1ba609ca2b53d287984e",
-  "canonical_title": "算法：二叉树中序遍历",
-  "companies": [
-    "滴滴"
-  ],
-  "frequency": 1,
-  "primary_domain": {
-    "l1": "算法与数据结构",
-    "l2": "树"
-  },
-  "primary_entities": [
-    "二叉树",
-    "in-order traversal"
-  ],
-  "question_ids": [
-    "2d08f15b8ffa1ba609ca2b53d287984e"
-  ],
-  "review_priority": "P2",
-  "schema_version": "canonical_question.v1"
-}
-```
-
-### Source hits (1)
-
-#### Source 1: `666c3aee000000000e03140b`
-
-- tagged: `note_tagged/666c3aee000000000e03140b.json`
-- caption: `note_desc/666c3aee000000000e03140b.txt`
-- image transcript: `note_img_txt/666c3aee000000000e03140b.txt`
-
-Tagged question:
-
-```json
-{
-  "question_id": "2d08f15b8ffa1ba609ca2b53d287984e",
-  "original_question": "算法：二叉树中序遍历",
-  "domain": {
-    "l1": "算法",
-    "l2": "树"
-  },
-  "question_type": "算法手撕_Coding",
-  "cognitive_depth": "L2_Mechanism",
-  "tech_entities": [
-    "二叉树",
-    "in-order traversal"
-  ],
-  "is_valid_for_library": true
-}
-```
-
-Caption text:
-
-```text
-一面50min
-自我介绍
-怼项目
-apollo
-流程介绍
-客户端如何与服务端进行连接
-业务端如何与客户端连接，需要的信息手撕
-二叉树中序遍历
-1-N的硬币，1-N个人从每个硬币走过，如果硬币编号可以整除人编号，硬币翻面，求最后被翻面朝上的硬币有哪些(说思路)
-sql
-redis
-应用场景
-跳表
-设计模式
-工厂，单例，责任链，策略模式应用场景
-二面 15min
-自我介绍
-策略模式
-java
-hashmap结构
-红黑树的限制条件
-gc
-说垃圾回收器
-mysql
-索引失效
-索引结构
-使用的框架，中间件
-三面 50min
-自我介绍
-进程和线程区别
-多线程问题锁
-计网
-http与tcp区别
-长连接与短连接
-time wait，过多怎么办
-数据库
-使用注意事项
-什么情况不建议使用索引
-索引结构
-隔离级别
-幻读
-快照读与当前读如何避免幻读
-手撕
-100万个ip地址，如何存这些ip地址，需要加入ip地址及判断ip地址是否存在，如何做
-ipv4转int
-兴趣爱好
-优点和缺点
-职业规划
-#面经[话题]# #滴滴面试题[话题]# #互联网大厂[话题]# #Java[话题]# #经验分享[话题]#
-```
-
-Image transcript:
-
-```text
-滴滴 Java岗-差点被赛码网搞崩心态
-一面 50min
-
-自我介绍
-怼项目
-apollo
-流程介绍
-客户端如何与服务端进行连接
-业务端如何与客户端连接,需要的信息
-手撕
-二叉树中序遍历
-1-N的硬币,1-N个人从每个硬币走过,如果硬币
-编号可以整除人编号,硬币翻面,求最后被翻面朝
-上的硬币有哪些 (说思路)
-sql
-redis
-应用场景
-跳表
-设计模式
-工厂,单例,责任链,策略模式应用场景
-
-二面 15min
-
-自我介绍
-策略模式
-java
-hashmap结构
-红黑树的限制条件
-gc
-说垃圾回收器
-mysql
-索引失效
-索引结构
-使用的框架,中间件
-三面 50min
-
-自我介绍
-进程和线程
-区别
-多线程问题
-锁
-计网
-http与tcp区别
-长连接与短连接
-time wait,过多怎么办
-数据库
-使用注意事项
-什么情况不建议使用索引
-索引结构
-隔离级别
-幻读
-快照读与当前读如何避免幻读
-手撕
-100万个ip地址,如何存这些ip地址,需要加入ip
-地址及判断ip地址是否存在,如何做
-ipv4转int
-兴趣爱好
-优点和缺点
-职业规划
 ```
