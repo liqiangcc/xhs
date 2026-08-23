@@ -1,0 +1,93 @@
+name: Remediate Content Batch 0018 Source-Unrecoverable Questions
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Retire source-unrecoverable batch 0018 singleton assets
+        run: python3 scripts/content/remediate_batch_0018_unrecoverable.py
+
+      - name: Regenerate Question and index projections
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify full repository gates
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Record bounded batch 0018 remediation progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0018.md')
+          text = path.read_text(encoding='utf-8')
+          marker = '## Remediation progress\n'
+          section = '''## Remediation progress
+
+- [x] Source-unrecoverable/ambiguous singleton Questions are resolved through the Question/Canonical SSOT without inventing deterministic contracts: `cq_q_28ddc5240672730f91363131ba8cc14e`, `cq_q_2979c00d6ff6c1582ecb289775522412`, `cq_q_2a09d0d7980006e66439a361880bc83d`, and `cq_q_2bd82e0bd4203f85f02cca39fb7a67e2` are excluded with explicit repository-source reasons; their singleton Canonicals are retired, active placeholder Answers archived, and ReviewProgress entries removed.
+'''
+          if marker not in text:
+              text = text.rstrip() + '\n\n' + section
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit remediation to content branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No remediation changes to commit.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: retire source-unrecoverable batch 0018 questions"
+          git push origin HEAD:content/quality-completion
