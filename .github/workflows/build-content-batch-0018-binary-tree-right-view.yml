@@ -1,0 +1,77 @@
+name: Content Batch 0018 Binary Tree Right View Gate
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate binary-tree right-view fixture
+        working-directory: review/content_build/answer_batch_0018/cq_q_2a97bfeb868fc672fcabeb1182608de4
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac BinaryTreeRightSideView.java BinaryTreeRightSideViewTest.java
+          stdout="$(java BinaryTreeRightSideViewTest)"
+          echo "$stdout"
+          test "$stdout" = "PASS fixed=8 randomized=5000 oracle=bfs-last-per-level order=top-down mutation=none"
+
+      - name: Verify recorded validation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('review/content_build/answer_batch_0018/cq_q_2a97bfeb868fc672fcabeb1182608de4/code_validation.json')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          assert payload['schema_version'] == 'code_validation.v1'
+          assert payload['canonical_id'] == 'cq_q_2a97bfeb868fc672fcabeb1182608de4'
+          assert payload['result'] == 'pass'
+          assert payload['stdout'] == 'PASS fixed=8 randomized=5000 oracle=bfs-last-per-level order=top-down mutation=none'
+          PY
+
+      - name: Verify source-first evidence and review binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          evidence = json.loads(Path('review/evidence/cq_q_2a97bfeb868fc672fcabeb1182608de4.json').read_text(encoding='utf-8'))
+          review = json.loads(Path('review/content_build/answer_batch_0018/cq_q_2a97bfeb868fc672fcabeb1182608de4/isolated_review_result.json').read_text(encoding='utf-8'))
+          assert evidence['schema_version'] == 'answer_evidence.v1'
+          assert evidence['review_state'] == 'independent_source_first_review_passed'
+          assert evidence['review']['decision'] == 'pass'
+          assert review['schema_version'] == 'isolated_review.v1'
+          assert review['decision'] == 'pass'
+          assert review['promotion_blockers'] == ['human_approval_required_for_pilot_promotion']
+          assert evidence['candidate_sha256'] == review['candidate_sha256']
+          PY
+
+      - name: Verify source-first boundary artifact exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f review/content_build/answer_batch_0018/source_boundary_audit.md
+          grep -Fq 'cq_q_2a97bfeb868fc672fcabeb1182608de4' review/content_build/answer_batch_0018/source_boundary_audit.md
