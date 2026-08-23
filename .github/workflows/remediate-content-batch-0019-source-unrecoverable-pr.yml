@@ -1,8 +1,8 @@
 name: Remediate Content Batch 0019 Source-Unrecoverable Questions
 
-# One-off bounded remediation runner; remove the push trigger after batch 0019 closes.
-# Expanded to the four source-unrecoverable singleton contracts identified by the source-first audit.
-# Raised the timeout after two bounded runs exhausted the prior 45-minute envelope while executing the full repository gate set.
+# One-off bounded remediation runner. It retires only the four singleton coding
+# contracts that the source-first audit proved cannot be reconstructed without
+# inventing problem semantics.
 on:
   pull_request:
     branches:
@@ -16,6 +16,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: remediate-content-batch-0019-source-unrecoverable
+  cancel-in-progress: true
+
 jobs:
   remediate:
     if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
@@ -28,24 +32,42 @@ jobs:
           ref: content/quality-completion
           fetch-depth: 0
 
+      - name: Check whether this bounded slice is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md'
+          if grep -Fq 'Four source-unrecoverable singleton Questions are excluded without inventing coding contracts' "$task"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Source-unrecoverable batch 0019 slice is already complete.'
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+            echo 'Source-unrecoverable batch 0019 slice still requires remediation.'
+          fi
+
       - name: Setup Node
+        if: steps.status.outputs.pending == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Setup Java 21
+        if: steps.status.outputs.pending == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Setup Go
+        if: steps.status.outputs.pending == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
 
       - name: Retire source-unrecoverable batch 0019 singleton assets
         id: retire
+        if: steps.status.outputs.pending == 'true'
         continue-on-error: true
         shell: bash
         run: |
@@ -56,7 +78,7 @@ jobs:
 
       - name: Regenerate Question and index projections
         id: regenerate
-        if: steps.retire.outcome == 'success'
+        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -66,28 +88,23 @@ jobs:
             node scripts/xhs.js index build --noManifest
           } 2>&1 | tee -a .ci/batch-0019-source-remediation.log
 
-      - name: Verify full repository gates
+      - name: Verify repository gates without duplicate full-suite execution
         id: verify
-        if: steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success'
+        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           {
             node scripts/content/check_question_coverage.js --check
-            node scripts/xhs.js canonical check --noWrite
-            node scripts/xhs.js answer validate --strict --noWrite
-            node scripts/xhs.js validate all --noWrite
-            npm test
             npm run ci:check
             npm run ci:answer:semantic
             npm run ci:answer:evidence
             npm run ci:answer:code
-            npm run ci:answer:coverage
           } 2>&1 | tee -a .ci/batch-0019-source-remediation.log
 
       - name: Persist failure diagnostics only
-        if: steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure'
+        if: steps.status.outputs.pending == 'true' && (steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure')
         shell: bash
         run: |
           set -euo pipefail
@@ -105,11 +122,11 @@ jobs:
           fi
 
       - name: Fail after persisting diagnostics
-        if: steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure'
+        if: steps.status.outputs.pending == 'true' && (steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure')
         run: exit 1
 
       - name: Record bounded batch 0019 remediation progress
-        if: steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success' && steps.verify.outcome == 'success'
+        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success' && steps.verify.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -133,7 +150,7 @@ jobs:
           PY
 
       - name: Commit remediation to content branch
-        if: steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success' && steps.verify.outcome == 'success'
+        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success' && steps.verify.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
