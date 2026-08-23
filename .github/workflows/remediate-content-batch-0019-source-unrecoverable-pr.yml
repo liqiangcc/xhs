@@ -1,0 +1,167 @@
+name: Remediate Content Batch 0019 Source-Unrecoverable Questions
+
+# One-off bounded remediation runner. It retires only the four singleton coding
+# contracts that the source-first audit proved cannot be reconstructed without
+# inventing problem semantics.
+# Retriggered after confirming the content branch still lacks the bounded remediation marker.
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0019-source-unrecoverable-pr.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: remediate-content-batch-0019-source-unrecoverable
+  cancel-in-progress: true
+
+jobs:
+  remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Check whether this bounded slice is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md'
+          if grep -Fq 'Four source-unrecoverable singleton Questions are excluded without inventing coding contracts' "$task"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Source-unrecoverable batch 0019 slice is already complete.'
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+            echo 'Source-unrecoverable batch 0019 slice still requires remediation.'
+          fi
+
+      - name: Setup Node
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Retire source-unrecoverable batch 0019 singleton assets
+        id: retire
+        if: steps.status.outputs.pending == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .ci
+          : > .ci/batch-0019-source-remediation.log
+          python3 scripts/content/remediate_batch_0019_unrecoverable.py 2>&1 | tee -a .ci/batch-0019-source-remediation.log
+
+      - name: Regenerate Question and index projections
+        id: regenerate
+        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+            node scripts/xhs.js index build --noManifest
+          } 2>&1 | tee -a .ci/batch-0019-source-remediation.log
+
+      - name: Verify repository gates without duplicate full-suite execution
+        id: verify
+        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            node scripts/content/check_question_coverage.js --check
+            npm run ci:check
+            npm run ci:answer:semantic
+            npm run ci:answer:evidence
+            npm run ci:answer:code
+          } 2>&1 | tee -a .ci/batch-0019-source-remediation.log
+
+      - name: Persist failure diagnostics only
+        if: steps.status.outputs.pending == 'true' && (steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .ci/batch-0019-source-remediation.log /tmp/batch-0019-source-remediation.log
+          git fetch origin content/quality-completion
+          git reset --hard origin/content/quality-completion
+          mkdir -p .ci
+          cp /tmp/batch-0019-source-remediation.log .ci/batch-0019-source-remediation.log
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add .ci/batch-0019-source-remediation.log
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: record batch 0019 source remediation failure"
+            git push origin HEAD:content/quality-completion
+          fi
+
+      - name: Fail after persisting diagnostics
+        if: steps.status.outputs.pending == 'true' && (steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure')
+        run: exit 1
+
+      - name: Record bounded batch 0019 remediation progress
+        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success' && steps.verify.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .ci/batch-0019-source-remediation.log
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md')
+          text = path.read_text(encoding='utf-8')
+          marker = '## Remediation progress\n'
+          section = '''## Remediation progress
+
+- [x] Four source-unrecoverable singleton Questions are excluded without inventing coding contracts: `cq_q_2dcc4ae8850241c339c211516c55b307` (the supplied Shell script body is absent), `cq_q_2e11155d7a78e8fda6758fc98aa44029` (only “一道sql” is preserved), `cq_q_3022a886d714c0fc8bc2fa4d0b7812a5` (only “深拷贝” is preserved without an object-model/API contract), and `cq_q_3022eb4f8a66f69b09a2d019164f0bb5` (source is ambiguous between palindromic sequence/subsequence/substring and conflicts with Manacher). Their singleton Canonicals are retired, active placeholder Answers archived, ReviewProgress entries removed, and the Question validity audit records explicit `incomplete_or_unreadable` reasons.
+- [ ] Two source-recoverable normalization records remain: `cq_q_2e26508950e5da505c44621129f41a26` must be split back into the two tasks actually preserved by source, and `cq_q_2f278e6b489feb680f8b173047815566` must replace misleading `子数组` wording with two groups/arrays of equal sum before answer generation.
+'''
+          if marker in text:
+              text = text[:text.index(marker)].rstrip() + '\n\n' + section
+          else:
+              text = text.rstrip() + '\n\n' + section
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit remediation to content branch
+        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success' && steps.verify.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No remediation changes to commit.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: retire source-unrecoverable batch 0019 questions"
+          git push origin HEAD:content/quality-completion
