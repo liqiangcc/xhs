@@ -30,9 +30,9 @@ jobs:
 
           task_path = pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0018.md')
           task = task_path.read_text(encoding='utf-8')
-          canonical_ids = re.findall(r'`(cq_q_[0-9a-f]{32})`', task)
+          canonical_ids = list(dict.fromkeys(re.findall(r'`(cq_q_[0-9a-f]{32})`', task)))
           if len(canonical_ids) != 10:
-              raise SystemExit(f'expected 10 batch canonicals, got {len(canonical_ids)}')
+              raise SystemExit(f'expected 10 unique batch canonicals, got {len(canonical_ids)}')
 
           canon_rows = {}
           for line in pathlib.Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines():
