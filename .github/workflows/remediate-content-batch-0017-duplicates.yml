@@ -35,9 +35,6 @@ jobs:
         with:
           go-version: '1.23.x'
 
-      - name: Retire source-unrecoverable batch 0019 singleton assets
-        run: python3 scripts/content/remediate_batch_0019_unrecoverable.py
-
       - name: Merge source-confirmed duplicate Canonicals through supported consistency boundary
         shell: bash
         run: |
@@ -104,10 +101,9 @@ jobs:
                   raise SystemExit(f'{target}: merged source Question {source_qid} not preserved in target ownership')
           PY
 
-      - name: Regenerate Question and index projections
+      - name: Regenerate index projections
         run: |
           set -euo pipefail
-          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
           node scripts/xhs.js index build --noManifest
 
       - name: Verify full repository gates
@@ -141,36 +137,17 @@ jobs:
           path.write_text(text, encoding='utf-8')
           PY
 
-      - name: Record bounded batch 0019 remediation progress
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md')
-          text = path.read_text(encoding='utf-8')
-          marker = '## Remediation progress\n'
-          section = '''## Remediation progress
-
-- [x] Two source-unrecoverable singleton Questions are excluded without inventing coding contracts: `cq_q_2dcc4ae8850241c339c211516c55b307` (the supplied Shell script body is absent) and `cq_q_2e11155d7a78e8fda6758fc98aa44029` (only “一道sql” is preserved). Their singleton Canonicals are retired, active placeholder Answers archived, ReviewProgress entries removed, and the Question validity audit records explicit `incomplete_or_unreadable` reasons.
-- [ ] Four additional normalization/conflict records remain blocked pending bounded Question/Canonical remediation: `cq_q_2e26508950e5da505c44621129f41a26`, `cq_q_2f278e6b489feb680f8b173047815566`, `cq_q_3022a886d714c0fc8bc2fa4d0b7812a5`, and `cq_q_3022eb4f8a66f69b09a2d019164f0bb5`.
-'''
-          if marker not in text:
-              text = text.rstrip() + '\n\n' + section
-              path.write_text(text, encoding='utf-8')
-          PY
-
-      - name: Commit bounded remediation updates to content branch
+      - name: Commit duplicate normalization to content branch
         shell: bash
         run: |
           set -euo pipefail
           if git diff --quiet; then
-            echo 'No bounded-remediation changes to commit.'
+            echo 'No duplicate-normalization changes to commit.'
             exit 0
           fi
           git config user.name "xhs-remediation-bot"
           git config user.email "43640935+liqiangcc@users.noreply.github.com"
           git add -A
           git diff --cached --check
-          git commit -m "content: retire source-unrecoverable batch 0019 questions"
+          git commit -m "content: merge duplicate batch 0017 canonicals"
           git push origin HEAD:content/quality-completion
