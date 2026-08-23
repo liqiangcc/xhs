@@ -1,0 +1,25 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_294cb4b4464c886329fda6efb26f3d5a",
+  "validated_at": "2026-08-23",
+  "runtime": "OpenJDK 21 local preflight; GitHub Actions gate runs the same command",
+  "command": "javac LinkedListEqualValueMatches.java LinkedListEqualValueMatchesTest.java && java LinkedListEqualValueMatchesTest",
+  "result": "pass",
+  "stdout": "PASS fixed=7 randomized=5000 oracle=nested-loop duplicateSemantics=cartesian-pairs order=left-then-right",
+  "implementation_contract": {
+    "left": "possibly empty singly linked list with int values",
+    "right": "possibly empty singly linked list with int values; source boundary assumes node identities do not intersect with left",
+    "result": "all equal-value node pairs represented as (leftIndex, rightIndex, value), ordered by leftIndex then rightIndex",
+    "duplicate_semantics": "for a value occurring a times on the left and b times on the right, return all a*b node pairs",
+    "mutation": "input lists are not modified"
+  },
+  "checks": [
+    "both lists empty and each one-sided empty case",
+    "no-match case",
+    "multiple distinct matching values with stable left-then-right ordering",
+    "duplicate values produce the full cartesian set of node pairs",
+    "negative and zero values",
+    "fixed fixtures assert the two input lists are disjoint by node identity",
+    "5000 deterministic random list pairs of length 0-30 and values -6..6 checked against an independent nested-loop oracle"
+  ]
+}
