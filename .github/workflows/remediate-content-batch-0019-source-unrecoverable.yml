@@ -1,13 +1,12 @@
 name: Remediate Content Batch 0019 Source-Unrecoverable Questions
 
 on:
+  pull_request:
+    branches:
+      - master
   push:
     branches:
       - content/quality-completion
-    paths:
-      - .github/workflows/remediate-content-batch-0019-source-unrecoverable.yml
-      - scripts/content/remediate_batch_0019_unrecoverable.py
-      - .ci/trigger-batch-0019-unrecoverable-*
 
 permissions:
   contents: write
@@ -18,7 +17,9 @@ concurrency:
 
 jobs:
   remediate:
-    if: github.ref == 'refs/heads/content/quality-completion'
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'content/quality-completion') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/content/quality-completion')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
