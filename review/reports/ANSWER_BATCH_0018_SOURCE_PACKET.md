@@ -78,88 +78,6 @@ Caption text:
 #java面试[话题]# #java学习[话题]# #java[话题]# #后端开发[话题]# #计算机专业[话题]# #软件开发[话题]# #java八股文[话题]# #面经[话题]# #面试技巧[话题]# #java培训[话题]# #java白泽[话题]#
 ```
 
-## `cq_q_28ddc5240672730f91363131ba8cc14e`
-
-### Canonical record
-
-```json
-{
-  "aliases": [
-    "算法手撕：字符串模式匹配（Pattern Matching）。"
-  ],
-  "answer_status": "needs_update",
-  "canonical_id": "cq_q_28ddc5240672730f91363131ba8cc14e",
-  "canonical_title": "算法手撕：字符串模式匹配（Pattern Matching）。",
-  "companies": [
-    "未知"
-  ],
-  "frequency": 1,
-  "primary_domain": {
-    "l1": "操作系统",
-    "l2": "其他"
-  },
-  "primary_entities": [
-    "字符串匹配"
-  ],
-  "question_ids": [
-    "28ddc5240672730f91363131ba8cc14e"
-  ],
-  "review_priority": "P2",
-  "schema_version": "canonical_question.v1"
-}
-```
-
-### Source hits (1)
-
-#### Source 1: `68c2c62e000000001b01d168`
-
-- tagged: `note_tagged/68c2c62e000000001b01d168.json`
-- caption: `note_desc/68c2c62e000000001b01d168.txt`
-
-Tagged question:
-
-```json
-{
-  "question_id": "28ddc5240672730f91363131ba8cc14e",
-  "original_question": "算法手撕：字符串模式匹配（Pattern Matching）。",
-  "domain": {
-    "l1": "计算机基础",
-    "l2": "算法"
-  },
-  "question_type": "算法手撕_Coding",
-  "cognitive_depth": "L1_Principle",
-  "tech_entities": [
-    "字符串匹配"
-  ],
-  "business_context": [],
-  "is_valid_for_library": true
-}
-```
-
-Caption text:
-
-```text
-1.自我介绍
-2.项目拷打
-2.1 项目里遇到什么困难，怎么解决的
-3.八股
-3.1 redis多级缓存一致性
-3.2 本地缓存如何删除
-3.3 雪崩、缓存穿透、缓存击穿
-3.4redis过期策略
-3.5消息队列如何保证可靠性
-3.6mysql如何解决幻读问题
-3.7 g1和cms区别
-4.场景题
-4.1大量数据的接口优化
-4.2亿万级数据库的分库策略
-5.反问
-6.手撕两道题
-6.1模式匹配
-6.2topk高频词
-#后端开发[话题]# #秋招[话题]# #面经[话题]#
-```
-
 ## `cq_q_294cb4b4464c886329fda6efb26f3d5a`
 
 ### Canonical record
@@ -404,6 +322,88 @@ survive区,为什么是8:1:1, 为什么
 三轮总耗时大概 两个半小时
 
 --- 图片 9 ---
+```
+
+## `cq_q_28ddc5240672730f91363131ba8cc14e`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法手撕：字符串模式匹配（Pattern Matching）。"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_28ddc5240672730f91363131ba8cc14e",
+  "canonical_title": "算法手撕：字符串模式匹配（Pattern Matching）。",
+  "companies": [
+    "未知"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "操作系统",
+    "l2": "其他"
+  },
+  "primary_entities": [
+    "字符串匹配"
+  ],
+  "question_ids": [
+    "28ddc5240672730f91363131ba8cc14e"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `68c2c62e000000001b01d168`
+
+- tagged: `note_tagged/68c2c62e000000001b01d168.json`
+- caption: `note_desc/68c2c62e000000001b01d168.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "28ddc5240672730f91363131ba8cc14e",
+  "original_question": "算法手撕：字符串模式匹配（Pattern Matching）。",
+  "domain": {
+    "l1": "计算机基础",
+    "l2": "算法"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L1_Principle",
+  "tech_entities": [
+    "字符串匹配"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+1.自我介绍
+2.项目拷打
+2.1 项目里遇到什么困难，怎么解决的
+3.八股
+3.1 redis多级缓存一致性
+3.2 本地缓存如何删除
+3.3 雪崩、缓存穿透、缓存击穿
+3.4redis过期策略
+3.5消息队列如何保证可靠性
+3.6mysql如何解决幻读问题
+3.7 g1和cms区别
+4.场景题
+4.1大量数据的接口优化
+4.2亿万级数据库的分库策略
+5.反问
+6.手撕两道题
+6.1模式匹配
+6.2topk高频词
+#后端开发[话题]# #秋招[话题]# #面经[话题]#
 ```
 
 ## `cq_q_2979c00d6ff6c1582ecb289775522412`
