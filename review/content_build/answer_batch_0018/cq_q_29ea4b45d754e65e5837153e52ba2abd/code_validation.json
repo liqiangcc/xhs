@@ -1,0 +1,30 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_29ea4b45d754e65e5837153e52ba2abd",
+  "validated_at": "2026-08-23",
+  "runtime": "OpenJDK 21.0.11 independent local execution",
+  "command": "javac ConcurrentTransfer.java ConcurrentTransferTest.java && java ConcurrentTransferTest",
+  "result": "pass",
+  "stdout": "PASS fixed=6 opposingThreads=8 opposingOps=160000 randomThreads=12 randomOps=60000 conservation=true nonnegative=true progress=true",
+  "implementation_contract": {
+    "scope": "single-JVM in-memory accounts only",
+    "account_identity": "unique long id for distinct accounts",
+    "balance": "non-negative long in smallest currency unit",
+    "amount": "must be positive",
+    "insufficient_funds": "return false with neither balance changed",
+    "self_transfer": "same account object returns true as a no-op",
+    "locking": "both account locks acquired in ascending account-id order",
+    "overflow": "destination overflow throws before either balance is assigned"
+  },
+  "checks": [
+    "successful transfer updates both balances",
+    "insufficient funds returns false with no mutation",
+    "same-account transfer is a no-op",
+    "non-positive amount is rejected with no mutation",
+    "distinct accounts with duplicate ids are rejected",
+    "destination long overflow throws before either balance is assigned",
+    "8 threads execute 160000 opposing transfers and finish within timeout with exact final balances",
+    "12 threads execute 60000 deterministic random transfers and finish within timeout",
+    "random stress preserves total balance and non-negative balances"
+  ]
+}

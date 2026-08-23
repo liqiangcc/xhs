@@ -1,0 +1,43 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_29ea4b45d754e65e5837153e52ba2abd",
+  "candidate_sha256": "3a0f45245ebc33e1403e82393762efb29a011550d373ea40fa90907a9ae8b136",
+  "reviewed_at": "2026-08-23",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-concurrent-transfer-20260823",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "note_desc/68b940e2000000001d00c624.txt",
+    "review/reports/ANSWER_BATCH_0018_SOURCE_PACKET.json",
+    "review/content_build/answer_batch_0018/source_boundary_audit.md",
+    "review/candidates/answers/cq_q_29ea4b45d754e65e5837153e52ba2abd.md",
+    "review/content_build/answer_batch_0018/cq_q_29ea4b45d754e65e5837153e52ba2abd/ConcurrentTransfer.java",
+    "review/content_build/answer_batch_0018/cq_q_29ea4b45d754e65e5837153e52ba2abd/ConcurrentTransferTest.java",
+    "review/content_build/answer_batch_0018/cq_q_29ea4b45d754e65e5837153e52ba2abd/code_validation.json"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The retained source states only a coding test for transfer under multithreading; the candidate therefore limits itself explicitly to a single-JVM in-memory account protocol instead of inventing database or distributed-transaction semantics.",
+    "Account representation, value type, insufficient-funds behavior, self-transfer behavior, overflow policy and lock primitive are not source facts; the candidate labels them as selected contract choices.",
+    "Both account locks cover the balance check, both new-balance computations and both assignments, so threads following this protocol cannot observe or create a successful half-transfer.",
+    "Acquiring unique account IDs in ascending order prevents the targeted A-to-B versus B-to-A opposite lock-order cycle; distinct accounts with duplicate IDs are rejected so the ordering key remains a strict identity.",
+    "Both new balances are computed before either assignment, so destination overflow fails before state mutation and does not leave a debit-only partial update.",
+    "The exact Java fixture was independently executed with OpenJDK 21.0.11 and produced 'PASS fixed=6 opposingThreads=8 opposingOps=160000 randomThreads=12 randomOps=60000 conservation=true nonnegative=true progress=true'.",
+    "No database ACID guarantee, cross-JVM safety, crash recovery, production incident, throughput metric or personal project experience is fabricated."
+  ],
+  "promotion_blockers": [
+    "human_approval_required_for_pilot_promotion"
+  ]
+}

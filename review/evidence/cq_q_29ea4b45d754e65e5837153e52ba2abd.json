@@ -1,0 +1,192 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_29ea4b45d754e65e5837153e52ba2abd",
+  "candidate_sha256": "3a0f45245ebc33e1403e82393762efb29a011550d373ea40fa90907a9ae8b136",
+  "checked_at": "2026-08-23",
+  "writer": {
+    "writer_id": "automation-content-builder-concurrent-transfer-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-68b940e2",
+      "title": "Interview note containing the multithreaded transfer coding prompt",
+      "locator": "note_desc/68b940e2000000001d00c624.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "batch-0018-source-packet",
+      "title": "Answer Batch 0018 mechanically extracted repository-source packet",
+      "locator": "review/reports/ANSWER_BATCH_0018_SOURCE_PACKET.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "batch-0018-source-boundary-audit",
+      "title": "Answer Batch 0018 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0018/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "concurrent-transfer-validation",
+      "title": "Deterministic Java validation for the selected in-memory transfer contract",
+      "locator": "review/content_build/answer_batch_0018/cq_q_29ea4b45d754e65e5837153e52ba2abd/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "concurrent-transfer-isolated-review",
+      "title": "Source-first isolated review for the concurrent-transfer candidate",
+      "locator": "review/content_build/answer_batch_0018/cq_q_29ea4b45d754e65e5837153e52ba2abd/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The retained repository source explicitly asks for a transfer implementation under multithreading and does not specify account representation, failure semantics, lock primitive, persistence or database/distributed transaction behavior.",
+      "source_ids": [
+        "xhs-raw-note-68b940e2",
+        "batch-0018-source-packet",
+        "batch-0018-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "candidate-boundary",
+      "text": "Single-JVM in-memory accounts, unique long ids, non-negative long balances, positive amounts, boolean insufficient-funds behavior, self-transfer no-op, duplicate-id rejection and overflow behavior are explicit candidate choices rather than source facts.",
+      "source_ids": [
+        "batch-0018-source-boundary-audit",
+        "concurrent-transfer-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "atomic-update",
+      "text": "Holding both account locks across the balance check, both new-balance computations and both assignments implements an indivisible successful state transition for callers following the selected in-memory protocol.",
+      "source_ids": [
+        "concurrent-transfer-validation",
+        "concurrent-transfer-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "deadlock-order",
+      "text": "Acquiring the two account locks by ascending unique account id prevents the opposite lock order of concurrent A-to-B and B-to-A transfers within this protocol.",
+      "source_ids": [
+        "concurrent-transfer-validation",
+        "concurrent-transfer-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java fixture passes fixed contract cases plus 160000 opposing-direction operations and 60000 deterministic random operations while confirming progress, conservation and non-negative balances.",
+      "source_ids": [
+        "concurrent-transfer-validation",
+        "concurrent-transfer-isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "29ea4b45d754e65e5837153e52ba2abd",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac ConcurrentTransfer.java ConcurrentTransferTest.java && java ConcurrentTransferTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=6 opposingThreads=8 opposingOps=160000 randomThreads=12 randomOps=60000 conservation=true nonnegative=true progress=true",
+    "checks": [
+      "six fixed contract and failure-boundary cases",
+      "opposing-direction concurrency progress and exact final balances",
+      "deterministic multi-account randomized stress",
+      "total balance conservation",
+      "non-negative balances"
+    ],
+    "boundary_tests": [
+      {
+        "case": "insufficient funds",
+        "expected": "false and neither balance changes",
+        "passed": true
+      },
+      {
+        "case": "destination long overflow",
+        "expected": "exception before either balance assignment",
+        "passed": true
+      },
+      {
+        "case": "opposing A-to-B and B-to-A transfers",
+        "expected": "all threads complete without target lock-order deadlock and exact balances are restored",
+        "passed": true
+      },
+      {
+        "case": "60000 deterministic randomized transfers",
+        "expected": "all threads complete, total balance is conserved and no balance is negative",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-concurrent-transfer-20260823",
+    "review_version": "concurrent-transfer.ordered-double-lock.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate stays within the source-supported multithreaded-transfer goal and explicitly limits its execution model.",
+      "The double-lock critical section and ascending-id order are consistent with the implementation and stress tests.",
+      "Failure atomicity for insufficient funds and overflow is covered by executable checks.",
+      "No database/distributed or personal production claims are introduced.",
+      "Formal promotion remains blocked only by the required human-approval gate."
+    ]
+  }
+}
