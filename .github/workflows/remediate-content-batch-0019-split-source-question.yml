@@ -1,0 +1,367 @@
+name: Remediate Content Batch 0019 Split Source Question
+
+# Guarded one-off source normalization. The repository source preserves two
+# separate coding tasks ("二叉树路径和" and "最长连续序列长度"), while the legacy
+# Canonical merged and embellished them. This workflow runs only after the
+# preceding source-unrecoverable and equal-sum normalization slices have landed.
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0019-split-source-question.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Check prerequisite remediation slices
+        id: prereq
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md'
+          if grep -Fq 'Four source-unrecoverable singleton Questions are excluded without inventing coding contracts' "$task" \
+             && grep -Fq 'cq_q_2f278e6b489feb680f8b173047815566` is normalized from misleading contiguous `子数组` wording' "$task"; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'Prerequisite remediation slices are present.'
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Prerequisite remediation slices have not both landed; guarded no-op.'
+          fi
+
+      - name: Setup Node
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 21
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Go
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Split merged source Question into two Canonicals
+        if: steps.prereq.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+          import shutil
+
+          ROOT = Path('.')
+          NOTE_PATH = ROOT / 'note_tagged/68ad5735000000001c033a19.json'
+          CANONICAL_PATH = ROOT / 'data/questions/canonical_questions.jsonl'
+          QUESTION_PATH = ROOT / 'data/questions/questions.jsonl'
+          PROGRESS_PATH = ROOT / 'review/progress.json'
+          AUDIT_PATH = ROOT / 'config/question_validity_audit.json'
+          TASK_PATH = ROOT / 'tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md'
+          SOURCE_AUDIT_PATH = ROOT / 'review/content_build/answer_batch_0019/source_boundary_audit.md'
+
+          OLD_QID = '2e26508950e5da505c44621129f41a26'
+          OLD_CANONICAL = f'cq_q_{OLD_QID}'
+          OLD_TEXT = '算法实战：给定二叉树与目标值，找出所有路径和等于目标值的路径个数（LeetCode 437）；并求解数组中的最长连续序列长度（要求O(N)时空复杂度，基于HashSet优化）'
+          SOURCE_NOTE_ID = '68ad5735000000001c033a19'
+          SOURCE_INDEX = 5
+          SPLITS = [
+              {
+                  'text': '二叉树路径和',
+                  'qid': '84bd83ff8f06510515f6b71534cd2ac5',
+                  'entity': '树路径统计',
+              },
+              {
+                  'text': '最长连续序列长度',
+                  'qid': '2a5006d66e022875a36106ef0c25c2c2',
+                  'entity': '最长序列',
+              },
+          ]
+          for item in SPLITS:
+              item['canonical_id'] = f"cq_q_{item['qid']}"
+
+          def normalize(text: str) -> str:
+              return re.sub(r'[^\w\u4e00-\u9fa5]', '', str(text).lower())
+
+          def qid(text: str) -> str:
+              return hashlib.md5(normalize(text).encode('utf-8')).hexdigest()
+
+          for item in SPLITS:
+              actual = qid(item['text'])
+              if actual != item['qid']:
+                  raise SystemExit(f"unexpected normalized id for {item['text']}: {actual}")
+
+          def read_json(path: Path):
+              return json.loads(path.read_text(encoding='utf-8'))
+
+          def write_json(path: Path, value) -> None:
+              path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          def read_jsonl(path: Path):
+              return [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+
+          def write_jsonl(path: Path, rows) -> None:
+              path.write_text(
+                  ''.join(json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n' for row in rows),
+                  encoding='utf-8',
+              )
+
+          note = read_json(NOTE_PATH)
+          if note.get('note_id') != SOURCE_NOTE_ID:
+              raise SystemExit(f"unexpected note id: {note.get('note_id')}")
+          tagged = list(note.get('tagged_questions') or [])
+          if len(tagged) not in {6, 7}:
+              raise SystemExit(f'unexpected tagged question count: {len(tagged)}')
+
+          old_matches = [i for i, row in enumerate(tagged) if row.get('question_id') == OLD_QID or row.get('original_question') == OLD_TEXT]
+          split_matches = [row for row in tagged if row.get('question_id') in {item['qid'] for item in SPLITS}]
+          if old_matches:
+              if len(old_matches) != 1 or split_matches:
+                  raise SystemExit('legacy and split source rows coexist unexpectedly')
+              index = old_matches[0]
+              if index != SOURCE_INDEX:
+                  raise SystemExit(f'legacy source index drifted: {index}')
+              legacy = tagged[index]
+              if legacy.get('original_question') != OLD_TEXT:
+                  raise SystemExit(f"legacy source text drifted: {legacy.get('original_question')!r}")
+              replacements = []
+              for item in SPLITS:
+                  row = dict(legacy)
+                  row['question_id'] = item['qid']
+                  row['original_question'] = item['text']
+                  row['tech_entities'] = [item['entity']]
+                  row['is_valid_for_library'] = True
+                  replacements.append(row)
+              tagged[index:index + 1] = replacements
+              note['tagged_questions'] = tagged
+              write_json(NOTE_PATH, note)
+          else:
+              if len(split_matches) != 2:
+                  raise SystemExit('expected legacy merged row or exactly two split rows')
+              ordered = tagged[SOURCE_INDEX:SOURCE_INDEX + 2]
+              if [row.get('question_id') for row in ordered] != [item['qid'] for item in SPLITS]:
+                  raise SystemExit('split source rows exist but are not at the expected source indexes')
+              if [row.get('original_question') for row in ordered] != [item['text'] for item in SPLITS]:
+                  raise SystemExit('split source text drifted')
+
+          canonicals = read_jsonl(CANONICAL_PATH)
+          by_id = {row.get('canonical_id'): row for row in canonicals}
+          old = by_id.get(OLD_CANONICAL)
+          new_ids = {item['canonical_id'] for item in SPLITS}
+          existing_new = [by_id.get(item['canonical_id']) for item in SPLITS if by_id.get(item['canonical_id'])]
+
+          if old is not None:
+              if existing_new:
+                  raise SystemExit('legacy Canonical and split Canonicals coexist unexpectedly')
+              if list(old.get('question_ids') or []) != [OLD_QID]:
+                  raise SystemExit(f"legacy Canonical ownership drifted: {old.get('question_ids')}")
+              if int(old.get('frequency', 0)) != 1:
+                  raise SystemExit(f"legacy Canonical frequency drifted: {old.get('frequency')}")
+              canonicals = [row for row in canonicals if row.get('canonical_id') != OLD_CANONICAL]
+              for item in SPLITS:
+                  record = dict(old)
+                  record['canonical_id'] = item['canonical_id']
+                  record['canonical_title'] = item['text']
+                  record['aliases'] = [item['text']]
+                  record['question_ids'] = [item['qid']]
+                  record['primary_entities'] = [item['entity']]
+                  record['frequency'] = 1
+                  record['answer_status'] = 'missing'
+                  canonicals.append(record)
+              write_jsonl(CANONICAL_PATH, sorted(canonicals, key=lambda row: row['canonical_id']))
+          else:
+              if len(existing_new) != 2:
+                  raise SystemExit('legacy Canonical is absent without both split Canonicals')
+              for item in SPLITS:
+                  record = by_id[item['canonical_id']]
+                  if list(record.get('question_ids') or []) != [item['qid']]:
+                      raise SystemExit(f"split Canonical ownership drifted for {item['canonical_id']}")
+                  if record.get('canonical_title') != item['text']:
+                      raise SystemExit(f"split Canonical title drifted for {item['canonical_id']}")
+
+          progress = read_json(PROGRESS_PATH)
+          old_progress = [row for row in progress.get('items', []) if row.get('canonical_id') == OLD_CANONICAL]
+          if old_progress:
+              if len(old_progress) != 1:
+                  raise SystemExit(f'expected at most one legacy ReviewProgress item, got {len(old_progress)}')
+              progress['items'] = [row for row in progress.get('items', []) if row.get('canonical_id') != OLD_CANONICAL]
+              progress['updated_at'] = '2026-08-23'
+              progress['items'] = sorted(progress.get('items', []), key=lambda row: row.get('canonical_id', ''))
+              write_json(PROGRESS_PATH, progress)
+          elif any(row.get('canonical_id') == OLD_CANONICAL for row in progress.get('items', [])):
+              raise SystemExit('legacy ReviewProgress cleanup failed')
+
+          active_answer = ROOT / 'review/answers' / f'{OLD_CANONICAL}.md'
+          archive_answer = ROOT / 'review/archive/answers' / f'{OLD_CANONICAL}.md'
+          if active_answer.exists():
+              archive_answer.parent.mkdir(parents=True, exist_ok=True)
+              if archive_answer.exists():
+                  if archive_answer.read_bytes() != active_answer.read_bytes():
+                      raise SystemExit('existing legacy Answer archive differs from active Answer')
+                  active_answer.unlink()
+              else:
+                  shutil.move(str(active_answer), str(archive_answer))
+          elif not archive_answer.exists():
+              raise SystemExit('legacy Answer is neither active nor archived')
+
+          audit = read_json(AUDIT_PATH)
+          decisions = list(audit.get('decisions', []))
+          legacy_decisions = [d for d in decisions if d.get('source_note_id') == SOURCE_NOTE_ID and d.get('source_question_index') == SOURCE_INDEX]
+          if legacy_decisions:
+              if len(legacy_decisions) != 1:
+                  raise SystemExit(f'expected at most one audit decision at source index {SOURCE_INDEX}')
+              decision = legacy_decisions[0]
+              if decision.get('decision') != 'include':
+                  raise SystemExit(f"legacy merged Question has non-include audit decision: {decision.get('decision')}")
+              decision['question_id'] = SPLITS[0]['qid']
+              decision['original_question'] = SPLITS[0]['text']
+              decision['exclusion_reason'] = None
+              decision['exclusion_note'] = None
+              if not any(d.get('source_note_id') == SOURCE_NOTE_ID and d.get('source_question_index') == SOURCE_INDEX + 1 for d in decisions):
+                  decisions.append({
+                      'source_note_id': SOURCE_NOTE_ID,
+                      'source_question_index': SOURCE_INDEX + 1,
+                      'question_id': SPLITS[1]['qid'],
+                      'original_question': SPLITS[1]['text'],
+                      'decision': 'include',
+                      'exclusion_reason': None,
+                      'exclusion_note': None,
+                  })
+              decisions.sort(key=lambda d: (str(d.get('source_note_id', '')), int(d.get('source_question_index', 0))))
+              audit['decisions'] = decisions
+              audit['audited_at'] = '2026-08-23'
+              audit['include_count'] = sum(1 for d in decisions if d.get('decision') == 'include')
+              audit['exclude_count'] = sum(1 for d in decisions if d.get('decision') == 'exclude')
+              write_json(AUDIT_PATH, audit)
+
+          task = TASK_PATH.read_text(encoding='utf-8')
+          old_line = '- `cq_q_2e26508950e5da505c44621129f41a26` — coding; split/normalization required because source lists `二叉树路径和` and `最长连续序列长度` as two separate tasks while the Canonical combines and embellishes them.'
+          new_line = '- `cq_q_2e26508950e5da505c44621129f41a26` — retired after source-first normalization; the merged/embellished Canonical was split into `cq_q_84bd83ff8f06510515f6b71534cd2ac5` (`二叉树路径和`) and `cq_q_2a5006d66e022875a36106ef0c25c2c2` (`最长连续序列长度`). Both new Canonicals preserve only the source wording; concrete LeetCode number, target-value/count semantics, HashSet requirement, complexity target, and API are not asserted unless separately sourced.'
+          if old_line in task:
+              task = task.replace(old_line, new_line)
+          elif new_line not in task:
+              raise SystemExit('batch task split-normalization line drifted')
+          progress_line = '- [x] `cq_q_2e26508950e5da505c44621129f41a26` is retired and split into two source-exact Canonicals: `cq_q_84bd83ff8f06510515f6b71534cd2ac5` (`二叉树路径和`) and `cq_q_2a5006d66e022875a36106ef0c25c2c2` (`最长连续序列长度`); the unsupported LeetCode 437/HashSet/O(N) embellishments are removed and the legacy Answer/ReviewProgress are archived/retired.'
+          if progress_line not in task:
+              task = task.rstrip() + '\n' + progress_line + '\n'
+          TASK_PATH.write_text(task, encoding='utf-8')
+
+          audit_doc = SOURCE_AUDIT_PATH.read_text(encoding='utf-8')
+          old_heading = '### `cq_q_2e26508950e5da505c44621129f41a26` — split / normalization required'
+          new_heading = '### `cq_q_2e26508950e5da505c44621129f41a26` — retired and split source-first'
+          if old_heading in audit_doc:
+              audit_doc = audit_doc.replace(old_heading, new_heading)
+          elif new_heading not in audit_doc:
+              raise SystemExit('source-boundary split heading drifted')
+          marker = 'Repository source preserves two separate coding tasks: `二叉树路径和` and `最长连续序列长度`.'
+          replacement = ('Repository source preserves two separate coding tasks: `二叉树路径和` and `最长连续序列长度`. '
+                         'The merged Canonical is retired and replaced by `cq_q_84bd83ff8f06510515f6b71534cd2ac5` and '
+                         '`cq_q_2a5006d66e022875a36106ef0c25c2c2`, using those source-exact titles only. The repository does not '
+                         'support silently adding LeetCode 437, target-value/path-count semantics, HashSet, O(N), or a concrete API contract.')
+          if marker in audit_doc:
+              start = audit_doc.index(marker)
+              end = audit_doc.find('\n\n', start)
+              if end == -1:
+                  end = len(audit_doc)
+              audit_doc = audit_doc[:start] + replacement + audit_doc[end:]
+          elif replacement not in audit_doc:
+              # Keep the operation fail-closed if the prose drifted; the heading guard above already
+              # confirms we are in the intended source-boundary section.
+              raise SystemExit('source-boundary split body drifted')
+          SOURCE_AUDIT_PATH.write_text(audit_doc, encoding='utf-8')
+
+          # Sanity-check the existing generated projection before it is rebuilt.
+          questions = read_jsonl(QUESTION_PATH)
+          old_rows = [row for row in questions if row.get('question_id') == OLD_QID]
+          new_rows = [row for row in questions if row.get('question_id') in {item['qid'] for item in SPLITS}]
+          if old_rows and new_rows:
+              raise SystemExit('legacy and split generated Question rows coexist before rebuild')
+          if old_rows:
+              if len(old_rows) != 1 or old_rows[0].get('source_note_id') != SOURCE_NOTE_ID or old_rows[0].get('source_question_index') != SOURCE_INDEX:
+                  raise SystemExit('legacy generated Question projection drifted')
+
+          print('Split source Question into:', ', '.join(item['canonical_id'] for item in SPLITS))
+          PY
+
+      - name: Regenerate Question and index projections
+        if: steps.prereq.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify split ownership and full repository gates
+        if: steps.prereq.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          qids = ['84bd83ff8f06510515f6b71534cd2ac5', '2a5006d66e022875a36106ef0c25c2c2']
+          rows = [json.loads(line) for line in Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          matched = [row for row in rows if row.get('question_id') in set(qids)]
+          if len(matched) != 2:
+              raise SystemExit(f'expected two split Question projections, got {len(matched)}')
+          by_id = {row['question_id']: row for row in matched}
+          for qid in qids:
+              row = by_id[qid]
+              if row.get('canonical_id') != f'cq_q_{qid}' or row.get('is_valid_for_library') is not True:
+                  raise SystemExit(f'split ownership invalid for {qid}: {row}')
+          if any(row.get('question_id') == '2e26508950e5da505c44621129f41a26' for row in rows):
+              raise SystemExit('legacy merged Question projection still exists')
+          PY
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit split normalization to content branch
+        if: steps.prereq.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Split normalization already applied; no commit needed.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: split batch 0019 merged source question"
+          git push origin HEAD:content/quality-completion
