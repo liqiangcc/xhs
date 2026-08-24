@@ -155,12 +155,13 @@ jobs:
               print('Batch 0017 unrecoverable remediation already materialized; idempotent no-op.')
           PY
 
-      - name: Regenerate Question and index projections
+      - name: Regenerate Question, index, and answer-type projections
         shell: bash
         run: |
           set -euo pipefail
           node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
           node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
 
       - name: Verify complete repository gates
         shell: bash
