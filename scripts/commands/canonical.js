@@ -38,6 +38,7 @@ function printHelp() {
         'Commands:',
         '  suggest --entity <value> [--limit <n>]',
         '  suggest --hotspot [--limit <n>]',
+        '  suggest --question-ids <qid1,qid2>',
         '  list [--priority <P0|P1|P2|P3>] [--answer-status <status>] [--limit <n>]',
         '  check',
         '  merge --target <canonical_id> --source <canonical_id> --reason <text>',
@@ -45,6 +46,7 @@ function printHelp() {
         '  stats',
         '',
         'Suggestion commands produce Dedup RelationCandidates for explicit review.',
+        'Explicit question-pair suggestion performs no similarity-based relation inference.',
         '',
         'Options:',
         '  --noWrite     Do not write reports or run manifests for read-only commands',
@@ -58,9 +60,29 @@ function assertCanonicalId(canonicalId) {
     }
 }
 
+function parseQuestionPair(value) {
+    const questionIds = [...new Set(String(value || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean))];
+    if (questionIds.length !== 2) {
+        throw new Error('--question-ids requires exactly two distinct comma-separated Question IDs');
+    }
+    return questionIds;
+}
+
 function runSuggest(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const application = createApplication({ root });
+    if (options['question-ids'] != null) {
+        if (options.hotspot || options.entity || options._?.length) {
+            throw new Error('--question-ids cannot be combined with --entity, --hotspot, or positional entity input');
+        }
+        return application.dedup.suggest({
+            mode: 'pair',
+            question_ids: parseQuestionPair(options['question-ids']),
+        });
+    }
     if (options.hotspot) {
         return application.dedup.suggest({
             mode: 'hotspot',
@@ -199,6 +221,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+    parseQuestionPair,
     runSuggest,
     runList,
     runCheck,
