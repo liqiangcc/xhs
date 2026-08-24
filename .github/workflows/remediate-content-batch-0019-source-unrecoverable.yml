@@ -1,5 +1,9 @@
-name: Remediate Content Batch 0019 Source-Unrecoverable Questions
+name: Remediate Content Batch 0019 Source-Unrecoverable Questions (direct)
 
+# Direct content-branch companion for the registered default-branch runner.
+# Both workflows share one concurrency key so only the newest bounded mutation
+# can operate on the content branch. Full repository verification remains the
+# responsibility of the normal PR CI after the atomic remediation commit lands.
 on:
   pull_request:
     branches:
@@ -7,13 +11,16 @@ on:
   push:
     branches:
       - content/quality-completion
+    paths:
+      - .github/workflows/remediate-content-batch-0019-source-unrecoverable.yml
+      - .ci/trigger-batch-0019-source-unrecoverable-*
 
 permissions:
   contents: write
 
 concurrency:
-  group: content-batch-0019-source-remediation
-  cancel-in-progress: false
+  group: remediate-content-batch-0019-source-unrecoverable
+  cancel-in-progress: true
 
 jobs:
   remediate:
@@ -22,7 +29,7 @@ jobs:
       ((github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'content/quality-completion') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/content/quality-completion'))
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
     steps:
       - name: Checkout content branch
         uses: actions/checkout@v4
@@ -50,89 +57,52 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Java 21
-        if: steps.status.outputs.pending == 'true'
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Setup Go
-        if: steps.status.outputs.pending == 'true'
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
-
-      - name: Retire source-unrecoverable batch 0019 singleton assets
-        id: retire
+      - name: Apply source-bounded retirement
+        id: mutate
         if: steps.status.outputs.pending == 'true'
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           mkdir -p .ci
-          : > .ci/batch-0019-remediation-diagnostics.log
-          python3 scripts/content/remediate_batch_0019_unrecoverable.py 2>&1 | tee -a .ci/batch-0019-remediation-diagnostics.log
-
-      - name: Regenerate Question and index projections
-        id: regenerate
-        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
+          : > .ci/batch-0019-source-remediation.log
           {
+            python3 scripts/content/remediate_batch_0019_unrecoverable.py
             node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
             node scripts/xhs.js index build --noManifest
-          } 2>&1 | tee -a .ci/batch-0019-remediation-diagnostics.log
-
-      - name: Verify bounded repository gates
-        id: verify
-        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          {
             node scripts/content/check_question_coverage.js --check
-            npm run ci:check
-            npm run ci:answer:semantic
-            npm run ci:answer:evidence
-            npm run ci:answer:code
-          } 2>&1 | tee -a .ci/batch-0019-remediation-diagnostics.log
+            node scripts/xhs.js canonical check --noWrite
+            node scripts/xhs.js answer validate --strict --noWrite
+          } 2>&1 | tee -a .ci/batch-0019-source-remediation.log
 
-      - name: Persist remediation diagnostics on failure
-        if: >-
-          steps.status.outputs.pending == 'true' &&
-          (steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure')
+      - name: Persist failure diagnostics
+        if: steps.status.outputs.pending == 'true' && steps.mutate.outcome == 'failure'
         shell: bash
         run: |
           set -euo pipefail
-          cp .ci/batch-0019-remediation-diagnostics.log /tmp/batch-0019-remediation-diagnostics.log
+          cp .ci/batch-0019-source-remediation.log /tmp/batch-0019-source-remediation.log
           git fetch origin content/quality-completion
           git reset --hard origin/content/quality-completion
           mkdir -p .ci
-          cp /tmp/batch-0019-remediation-diagnostics.log .ci/batch-0019-remediation-diagnostics.log
+          cp /tmp/batch-0019-source-remediation.log .ci/batch-0019-source-remediation.log
           git config user.name "xhs-remediation-bot"
           git config user.email "43640935+liqiangcc@users.noreply.github.com"
-          git add .ci/batch-0019-remediation-diagnostics.log
+          git add .ci/batch-0019-source-remediation.log
           if ! git diff --cached --quiet; then
-            git commit -m "ci: record batch 0019 remediation failure"
+            git commit -m "ci: record batch 0019 source remediation failure"
             git push origin HEAD:content/quality-completion
           fi
 
       - name: Fail after persisting diagnostics
-        if: >-
-          steps.status.outputs.pending == 'true' &&
-          (steps.retire.outcome == 'failure' || steps.regenerate.outcome == 'failure' || steps.verify.outcome == 'failure')
+        if: steps.status.outputs.pending == 'true' && steps.mutate.outcome == 'failure'
         run: exit 1
 
-      - name: Record bounded batch 0019 remediation progress
-        if: steps.status.outputs.pending == 'true' && steps.retire.outcome == 'success' && steps.regenerate.outcome == 'success' && steps.verify.outcome == 'success'
+      - name: Record bounded remediation progress
+        if: steps.status.outputs.pending == 'true' && steps.mutate.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .ci/batch-0019-remediation-diagnostics.log
+          rm -f .ci/batch-0019-source-remediation.log
           python3 - <<'PY'
           from pathlib import Path
 
@@ -152,11 +122,7 @@ jobs:
           PY
 
       - name: Commit remediation to content branch
-        if: >-
-          steps.status.outputs.pending == 'true' &&
-          steps.retire.outcome == 'success' &&
-          steps.regenerate.outcome == 'success' &&
-          steps.verify.outcome == 'success'
+        if: steps.status.outputs.pending == 'true' && steps.mutate.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
