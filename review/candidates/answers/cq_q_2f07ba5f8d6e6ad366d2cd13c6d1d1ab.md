@@ -45,30 +45,50 @@ BFS 和 DFS 都可以。这里选 BFS，避免代码依赖递归深度，并且�
 ## 原理机制
 
 ```java
-public static Node cloneGraph(Node start) {
-    if (start == null) {
-        return null;
-    }
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
 
-    Map<Node, Node> clones = new IdentityHashMap<>();
-    Deque<Node> queue = new ArrayDeque<>();
-    clones.put(start, new Node(start.value));
-    queue.addLast(start);
+public final class GraphClone {
+    public static final class Node {
+        public final int value;
+        public final List<Node> neighbors = new ArrayList<>();
 
-    while (!queue.isEmpty()) {
-        Node original = queue.removeFirst();
-        Node copy = clones.get(original);
-        for (Node neighbor : original.neighbors) {
-            Node neighborCopy = clones.get(neighbor);
-            if (neighborCopy == null) {
-                neighborCopy = new Node(neighbor.value);
-                clones.put(neighbor, neighborCopy);
-                queue.addLast(neighbor);
-            }
-            copy.neighbors.add(neighborCopy);
+        public Node(int value) {
+            this.value = value;
         }
     }
-    return clones.get(start);
+
+    private GraphClone() {}
+
+    public static Node cloneGraph(Node start) {
+        if (start == null) {
+            return null;
+        }
+
+        Map<Node, Node> clones = new IdentityHashMap<>();
+        Deque<Node> queue = new ArrayDeque<>();
+        clones.put(start, new Node(start.value));
+        queue.addLast(start);
+
+        while (!queue.isEmpty()) {
+            Node original = queue.removeFirst();
+            Node copy = clones.get(original);
+            for (Node neighbor : original.neighbors) {
+                Node neighborCopy = clones.get(neighbor);
+                if (neighborCopy == null) {
+                    neighborCopy = new Node(neighbor.value);
+                    clones.put(neighbor, neighborCopy);
+                    queue.addLast(neighbor);
+                }
+                copy.neighbors.add(neighborCopy);
+            }
+        }
+        return clones.get(start);
+    }
 }
 ```
 
@@ -84,11 +104,11 @@ PASS fixed=7 randomized=3000 oracle=paired-bijection sharedNodes=0 mutation=none
 
 ## 常见追问
 
-- **为什么不能递归地直接 `new` 每个邻居？** 因为环会无限递归，共享邻居也会被复制成多个不同对象；必须先用映射固定一一对应关系。
-- **为什么不能用节点值作为 Map 的 key？** 值可以重复，两个不同原节点可能同值；图克隆要保持节点身份关系而不是按值合并。
-- **BFS 和 DFS 有本质区别吗？** 对正确克隆没有，本质都是“访问集合/映射 + 逐边重建”；BFS 用队列，DFS 用递归或栈。
-- **怎么证明是深拷贝而不是浅拷贝？** 除了结构和值一致，还要确认所有克隆节点都是新对象，且同一个原节点始终映射到同一个克隆节点；测试做了双向身份映射检查。
-- **如果图不连通怎么办？** 当前 API 只有一个起点，因此只克隆该起点可达的连通分量；若要求复制整个离散图，需要把输入契约改成所有顶点集合并对每个未访问分量启动一次遍历。
+- 问：为什么不能递归地直接 `new` 每个邻居？答：因为环会无限递归，共享邻居也会被复制成多个不同对象；必须先用映射固定一一对应关系。
+- 问：为什么不能用节点值作为 Map 的 key？答：值可以重复，两个不同原节点可能同值；图克隆要保持节点身份关系而不是按值合并。
+- 问：BFS 和 DFS 有本质区别吗？答：对正确克隆没有，本质都是“访问集合/映射 + 逐边重建”；BFS 用队列，DFS 用递归或栈。
+- 问：怎么证明是深拷贝而不是浅拷贝？答：除了结构和值一致，还要确认所有克隆节点都是新对象，且同一个原节点始终映射到同一个克隆节点；测试做了双向身份映射检查。
+- 问：如果图不连通怎么办？答：当前 API 只有一个起点，因此只克隆该起点可达的连通分量；若要求复制整个离散图，需要把输入契约改成所有顶点集合并对每个未访问分量启动一次遍历。
 
 ## 易错点
 
