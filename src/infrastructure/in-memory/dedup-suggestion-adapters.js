@@ -12,6 +12,13 @@ function refKey(ref) {
     ].join('::');
 }
 
+function normalizeQuestionIds(questionIds) {
+    return [...new Set((questionIds || [])
+        .map((questionId) => String(questionId || '').trim())
+        .filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right));
+}
+
 function entityIndexResource(seed) {
     return `dedup-entity-index:${String(seed)}`;
 }
@@ -106,6 +113,22 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
                 const question = byRef.get(key);
                 if (question) resolved.push(clone(question));
             }
+            const resource = 'dedup-question-catalog';
+            return {
+                questions: resolved,
+                resource,
+                revision: revision(resource),
+            };
+        },
+    };
+
+    const questionSelectionRepository = {
+        async findByQuestionIds(questionIds) {
+            if (!Array.isArray(questionIds)) throw new Error('questionIds must be an array');
+            const requested = new Set(normalizeQuestionIds(questionIds));
+            const resolved = questions
+                .filter((question) => requested.has(String(question?.question_id || '')))
+                .map(clone);
             const resource = 'dedup-question-catalog';
             return {
                 questions: resolved,
@@ -221,6 +244,7 @@ function createInMemoryDedupSuggestionAdapters(seed = {}) {
         indexRepository,
         hotspotRepository,
         questionRepository,
+        questionSelectionRepository,
         relationCandidatePublisher,
         relationCandidateRepository,
         relationDecisionRepository,
