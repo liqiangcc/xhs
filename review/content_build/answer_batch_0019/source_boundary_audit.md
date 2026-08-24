@@ -30,9 +30,9 @@ Repository source lists two separate hand-written tasks: `二叉树路径和` an
 
 Repository source explicitly records `手撕代码（真手撕）：无向图的深拷贝`. A candidate may implement graph cloning with a visited/original-to-clone map. Concrete node fields, language, entry-point shape, and null handling must be identified as implementation assumptions. Do not silently replace the task with an unrelated generic object deep-copy problem.
 
-### `cq_q_2f278e6b489feb680f8b173047815566` — normalization required
+### `cq_q_2f278e6b489feb680f8b173047815566` — normalized; candidate-qualified
 
-Repository source says `给一个数组判断能否拆成两个数组，这两个数组的元素和相等`. The current title says `两个和相等的子数组`, which can imply contiguous subarrays and therefore narrows the problem beyond the source. Normalize the contract to the recoverable partition/group meaning, or retain the ambiguity explicitly; do not choose contiguous-subarray semantics without evidence.
+Repository source says `给一个数组判断能否拆成两个数组，这两个数组的元素和相等`. The Question and Canonical are normalized to that recoverable partition/group meaning, and the misleading contiguous `子数组` wording is removed. A candidate may now implement equal-sum partition, but input constraints, non-empty-group requirements, integer sign/range, and concrete API remain implementation assumptions unless separately sourced.
 
 ### `cq_q_2f351e2a49d14ad9643e8daed49006b0` — candidate-qualified
 
