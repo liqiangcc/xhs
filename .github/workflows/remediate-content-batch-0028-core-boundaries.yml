@@ -1,0 +1,219 @@
+name: Remediate Content Batch 0028 Core Source Boundaries
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0028-core-boundaries.yml
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-core-source-boundaries
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Capture stable base head
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether bounded remediation is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md'
+          marker='[x] Apply and verify the non-relational boundary slice'
+          if grep -Fq "$marker" "$task"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply frozen non-relational dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/content/remediate_batch_0028_core_boundaries.py
+          python3 scripts/content/remediate_batch_0028_core_boundaries.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify exact core dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          root = pathlib.Path('.')
+          normalized = {
+              'cq_q_5a5db0e8391add20113a1ffec9c1e41b': (
+                  'fcd6c7cbfba95b407ed6dfd83adeb926',
+                  '有序链表去除重复元素：给出1→2→3→3→4→4→5，返回1→2→5',
+              ),
+              'cq_q_5a87a04d4bc934eadb1cf42e28fcaed2': (
+                  'be5212d5e7ffdfedf22de7bae65f3f78',
+                  'IPv4 转 int',
+              ),
+          }
+          retired = 'cq_q_5b53dba65e5ceb49b026dad8fc1704cc'
+          retired_qid = retired.removeprefix('cq_q_')
+
+          canon = [json.loads(x) for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          if retired in by_cid:
+              raise SystemExit('source-unrecoverable batch 0028 Canonical remains active')
+          for cid, (qid, title) in normalized.items():
+              row = by_cid.get(cid)
+              if not row:
+                  raise SystemExit(f'{cid}: normalized Canonical missing')
+              if row.get('canonical_title') != title or row.get('question_ids') != [qid] or row.get('aliases') != [title]:
+                  raise SystemExit(f'{cid}: normalized Canonical drifted: {row}')
+
+          questions = [json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_qid = {row.get('question_id'): row for row in questions}
+          for cid, (qid, title) in normalized.items():
+              row = by_qid.get(qid)
+              if not row or row.get('canonical_id') != cid or row.get('original_question') != title or row.get('is_valid_for_library') is not True:
+                  raise SystemExit(f'{cid}: normalized Question projection missing or invalid: {row}')
+          for old_qid in ['5a5db0e8391add20113a1ffec9c1e41b', '5a87a04d4bc934eadb1cf42e28fcaed2']:
+              if old_qid in by_qid:
+                  raise SystemExit(f'inflated source Question id survived rebuild: {old_qid}')
+          retired_row = by_qid.get(retired_qid)
+          if not retired_row or retired_row.get('canonical_id') is not None or retired_row.get('is_valid_for_library') is not False or retired_row.get('exclusion_reason') != 'incomplete_or_unreadable':
+              raise SystemExit(f'retired source Question must remain explained and invalid: {retired_row}')
+
+          progress = json.loads((root/'review/progress.json').read_text(encoding='utf-8'))
+          items = progress.get('items', []) if isinstance(progress, dict) else progress
+          progress_ids = {row.get('canonical_id') for row in items}
+          if retired in progress_ids:
+              raise SystemExit('retired batch 0028 Canonical still has ReviewProgress')
+          for cid in normalized:
+              if cid not in progress_ids:
+                  raise SystemExit(f'{cid}: normalized Canonical lost ReviewProgress')
+
+          active = root/'review/answers'/f'{retired}.md'
+          archived = root/'review/archive/answers'/f'{retired}.md'
+          if active.exists() or not archived.exists():
+              raise SystemExit('retired batch 0028 Answer archive state is invalid')
+          for cid, (_, title) in normalized.items():
+              answer = root/'review/answers'/f'{cid}.md'
+              if not answer.exists() or title not in answer.read_text(encoding='utf-8'):
+                  raise SystemExit(f'{cid}: normalized active Answer title missing')
+
+          audit = json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8'))
+          retire_decision = [row for row in audit.get('decisions', []) if row.get('question_id') == retired_qid]
+          if len(retire_decision) != 1 or retire_decision[0].get('decision') != 'exclude' or retire_decision[0].get('exclusion_reason') != 'incomplete_or_unreadable':
+              raise SystemExit('validity audit missing batch 0028 fail-closed exclusion')
+
+          packet = json.loads((root/'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.json').read_text(encoding='utf-8'))
+          packet_ids = {row.get('canonical_id') for row in packet.get('canonicals', [])}
+          original = {
+              'cq_q_59d52495f3df25f0d98935d5e7fa3191',
+              'cq_q_5a5db0e8391add20113a1ffec9c1e41b',
+              'cq_q_5a87a04d4bc934eadb1cf42e28fcaed2',
+              'cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266',
+              'cq_q_5b53dba65e5ceb49b026dad8fc1704cc',
+              'cq_q_5d39b5ae05a488c7436cbfa9b21e746c',
+              'cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97',
+              'cq_q_5f1aa586172b1a82ebb8cdd65fb6927b',
+              'cq_q_5f591ff5674d612dc10f87d07c1e820f',
+              'cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5',
+          }
+          if packet_ids != original:
+              raise SystemExit('frozen batch 0028 source packet was mutated by remediation')
+
+          task = (root/'tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md').read_text(encoding='utf-8')
+          if '[x] Apply and verify the non-relational boundary slice' not in task:
+              raise SystemExit('batch 0028 task does not record verified core remediation')
+          print('PASS: batch 0028 core source-boundary dispositions verified.')
+          PY
+
+      - name: Verify repository integrity and full quality gates
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content head stayed stable during validation
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding this verified local mutation; a later trigger will retry against the newer source state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'No batch 0028 core source-boundary remediation changes remain.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: apply batch 0028 core source boundaries"
+          git push origin "HEAD:$CONTENT_BRANCH"
