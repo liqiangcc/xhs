@@ -28,7 +28,48 @@ jobs:
           ref: content/quality-completion
           fetch-depth: 0
 
+      - name: Preserve completed source-first boundary
+        id: boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+
+          batch = '0025'
+          task_path = pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md')
+          packet_path = pathlib.Path(f'review/reports/ANSWER_BATCH_{batch}_SOURCE_PACKET.json')
+          boundary_path = pathlib.Path(f'review/content_build/answer_batch_{batch}/source_boundary_audit.md')
+          task = task_path.read_text(encoding='utf-8')
+          canonical_ids = list(dict.fromkeys(re.findall(r'`(cq_q_[0-9a-f]{32})`', task)))
+          if len(canonical_ids) != 10:
+              raise SystemExit(f'expected 10 unique batch canonicals, got {len(canonical_ids)}')
+
+          frozen = boundary_path.exists()
+          if frozen:
+              if not packet_path.exists():
+                  raise SystemExit('source-boundary audit exists but frozen source packet is missing')
+              packet = json.loads(packet_path.read_text(encoding='utf-8'))
+              packet_ids = [entry.get('canonical_id') for entry in packet.get('canonicals') or []]
+              if packet.get('schema_version') != 'answer_batch_source_packet.v2' or packet.get('batch') != batch:
+                  raise SystemExit('frozen source packet schema/batch mismatch')
+              if len(packet_ids) != 10 or set(packet_ids) != set(canonical_ids):
+                  raise SystemExit(f'frozen source packet does not preserve original batch membership: {packet_ids}')
+              boundary = boundary_path.read_text(encoding='utf-8')
+              disposition_ids = re.findall(r'^\| `(cq_q_[0-9a-f]{32})` \|', boundary, flags=re.MULTILINE)
+              if set(disposition_ids) != set(canonical_ids):
+                  raise SystemExit(f'source-boundary audit does not disposition every original Canonical: {disposition_ids}')
+              print('Frozen source packet already has a complete source-first boundary audit; preserve it as historical evidence.')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+              fh.write(f'frozen={str(frozen).lower()}\n')
+          PY
+
       - name: Extract repository-source packet for batch 0025
+        if: steps.boundary.outputs.frozen != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -165,6 +206,7 @@ jobs:
           PY
 
       - name: Verify packet shape
+        if: steps.boundary.outputs.frozen != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -192,6 +234,7 @@ jobs:
           PY
 
       - name: Commit source packet to content branch only if source head stayed stable
+        if: steps.boundary.outputs.frozen != 'true'
         shell: bash
         run: |
           set -euo pipefail
