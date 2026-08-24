@@ -207,8 +207,12 @@ test('Canonical merge rejects loss of a reviewed target Question before mutation
     assert.equal(harness.mutationCalled(), false);
 });
 
-test('Dedup apply carries reviewed Canonical scope into the merge preconditions', async () => {
+test('Dedup apply carries reviewed Canonical scope and ownership CAS into merge preconditions', async () => {
     let mergeInput = null;
+    const ownershipExpectedRevisions = [
+        { resource: 'canonical-ownership-by-question:q_target', revision: 'owner-target-rev' },
+        { resource: 'canonical-ownership-by-question:q_source', revision: 'owner-source-rev' },
+    ];
     const apply = createApplyRelationDecisionUseCase({
         async prepareRelationApply() {
             return {
@@ -231,6 +235,7 @@ test('Dedup apply carries reviewed Canonical scope into the merge preconditions'
                 reviewed_question_ids: ['q_source', 'q_target'],
                 target_reviewed_question_ids: ['q_target'],
                 source_question_ids: ['q_source'],
+                ownership_expected_revisions: ownershipExpectedRevisions,
             };
         },
         async mergeCanonical(inputValue) {
@@ -264,4 +269,5 @@ test('Dedup apply carries reviewed Canonical scope into the merge preconditions'
     assert.equal(result.ok, true);
     assert.deepEqual(mergeInput.expected_source_question_ids, ['q_source']);
     assert.deepEqual(mergeInput.expected_target_reviewed_question_ids, ['q_target']);
+    assert.deepEqual(mergeInput.expected_reviewed_ownership_revisions, ownershipExpectedRevisions);
 });
