@@ -1,6 +1,7 @@
 name: Inventory Content Batch 0028 Current Relations
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - master
@@ -141,8 +142,7 @@ jobs:
 
           out_dir = root/'review/content_build/answer_batch_0028'
           out_dir.mkdir(parents=True, exist_ok=True)
-          json_path = out_dir/'current_relation_inventory.json'
-          json_path.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          (out_dir/'current_relation_inventory.json').write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
           lines = [
               '# Answer Batch 0028 — Current Relation Inventory',
@@ -196,13 +196,13 @@ jobs:
             echo 'Discarding generated inventory; a later run can regenerate from fresh state.'
             exit 0
           fi
-          if git diff --quiet; then
+          git add review/content_build/answer_batch_0028/current_relation_inventory.json review/content_build/answer_batch_0028/current_relation_inventory.md
+          if git diff --cached --quiet; then
             echo 'Relation inventory is already current.'
             exit 0
           fi
           git config user.name 'xhs-remediation-bot'
           git config user.email '43640935+liqiangcc@users.noreply.github.com'
-          git add review/content_build/answer_batch_0028/current_relation_inventory.json review/content_build/answer_batch_0028/current_relation_inventory.md
           git diff --cached --check
           git commit -m 'content: inventory batch 0028 current relation facts'
           git push origin "HEAD:$CONTENT_BRANCH"
