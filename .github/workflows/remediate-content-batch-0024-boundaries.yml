@@ -1,0 +1,214 @@
+name: Remediate Content Batch 0024 Source Boundaries
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0024-boundaries.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0024-source-boundaries
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Synchronize and capture base head
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          git reset --hard "origin/$CONTENT_BRANCH"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether bounded remediation is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0024.md'
+          boundary='review/content_build/answer_batch_0024/source_boundary_audit.md'
+          if [ -f "$boundary" ] \
+             && grep -Fq 'Active after source-boundary audit: `6`' "$task" \
+             && grep -Fq 'three separate under-specified prompts' "$task" \
+             && grep -Fq 'two SparkSQL tasks' "$task" \
+             && grep -Fq '“前缀和” names a technique' "$task" \
+             && grep -Fq 'source example contradicts standard K-group node reversal' "$task"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Batch 0024 source-boundary remediation already complete.'
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+            echo 'Batch 0024 source-boundary remediation is pending.'
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Apply source-first boundary dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/content/remediate_batch_0024_boundaries.py
+          python3 scripts/content/remediate_batch_0024_boundaries.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify exact batch 0024 dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          retired = {
+              'cq_q_45e7ff4427260a3df4b31c08cad14141',
+              'cq_q_46a0db137d9b355e6858b744d86f5d26',
+              'cq_q_46f480936190e2b68c9f9dc6cba0d866',
+              'cq_q_46fe1307494a9f56b39e0d9f76796f61',
+          }
+          qualified = {
+              'cq_q_458d73b3af53aae38af2eaf83473ef2f',
+              'cq_q_4715e4cb7c542d15146981fcac350958',
+              'cq_q_48bf70b4872cce81f798c61fe039ef47',
+              'cq_q_48d51539a85aabde9bd294e902c0cd86',
+              'cq_q_494b0b68c1f4eb41cf7ec520babc8f11',
+              'cq_q_496dcfbf2235c39f2f484c991f151e76',
+          }
+
+          packet = json.loads(Path('review/reports/ANSWER_BATCH_0024_SOURCE_PACKET.json').read_text(encoding='utf-8'))
+          if packet.get('batch') != '0024' or len(packet.get('canonicals') or []) != 10:
+              raise SystemExit('batch 0024 source packet identity/shape drifted')
+          if any(not entry.get('source_hits') for entry in packet['canonicals']):
+              raise SystemExit('batch 0024 source packet lost source-hit completeness')
+
+          canon = [json.loads(x) for x in Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          leaked = sorted(retired & by_cid.keys())
+          if leaked:
+              raise SystemExit(f'retired batch 0024 Canonicals are still active: {leaked}')
+          missing = sorted(qualified - by_cid.keys())
+          if missing:
+              raise SystemExit(f'qualified batch 0024 Canonicals disappeared: {missing}')
+
+          questions = [json.loads(x) for x in Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          leaked_questions = sorted({q.get('canonical_id') for q in questions} & retired)
+          if leaked_questions:
+              raise SystemExit(f'retired batch 0024 Question bindings survived rebuild: {leaked_questions}')
+
+          progress = json.loads(Path('review/progress.json').read_text(encoding='utf-8'))
+          progress_ids = {item.get('canonical_id') for item in progress.get('items', [])}
+          leaked_progress = sorted(retired & progress_ids)
+          if leaked_progress:
+              raise SystemExit(f'retired batch 0024 Canonicals still have ReviewProgress: {leaked_progress}')
+          missing_progress = sorted(qualified - progress_ids)
+          if missing_progress:
+              raise SystemExit(f'qualified batch 0024 Canonicals lost ReviewProgress: {missing_progress}')
+
+          for cid in retired:
+              if Path(f'review/answers/{cid}.md').exists():
+                  raise SystemExit(f'{cid}: retired Canonical still has an active Answer')
+              if not Path(f'review/archive/answers/{cid}.md').exists():
+                  raise SystemExit(f'{cid}: retired Canonical Answer was not archived')
+
+          audit = json.loads(Path('config/question_validity_audit.json').read_text(encoding='utf-8'))
+          excluded_qids = {
+              d.get('question_id')
+              for d in audit.get('decisions', [])
+              if d.get('decision') == 'exclude' and d.get('exclusion_reason') == 'incomplete_or_unreadable'
+          }
+          expected_retired_qids = {cid.removeprefix('cq_q_') for cid in retired}
+          if not expected_retired_qids <= excluded_qids:
+              raise SystemExit('validity audit is missing one or more batch 0024 fail-closed exclusions')
+
+          task = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0024.md').read_text(encoding='utf-8')
+          if 'Active after source-boundary audit: `6`' not in task:
+              raise SystemExit('batch 0024 task active count was not updated')
+          boundary = Path('review/content_build/answer_batch_0024/source_boundary_audit.md')
+          if not boundary.exists():
+              raise SystemExit('batch 0024 source-boundary audit is missing')
+          boundary_text = boundary.read_text(encoding='utf-8')
+          if 'Directly candidate-qualified: 6' not in boundary_text or 'Source-unrecoverable / excluded: 4' not in boundary_text:
+              raise SystemExit('batch 0024 source-boundary audit verdict drifted')
+          PY
+
+      - name: Verify repository integrity and full quality gates
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content head stayed stable during validation
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding this verified local mutation; a later trigger will retry against the newer source state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'No batch 0024 source-boundary remediation changes remain.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: apply batch 0024 source-boundary dispositions"
+          git push origin "HEAD:$CONTENT_BRANCH"
