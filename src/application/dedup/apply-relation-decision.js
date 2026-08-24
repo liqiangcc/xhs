@@ -98,6 +98,7 @@ function createApplyRelationDecisionUseCase(dependencies = {}) {
                 reason: `Explicit ${prepared.relation} RelationDecision ${relationCandidateKey}`,
                 expected_source_question_ids: applyStrategy.source_question_ids,
                 expected_target_reviewed_question_ids: applyStrategy.target_reviewed_question_ids,
+                expected_reviewed_ownership_revisions: applyStrategy.ownership_expected_revisions,
             });
             return {
                 ok: mergeResult.ok === true,
