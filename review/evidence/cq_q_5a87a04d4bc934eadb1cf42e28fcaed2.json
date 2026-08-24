@@ -1,0 +1,191 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_5a87a04d4bc934eadb1cf42e28fcaed2",
+  "candidate_sha256": "539c01f06b88128497d8048a887b5705f8fb9bf8088bb49acaf34130aeb4faba",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0028-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repo-source",
+      "title": "Answer Batch 0028 repository source packet",
+      "locator": "review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "boundary-audit",
+      "title": "Answer Batch 0028 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0028/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "rfc791",
+      "title": "RFC 791 — Internet Protocol",
+      "locator": "https://www.rfc-editor.org/rfc/rfc791.html",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "jdk21-integer",
+      "title": "Java SE 21 Integer.toUnsignedLong",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Integer.html#toUnsignedLong(int)",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "IPv4 deterministic Java validation",
+      "locator": "review/content_build/answer_batch_0028/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Source-first isolated review",
+      "locator": "review/content_build/answer_batch_0028/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source asks for IPv4 string to int conversion; reverse int to text is not a source requirement.",
+      "source_ids": [
+        "repo-source",
+        "boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "address-width",
+      "text": "IPv4 internet addresses are four octets / 32 bits.",
+      "source_ids": [
+        "rfc791"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "unsigned-view",
+      "text": "Integer.toUnsignedLong preserves the int argument bits in the low 32 bits of a nonnegative long unsigned conversion.",
+      "source_ids": [
+        "jdk21-integer"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "implementation",
+      "text": "The implementation validates exactly four non-empty decimal segments in 0..255 and appends each octet by left-shifting the accumulated bit pattern eight bits before OR-ing the next octet.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java fixture passes byte-order, signed/unsigned boundaries, explicit decimal leading-zero behavior and malformed-input rejection.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "be5212d5e7ffdfedf22de7bae65f3f78",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac -encoding UTF-8 Ipv4ToInt.java Ipv4ToIntTest.java && java Ipv4ToIntTest",
+    "result": "pass",
+    "reported_stdout": "PASS valid=6 invalid=12 unsigned-boundaries=2 leading-zero-contract=decimal",
+    "checks": [
+      "ordinary byte order",
+      "127/128 signed boundary",
+      "unsigned 32-bit maximum",
+      "explicit leading-zero decimal contract",
+      "malformed segment count/content/range rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "255.255.255.255",
+        "expected": "int -1; unsigned long 4294967295",
+        "passed": true
+      },
+      {
+        "case": "001.002.003.004",
+        "expected": "explicit candidate contract parses decimal as 1.2.3.4",
+        "passed": true
+      },
+      {
+        "case": "malformed addresses",
+        "expected": "IllegalArgumentException",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0028-20260825-v1",
+    "review_version": "batch-0028.ipv4-to-int.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The authoritative repository source asks only ipv4转int; the candidate correctly treats reverse conversion as outside the required answer boundary.",
+      "RFC 791 supports the four-octet/32-bit address-width claim; the candidate does not present its dotted-decimal leading-zero choice as an RFC requirement.",
+      "Java SE 21 Integer.toUnsignedLong documents that the high 32 long bits are zero and the low 32 bits equal the int argument, supporting the signed-int/unsigned-view explanation.",
+      "The shift-and-or state invariant preserves octet order, and every segment is range-checked before it is inserted into the 32-bit pattern.",
+      "The exact Java fixture passes byte-order, signed/unsigned boundary, explicit decimal-leading-zero and malformed-input cases. Formal promotion remains blocked only by the repository human-approval gate."
+    ]
+  }
+}
