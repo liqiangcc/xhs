@@ -182,6 +182,7 @@ function createApplication(options = {}) {
         indexRepository: dedupIndexRepository,
         hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
+        questionSelectionRepository: dedupQuestionSelectionRepository,
         relationCandidatePublisher,
     } = createFsDedupSuggestionRepositories({ root: options.root, paths: dedupPaths });
     const {
@@ -190,25 +191,25 @@ function createApplication(options = {}) {
         relationDecisionRepository,
     } = createFsDedupDecisionRepositories({ root: options.root, paths: dedupPaths });
 
-    const suggest = createSuggestCanonicalRelationsUseCase({
-        taxonomy,
+    const dedupSourceDependencies = {
         indexRepository: dedupIndexRepository,
         hotspotRepository: dedupHotspotRepository,
         questionRepository: dedupQuestionRepository,
+        questionSelectionRepository: dedupQuestionSelectionRepository,
+    };
+    const suggest = createSuggestCanonicalRelationsUseCase({
+        taxonomy,
+        ...dedupSourceDependencies,
         relationCandidatePublisher,
     });
     const recordDecision = createRecordRelationDecisionUseCase({
         relationCandidateRepository,
-        indexRepository: dedupIndexRepository,
-        hotspotRepository: dedupHotspotRepository,
-        questionRepository: dedupQuestionRepository,
+        ...dedupSourceDependencies,
         relationDecisionGateway,
     });
     const prepareApply = createPrepareRelationApplyUseCase({
         relationDecisionRepository,
-        indexRepository: dedupIndexRepository,
-        hotspotRepository: dedupHotspotRepository,
-        questionRepository: dedupQuestionRepository,
+        ...dedupSourceDependencies,
     });
     const applyDecision = createApplyRelationDecisionUseCase({
         prepareRelationApply: prepareApply,

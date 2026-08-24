@@ -13,11 +13,13 @@ const {
     entityIndexResource,
     hotspotIndexResource,
     questionSnapshotResource,
+    questionSelectionResource,
     relationQueueResource,
     matchingEntityRefs,
     listHotspots,
     hotspotRefs,
     resolveQuestionsByRefs,
+    resolveQuestionsByQuestionIds,
     readQueueManifest,
     relationQueueSnapshot,
 } = require('./dedup-suggestion-repositories');
@@ -97,6 +99,16 @@ function currentDecisionRevisions(paths, decision) {
             [queueSnapshot.resource, queueSnapshot.revision],
             [hotspotIndexResource(), hashValue(hotspots)],
             [questionSnapshotResource(refs), hashValue(questions)],
+        ]);
+    }
+    if (mode === 'pair') {
+        if (!Array.isArray(candidate.question_ids) || candidate.question_ids.length !== 2) {
+            throw new Error('Pair relation decision requires exactly two question_ids');
+        }
+        const questions = resolveQuestionsByQuestionIds(paths, candidate.question_ids);
+        return new Map([
+            [queueSnapshot.resource, queueSnapshot.revision],
+            [questionSelectionResource(candidate.question_ids), hashValue(questions)],
         ]);
     }
     throw new Error(`Unsupported dedup relation decision scope: ${mode}`);
