@@ -1,11 +1,14 @@
 name: Remediate Content Batch 0019 Source-Unrecoverable Questions
 
-# Default-branch registered one-shot transport for the bounded source retirement.
-# The mutation is verified in Actions and exported to an unprotected staging
-# branch. The automation controller then fast-forwards/merges that verified
-# commit into content/quality-completion. This avoids protected-branch push rules
-# and content-head races while preserving an auditable atomic mutation.
+# Default-branch registered transport for the bounded source retirement. The
+# mutation is verified in Actions and exported to an unprotected staging branch;
+# the automation controller can then merge that verified commit into the active
+# content branch. PR synchronization is the reliable execution trigger because
+# the workflow definition is read from master.
 on:
+  pull_request:
+    branches:
+      - master
   push:
     branches:
       - master
@@ -25,6 +28,7 @@ env:
 
 jobs:
   remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
