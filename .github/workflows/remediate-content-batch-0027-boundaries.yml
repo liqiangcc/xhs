@@ -62,7 +62,7 @@ jobs:
 
       - name: Set up Java 21
         if: steps.status.outputs.pending == 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -72,6 +72,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
+          cache: false
 
       - name: Apply source-first boundary dispositions
         if: steps.status.outputs.pending == 'true'
@@ -96,6 +97,7 @@ jobs:
 
           root = pathlib.Path('.')
           retired = 'cq_q_5598debbce04bff1fcb9dbd8f09e9d68'
+          retired_qid = retired.removeprefix('cq_q_')
           required = {
               'cq_q_555486cb901cc4cd56776f7eeaa0d5b5',
               'cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc',
@@ -112,11 +114,10 @@ jobs:
               'cq_q_5873d2a550ca02cc41b2862b6aefaa77': ('b1effe2d30fbefb17fab84fe768fbdac', '两个线程交替打印abababab'),
               'cq_q_59c84ea33afa81784f39f85a824a2d94': ('a49d8c5d9ec12aa92ccea9a5f2bb4302', 'LeetCode 16.26 计算器：如何让乘除法优先计算？'),
           }
-          old_qids = {
+          inflated_qids = {
               '58149c934c9b77f14e10c21cebff411c',
               '5873d2a550ca02cc41b2862b6aefaa77',
               '59c84ea33afa81784f39f85a824a2d94',
-              retired.removeprefix('cq_q_'),
           }
 
           canon = [json.loads(x) for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
@@ -134,15 +135,18 @@ jobs:
               raise SystemExit('Top-100 Canonical still encodes solution-specific algorithm entities')
 
           questions = [json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
-          if any(row.get('question_id') in old_qids for row in questions):
-              raise SystemExit('retired/inflated batch 0027 Question id survived rebuild')
+          if any(row.get('question_id') in inflated_qids for row in questions):
+              raise SystemExit('inflated batch 0027 Question id survived rebuild')
           by_qid = {row.get('question_id'): row for row in questions}
+          retired_row = by_qid.get(retired_qid)
+          if not retired_row or retired_row.get('canonical_id') is not None or retired_row.get('is_valid_for_library') is not False or retired_row.get('exclusion_reason') != 'incomplete_or_unreadable':
+              raise SystemExit(f'retired source Question must remain as an explained invalid projection: {retired_row}')
           for cid, (qid, title) in normalized.items():
               row = by_qid.get(qid)
               if not row or row.get('canonical_id') != cid or row.get('original_question') != title:
                   raise SystemExit(f'{cid}: normalized Question projection missing/misbound')
           puzzle = by_qid.get('580b69f633d51b4f6c6262690a0fdf9c')
-          if not puzzle or puzzle.get('canonical_id') != 'cq_q_580b69f633d51b4f6c6262690a0fdf9c' or puzzle.get('question_type') != '八股文_Concept':
+          if not puzzle or puzzle.get('canonical_id') != 'cq_q_580b69f633d51b4f6c6262690a0fdf9c' or puzzle.get('question_type') != '八股文_Concept' or puzzle.get('is_valid_for_library') is not True:
               raise SystemExit('12-ball puzzle validity/type repair did not survive rebuild')
           topk = by_qid.get('567ffeb91924fcb3677322177357773b')
           if not topk or topk.get('tech_entities') != ['Top K']:
@@ -166,7 +170,7 @@ jobs:
               raise SystemExit('12-ball baseline Answer still carries an artificial coding type')
 
           audit = json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8'))
-          retire_decision = [row for row in audit.get('decisions', []) if row.get('question_id') == retired.removeprefix('cq_q_')]
+          retire_decision = [row for row in audit.get('decisions', []) if row.get('question_id') == retired_qid]
           if len(retire_decision) != 1 or retire_decision[0].get('decision') != 'exclude' or retire_decision[0].get('exclusion_reason') != 'incomplete_or_unreadable':
               raise SystemExit('validity audit missing batch 0027 fail-closed exclusion')
           puzzle_decision = [row for row in audit.get('decisions', []) if row.get('question_id') == '580b69f633d51b4f6c6262690a0fdf9c']
@@ -180,6 +184,7 @@ jobs:
           disposition_ids = set(re.findall(r'^\| `(cq_q_[0-9a-f]{32})` \|', boundary.read_text(encoding='utf-8'), flags=re.MULTILINE))
           if disposition_ids != required | {retired}:
               raise SystemExit('batch 0027 frozen boundary no longer covers original 10')
+          print('PASS: batch 0027 exact source-boundary dispositions verified, including retained invalid-source audit row.')
           PY
 
       - name: Verify repository integrity and full quality gates
