@@ -44,3 +44,14 @@ The legacy batch member `cq_q_5f1aa586172b1a82ebb8cdd65fb6927b` must first be sp
 5. Apply only current, fresh Decisions. `same` may mutate Canonical ownership; `related` records relation only.
 6. Re-run Question coverage, Canonical, ReviewProgress, strict Answer, type, semantic, evidence, code and full CI gates after mutation.
 7. Any surviving Answer whose source set or response contract changes is stale by construction and must complete fresh candidate -> isolated review -> evidence/code gate -> required human approval before atomic promotion.
+
+## 5. Fresh SQL split-child relation review
+
+The required post-split discovery was rerun through the current Application path and frozen in `sql_relation_discovery.{json,md}` from current repository state. The source Question is `e9c5bb8468fd0b37bd3f0abf72df80aa`, remains valid and solely owned by `cq_q_e9c5bb8468fd0b37bd3f0abf72df80aa`, has `SQL` as its current entity, and asks only for student number, student name and average grade from student/grade tables.
+
+- Fresh `canonical suggest --entity SQL --limit 100` produced `0` detections and `0` RelationCandidates.
+- Fresh `canonical suggest --hotspot --limit 200` also produced `0` detections and `0` RelationCandidates.
+- Independent repository source search found no exact active same-boundary Canonical; the nearby mixed long-tail item `cq_q_01eb7504533c120cd1401f8909417eca` asks a different aggregate predicate (`平均成绩大于 80`) and is itself a mixed multi-question baseline, so it is not authorization to merge this split child.
+- No RelationCandidate exists to decide or apply. Absence of a candidate is not treated as an `unrelated` Decision; it only closes the required discovery step.
+
+Boundary conclusion: retain `cq_q_e9c5bb8468fd0b37bd3f0abf72df80aa` as its own source-exact Coding/SQL Canonical and proceed to candidate authoring. The candidate may introduce minimal table/column names solely as explicit implementation assumptions and must not rewrite `JOIN`, `GROUP BY`, key names, or schema names into source evidence.
