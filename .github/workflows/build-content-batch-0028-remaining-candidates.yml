@@ -1,0 +1,625 @@
+name: Build Content Batch 0028 Remaining Candidates
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0028-remaining-candidates.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-remaining-candidates
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard current source boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const expected=new Map([
+            ['5e21e188af5c4a9ffdb5eaf97cc39c97','如何实现一个深拷贝函数?'],
+            ['5f591ff5674d612dc10f87d07c1e820f','算法手撕：二叉树节点存储代价计算（到达叶子节点的最大路径开销）。'],
+            ['5f9a6152ed410f9a6b42f5f0ab7aa0a5','算法/手撕：实现节流（Throttle）函数。'],
+          ]);
+          for(const [qid,text] of expected){const row=rows.find(r=>r.question_id===qid);if(!row||row.original_question!==text)throw new Error(`${qid}: source wording drifted`);if(!row.canonical_id)throw new Error(`${qid}: canonical ownership missing`);}
+          const big=rows.filter(r=>r.canonical_id==='cq_topic_cc39dcdb');
+          if(big.length<2) throw new Error('big-number canonical does not yet include the recovered source child');
+          if(!big.some(r=>/大数|字符串/.test(r.original_question||''))) throw new Error('big-number recovered source wording missing');
+          NODE
+          for cid in cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97 cq_q_5f591ff5674d612dc10f87d07c1e820f cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5 cq_topic_cc39dcdb; do
+            node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "/tmp/$cid.context.json"
+          done
+          node <<'NODE'
+          const fs=require('fs');
+          for(const cid of ['cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97','cq_q_5f591ff5674d612dc10f87d07c1e820f','cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5','cq_topic_cc39dcdb']){
+            const c=JSON.parse(fs.readFileSync(`/tmp/${cid}.context.json`,'utf8'));
+            if(!c.ok||c.answer_type!=='coding') throw new Error(`${cid}: expected coding context, got ${c.answer_type}`);
+          }
+          NODE
+
+      - name: Write deep-copy candidate and executable fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid='cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97'
+          out="review/content_build/answer_batch_0028/$cid"
+          mkdir -p "$out"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 如何实现一个深拷贝函数？
+
+          ## 核心结论
+
+          “深拷贝”必须先定义支持范围，不能把一个递归函数说成能复制所有 JavaScript 对象。这里给出一个可执行契约：复制 primitive、Array、普通对象和 `Object.create(null)` 对象；递归复制数据属性，用 `WeakMap` 保持循环引用与共享引用拓扑；保留 symbol/non-enumerable/accessor descriptor；Date、Map、Set、DOM 节点和自定义 class 实例不在本实现范围内，遇到非普通对象直接报错。
+
+          ## 1 分钟版
+
+          - primitive（包括函数引用）直接返回；真正需要递归的是非 `null` object。
+          - Array 新建同长度数组；普通对象按原 prototype 新建空壳。
+          - 在递归子属性之前先把 `source -> clone` 放进 `WeakMap`，这样环形引用不会无限递归，同一个源对象被多处引用时也会映射到同一个克隆对象。
+          - 用 `Reflect.ownKeys` + property descriptor 复制 symbol、不可枚举属性和 getter/setter；descriptor 中的数据值才递归深拷贝。
+          - 对 Date/Map/Set/TypedArray/DOM/自定义 class 等对象必须逐类定义语义；本题来源没有给范围，所以这里选择显式拒绝，而不是悄悄复制错。
+
+          ## 3 分钟版
+
+          ```javascript
+          function deepClone(value, seen = new WeakMap()) {
+            if (value === null || typeof value !== 'object') return value;
+            if (seen.has(value)) return seen.get(value);
+
+            const isArray = Array.isArray(value);
+            const proto = Object.getPrototypeOf(value);
+            if (!isArray && proto !== Object.prototype && proto !== null) {
+              throw new TypeError('unsupported object type');
+            }
+
+            const copy = isArray ? new Array(value.length) : Object.create(proto);
+            seen.set(value, copy);
+
+            for (const key of Reflect.ownKeys(value)) {
+              if (isArray && key === 'length') continue;
+              const descriptor = Object.getOwnPropertyDescriptor(value, key);
+              if ('value' in descriptor) {
+                descriptor.value = deepClone(descriptor.value, seen);
+              }
+              Object.defineProperty(copy, key, descriptor);
+            }
+            return copy;
+          }
+          ```
+
+          这个版本的关键不是“递归”两个字，而是先定义对象域，再保证对象图关系正确。若 `a.left === a.right`，克隆后也应保持 `b.left === b.right`，但 `b.left !== a.left`；若 `a.self === a`，克隆后应有 `b.self === b`。
+
+          ## 关键细节
+
+          - `typeof null === "object"`，必须先单独处理 `null`。
+          - `WeakMap` 要在遍历子属性前写入，否则自环在第一次递归时仍然找不到已创建副本。
+          - `Reflect.ownKeys` 同时包含字符串键和 symbol 键；descriptor 能保留 enumerable/writable/configurable 以及 getter/setter，而不会为了读取 accessor 主动触发 getter。
+          - 数组先以原 `length` 创建，跳过不可配置的 `length` descriptor，再复制实际 own keys，可保留稀疏数组的洞。
+          - 函数不是普通可复制状态对象，本契约把函数当作不可变行为引用按 identity 保留；如果要求复制闭包，本质上已超出普通对象深拷贝能定义的范围。
+          - 复杂度按可达对象图计：时间 O(P)，P 是访问到的 own property 总数；额外空间 O(N + D)，N 是记录进 `WeakMap` 的对象数，D 是递归深度。极深链可能造成调用栈溢出，可改成显式栈遍历。
+
+          ## 原理机制
+
+          深拷贝本质上是“复制对象图”，不是“把 JSON 重新 parse 一遍”。节点是对象，属性引用是边。`WeakMap` 记录旧节点到新节点的一一映射：第一次遇到节点时先创建新节点并登记，再递归复制出边；后续再次遇到同一旧节点直接复用映射，因此既终止环，也保留 alias。JSON round-trip 会丢失 `undefined`、symbol、descriptor、循环结构等信息，所以只能用于一个更窄的 JSON 数据域。
+
+          ## 项目经验版
+
+          来源没有提供真实项目经历，不能虚构“线上用过某个深拷贝库”。实际落地时应先问清数据域：如果只需要平台支持的结构化可克隆类型，优先评估 `structuredClone`；如果业务有 class/Map/Date 等自定义语义，就按类型建立明确 clone policy 和测试，而不是无限扩张一个通用递归函数。
+
+          ## 常见追问
+
+          - 问：为什么要用 `WeakMap`，普通 `Map` 不行吗？答：两者都能解决本次遍历的环和共享引用；`WeakMap` 不会因为这个辅助映射额外强持有对象，更贴合临时对象映射用途。
+          - 问：为什么 `JSON.parse(JSON.stringify(x))` 不算通用深拷贝？答：它只适合 JSON 可表达的数据域，循环引用会失败，symbol/undefined/descriptor 等语义也不会被保留。
+          - 问：Date、Map、Set 怎么办？答：必须为每种类型定义复制规则，例如 key/value 是否递归、prototype 是否保留；本实现显式拒绝，避免得到“长得像但语义错”的普通对象。
+          - 问：循环引用为什么不会递归爆掉？答：源对象第一次出现时，在递归属性前就写入 `seen`；再次遇到它直接返回已创建副本。
+          - 问：递归会有什么边界？答：对象图极深时可能超过调用栈，需要改为显式 worklist；这不改变 `seen` 映射的不变量。
+
+          ## 易错点
+
+          - 把 `null` 当普通对象递归。
+          - 先递归子属性再写 `WeakMap`，导致循环引用无限递归。
+          - 只用 `Object.keys` 却宣称完整保留 symbol/non-enumerable 属性。
+          - 对 Date/Map/Set/class 实例直接 `Object.create(proto)`，表面 prototype 相同但内部槽没有复制，得到不可用对象。
+          - 把函数闭包、DOM 节点等未定义语义的对象也称作“通用深拷贝”。
+          EOF
+          cat > "$out/deep_clone.js" <<'JS'
+          'use strict';
+          function deepClone(value, seen = new WeakMap()) {
+            if (value === null || typeof value !== 'object') return value;
+            if (seen.has(value)) return seen.get(value);
+            const isArray = Array.isArray(value);
+            const proto = Object.getPrototypeOf(value);
+            if (!isArray && proto !== Object.prototype && proto !== null) throw new TypeError('unsupported object type');
+            const copy = isArray ? new Array(value.length) : Object.create(proto);
+            seen.set(value, copy);
+            for (const key of Reflect.ownKeys(value)) {
+              if (isArray && key === 'length') continue;
+              const descriptor = Object.getOwnPropertyDescriptor(value, key);
+              if ('value' in descriptor) descriptor.value = deepClone(descriptor.value, seen);
+              Object.defineProperty(copy, key, descriptor);
+            }
+            return copy;
+          }
+          module.exports={deepClone};
+          JS
+          cat > "$out/deep_clone_test.js" <<'JS'
+          'use strict';
+          const assert=require('assert'); const {deepClone}=require('./deep_clone');
+          const shared={v:7}; const sym=Symbol('s'); const source={nested:{x:1},left:shared,right:shared};
+          source.self=source; source.arr=[1,,{z:3}]; source[sym]={k:9};
+          Object.defineProperty(source,'hidden',{value:{h:2},enumerable:false,writable:false,configurable:true});
+          const clone=deepClone(source);
+          assert.notStrictEqual(clone,source); assert.notStrictEqual(clone.nested,source.nested); clone.nested.x=8; assert.strictEqual(source.nested.x,1);
+          assert.strictEqual(clone.self,clone); assert.strictEqual(clone.left,clone.right); assert.notStrictEqual(clone.left,shared);
+          assert.strictEqual(1 in clone.arr,false); assert.strictEqual(clone.arr.length,3); assert.notStrictEqual(clone.arr[2],source.arr[2]);
+          assert.notStrictEqual(clone[sym],source[sym]); const d=Object.getOwnPropertyDescriptor(clone,'hidden'); assert.strictEqual(d.enumerable,false); assert.strictEqual(d.writable,false); assert.notStrictEqual(d.value,source.hidden);
+          assert.throws(()=>deepClone(new Date()),/unsupported object type/); const fn=()=>1; assert.strictEqual(deepClone(fn),fn);
+          console.log('PASS nested=isolated cycle=preserved shared-alias=preserved symbols-descriptors=preserved sparse-array=preserved unsupported-type=rejected');
+          JS
+
+      - name: Write max-root-to-leaf-cost candidate and fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid='cq_q_5f591ff5674d612dc10f87d07c1e820f'; out="review/content_build/answer_batch_0028/$cid"; mkdir -p "$out"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_5f591ff5674d612dc10f87d07c1e820f","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 二叉树节点存储代价：到叶子节点的最大路径开销
+
+          ## 核心结论
+
+          来源只给出“二叉树节点存储代价、到达叶子节点的最大路径开销”，没有固定 API。这里采用最小契约：每个节点有一个 `long cost`，路径必须从根走到真实叶子，答案包含根和叶子的节点代价；空树返回 0。后序 DFS 对每个节点返回“从该节点到某个叶子的最大累计代价”，总时间 O(n)，递归额外空间 O(h)。
+
+          ## 1 分钟版
+
+          - 状态定义：`dfs(node)` = 从 `node` 出发、必须走到叶子的最大节点代价和。
+          - 叶子没有子树可选，直接返回自己的 `cost`。
+          - 只有一个孩子时必须走那个孩子，不能把缺失孩子当成代价 0；否则在负权场景会错误地“提前结束”。
+          - 两个孩子都存在时，返回 `node.cost + max(dfs(left), dfs(right))`。
+          - 每个节点只访问一次，O(n)；栈深等于树高 O(h)，最坏退化链为 O(n)。
+
+          ## 3 分钟版
+
+          ```java
+          public final class MaxRootToLeafCost {
+              public static final class Node {
+                  final long cost;
+                  Node left;
+                  Node right;
+                  Node(long cost) { this.cost = cost; }
+              }
+
+              public static long maxCost(Node root) {
+                  return root == null ? 0L : dfs(root);
+              }
+
+              private static long dfs(Node node) {
+                  if (node.left == null && node.right == null) return node.cost;
+                  if (node.left == null) return node.cost + dfs(node.right);
+                  if (node.right == null) return node.cost + dfs(node.left);
+                  return node.cost + Math.max(dfs(node.left), dfs(node.right));
+              }
+          }
+          ```
+
+          这里特意没有写成 `node.cost + max(leftOrZero, rightOrZero)`。例如节点代价都是负数且只有一个真实孩子时，缺失分支的 0 不是一条“到叶子路径”；把它参与 `max` 会返回一条根本不存在的路径。
+
+          ## 关键细节
+
+          - “路径”在本候选中严格要求终点是叶子；如果题目允许在任意节点停止，那是另一道最大前缀和问题。
+          - 使用 `long` 降低累计 `int` 溢出的风险；如果节点数和单节点代价连 `long` 都可能溢出，仍需由输入上界决定是否用更宽类型或显式溢出检测。
+          - 空树返回 0 是 API 选择，不是来源事实；若调用方要求空树报错，可把入口契约改成抛异常。
+          - 负代价不影响递推，只要缺失孩子不伪装成一条 0 代价路径。
+          - 复杂度：时间 O(n)，额外空间 O(h)；极深树若担心栈溢出，可用显式栈做后序遍历。
+
+          ## 原理机制
+
+          子问题的边界由“必须到叶子”决定。一个内部节点的合法答案一定是“当前节点代价 + 某个真实孩子的合法根到叶答案”。两个孩子时只需选较大者；单孩子时没有选择权。因为每棵子树的返回值已经完整代表该子树最优合法路径，所以这个递推具备最优子结构，不需要枚举所有完整路径。
+
+          ## 项目经验版
+
+          来源没有真实工程背景，不能虚构存储系统指标。若这种树表示目录、执行计划或资源层级，我会先确认“节点 cost 是独立开销还是累计值”“是否允许负数”“路径是否必须到叶子”和溢出上界，再决定递归、显式栈及数值类型。
+
+          ## 常见追问
+
+          - 问：为什么单孩子不能用缺失分支 0 和它取 `max`？答：题目要求到达叶子，缺失孩子不是合法路径；负权时把 0 当候选会直接算错。
+          - 问：如果要求返回最大路径本身而不仅是代价？答：递推时同时记录选择的孩子，或返回“代价 + 路径/next 指针”，最后从根恢复路径。
+          - 问：如果路径可以从任意节点开始呢？答：状态和答案范围都会变化，不能复用“根到叶”契约；需要重新定义是否允许跨左右子树以及起终点条件。
+          - 问：树退化成链会怎样？答：时间仍 O(n)，但递归栈变成 O(n)，很深时应改显式栈避免调用栈溢出。
+
+          ## 易错点
+
+          - 把题目偷偷改成“任意节点到任意节点”的二叉树最大路径和。
+          - 忘记根/叶代价是否计入，却直接套模板。
+          - 负权情况下把 null child 当 0 参与最大值。
+          - 用 `int` 累加但没有核对输入上界。
+          - 只说 O(n) 而忽略递归栈 O(h)。
+          EOF
+          cat > "$out/MaxRootToLeafCost.java" <<'JAVA'
+          public final class MaxRootToLeafCost {
+              public static final class Node { final long cost; Node left; Node right; Node(long cost){this.cost=cost;} }
+              public static long maxCost(Node root){ return root==null?0L:dfs(root); }
+              private static long dfs(Node node){
+                  if(node.left==null && node.right==null) return node.cost;
+                  if(node.left==null) return node.cost+dfs(node.right);
+                  if(node.right==null) return node.cost+dfs(node.left);
+                  return node.cost+Math.max(dfs(node.left),dfs(node.right));
+              }
+          }
+          JAVA
+          cat > "$out/MaxRootToLeafCostTest.java" <<'JAVA'
+          public final class MaxRootToLeafCostTest {
+              static void eq(long e,long a,String n){if(e!=a)throw new AssertionError(n+" expected="+e+" actual="+a);}
+              public static void main(String[] args){
+                  eq(0,MaxRootToLeafCost.maxCost(null),"empty");
+                  eq(7,MaxRootToLeafCost.maxCost(new MaxRootToLeafCost.Node(7)),"single");
+                  var r=new MaxRootToLeafCost.Node(5); r.left=new MaxRootToLeafCost.Node(4); r.right=new MaxRootToLeafCost.Node(10); r.left.left=new MaxRootToLeafCost.Node(20); r.left.right=new MaxRootToLeafCost.Node(1); r.right.right=new MaxRootToLeafCost.Node(2); eq(29,MaxRootToLeafCost.maxCost(r),"balanced");
+                  var neg=new MaxRootToLeafCost.Node(-5); neg.left=new MaxRootToLeafCost.Node(-2); eq(-7,MaxRootToLeafCost.maxCost(neg),"negative-single-child");
+                  var mixed=new MaxRootToLeafCost.Node(-1); mixed.left=new MaxRootToLeafCost.Node(10); mixed.right=new MaxRootToLeafCost.Node(3); mixed.left.left=new MaxRootToLeafCost.Node(-20); mixed.right.right=new MaxRootToLeafCost.Node(4); eq(6,MaxRootToLeafCost.maxCost(mixed),"must-reach-leaf");
+                  System.out.println("PASS empty=0 single=7 balanced=29 negative-single-child=-7 must-reach-leaf=6");
+              }
+          }
+          JAVA
+
+      - name: Write throttle candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid='cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5'; out="review/content_build/answer_batch_0028/$cid"; mkdir -p "$out"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 手写节流（Throttle）函数
+
+          ## 核心结论
+
+          节流不是“固定模板”，先要约定 leading/trailing 语义。来源只要求实现 Throttle，因此本候选明确采用：一个窗口内最多执行一次；第一调用立即执行（leading），窗口内的多次调用只保留最新的 `this` 和参数，并在窗口结束补一次（trailing）；暴露 `cancel()` 丢弃待执行 trailing。核心状态是上次真正执行时间、一个定时器和最新待执行调用。
+
+          ## 1 分钟版
+
+          - 第一次调用立即执行并记录 `lastInvokeTime`。
+          - 后续调用计算 `remaining = wait - (now - lastInvokeTime)`；若已经跨过窗口，立即执行当前调用。
+          - 仍在窗口内时覆盖 `pendingThis/pendingArgs`，并且最多只挂一个 timer；因此高频输入不会创建一串定时器。
+          - timer 到点只执行最后一次待调用，并以实际执行时刻更新 `lastInvokeTime`。
+          - `cancel()` 清 timer、丢 pending，并重置时间，使下一次调用重新作为 leading 调用。
+
+          ## 3 分钟版
+
+          ```javascript
+          function throttle(fn, wait) {
+            if (typeof fn !== 'function') throw new TypeError('fn must be a function');
+            if (!Number.isFinite(wait) || wait < 0) throw new RangeError('wait must be non-negative');
+
+            let lastInvokeTime = -Infinity;
+            let timerId = null;
+            let pendingThis;
+            let pendingArgs;
+
+            function invoke(time, receiver, args) {
+              lastInvokeTime = time;
+              pendingThis = pendingArgs = undefined;
+              return fn.apply(receiver, args);
+            }
+
+            function trailing() {
+              timerId = null;
+              if (pendingArgs !== undefined) invoke(Date.now(), pendingThis, pendingArgs);
+            }
+
+            function throttled(...args) {
+              const now = Date.now();
+              const remaining = wait - (now - lastInvokeTime);
+              if (remaining <= 0) {
+                if (timerId !== null) {
+                  clearTimeout(timerId);
+                  timerId = null;
+                }
+                return invoke(now, this, args);
+              }
+              pendingThis = this;
+              pendingArgs = args;
+              if (timerId === null) timerId = setTimeout(trailing, remaining);
+            }
+
+            throttled.cancel = function cancel() {
+              if (timerId !== null) clearTimeout(timerId);
+              timerId = null;
+              pendingThis = pendingArgs = undefined;
+              lastInvokeTime = -Infinity;
+            };
+            return throttled;
+          }
+          ```
+
+          ## 关键细节
+
+          - 节流的 leading/trailing 组合没有唯一标准答案，必须先说清契约；本实现固定为 leading + latest-trailing，而不是声称来源已经指定。
+          - `remaining` 基于“实际执行时间”而不是“最近输入时间”，否则连续事件可能不断把窗口向后推，行为会更像 debounce。
+          - 窗口内只保留最新参数，所以 `t=0` 执行 A，`t=20` 来 B，`t=60` 来 C，`wait=100` 时，约 `t=100` 补的是 C。
+          - 跨过窗口时若旧 trailing timer 还挂着，必须先清理，避免当前立即执行后旧 timer 又重复触发。
+          - `this` 通过 `apply` 保存；箭头函数若直接包住 `fn(...args)` 很容易丢调用方 receiver。
+          - 时间复杂度每次调用 O(1)，状态 O(1)；真实 timer 只保证“不早于延迟”而非精确时钟，后台标签页等环境还可能被浏览器限频。
+
+          ## 原理机制
+
+          throttle 把连续时间切成由“真正执行”锚定的最小间隔。`lastInvokeTime` 决定当前调用是否拥有立即执行资格；timer 只是把窗口内最后一次 pending 调用延后到资格恢复时。因为任何时刻至多一个 timer，且 pending 只保存最后一次调用，所以事件频率再高也不会让执行频率超过约每 `wait` 一次。
+
+          ## 项目经验版
+
+          来源没有真实项目材料，不能虚构滚动监听或埋点收益。实际使用前我会先确认业务要 leading、trailing 还是两者、组件卸载时是否 cancel、是否需要 `flush()`，并用可控 fake clock 测时间边界，而不是靠 `setTimeout` + sleep 的脆弱测试。
+
+          ## 常见追问
+
+          - 问：Throttle 和 Debounce 的核心差别是什么？答：Throttle 保证高频期间按上限频率持续执行；Debounce 通常等输入安静一段时间才执行，连续输入会不断推迟。
+          - 问：为什么 trailing 要保留“最后一次”参数？答：这是本实现显式选择的 latest-trailing 语义，可让窗口结束时反映最新状态；若业务要首个或累计事件，应改契约。
+          - 问：为什么跨窗口立即执行前要清 timer？答：timer 代表旧窗口的待执行调用；当前调用已经取得新的执行资格，再让旧 timer 触发会造成额外一次执行。
+          - 问：组件销毁为什么要 cancel？答：否则挂起的 trailing 可能在生命周期结束后继续调用旧回调或持有参数引用。
+          - 问：`Date.now()` 会不会受系统时钟回拨影响？答：会；强时序场景可注入单调时钟，例如浏览器的 `performance.now()`，但要让 timer 与测试时钟使用同一时间基准。
+
+          ## 易错点
+
+          - 不声明 leading/trailing 行为，导致实现和测试各自理解不同。
+          - 每次高频调用都新建 timer，最终出现一串延迟执行。
+          - timer 执行后忘记清 `timerId`，后续再也无法调度 trailing。
+          - 不保存最新 `this/args`，trailing 调到旧参数。
+          - 把最近输入时间当执行时间更新，意外把 throttle 写成 debounce。
+          EOF
+          cat > "$out/throttle.js" <<'JS'
+          'use strict';
+          function throttle(fn, wait) {
+            if (typeof fn !== 'function') throw new TypeError('fn must be a function');
+            if (!Number.isFinite(wait) || wait < 0) throw new RangeError('wait must be non-negative');
+            let lastInvokeTime=-Infinity,timerId=null,pendingThis,pendingArgs;
+            function invoke(time,receiver,args){lastInvokeTime=time;pendingThis=pendingArgs=undefined;return fn.apply(receiver,args);}
+            function trailing(){timerId=null;if(pendingArgs!==undefined)invoke(Date.now(),pendingThis,pendingArgs);}
+            function throttled(...args){const now=Date.now();const remaining=wait-(now-lastInvokeTime);if(remaining<=0){if(timerId!==null){clearTimeout(timerId);timerId=null;}return invoke(now,this,args);}pendingThis=this;pendingArgs=args;if(timerId===null)timerId=setTimeout(trailing,remaining);}
+            throttled.cancel=function(){if(timerId!==null)clearTimeout(timerId);timerId=null;pendingThis=pendingArgs=undefined;lastInvokeTime=-Infinity;};
+            return throttled;
+          }
+          module.exports={throttle};
+          JS
+          cat > "$out/throttle_test.js" <<'JS'
+          'use strict';
+          const assert=require('assert');
+          let now=0,nextId=1,timers=new Map();
+          Date.now=()=>now;
+          global.setTimeout=(fn,delay)=>{const id=nextId++;timers.set(id,{at:now+delay,fn});return id;};
+          global.clearTimeout=(id)=>timers.delete(id);
+          function advance(ms){const end=now+ms;while(true){let chosen=null;for(const [id,t] of timers){if(t.at<=end&&(!chosen||t.at<chosen.t.at))chosen={id,t};}if(!chosen)break;timers.delete(chosen.id);now=chosen.t.at;chosen.t.fn();}now=end;}
+          const {throttle}=require('./throttle');
+          const calls=[]; const obj={name:'ctx',run:throttle(function(v){calls.push([Date.now(),this.name,v]);},100)};
+          obj.run('A'); assert.deepStrictEqual(calls,[[0,'ctx','A']]);
+          advance(20);obj.run('B');advance(40);obj.run('C');assert.strictEqual(calls.length,1);advance(40);assert.deepStrictEqual(calls[1],[100,'ctx','C']);
+          advance(100);obj.run('D');assert.deepStrictEqual(calls[2],[200,'ctx','D']);
+          advance(20);obj.run('E');obj.run.cancel();advance(200);assert.strictEqual(calls.length,3);
+          obj.run('F');assert.deepStrictEqual(calls[3],[420,'ctx','F']);
+          assert.throws(()=>throttle(null,10),TypeError);assert.throws(()=>throttle(()=>{},-1),RangeError);
+          console.log('PASS leading=immediate trailing=latest one-timer-window=verified context=preserved cancel=drops-pending validation=verified');
+          JS
+
+      - name: Revise big-number addition candidate for recovered empty-input source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid='cq_topic_cc39dcdb'; out="review/content_build/answer_batch_0028/$cid"; mkdir -p "$out"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_topic_cc39dcdb","version":2,"status":"draft","updated_at":"2026-08-25","quality_tier":"candidate","answer_type":"coding"} -->
+          # 算法：字符串大数加法
+
+          ## 核心结论
+
+          字符串大数加法就是模拟十进制竖式：从两个字符串末尾同时向前，逐位计算 `digitA + digitB + carry`，写当前位并把进位带到更高位。结合当前已归一化到该 Canonical 的来源变体，本候选明确把空字符串视为 0，因此 `"321" + "" = "321"`，两边都空返回规范零 `"0"`；`null` 和非数字字符仍视为非法输入。
+
+          ## 1 分钟版
+
+          - 输入是两个“空串或仅含 ASCII 十进制数字”的非负整数字符串；空串语义为 0，输出去掉多余前导零，零统一为 `"0"`。
+          - 两个下标从末位向前，当前缺失位按 0 参与；状态只需要 `i/j/carry`。
+          - 每轮 `sum = a + b + carry`，结果位是 `sum % 10`，新进位是 `sum / 10`。
+          - 循环条件要包含 `carry`，否则 `"9" + "1"` 会漏掉最高位。
+          - 不把整串转成 `long`；字符串长度只影响线性扫描和结果空间。
+
+          ## 3 分钟版
+
+          ```java
+          public final class StringAddition {
+              private StringAddition() {}
+
+              public static String add(String first, String second) {
+                  validate(first);
+                  validate(second);
+                  int i = first.length() - 1, j = second.length() - 1, carry = 0;
+                  StringBuilder reversed = new StringBuilder(Math.max(first.length(), second.length()) + 1);
+                  while (i >= 0 || j >= 0 || carry != 0) {
+                      int left = i >= 0 ? first.charAt(i--) - '0' : 0;
+                      int right = j >= 0 ? second.charAt(j--) - '0' : 0;
+                      int sum = left + right + carry;
+                      reversed.append((char) ('0' + sum % 10));
+                      carry = sum / 10;
+                  }
+                  if (reversed.length() == 0) return "0";
+                  reversed.reverse();
+                  int p = 0;
+                  while (p < reversed.length() - 1 && reversed.charAt(p) == '0') p++;
+                  return reversed.substring(p);
+              }
+
+              private static void validate(String value) {
+                  if (value == null) throw new IllegalArgumentException("non-null decimal string required");
+                  for (int i = 0; i < value.length(); i++) {
+                      char ch = value.charAt(i);
+                      if (ch < '0' || ch > '9') throw new IllegalArgumentException("decimal digits only");
+                  }
+              }
+          }
+          ```
+
+          `"321" + ""` 时第二个下标一开始就是 -1，因此每一轮右侧数字自然按 0 处理，结果为 321；两边都空时循环一次都不进入，最后显式返回 `"0"`。
+
+          ## 关键细节
+
+          - 空串视为 0 是当前来源变体要求后形成的 Canonical 契约；它不同于很多题库里“输入必为非空数字串”的版本，不能再用旧候选的空串报错规则。
+          - `null` 不等于空串，本实现仍拒绝 `null`，避免把缺失对象引用默默解释成业务数值 0。
+          - 前导零允许输入，输出统一裁剪；`"000" + "00"` 返回 `"0"`。
+          - 任一侧先耗尽时缺失位按 0；最后 carry 仍要单独进入循环。
+          - 校验和加法会使字符被访问常数次，总时间仍 O(m+n)，结果缓冲区 O(m+n)。
+          - 本实现处理非负整数；负号、小数和其他进制需要重新定义符号、对齐和借位/进位规则。
+
+          ## 原理机制
+
+          不变量是：完成 k 轮后，`reversed` 已按逆序保存最终和的最低 k 位，`carry` 是未处理高位唯一需要继承的十进制进位。因为低位进位只影响紧邻高位，从末尾向前时无需回改已经确定的低位。空串只是“没有任何显式数字位”的 0，在这一状态机里等价于下标从 -1 开始。
+
+          ## 项目经验版
+
+          这是算法题，不应包装成虚构项目经历。真实接口若允许空串，还要在 API 文档和测试里把“空串 = 0”写成正式契约，避免调用方把数据缺失和数字零混为一谈；如果业务不希望这种宽松语义，就应在边界层拒绝空串。
+
+          ## 常见追问
+
+          - 问：为什么不能直接 `Long.parseLong`？答：字符串可能超过固定整数类型范围，而逐位法只受可用内存限制。
+          - 问：为什么这版允许空串？答：当前 Canonical 已吸收一个明确的来源变体 `"321" + "" = "321"`，因此空串必须按 0 处理；这是来源边界，不是随意宽松输入。
+          - 问：`"" + ""` 为什么返回 `"0"`？答：在“空串表示 0”的契约下两个操作数都是 0，输出又要求规范十进制表示，所以选 `"0"` 而不是空串。
+          - 问：如何支持负数？答：先拆符号，异号时转成绝对值比较与大数减法；不能把 `'-'` 当普通数字参与本循环。
+          - 问：为什么最后要裁剪前导零？答：输入允许前导零，但输出希望唯一规范表示；否则同一个数会有多个字符串表示。
+
+          ## 易错点
+
+          - 沿用旧版“空串非法”假设，漏掉新归一化来源的明确示例。
+          - 两个输入都空时返回空结果而不是规范零。
+          - 忘记最终 carry，`"9"+"1"` 变成 `"0"`。
+          - 把整串转成 `int/long` 导致大数溢出。
+          - 未校验字符却直接 `ch-'0'`，把负号或其他字符算成伪数字。
+          EOF
+          cat > "$out/StringAddition.java" <<'JAVA'
+          public final class StringAddition {
+              private StringAddition() {}
+              public static String add(String first,String second){
+                  validate(first);validate(second);int i=first.length()-1,j=second.length()-1,carry=0;StringBuilder r=new StringBuilder(Math.max(first.length(),second.length())+1);
+                  while(i>=0||j>=0||carry!=0){int a=i>=0?first.charAt(i--)-'0':0;int b=j>=0?second.charAt(j--)-'0':0;int sum=a+b+carry;r.append((char)('0'+sum%10));carry=sum/10;}
+                  if(r.length()==0)return "0";r.reverse();int p=0;while(p<r.length()-1&&r.charAt(p)=='0')p++;return r.substring(p);
+              }
+              private static void validate(String value){if(value==null)throw new IllegalArgumentException("non-null decimal string required");for(int i=0;i<value.length();i++){char ch=value.charAt(i);if(ch<'0'||ch>'9')throw new IllegalArgumentException("decimal digits only");}}
+          }
+          JAVA
+          cat > "$out/StringAdditionTest.java" <<'JAVA'
+          import java.math.BigInteger;
+          public final class StringAdditionTest {
+              static void eq(String e,String a,String n){if(!e.equals(a))throw new AssertionError(n+" expected="+e+" actual="+a);}
+              static String oracle(String s){return s.isEmpty()?"0":s;}
+              static void enumerate(String prefix,int left,java.util.List<String> out){if(left==0){out.add(prefix);return;}for(char c='0';c<='3';c++)enumerate(prefix+c,left-1,out);}
+              public static void main(String[] args){
+                  eq("321",StringAddition.add("321",""),"right-empty");eq("321",StringAddition.add("","321"),"left-empty");eq("0",StringAddition.add("",""),"both-empty");eq("10",StringAddition.add("9","1"),"carry");eq("0",StringAddition.add("000","00"),"leading-zero");
+                  var vals=new java.util.ArrayList<String>(); vals.add("");for(int n=1;n<=3;n++)enumerate("",n,vals);int checked=0;
+                  for(String a:vals)for(String b:vals){String e=new BigInteger(oracle(a)).add(new BigInteger(oracle(b))).toString();eq(e,StringAddition.add(a,b),"oracle");checked++;}
+                  try{StringAddition.add(null,"1");throw new AssertionError("null accepted");}catch(IllegalArgumentException expected){}try{StringAddition.add("1x","2");throw new AssertionError("nondigit accepted");}catch(IllegalArgumentException expected){}
+                  System.out.println("PASS empty-as-zero=verified leading-zero=normalized carry=verified oracle-pairs="+checked+" invalid-input=rejected");
+              }
+          }
+          JAVA
+
+      - name: Execute all new fixtures and write writer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          deep='review/content_build/answer_batch_0028/cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97'
+          tree='review/content_build/answer_batch_0028/cq_q_5f591ff5674d612dc10f87d07c1e820f'
+          throttle='review/content_build/answer_batch_0028/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5'
+          big='review/content_build/answer_batch_0028/cq_topic_cc39dcdb'
+          test "$(node "$deep/deep_clone_test.js")" = 'PASS nested=isolated cycle=preserved shared-alias=preserved symbols-descriptors=preserved sparse-array=preserved unsupported-type=rejected'
+          javac -encoding UTF-8 "$tree/MaxRootToLeafCost.java" "$tree/MaxRootToLeafCostTest.java"
+          test "$(java -cp "$tree" MaxRootToLeafCostTest)" = 'PASS empty=0 single=7 balanced=29 negative-single-child=-7 must-reach-leaf=6'
+          test "$(node "$throttle/throttle_test.js")" = 'PASS leading=immediate trailing=latest one-timer-window=verified context=preserved cancel=drops-pending validation=verified'
+          javac -encoding UTF-8 "$big/StringAddition.java" "$big/StringAdditionTest.java"
+          big_stdout="$(java -cp "$big" StringAdditionTest)"; case "$big_stdout" in PASS\ empty-as-zero=verified\ leading-zero=normalized\ carry=verified\ oracle-pairs=*\ invalid-input=rejected) ;; *) echo "$big_stdout"; exit 1;; esac
+          node <<'NODE'
+          const fs=require('fs'); const date='2026-08-25';
+          const specs=[
+            ['cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97','deep_clone_test.js','node deep_clone_test.js','PASS nested=isolated cycle=preserved shared-alias=preserved symbols-descriptors=preserved sparse-array=preserved unsupported-type=rejected',['nested object isolation','cycle preservation','shared alias preservation','symbol/non-enumerable descriptor preservation','sparse array preservation','unsupported Date rejection']],
+            ['cq_q_5f591ff5674d612dc10f87d07c1e820f','MaxRootToLeafCostTest.java','javac MaxRootToLeafCost.java MaxRootToLeafCostTest.java && java MaxRootToLeafCostTest','PASS empty=0 single=7 balanced=29 negative-single-child=-7 must-reach-leaf=6',['empty and single-node boundaries','two-branch maximum','negative single-child must reach leaf','mixed-sign must reach real leaf']],
+            ['cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5','throttle_test.js','node throttle_test.js','PASS leading=immediate trailing=latest one-timer-window=verified context=preserved cancel=drops-pending validation=verified',['leading invocation','latest trailing args','single timer per window','receiver preservation','cancel drops pending']],
+            ['cq_topic_cc39dcdb','StringAdditionTest.java','javac StringAddition.java StringAdditionTest.java && java StringAdditionTest',null,['right/left/both empty as zero','carry and leading zero normalization','exhaustive small BigInteger oracle','null/non-digit rejection']]
+          ];
+          for(const [cid,fixture,command,stdout,checks] of specs){
+            const dir=`review/content_build/answer_batch_0028/${cid}`;
+            const ctx=JSON.parse(fs.readFileSync(`/tmp/${cid}.context.json`,'utf8'));
+            const sourceIds=(ctx.source_questions||[]).map(q=>q.question_id);
+            const actualStdout=cid==='cq_topic_cc39dcdb'?'PASS empty-as-zero=verified leading-zero=normalized carry=verified oracle-pairs=7225 invalid-input=rejected':stdout;
+            fs.writeFileSync(`${dir}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',source_question_ids:sourceIds,sources:[{source_id:'repository-source',title:'Current canonical and source-question context',locator:`answer context --canonical-id ${cid}`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:`Deterministic executable fixture ${fixture}`,locator:`${dir}/${fixture}`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The candidate states implementation choices not preserved by the source as explicit contract assumptions.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'implementation-validation',text:'The candidate implementation passes the deterministic topic-specific fixture.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制','易错点']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+            fs.writeFileSync(`${dir}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command,stdout:actualStdout,checks},null,2)+'\n');
+          }
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md'; let text=fs.readFileSync(task,'utf8');
+          const notes=[
+            '- Deep-copy source-exact Coding candidate is staged with an explicit supported object domain, cycle/shared-reference semantics, and deterministic JavaScript validation; isolated review remains pending.',
+            '- Binary-tree max root-to-leaf node-cost candidate is staged with negative-cost and one-child boundary validation; isolated review remains pending.',
+            '- JavaScript throttle candidate is staged with explicit leading+latest-trailing semantics and a deterministic fake-clock fixture; isolated review remains pending.',
+            '- Big-number string-addition candidate is revised for the recovered empty-string-as-zero source boundary and exhaustive small-oracle validation; isolated review remains pending.'
+          ];
+          for(const note of notes) if(!text.includes(note)) text += (text.endsWith('\n')?'':'\n')+note+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Validate candidates and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for cid in cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97 cq_q_5f591ff5674d612dc10f87d07c1e820f cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5 cq_topic_cc39dcdb; do
+            node scripts/xhs.js answer validate --candidate "review/candidates/answers/$cid.md" --strict --noWrite --noManifest
+          done
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit candidate batch if branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during candidate validation: $base_head -> $remote_head"; exit 0; fi
+          git add review/candidates/answers/cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97.md review/candidates/answers/cq_q_5f591ff5674d612dc10f87d07c1e820f.md review/candidates/answers/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5.md review/candidates/answers/cq_topic_cc39dcdb.md review/content_build/answer_batch_0028/cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97 review/content_build/answer_batch_0028/cq_q_5f591ff5674d612dc10f87d07c1e820f review/content_build/answer_batch_0028/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5 review/content_build/answer_batch_0028/cq_topic_cc39dcdb tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft remaining batch 0028 coding candidates'
+          git push origin "HEAD:$CONTENT_BRANCH"
