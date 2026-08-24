@@ -96,6 +96,8 @@ function createApplyRelationDecisionUseCase(dependencies = {}) {
                 target: applyStrategy.target_canonical_id,
                 source: applyStrategy.source_canonical_id,
                 reason: `Explicit ${prepared.relation} RelationDecision ${relationCandidateKey}`,
+                expected_source_question_ids: applyStrategy.source_question_ids,
+                expected_target_reviewed_question_ids: applyStrategy.target_reviewed_question_ids,
             });
             return {
                 ok: mergeResult.ok === true,
