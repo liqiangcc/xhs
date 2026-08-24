@@ -1,54 +1,97 @@
 name: Remediate Content Batch 0018 Source-Unrecoverable Questions
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0018-source-unrecoverable.yml
   pull_request:
-    branches:
-      - master
+    branches: [master]
 
 permissions:
   contents: write
 
+concurrency:
+  group: content-batch-0018-source-unrecoverable
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
 jobs:
   remediate:
-    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - name: Checkout content branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: content/quality-completion
-          fetch-depth: 0
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22'
 
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
+          cache: false
 
-      - name: Retire source-unrecoverable batch 0018 singleton assets
-        run: python3 scripts/content/remediate_batch_0018_unrecoverable.py
-
-      - name: Regenerate Question and index projections
+      - name: Apply source-first singleton retirement
+        shell: bash
         run: |
           set -euo pipefail
+          python3 -m py_compile scripts/content/remediate_batch_0018_unrecoverable.py
+          python3 scripts/content/remediate_batch_0018_unrecoverable.py
           node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
           node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
 
-      - name: Verify full repository gates
+      - name: Verify exact retired boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.')
+          targets=['cq_q_28ddc5240672730f91363131ba8cc14e','cq_q_2979c00d6ff6c1582ecb289775522412','cq_q_2a09d0d7980006e66439a361880bc83d','cq_q_2bd82e0bd4203f85f02cca39fb7a67e2']
+          canon={json.loads(x)['canonical_id'] for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()}
+          questions={row['question_id']:row for row in (json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip())}
+          progress=json.loads((root/'review/progress.json').read_text(encoding='utf-8')).get('items',[])
+          progress_ids={row.get('canonical_id') for row in progress}
+          audit=json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8'))
+          decisions={row.get('question_id'):row for row in audit.get('decisions',[])}
+          for cid in targets:
+              qid=cid.removeprefix('cq_q_')
+              if cid in canon: raise SystemExit(f'{cid}: retired Canonical still active')
+              row=questions.get(qid)
+              if not row or row.get('canonical_id') is not None or row.get('is_valid_for_library') is not False or row.get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit(f'{cid}: invalid Question projection missing')
+              if cid in progress_ids: raise SystemExit(f'{cid}: ReviewProgress still active')
+              if (root/'review/answers'/f'{cid}.md').exists() or not (root/'review/archive/answers'/f'{cid}.md').exists(): raise SystemExit(f'{cid}: answer archive state invalid')
+              decision=decisions.get(qid)
+              if not decision or decision.get('decision')!='exclude' or decision.get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit(f'{cid}: validity audit exclusion missing')
+          print('PASS: batch 0018 four source-unrecoverable singletons retired fail-closed')
+          PY
+
+      - name: Verify complete repository gates
+        shell: bash
         run: |
           set -euo pipefail
           node scripts/content/check_question_coverage.js --check
           node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
           node scripts/xhs.js answer validate --strict --noWrite
           node scripts/xhs.js validate all --noWrite
           npm test
@@ -58,36 +101,36 @@ jobs:
           npm run ci:answer:code
           npm run ci:answer:coverage
 
-      - name: Record bounded batch 0018 remediation progress
+      - name: Record bounded remediation progress
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-
-          path = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0018.md')
-          text = path.read_text(encoding='utf-8')
-          marker = '## Remediation progress\n'
-          section = '''## Remediation progress
-
-- [x] Source-unrecoverable/ambiguous singleton Questions are resolved through the Question/Canonical SSOT without inventing deterministic contracts: `cq_q_28ddc5240672730f91363131ba8cc14e`, `cq_q_2979c00d6ff6c1582ecb289775522412`, `cq_q_2a09d0d7980006e66439a361880bc83d`, and `cq_q_2bd82e0bd4203f85f02cca39fb7a67e2` are excluded with explicit repository-source reasons; their singleton Canonicals are retired, active placeholder Answers archived, and ReviewProgress entries removed.
-'''
-          if marker not in text:
-              text = text.rstrip() + '\n\n' + section
-              path.write_text(text, encoding='utf-8')
+          path=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0018.md')
+          text=path.read_text(encoding='utf-8')
+          line='- [x] Source-unrecoverable/ambiguous singleton Questions `cq_q_28ddc5240672730f91363131ba8cc14e`, `cq_q_2979c00d6ff6c1582ecb289775522412`, `cq_q_2a09d0d7980006e66439a361880bc83d`, and `cq_q_2bd82e0bd4203f85f02cca39fb7a67e2` are excluded with explicit repository-source reasons; their singleton Canonicals are retired, Answers archived, ReviewProgress removed, and invalid Question projections remain explainable.'
+          if line not in text:
+              text=text.rstrip()+'\n\n## Remediation progress\n\n'+line+'\n'
+              path.write_text(text,encoding='utf-8')
           PY
 
-      - name: Commit remediation to content branch
+      - name: Commit only if content branch stayed stable
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo 'No remediation changes to commit.'
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding verified local mutation; retry against current state.'
             exit 0
           fi
-          git config user.name "xhs-remediation-bot"
-          git config user.email "43640935+liqiangcc@users.noreply.github.com"
           git add -A
+          if git diff --cached --quiet; then echo 'No batch 0018 remediation changes to commit.'; exit 0; fi
           git diff --cached --check
-          git commit -m "content: retire source-unrecoverable batch 0018 questions"
-          git push origin HEAD:content/quality-completion
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: retire source-unrecoverable batch 0018 questions'
+          git push origin "HEAD:$CONTENT_BRANCH"
