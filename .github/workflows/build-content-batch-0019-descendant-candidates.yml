@@ -52,20 +52,25 @@ jobs:
             test "$stdout" = 'PASS fixed=10 randomized=5000 oracle=sort-deduplicate-scan mutation=none'
           )
 
-      - name: Run formal candidate audits
+      - name: Run formal audits for every active answerable batch canonical
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/xhs.js answer audit \
-            --candidate review/candidates/answers/cq_q_84bd83ff8f06510515f6b71534cd2ac5.md \
-            --require-evidence \
-            --require-code \
-            --noWrite
-          node scripts/xhs.js answer audit \
-            --candidate review/candidates/answers/cq_q_2a5006d66e022875a36106ef0c25c2c2.md \
-            --require-evidence \
-            --require-code \
-            --noWrite
+          for cid in \
+            cq_q_2d3c2cbca1d43c2ab3acad0e91726695 \
+            cq_q_2f07ba5f8d6e6ad366d2cd13c6d1d1ab \
+            cq_q_2f278e6b489feb680f8b173047815566 \
+            cq_q_2f351e2a49d14ad9643e8daed49006b0 \
+            cq_q_2fcd783bcefb0f3ab525b18afe3a7591 \
+            cq_q_84bd83ff8f06510515f6b71534cd2ac5 \
+            cq_q_2a5006d66e022875a36106ef0c25c2c2
+          do
+            node scripts/xhs.js answer audit \
+              --candidate "review/candidates/answers/${cid}.md" \
+              --require-evidence \
+              --require-code \
+              --noWrite
+          done
 
       - name: Verify candidate, evidence and isolated-review bindings
         shell: bash
