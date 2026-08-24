@@ -1,0 +1,126 @@
+name: Remediate Content Batch 0020 Source Boundaries
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0020-boundaries.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0020-source-boundaries
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Synchronize and capture base head
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          git reset --hard "origin/$CONTENT_BRANCH"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the bounded remediation is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0020.md'
+          if grep -Fq 'cq_q_32099ab899a15a5d7ab610c1477860e1` is normalized from the derived “(Morris遍历)” source wording' "$task" \
+             && grep -Fq 'cq_q_3395e0de3268979e86446a8ad2eebb4b` and `cq_q_33d091345ac48812c61f235d00515560` are excluded as `incomplete_or_unreadable`' "$task"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Batch 0020 source-boundary remediation already complete.'
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+            echo 'Batch 0020 source-boundary remediation is pending.'
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Apply source-first boundary dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/content/remediate_batch_0020_boundaries.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify repository integrity and full quality gates
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content head stayed stable during validation
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding this verified local mutation; the pull-request synchronization trigger will retry against the newer source state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'No source-boundary remediation changes remain.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: apply batch 0020 source-boundary dispositions"
+          git push origin "HEAD:$CONTENT_BRANCH"
