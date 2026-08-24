@@ -121,13 +121,13 @@ PASS fixed=12 randomized=2000 oracle=native-Promise.all iterable=supported order
 
 ## 常见追问
 
-- **为什么结果不能在完成时直接 `push`？** 因为完成顺序不等于输入顺序；必须先保存输入下标，再把 fulfillment value 写回固定槽位。
-- **为什么要 `Promise.resolve(value)`？** 为了统一普通值、原生 Promise 和 thenable 的处理；否则直接调用 `value.then` 会在普通值上失败，也可能漏掉 thenable 吸收语义。
-- **空数组怎么处理？** 遍历不到任何元素，哨兵计数从 `1` 减到 `0`，立即 `resolve([])`；对调用者来说，后续 `.then(...)` 仍通过微任务执行。
-- **某个 Promise reject 后，其他请求会被取消吗？** 不会。聚合 Promise 会进入 rejected，但已经启动的异步操作仍继续，除非这些操作自身支持并由上层显式触发取消。
-- **为什么这里支持 `Set` 和 generator？** 这是候选为了贴近 `Promise.all(iterable)` 做的规范完整性扩展；仓库图片中的参考实现本身只按数组 `length` 遍历。
-- **这是不是 100% 等价于原生静态 `Promise.all`？** 不是。本候选覆盖主要聚合行为，但固定使用原生 `Promise`，没有实现规范里基于静态方法 `this` 构造器的泛型构造能力；面试手写时应明确这个边界。
-- **`Promise.all` 能控制并发数吗？** 不能。它只聚合传入的值/Promise；任务通常在传入之前或迭代过程中就已创建。并发限制需要额外队列、信号量或 worker pool。
+- 问：为什么结果不能在完成时直接 `push`？答：因为完成顺序不等于输入顺序；必须先保存输入下标，再把 fulfillment value 写回固定槽位。
+- 问：为什么要 `Promise.resolve(value)`？答：为了统一普通值、原生 Promise 和 thenable 的处理；否则直接调用 `value.then` 会在普通值上失败，也可能漏掉 thenable 吸收语义。
+- 问：空数组怎么处理？答：遍历不到任何元素，哨兵计数从 `1` 减到 `0`，立即 `resolve([])`；对调用者来说，后续 `.then(...)` 仍通过微任务执行。
+- 问：某个 Promise reject 后，其他请求会被取消吗？答：不会。聚合 Promise 会进入 rejected，但已经启动的异步操作仍继续，除非这些操作自身支持并由上层显式触发取消。
+- 问：为什么这里支持 `Set` 和 generator？答：这是候选为了贴近 `Promise.all(iterable)` 做的规范完整性扩展；仓库图片中的参考实现本身只按数组 `length` 遍历。
+- 问：这是不是 100% 等价于原生静态 `Promise.all`？答：不是。本候选覆盖主要聚合行为，但固定使用原生 `Promise`，没有实现规范里基于静态方法 `this` 构造器的泛型构造能力；面试手写时应明确这个边界。
+- 问：`Promise.all` 能控制并发数吗？答：不能。它只聚合传入的值/Promise；任务通常在传入之前或迭代过程中就已创建。并发限制需要额外队列、信号量或 worker pool。
 
 ## 易错点
 
