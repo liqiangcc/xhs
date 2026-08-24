@@ -23,157 +23,275 @@ jobs:
         with:
           node-version: 20
 
+      - name: Run tests and read-only checks
+        run: npm run ci:check
+
+      - name: Enforce answer semantic and evidence gates
+        run: npm run ci:answer:semantic && npm run ci:answer:evidence && npm run ci:answer:code && npm run ci:answer:coverage
+
+      - name: Verify no generated changes
+        run: git diff --exit-code
+
+  batch0019_source_remediation:
+    if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'automation/batch0019-controller')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CONTENT_BRANCH: content/quality-completion
+      STAGING_BRANCH: automation/batch-0019-source-remediation
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Synchronize content head
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          git reset --hard "origin/$CONTENT_BRANCH"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
 
-      - name: Run tests and read-only checks
-        run: npm run ci:check
+      - name: Apply source-bounded retirement
+        run: |
+          set -euo pipefail
+          python3 scripts/content/remediate_batch_0019_unrecoverable.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
 
-      - name: Verify pilot audit ledger is current
-        run: node scripts/content/build_pilot_answer_audit.js --check
+      - name: Verify repository gates
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
 
-      - name: Enforce answer semantic and evidence gates
-        run: npm run ci:answer:semantic && npm run ci:answer:evidence && npm run ci:answer:code && npm run ci:answer:coverage
+      - name: Export verified remediation
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No remediation changes to export.'
+            exit 0
+          fi
+          git commit -m 'content: retire source-unrecoverable batch 0019 questions'
+          git push --force origin "HEAD:refs/heads/$STAGING_BRANCH"
 
-      - name: Audit short-video pilot candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_short_video_bcbcf234.md --require-evidence --noWrite
+  batch0019_equal_sum_normalization:
+    if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'automation/batch0019-controller')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CONTENT_BRANCH: content/quality-completion
+      STAGING_BRANCH: automation/batch-0019-equal-sum-normalization
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
 
-      - name: Audit batch 0010 GC algorithms candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_gc_algorithms_3f884748.md --require-evidence --noWrite
-
-      - name: Audit batch 0010 deep-copy candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_deep_copy_5cfb8eb4.md --require-evidence --noWrite
-
-      - name: Audit batch 0010 Java OOP candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_java_oop_21912814.md --require-evidence --noWrite
-
-      - name: Audit batch 0010 language-compilation candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_language_compilation_0a002e6b.md --require-evidence --noWrite
-
-      - name: Audit batch 0010 Linux-commands candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_linux_commands_76aadb5b.md --require-evidence --noWrite
-
-      - name: Audit batch 0010 MySQL-isolation candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_mysql_isolation_c43c6784.md --require-evidence --noWrite
-
-      - name: Audit batch 0010 RocketMQ-architecture candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_rocketmq_arch_22d7b629.md --require-evidence --noWrite
-
-      - name: Audit batch 0011 longest-palindromic-subsequence candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_05ef104a850cbc33126f5c746e00171c.md --require-evidence --require-code --noWrite
-
-      - name: Audit batch 0011 coin-change candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_3f52d557f29ac6552e5dc5f5e940f810.md --require-evidence --require-code --noWrite
-
-      - name: Audit batch 0011 reorder-list candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_5856fb8727752874f2e1c6d8a3832d67.md --require-evidence --require-code --noWrite
-
-      - name: Audit batch 0011 swap-nodes-in-pairs candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0fdff883609d352de9fa841f0a635925.md --require-evidence --require-code --noWrite
-
-      - name: Audit batch 0012 Paint House II candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_59f7da662c7278b9eb2959714186406f.md --require-evidence --require-code --noWrite
-
-      - name: Audit batch 0012 big-integer multiplication candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_f1c00467aaffe8e55b61643a8e353cb3.md --require-evidence --require-code --noWrite
-
-      - name: Audit batch 0012 zigzag level-order candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_feec754d2b1ea85c579767da96f4061a.md --require-evidence --require-code --noWrite
-
-      - name: Audit batch 0012 constrained color sequence candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_00bbcd5ca6d9fb646ab0192c8603e542.md --require-evidence --require-code --noWrite
-
-      - name: Run batch 0012 constrained color sequence test
-        working-directory: review/content_build/answer_batch_0012/cq_q_00bbcd5ca6d9fb646ab0192c8603e542
-        run: javac SafeColorSequences.java SafeColorSequencesTest.java && java SafeColorSequencesTest
-
-      - name: Audit batch 0012 student total-score SQL candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_03b72a8c6a1f37b231a8275207d927a1.md --require-evidence --require-code --noWrite
-
-      - name: Run batch 0012 student total-score SQL fixture
-        working-directory: review/content_build/answer_batch_0012/cq_q_03b72a8c6a1f37b231a8275207d927a1
-        run: python3 student_total_score_test.py
-
-      - name: Audit batch 0013 binary-tree diameter candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_055a106e79b4b8651c11ddb5633f467d.md --require-evidence --require-code --noWrite
-
-      - name: Run batch 0013 binary-tree diameter test
-        working-directory: review/content_build/answer_batch_0013/cq_q_055a106e79b4b8651c11ddb5633f467d
-        run: javac BinaryTreeDiameter.java BinaryTreeDiameterTest.java && java BinaryTreeDiameterTest
-
-      - name: Audit batch 0013 parallel independent-task candidate
-        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_05d294848031e3626b66c720bb2273f1.md --require-evidence --require-code --noWrite
-
-      - name: Run batch 0013 parallel independent-task test
-        working-directory: review/content_build/answer_batch_0013/cq_q_05d294848031e3626b66c720bb2273f1
-        run: javac ParallelIndependentTasks.java ParallelIndependentTasksTest.java && java ParallelIndependentTasksTest
-
-      - name: Audit batch 0012 goroutine alternating-print candidate
+      - name: Check prerequisite and pending state
+        id: prereq
         shell: bash
         run: |
           set -euo pipefail
-          candidate=review/candidates/answers/cq_q_70e4f9bc6af634f5bddb7c39b36cf798.md
-          grep -Eq '^```go([[:space:]]|$)' "$candidate"
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md'
+          if ! grep -Fq 'Four source-unrecoverable singleton Questions are excluded without inventing coding contracts' "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Source-unrecoverable prerequisite is not recorded.'
+          elif grep -Fq 'cq_q_2f278e6b489feb680f8b173047815566` is normalized from misleading contiguous `子数组` wording' "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Equal-sum normalization is already recorded.'
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
 
-          set +e
-          node scripts/xhs.js answer audit --candidate "$candidate" --require-evidence --noWrite > /tmp/go-candidate-audit.json
-          audit_status=$?
-          set -e
-
-          node - /tmp/go-candidate-audit.json "$audit_status" <<'NODE'
-          const fs = require('fs');
-          const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          const status = Number(process.argv[3]);
-          if (status === 0) {
-            if (!report.ok || report.candidate_count !== 1 || report.passed_count !== 1) process.exit(1);
-            process.exit(0);
-          }
-
-          // The shared coding auditor currently recognizes only Java/SQL
-          // fences. Accept exactly that known false negative here, while the
-          // following Go race/order step independently validates the Go code.
-          if (report.candidate_count !== 1 || report.rows?.length !== 1) process.exit(1);
-          const row = report.rows[0];
-          const errorIds = (row.errors || []).map((item) => item.error).sort();
-          const hardFailures = [...(row.hard_failures || [])].sort();
-          const onlyKnownLanguageGap = JSON.stringify(errorIds) === JSON.stringify(['coding_block_required'])
-            && JSON.stringify(hardFailures) === JSON.stringify(['placeholder_implementation']);
-          if (!onlyKnownLanguageGap || !row.evidence_path || Number(row.total_score) < 90) {
-            console.error(JSON.stringify(report, null, 2));
-            process.exit(1);
-          }
-          NODE
-
-      - name: Run batch 0012 Go race/order test
-        env:
-          GO111MODULE: 'off'
-        run: go test -race -count=1 ./review/content_build/answer_batch_0012/cq_q_70e4f9bc6af634f5bddb7c39b36cf798
-
-      - name: Capture batch 0011-0013 audit diagnostics
-        if: always()
-        run: |
-          mkdir -p audit-diagnostics
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_05ef104a850cbc33126f5c746e00171c.md --require-evidence --require-code --noWrite > audit-diagnostics/lps.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_3f52d557f29ac6552e5dc5f5e940f810.md --require-evidence --require-code --noWrite > audit-diagnostics/coin-change.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_5856fb8727752874f2e1c6d8a3832d67.md --require-evidence --require-code --noWrite > audit-diagnostics/reorder-list.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0fdff883609d352de9fa841f0a635925.md --require-evidence --require-code --noWrite > audit-diagnostics/swap-pairs.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_59f7da662c7278b9eb2959714186406f.md --require-evidence --require-code --noWrite > audit-diagnostics/paint-house-ii.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_f1c00467aaffe8e55b61643a8e353cb3.md --require-evidence --require-code --noWrite > audit-diagnostics/big-integer-multiply.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_feec754d2b1ea85c579767da96f4061a.md --require-evidence --require-code --noWrite > audit-diagnostics/zigzag-level-order.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_00bbcd5ca6d9fb646ab0192c8603e542.md --require-evidence --require-code --noWrite > audit-diagnostics/constrained-color-sequence.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_03b72a8c6a1f37b231a8275207d927a1.md --require-evidence --require-code --noWrite > audit-diagnostics/student-total-score-sql.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_70e4f9bc6af634f5bddb7c39b36cf798.md --require-evidence --noWrite > audit-diagnostics/goroutine-alternating-print.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_055a106e79b4b8651c11ddb5633f467d.md --require-evidence --require-code --noWrite > audit-diagnostics/binary-tree-diameter.json || true
-          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_05d294848031e3626b66c720bb2273f1.md --require-evidence --require-code --noWrite > audit-diagnostics/parallel-independent-tasks.json || true
-
-      - name: Upload batch 0011-0013 audit diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Setup Node
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-node@v4
         with:
-          name: batch-0011-0013-audit-diagnostics
-          path: audit-diagnostics
+          node-version: 20
 
-      - name: Verify no generated changes
-        run: git diff --exit-code
+      - name: Setup Java 21
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Go
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Extract and run repository normalization logic
+        if: steps.prereq.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow='.github/workflows/remediate-content-batch-0019-equal-sum-normalization.yml'
+          awk 'BEGIN{capture=0} /python3 - <<'"'"'PY'"'"'/{capture=1; next} capture && /^          PY$/{exit} capture {sub(/^          /, ""); print}' "$workflow" > /tmp/batch0019_equal_sum.py
+          test -s /tmp/batch0019_equal_sum.py
+          grep -Fq "NEW_QID = qid(NEW_TEXT)" /tmp/batch0019_equal_sum.py
+          python3 /tmp/batch0019_equal_sum.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify repository gates
+        if: steps.prereq.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Export verified normalization
+        if: steps.prereq.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No normalization changes to export.'
+            exit 0
+          fi
+          git commit -m 'content: normalize batch 0019 equal-sum partition question'
+          git push --force origin "HEAD:refs/heads/$STAGING_BRANCH"
+
+  batch0019_split_source_question:
+    if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'automation/batch0019-controller')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CONTENT_BRANCH: content/quality-completion
+      STAGING_BRANCH: automation/batch-0019-split-source-question
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Check prerequisite and pending state
+        id: prereq
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md'
+          if ! grep -Fq 'Four source-unrecoverable singleton Questions are excluded without inventing coding contracts' "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Source-unrecoverable prerequisite is not recorded.'
+          elif ! grep -Fq 'cq_q_2f278e6b489feb680f8b173047815566` is normalized from misleading contiguous `子数组` wording' "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Equal-sum prerequisite is not recorded.'
+          elif grep -Fq 'cq_q_2e26508950e5da505c44621129f41a26` is retired and split into two source-exact Canonicals' "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Split normalization is already recorded.'
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 21
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Go
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Extract and run repository split logic
+        if: steps.prereq.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow='.github/workflows/remediate-content-batch-0019-split-source-question.yml'
+          awk 'BEGIN{capture=0} /python3 - <<'"'"'PY'"'"'/{capture=1; next} capture && /^          PY$/{exit} capture {sub(/^          /, ""); print}' "$workflow" > /tmp/batch0019_split.py
+          test -s /tmp/batch0019_split.py
+          grep -Fq "OLD_CANONICAL = f'cq_q_{OLD_QID}'" /tmp/batch0019_split.py
+          python3 /tmp/batch0019_split.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify repository gates
+        if: steps.prereq.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Export verified split normalization
+        if: steps.prereq.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No split normalization changes to export.'
+            exit 0
+          fi
+          git commit -m 'content: split batch 0019 source question into exact canonicals'
+          git push --force origin "HEAD:refs/heads/$STAGING_BRANCH"
