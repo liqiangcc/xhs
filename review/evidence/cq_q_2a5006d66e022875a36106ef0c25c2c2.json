@@ -1,0 +1,204 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_2a5006d66e022875a36106ef0c25c2c2",
+  "candidate_sha256": "84fd0542843682f5477e06f77357b78d7c106d6f6b1d0dfcf7ae1f7385b37b15",
+  "checked_at": "2026-08-24",
+  "writer": {
+    "writer_id": "automation-content-builder-longest-consecutive-descendant-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-68ad5735",
+      "title": "Interview note preserving the two source-exact coding task titles",
+      "locator": "note_desc/68ad5735000000001c033a19.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "xhs-tagged-note-68ad5735",
+      "title": "Normalized source projection containing the source-exact descendant Question",
+      "locator": "note_tagged/68ad5735000000001c033a19.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "batch-0019-source-packet",
+      "title": "Answer Batch 0019 frozen original repository-source packet",
+      "locator": "review/reports/ANSWER_BATCH_0019_SOURCE_PACKET.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "batch-0019-source-boundary-audit",
+      "title": "Answer Batch 0019 source-first boundary audit and descendant disposition",
+      "locator": "review/content_build/answer_batch_0019/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "candidate-code-validation",
+      "title": "Deterministic Java validation for this source-bounded candidate",
+      "locator": "review/content_build/answer_batch_0019/cq_q_2a5006d66e022875a36106ef0c25c2c2/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "candidate-isolated-review",
+      "title": "Source-first isolated review for this candidate",
+      "locator": "review/content_build/answer_batch_0019/cq_q_2a5006d66e022875a36106ef0c25c2c2/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The retained repository source preserves only the title “最长连续序列长度”; it does not define whether continuity is by input position or integer value, nor input type, duplicate semantics, complexity target, language, or API.",
+      "source_ids": [
+        "xhs-raw-note-68ad5735",
+        "xhs-tagged-note-68ad5735",
+        "batch-0019-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "candidate-contract-boundary",
+      "text": "Value-adjacency (+1), order independence, Java int[], HashSet, duplicate semantics, null/empty behavior, and non-mutation are explicit candidate choices rather than recovered prompt facts.",
+      "source_ids": [
+        "batch-0019-source-boundary-audit",
+        "candidate-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "algorithm-correctness",
+      "text": "For the chosen contract, deduplication turns each integer value into one point; expanding only from values with no predecessor enumerates each maximal +1 consecutive run from its unique minimum without duplicate starts.",
+      "source_ids": [
+        "candidate-code-validation",
+        "candidate-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity-and-resource-bound",
+      "text": "Under average O(1) HashSet operations the expected time is O(n) and extra space is O(n); the candidate explicitly does not claim strict worst-case linear time.",
+      "source_ids": [
+        "candidate-code-validation",
+        "candidate-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java fixture passes 10 fixed cases and 5000 deterministic random arrays against an independent copy-sort-deduplicate-scan oracle while confirming no input mutation.",
+      "source_ids": [
+        "candidate-code-validation",
+        "candidate-isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "2a5006d66e022875a36106ef0c25c2c2",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac LongestConsecutiveSequence.java LongestConsecutiveSequenceTest.java && java LongestConsecutiveSequenceTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=10 randomized=5000 oracle=sort-deduplicate-scan mutation=none",
+    "checks": [
+      "null and empty arrays",
+      "single value",
+      "unordered canonical example",
+      "duplicates",
+      "negative-to-positive run",
+      "Integer.MIN_VALUE edge",
+      "Integer.MAX_VALUE edge",
+      "all duplicates",
+      "mixed sequence with mutation check",
+      "5000 deterministic random arrays checked against sort-deduplicate-scan oracle",
+      "input arrays compared before and after calls to detect mutation"
+    ],
+    "boundary_tests": [
+      {
+        "case": "null/empty input",
+        "expected": "0 under explicit candidate contract",
+        "passed": true
+      },
+      {
+        "case": "duplicate values",
+        "expected": "duplicates do not extend a distinct-value run",
+        "passed": true
+      },
+      {
+        "case": "int minimum/maximum edges",
+        "expected": "predecessor/successor checks do not wrap around",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic randomized arrays",
+        "expected": "HashSet result matches sort-deduplicate-scan oracle without mutation",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-longest-consecutive-descendant-20260824",
+    "review_version": "longest-consecutive.value-adjacency.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The repository source supports only the title “最长连续序列长度”; the candidate explicitly acknowledges that “连续” is ambiguous and does not claim a hidden LeetCode number, HashSet requirement, O(n) requirement, language, or API.",
+      "The candidate labels value-adjacency (+1), input-order independence, Java int[], duplicate semantics, HashSet usage, null/empty behavior, and non-mutation as implementation choices.",
+      "The start-only expansion is correct for the declared set-of-values contract: every maximal run has exactly one value with no predecessor, and duplicates are removed before counting.",
+      "Promoting int values to long prevents predecessor/successor wraparound at Integer.MIN_VALUE and Integer.MAX_VALUE; the answer also qualifies O(n) as expected under average HashSet behavior rather than strict worst-case.",
+      "The exact OpenJDK 21.0.11 fixture passed 10 fixed cases and 5000 deterministic randomized arrays against an independent sort-deduplicate-scan oracle with mutation checks.",
+      "The answer explicitly says that a contiguous-subarray interpretation would require a different solution, preserving the unresolved source ambiguity instead of hiding it; formal promotion remains blocked by the repository human-approval gate."
+    ]
+  }
+}
