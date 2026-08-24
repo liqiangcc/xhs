@@ -56,6 +56,38 @@ function normalizeOwnerFacts(questionOwners, reviewedQuestionIds) {
     return byQuestionId;
 }
 
+function assertReviewedOwnershipMatchesRecords({
+    reviewedQuestionIds,
+    ownersByQuestion,
+    targetCanonicalId,
+    targetRecord,
+    sourceCanonicalId,
+    sourceRecord,
+}) {
+    const targetQuestionIds = new Set(targetRecord?.question_ids || []);
+    const sourceQuestionIds = new Set(sourceRecord?.question_ids || []);
+
+    for (const questionId of reviewedQuestionIds) {
+        const owners = ownersByQuestion.get(questionId) || [];
+        if (owners.length === 0) {
+            throw new Error(
+                `Reviewed consolidation cannot combine an unowned Question with an existing source Canonical: ${questionId}`,
+            );
+        }
+        const owner = owners[0];
+        if (owner === targetCanonicalId && !targetQuestionIds.has(questionId)) {
+            throw new Error(
+                `Reviewed consolidation ownership changed while resolving target ${targetCanonicalId}: ${questionId}`,
+            );
+        }
+        if (owner === sourceCanonicalId && !sourceQuestionIds.has(questionId)) {
+            throw new Error(
+                `Reviewed consolidation ownership changed while resolving source ${sourceCanonicalId}: ${questionId}`,
+            );
+        }
+    }
+}
+
 /**
  * Decide whether an explicit same/alias RelationDecision can use ordinary
  * question-group canonicalization or must consolidate an already-existing
@@ -106,6 +138,16 @@ function decideReviewedCanonicalConsolidation(input = {}) {
     if (sourceQuestionIds.length === 0) {
         throw new Error(`Reviewed consolidation source Canonical has no Questions: ${sourceCanonicalId}`);
     }
+
+    assertReviewedOwnershipMatchesRecords({
+        reviewedQuestionIds,
+        ownersByQuestion,
+        targetCanonicalId,
+        targetRecord: input.target_record,
+        sourceCanonicalId,
+        sourceRecord,
+    });
+
     const reviewed = new Set(reviewedQuestionIds);
     const unreviewedSourceQuestionIds = sourceQuestionIds.filter((questionId) => !reviewed.has(questionId));
     if (unreviewedSourceQuestionIds.length) {
@@ -113,6 +155,9 @@ function decideReviewedCanonicalConsolidation(input = {}) {
             `Reviewed consolidation would move unreviewed Questions from ${sourceCanonicalId}: ${unreviewedSourceQuestionIds.join(', ')}`,
         );
     }
+    const targetReviewedQuestionIds = reviewedQuestionIds.filter(
+        (questionId) => (ownersByQuestion.get(questionId) || [])[0] === targetCanonicalId,
+    );
 
     return Object.freeze({
         schema_version: 'reviewed_canonical_apply_strategy.v1',
@@ -122,6 +167,7 @@ function decideReviewedCanonicalConsolidation(input = {}) {
         target_canonical_id: targetCanonicalId,
         source_canonical_id: sourceCanonicalId,
         reviewed_question_ids: reviewedQuestionIds,
+        target_reviewed_question_ids: targetReviewedQuestionIds,
         source_question_ids: sourceQuestionIds,
     });
 }
