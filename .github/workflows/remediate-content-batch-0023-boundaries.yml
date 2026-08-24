@@ -1,0 +1,229 @@
+name: Remediate Content Batch 0023 Source Boundaries
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0023-boundaries.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0023-source-boundaries
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Synchronize and capture base head
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          git reset --hard "origin/$CONTENT_BRANCH"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether bounded remediation is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0023.md'
+          boundary='review/content_build/answer_batch_0023/source_boundary_audit.md'
+          if [ -f "$boundary" ] \
+             && grep -Fq 'Active after source-boundary audit: `8`' "$task" \
+             && grep -Fq 'normalized to source-backed process-termination wording' "$task" \
+             && grep -Fq 'corrected from erroneous Coding metadata' "$task" \
+             && grep -Fq '斗地主发牌程序”' "$task" \
+             && grep -Fq 'ranking criterion and log field contract are unrecoverable' "$task"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Batch 0023 source-boundary remediation already complete.'
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+            echo 'Batch 0023 source-boundary remediation is pending.'
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Apply source-first boundary dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/content/remediate_batch_0023_boundaries.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify exact batch 0023 dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          retired = {
+              'cq_q_454acf00cd919a7e95a309068e8eaf5a',
+              'cq_q_454e063c3dff5366f28907955aa777e3',
+          }
+          process_cid = 'cq_q_449cb09687b14bdba2c6864c7787239f'
+          process_old_qid = '449cb09687b14bdba2c6864c7787239f'
+          process_new_qid = '55ee94f1cd20c8f85bc43f9f932f602f'
+          process_text = 'Linux 命令：批量终止名字包含 abc 的进程'
+          python_cid = 'cq_q_44ff2aad182c5458e01efb1d5e71d10f'
+          python_qid = '44ff2aad182c5458e01efb1d5e71d10f'
+          qualified = {
+              'cq_q_3e7bd1708ff77403d01141eed87a0d38',
+              'cq_q_3e94666b4738de5e0a5df40052329f18',
+              'cq_q_3f45aeaf42ea66632927d3dfc96608bf',
+              'cq_q_3f6b196a94cc495fb482d88305f9ab94',
+              'cq_q_40513b5c52db7d66bb1432079733783c',
+              'cq_q_458ab81f23e2fde622c12a1a85c8438a',
+              process_cid,
+              python_cid,
+          }
+
+          canon = [json.loads(x) for x in Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          leaked = sorted(retired & by_cid.keys())
+          if leaked:
+              raise SystemExit(f'retired batch 0023 Canonicals are still active: {leaked}')
+          missing = sorted(qualified - by_cid.keys())
+          if missing:
+              raise SystemExit(f'qualified batch 0023 Canonicals disappeared: {missing}')
+
+          process = by_cid.get(process_cid)
+          if process.get('question_ids') != [process_new_qid]:
+              raise SystemExit(f'normalized process ownership mismatch: {process}')
+          if process.get('canonical_title') != process_text:
+              raise SystemExit(f'normalized process title drifted: {process.get("canonical_title")}')
+          if '命令管道' in process.get('canonical_title', ''):
+              raise SystemExit('unsupported mandatory shell-pipeline wording survived normalization')
+
+          python_canonical = by_cid.get(python_cid)
+          if python_canonical.get('primary_domain') != {'l1': '其他', 'l2': 'Python'}:
+              raise SystemExit(f'Python Canonical domain was not corrected: {python_canonical.get("primary_domain")}')
+
+          questions = [json.loads(x) for x in Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          if any(q.get('question_id') == process_old_qid for q in questions):
+              raise SystemExit('old pipeline-inflated process Question id still present')
+          process_q = next((q for q in questions if q.get('question_id') == process_new_qid), None)
+          if not process_q or process_q.get('canonical_id') != process_cid or process_q.get('original_question') != process_text:
+              raise SystemExit('normalized process Question projection is missing or misbound')
+          python_q = next((q for q in questions if q.get('question_id') == python_qid), None)
+          if not python_q or python_q.get('canonical_id') != python_cid:
+              raise SystemExit('Python dict Question projection is missing or misbound')
+          if python_q.get('question_type') != '八股文_Concept':
+              raise SystemExit(f'Python dict Question still has wrong type: {python_q.get("question_type")}')
+
+          type_rows = [json.loads(x) for x in Path('data/manifests/quality/answer_type_audit.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          python_type = next((row for row in type_rows if row.get('canonical_id') == python_cid), None)
+          if not python_type or python_type.get('answer_type') != 'concept':
+              raise SystemExit(f'Python dict answer type audit did not resolve to concept: {python_type}')
+
+          progress = json.loads(Path('review/progress.json').read_text(encoding='utf-8'))
+          progress_ids = {item.get('canonical_id') for item in progress.get('items', [])}
+          leaked_progress = sorted(retired & progress_ids)
+          if leaked_progress:
+              raise SystemExit(f'retired Canonicals still have ReviewProgress: {leaked_progress}')
+          for cid in retired:
+              if Path(f'review/answers/{cid}.md').exists():
+                  raise SystemExit(f'{cid}: retired Canonical still has an active Answer')
+              if not Path(f'review/archive/answers/{cid}.md').exists():
+                  raise SystemExit(f'{cid}: retired Canonical Answer was not archived')
+
+          audit = json.loads(Path('config/question_validity_audit.json').read_text(encoding='utf-8'))
+          excluded_qids = {
+              d.get('question_id')
+              for d in audit.get('decisions', [])
+              if d.get('decision') == 'exclude' and d.get('exclusion_reason') == 'incomplete_or_unreadable'
+          }
+          expected_retired_qids = {cid.removeprefix('cq_q_') for cid in retired}
+          if not expected_retired_qids <= excluded_qids:
+              raise SystemExit('validity audit is missing one or more batch 0023 fail-closed exclusions')
+
+          task = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0023.md').read_text(encoding='utf-8')
+          if 'Active after source-boundary audit: `8`' not in task:
+              raise SystemExit('batch 0023 task active count was not updated')
+          if not Path('review/content_build/answer_batch_0023/source_boundary_audit.md').exists():
+              raise SystemExit('batch 0023 source-boundary audit is missing')
+          PY
+
+      - name: Verify repository integrity and full quality gates
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content head stayed stable during validation
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding this verified local mutation; a later trigger will retry against the newer source state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'No batch 0023 source-boundary remediation changes remain.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: apply batch 0023 source-boundary dispositions"
+          git push origin "HEAD:$CONTENT_BRANCH"
