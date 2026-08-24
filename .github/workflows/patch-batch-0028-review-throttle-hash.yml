@@ -1,0 +1,33 @@
+name: Patch Batch 0028 Review Throttle Hash
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/patch-batch-0028-review-throttle-hash.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - name: Bind review workflow to corrected throttle candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          f='.github/workflows/review-content-batch-0028-remaining-candidates.yml'
+          grep -F "928abdd1326001e78a65e728251b69a732ff75d2" "$f"
+          sed -i 's/928abdd1326001e78a65e728251b69a732ff75d2/1927b62088a6aa2419fe239367ab1604fac2c0c5/g' "$f"
+          grep -F "1927b62088a6aa2419fe239367ab1604fac2c0c5" "$f"
+          git diff --check
+          git config user.name 'xhs-ci-maintenance-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$f"
+          git commit -m 'ci: bind batch 0028 review to throttle candidate revision'
+          git push origin HEAD:master
