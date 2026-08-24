@@ -1,0 +1,265 @@
+name: Build Content Batch 0028 Rotate Array Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0028-rotate-array-candidate.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-rotate-array-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266
+  SOURCE_QID: 5aa1b6ca0f00362ffc20d3cf8bc5f266
+
+jobs:
+  build-candidate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Verify current source-qualified boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0028/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('Canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src || !/lc189|轮转数组/i.test(src.original_question||'')) throw new Error(`source wording drifted: ${src?.original_question}`);
+          NODE
+
+      - id: state
+        shell: bash
+        run: |
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/code_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded candidate and Java fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 算法：轮转数组（LeetCode 189），O(1) 额外空间、O(n) 时间
+
+          ## 核心结论
+
+          题目来源明确指向 LeetCode 189，并要求 `O(1)` 额外空间和 `O(n)` 时间。LeetCode 的原题契约是把整数数组向右轮转 `k` 步，`k` 非负。最稳妥的原地做法是三次反转：先把整个数组反转，再反转前 `k` 个元素，最后反转剩余元素；先做 `k %= n`，避免 `k > n` 时做无意义轮转。
+
+          ## 1 分钟版
+
+          - 设数组长度为 `n`，先归一化 `k %= n`。
+          - 反转整个数组，把原来的后 `k` 个元素整体移到前面，但两段内部顺序都被反了。
+          - 再分别反转 `[0, k-1]` 和 `[k, n-1]`，恢复两段内部顺序。
+          - 每个元素只参与常数次交换，所以时间是 `O(n)`；只用几个下标和临时变量，所以额外空间 `O(1)`。
+          - 原题的 `k` 是非负数。面试官若追问 Java 负数取模，应把它当作语言语义/扩展输入讨论，不要反过来声称原题要求负 `k`。
+
+          ## 3 分钟版
+
+          以 `[1,2,3,4,5,6,7]`、`k=3` 为例。完整反转后得到 `[7,6,5,4,3,2,1]`；前 3 个再反转得到 `[5,6,7,4,3,2,1]`；后 4 个反转得到 `[5,6,7,1,2,3,4]`，正好是向右轮转 3 步。
+
+          ```java
+          class Solution {
+              public void rotate(int[] nums, int k) {
+                  int n = nums.length;
+                  if (n <= 1) return;
+                  k %= n;
+                  if (k == 0) return;
+                  reverse(nums, 0, n - 1);
+                  reverse(nums, 0, k - 1);
+                  reverse(nums, k, n - 1);
+              }
+
+              private void reverse(int[] nums, int left, int right) {
+                  while (left < right) {
+                      int tmp = nums[left];
+                      nums[left++] = nums[right];
+                      nums[right--] = tmp;
+                  }
+              }
+          }
+          ```
+
+          这里不需要辅助数组，也不需要把元素逐个右移 `k` 轮。后者最坏会到 `O(nk)`，不满足来源给出的 `O(n)` 时间要求。
+
+          ## 关键细节
+
+          - `k %= n` 必须在三次反转之前做；比如 `n=7, k=10` 与 `k=3` 等价。
+          - `n <= 1` 可直接返回；LeetCode 当前约束保证 `n >= 1`，这个判断只是让实现更稳健。
+          - `k == 0` 时直接返回，避免虽然正确但无意义的三次反转。
+          - 三次反转都在原数组上交换，额外空间是常数级；不能把复制数组再写回说成 `O(1)`。
+          - Java 的 `%` 保留被除数符号；如果面试官额外扩展到负 `k`，必须先定义“负数表示向左还是仍按右移折算”的契约，再用 `((k % n) + n) % n` 一类方式得到非负余数。原题本身的 `k` 非负，因此正式实现无需引入这个扩展语义。
+
+          ## 原理机制
+
+          把原数组写成 `A B`，其中 `B` 是最终应移动到前面的后 `k` 个元素。整个数组反转得到 `reverse(B) reverse(A)`；再分别反转两段，就得到 `B A`。所以三次反转不是经验技巧，而是利用“整体反转会同时交换两段位置并反转段内顺序，再用两次局部反转消掉段内反序”的等价变换。
+
+          ## 项目经验版
+
+          来源没有提供真实生产项目经历，不应虚构性能数据。若在工程里实现，我会把大 `k`、`k=0`、单元素、重复值以及随机数组与一个清晰的辅助数组 oracle 对拍，并在目标语言里确认整数取模语义；这些是验证步骤，不是题目来源中已经发生过的项目事实。
+
+          ## 常见追问
+
+          - 问：为什么三次反转是 `O(n)` 而不是 `O(3n)` 之外更高？答：三次线性扫描的常数因子会被大 O 忽略，总交换次数仍与 `n` 成正比。
+          - 问：能不能每次把最后一个元素挪到开头，做 `k` 次？答：可以得到正确结果，但每次移动要 `O(n)`，最坏 `O(nk)`，不满足题目要求。
+          - 问：`k` 比数组长度大怎么办？答：右移 `n` 步回到原状态，因此只需要 `k % n`。
+          - 问：面试官问 Java 里 `-1 % 7` 呢？答：结果是 `-1`；如果扩展契约允许负 `k`，要先约定负数方向，再把余数规范化到 `[0,n)`，但不要把这个追问冒充成 LeetCode 189 的原始输入约束。
+
+          ## 易错点
+
+          - 忘记 `k %= n`，导致分段下标越界。
+          - 反转顺序或分段边界写错，例如把第二段从 `k-1` 开始。
+          - 使用额外 `O(n)` 数组，却声称满足 `O(1)` 额外空间。
+          - 逐步右移 `k` 次，正确但最坏时间复杂度退化为 `O(nk)`。
+          - 把负数取模追问误写成原题必须支持负 `k`，造成来源边界膨胀。
+          EOF
+
+          cat > "$out/RotateArrayTest.java" <<'EOF'
+          import java.util.*;
+
+          class RotateArrayTest {
+              static void rotate(int[] nums, int k) {
+                  int n = nums.length;
+                  if (n <= 1) return;
+                  k %= n;
+                  if (k == 0) return;
+                  reverse(nums, 0, n - 1);
+                  reverse(nums, 0, k - 1);
+                  reverse(nums, k, n - 1);
+              }
+              static void reverse(int[] a, int l, int r) {
+                  while (l < r) { int t=a[l]; a[l++]=a[r]; a[r--]=t; }
+              }
+              static int[] oracle(int[] input, int k) {
+                  int n=input.length;
+                  int[] out=new int[n];
+                  if(n==0) return out;
+                  k%=n;
+                  for(int i=0;i<n;i++) out[(i+k)%n]=input[i];
+                  return out;
+              }
+              static void check(int[] input, int k) {
+                  int[] actual=input.clone();
+                  int[] expected=oracle(input,k);
+                  rotate(actual,k);
+                  if(!Arrays.equals(actual,expected)) throw new AssertionError(Arrays.toString(input)+" k="+k+" expected="+Arrays.toString(expected)+" actual="+Arrays.toString(actual));
+              }
+              public static void main(String[] args) {
+                  check(new int[]{1,2,3,4,5,6,7},3);
+                  check(new int[]{-1,-100,3,99},2);
+                  check(new int[]{1},0);
+                  check(new int[]{1},100000);
+                  check(new int[]{1,2},0);
+                  check(new int[]{1,2},2);
+                  check(new int[]{1,2,3},10);
+                  check(new int[]{5,5,5,5},3);
+                  Random rnd=new Random(189);
+                  for(int t=0;t<5000;t++){
+                      int n=1+rnd.nextInt(128), k=rnd.nextInt(100001);
+                      int[] a=new int[n];
+                      for(int i=0;i<n;i++) a[i]=rnd.nextInt();
+                      check(a,k);
+                  }
+                  System.out.println("PASS fixed=8 randomized=5000 oracle=copy-right-rotation complexity=in-place-three-reversals");
+              }
+          }
+          EOF
+
+      - name: Execute deterministic fixture and freeze writer research
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          javac -encoding UTF-8 "$out/RotateArrayTest.java"
+          stdout="$(java -cp "$out" RotateArrayTest)"
+          test "$stdout" = 'PASS fixed=8 randomized=5000 oracle=copy-right-rotation complexity=in-place-three-reversals'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'), path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0028/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac -encoding UTF-8 RotateArrayTest.java && java RotateArrayTest',stdout:process.env.STDOUT,checks:['official examples','k=0','k multiple of n','k greater than n','single element','duplicate values','5000 seeded randomized oracle comparisons']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Answer Batch 0028 repository source packet',locator:'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md',source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'leetcode-189',title:'LeetCode 189 Rotate Array',locator:'https://leetcode.com/problems/rotate-array/',source_type:'official_documentation',checked_at:'2026-08-25'},{source_id:'fixture',title:'Rotate Array deterministic Java validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'Repository source explicitly identifies lc189 array rotation and requires O(1) extra space and O(n) time.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'official-contract',text:'LeetCode 189 rotates an integer array to the right by non-negative k steps and asks for an in-place O(1)-extra-space follow-up.',source_ids:['leetcode-189'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'implementation-validation',text:'The committed three-reversal Java implementation matches an independent copy-based right-rotation oracle on fixed boundaries and 5000 seeded randomized cases.',source_ids:['fixture'],answer_locations:['3 分钟版','原理机制','项目经验版','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Verify repository gates
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit candidate only if content branch stayed stable
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced: $base_head -> $remote_head; discard and retry later."; exit 0; fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0028/$CANONICAL_ID/context.json" "review/content_build/answer_batch_0028/$CANONICAL_ID/RotateArrayTest.java" "review/content_build/answer_batch_0028/$CANONICAL_ID/code_validation.json" "review/content_build/answer_batch_0028/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft batch 0028 rotate-array candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
