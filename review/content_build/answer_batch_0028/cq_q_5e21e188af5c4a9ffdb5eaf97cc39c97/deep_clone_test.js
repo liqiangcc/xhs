@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('assert'); const {deepClone}=require('./deep_clone');
+const shared={v:7}; const sym=Symbol('s'); const source={nested:{x:1},left:shared,right:shared};
+source.self=source; source.arr=[1,,{z:3}]; source[sym]={k:9};
+Object.defineProperty(source,'hidden',{value:{h:2},enumerable:false,writable:false,configurable:true});
+const clone=deepClone(source);
+assert.notStrictEqual(clone,source); assert.notStrictEqual(clone.nested,source.nested); clone.nested.x=8; assert.strictEqual(source.nested.x,1);
+assert.strictEqual(clone.self,clone); assert.strictEqual(clone.left,clone.right); assert.notStrictEqual(clone.left,shared);
+assert.strictEqual(1 in clone.arr,false); assert.strictEqual(clone.arr.length,3); assert.notStrictEqual(clone.arr[2],source.arr[2]);
+assert.notStrictEqual(clone[sym],source[sym]); const d=Object.getOwnPropertyDescriptor(clone,'hidden'); assert.strictEqual(d.enumerable,false); assert.strictEqual(d.writable,false); assert.notStrictEqual(d.value,source.hidden);
+assert.throws(()=>deepClone(new Date()),/unsupported object type/); const fn=()=>1; assert.strictEqual(deepClone(fn),fn);
+console.log('PASS nested=isolated cycle=preserved shared-alias=preserved symbols-descriptors=preserved sparse-array=preserved unsupported-type=rejected');
