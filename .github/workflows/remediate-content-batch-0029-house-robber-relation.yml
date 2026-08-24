@@ -1,0 +1,170 @@
+name: Remediate Content Batch 0029 House Robber Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0029-house-robber-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0029-house-robber-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SOURCE_QID: 64fba5a4c506e237a3a3cf3a91414c8b
+  SOURCE_CID: cq_q_64fba5a4c506e237a3a3cf3a91414c8b
+  TARGET_QID: 6634a5c9294a3f0117a0a029020256ae
+  TARGET_CID: cq_q_6634a5c9294a3f0117a0a029020256ae
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first preflight and independent relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0029
+          node <<'NODE'
+          const fs=require('fs');
+          const packet=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0029/source_boundary_audit.json','utf8'));
+          const byCid=new Map(packet.canonicals.map(x=>[x.canonical_id,x]));
+          const a=byCid.get(process.env.SOURCE_CID), b=byCid.get(process.env.TARGET_CID);
+          if(!a||!b) throw new Error('house-robber pair missing from frozen source-boundary packet');
+          if(a.question_count!==1||b.question_count!==1) throw new Error('house-robber pair must remain singleton-bounded for this review');
+          const qa=a.source_questions[0], qb=b.source_questions[0];
+          const expectedA='算法手撕：打家劫舍（House Robber, 简单动态规划）。';
+          const expectedB='算法手撕：LeetCode 198 - 打家劫舍。给定一个代表每个房屋存放金额的非负整数数组，计算在不触发报警装置（不进入相邻房屋）的情况下，一夜之内能够偷取的最高金额';
+          if(qa.question_id!==process.env.SOURCE_QID||qa.original_question!==expectedA) throw new Error('generic House Robber source drifted');
+          if(qb.question_id!==process.env.TARGET_QID||qb.original_question!==expectedB) throw new Error('LeetCode 198 House Robber source drifted');
+          const review=`# Answer Batch 0029 — House Robber Relation Review\n\n`+
+            `## Source-first facts\n\n`+
+            `- \`${qa.question_id}\`: ${qa.original_question}\n`+
+            `- \`${qb.question_id}\`: ${qb.original_question}\n\n`+
+            `No historical relation/remediation record was consulted to reach the conclusion below. Both current source Questions ask the same coding contract: maximize the sum selected from a linear sequence of house values under the constraint that adjacent houses cannot both be selected. The second wording identifies the standard problem as LeetCode 198 and states the non-negative-array contract explicitly; it does not introduce a distinct output, algorithmic objective, topology, or failure model.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\`. Preserve \`${process.env.TARGET_CID}\` as the survivor because its source wording is the more explicit contract. Retire the singleton duplicate \`${process.env.SOURCE_CID}\` through the reviewed Select → Decide → Apply path. The survivor Answer must remain invalid/rebuildable if source consolidation changes its audited source set; this relation decision does not by itself promote any Answer.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0029/house_robber_relation_review.md',review);
+          NODE
+
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select, decide, and apply exact reviewed pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0029/house_robber_relation_apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$SOURCE_QID,$TARGET_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected exactly one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0];
+          const actual=[...c.question_ids].sort();
+          const expected=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected Question set drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0029-house-robber-source-first-review \
+            --actor-display-name 'Batch 0029 House Robber source-first reviewer' \
+            --rationale 'Current source-first review found both singleton Questions ask the same linear House Robber / LeetCode 198 coding contract; the target source is more explicit and introduces no distinct answer boundary.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$TARGET_CID" \
+            --canonical-title '算法手撕：LeetCode 198 - 打家劫舍' > "$out/apply.json"
+
+      - name: Verify exact ownership effect and record application
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byCid=new Map(canon.map(x=>[x.canonical_id,x])), byQid=new Map(qs.map(x=>[x.question_id,x]));
+          for(const qid of [process.env.SOURCE_QID,process.env.TARGET_QID]){
+            if(byQid.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: expected target ownership after reviewed apply`);
+          }
+          if(byCid.has(process.env.SOURCE_CID)) throw new Error('duplicate source Canonical survived same-relation consolidation');
+          const target=byCid.get(process.env.TARGET_CID);
+          const members=[...(target?.question_ids||[])].sort();
+          const expected=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`target member set drifted: ${JSON.stringify(members)}`);
+          fs.writeFileSync('review/content_build/answer_batch_0029/house_robber_relation_apply.md',
+            '# Answer Batch 0029 — House Robber Relation Application\n\n'+
+            '- Reviewed relation: `same`.\n'+
+            `- Survivor: \`${process.env.TARGET_CID}\`.\n`+
+            `- Consolidated Questions: \`${process.env.SOURCE_QID}\`, \`${process.env.TARGET_QID}\`.\n`+
+            `- Retired duplicate Canonical: \`${process.env.SOURCE_CID}\`.\n`+
+            '- Mutation path: explicit pair Select → AI Decision → Application dedup apply with current ownership/freshness checks.\n'+
+            '- Answer promotion is intentionally deferred; the consolidated survivor must be rebuilt and independently reviewed against both source Questions.\n');
+          NODE
+
+      - name: Full repository and answer gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during reviewed relation slice: $base_head -> $remote_head; fail closed and regenerate next run."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: consolidate batch 0029 house robber duplicate'
+          git push origin "HEAD:$CONTENT_BRANCH"
