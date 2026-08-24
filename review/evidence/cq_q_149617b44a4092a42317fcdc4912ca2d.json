@@ -1,0 +1,137 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_149617b44a4092a42317fcdc4912ca2d",
+  "candidate_sha256": "2199315f55fd5462560ade746d01a0000c2a05a96b1b8613e5536d3908b374ae",
+  "checked_at": "2026-08-22",
+  "writer": {
+    "writer_id": "automation-content-builder-three-array-median-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-67de17c2",
+      "title": "Interview note containing the three-sorted-array median question and the merge-until-middle solution note",
+      "locator": "note_desc/67de17c2000000001a005fa3.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "batch-0015-source-boundary-audit",
+      "title": "Answer Batch 0015 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0015/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "three-array-median-validation",
+      "title": "Deterministic Java validation against a combined-sort oracle",
+      "locator": "review/content_build/answer_batch_0015/cq_q_149617b44a4092a42317fcdc4912ca2d/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "three-array-median-isolated-review",
+      "title": "Source-first isolated review for the median candidate",
+      "locator": "review/content_build/answer_batch_0015/cq_q_149617b44a4092a42317fcdc4912ca2d/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recovered source asks for the median of three sorted arrays with O(1) auxiliary space and records a merge-like strategy that stops around the middle; it does not preserve the even-length convention, element type, empty-array behavior, or a stronger time-complexity target.",
+      "source_ids": ["xhs-raw-note-67de17c2", "batch-0015-source-boundary-audit"],
+      "answer_locations": ["核心结论", "关键细节"]
+    },
+    {
+      "claim_id": "three-way-selection-invariant",
+      "text": "With one pointer per sorted input, the smallest currently pointed-to value is the globally smallest unconsumed value; advancing only that source reproduces the prefix ranks of a three-way merge without materializing the merge.",
+      "source_ids": ["three-array-median-validation", "three-array-median-isolated-review"],
+      "answer_locations": ["3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "space-and-time",
+      "text": "The implementation stores only constant-sized scalar state and scans at most through the right-middle rank, giving O(1) auxiliary space and O(N) worst-case time for total input length N.",
+      "source_ids": ["three-array-median-validation", "three-array-median-isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java implementation passes ten fixed cases and 5000 deterministic randomized sorted-array triples against a combined-sort oracle, preserves all inputs, and handles central-value integer extremes without addition overflow.",
+      "source_ids": ["three-array-median-validation"],
+      "answer_locations": ["关键细节", "原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "149617b44a4092a42317fcdc4912ca2d",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "javac MedianOfThreeSortedArrays.java MedianOfThreeSortedArraysTest.java && java MedianOfThreeSortedArraysTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=10 randomized=5000 oracle=combined-sort input_immutable=true overflow_safe_average=true",
+    "checks": [
+      "odd and even total lengths",
+      "individually empty inputs with non-empty total",
+      "negative and duplicate values",
+      "integer extreme midpoint cases",
+      "5000 deterministic randomized cases against a full-sort oracle",
+      "input arrays remain unchanged",
+      "null and all-empty fail-fast implementation contracts"
+    ],
+    "boundary_tests": [
+      {
+        "case": "even total length across three sorted arrays",
+        "expected": "returns the arithmetic mean of the two central values",
+        "passed": true
+      },
+      {
+        "case": "one or two arrays empty while total input remains non-empty",
+        "expected": "returns the same median as a full sorted merge without mutating inputs",
+        "passed": true
+      },
+      {
+        "case": "central values at Integer.MIN_VALUE/Integer.MAX_VALUE extremes",
+        "expected": "computes the midpoint without int addition overflow",
+        "passed": true
+      },
+      {
+        "case": "all three arrays empty",
+        "expected": "fails fast with IllegalArgumentException under the candidate API contract",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-three-array-median-20260822",
+    "review_version": "three-array-median.three-way-prefix.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate is source-bounded and explicitly separates recovered facts from chosen API assumptions.",
+      "The correctness invariant and O(1) auxiliary-space argument are explicit and match the implementation.",
+      "The independent oracle covers randomized ordering combinations without reusing the candidate selection algorithm.",
+      "Integer-extreme fixed cases prove the average expression avoids int addition overflow.",
+      "No unsupported project, online-judge or hidden-constraint claims were introduced.",
+      "Formal promotion remains blocked only by the pilot human-approval gate."
+    ]
+  }
+}

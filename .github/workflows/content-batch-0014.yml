@@ -1,0 +1,53 @@
+name: Content Batch 0014
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run sorted-array range fixture
+        working-directory: review/content_build/answer_batch_0014/cq_q_0d3977f38b683b8870680583294bec75
+        run: javac SearchRange.java SearchRangeTest.java && java SearchRangeTest
+
+      - name: Run rotate-string fixture
+        working-directory: review/content_build/answer_batch_0014/cq_q_0e62222057e8d368021aea7612198b22
+        run: javac RotateString.java RotateStringTest.java && java RotateStringTest
+
+      - name: Run linked-list big-integer fixture
+        working-directory: review/content_build/answer_batch_0014/cq_q_10b16ccc8b909fb29e93c5d4a67ddf71
+        run: javac LinkedListBigIntegerAdd.java LinkedListBigIntegerAddTest.java && java LinkedListBigIntegerAddTest
+
+      - name: Audit linked-list big-integer candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_10b16ccc8b909fb29e93c5d4a67ddf71.md --require-evidence --require-code --noWrite
+
+      - name: Run generic group-by fixture
+        working-directory: review/content_build/answer_batch_0014/cq_q_10ca2be141844abf692f07c3c2ab8918
+        run: node --version && node groupByTest.js
+
+      - name: Capture generic group-by candidate hashes
+        run: |
+          sha256sum review/candidates/answers/cq_q_10ca2be141844abf692f07c3c2ab8918.md
+          sha256sum review/content_build/answer_batch_0014/cq_q_10ca2be141844abf692f07c3c2ab8918/groupBy.js
+          sha256sum review/content_build/answer_batch_0014/cq_q_10ca2be141844abf692f07c3c2ab8918/groupByTest.js
+
+      - name: Verify no generated changes
+        run: git diff --exit-code

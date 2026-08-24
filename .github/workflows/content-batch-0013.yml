@@ -1,0 +1,97 @@
+name: Content Batch 0013
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Audit binary-tree diameter candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_055a106e79b4b8651c11ddb5633f467d.md --require-evidence --require-code --noWrite
+
+      - name: Run binary-tree diameter fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_055a106e79b4b8651c11ddb5633f467d
+        run: javac BinaryTreeDiameter.java BinaryTreeDiameterTest.java && java BinaryTreeDiameterTest
+
+      - name: Audit parallel independent-task candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_05d294848031e3626b66c720bb2273f1.md --require-evidence --require-code --noWrite
+
+      - name: Run parallel independent-task fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_05d294848031e3626b66c720bb2273f1
+        run: javac ParallelIndependentTasks.java ParallelIndependentTasksTest.java && java ParallelIndependentTasksTest
+
+      - name: Audit Promise.all candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0758303ae6a5334a56c9c6239f2787ab.md --require-evidence --require-code --noWrite
+
+      - name: Run Promise.all fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_0758303ae6a5334a56c9c6239f2787ab
+        run: node promise_all_test.js
+
+      - name: Audit linked-list common-node candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_08084c56954c213d036776b7cddffdf7.md --require-evidence --require-code --noWrite
+
+      - name: Run linked-list common-node fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_08084c56954c213d036776b7cddffdf7
+        run: javac LinkedListFirstCommonNode.java LinkedListFirstCommonNodeTest.java && java LinkedListFirstCommonNodeTest
+
+      - name: Audit counterclockwise-matrix candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_085f9d4fb37c28311af8525abbfe36a7.md --require-evidence --require-code --noWrite
+
+      - name: Run counterclockwise-matrix fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_085f9d4fb37c28311af8525abbfe36a7
+        run: javac CounterClockwiseMatrix.java CounterClockwiseMatrixTest.java && java CounterClockwiseMatrixTest
+
+      - name: Audit bank-card grouping candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_08a054b37d559194555ce32cf4b65130.md --require-evidence --require-code --noWrite
+
+      - name: Run bank-card grouping fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_08a054b37d559194555ce32cf4b65130
+        run: node formatBankCardNumberTest.js
+
+      - name: Audit Path Sum candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0b2b60b3fcf31abae6c4bff516b07ade.md --require-evidence --require-code --noWrite
+
+      - name: Run Path Sum fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_0b2b60b3fcf31abae6c4bff516b07ade
+        run: javac PathSum.java PathSumTest.java && java PathSumTest
+
+      - name: Audit JavaScript this-binding candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0c1e11f63f195e0539750aec00ec460a.md --require-evidence --require-code --noWrite
+
+      - name: Run JavaScript this-binding fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_0c1e11f63f195e0539750aec00ec460a
+        run: node this_binding_test.js
+
+      - name: Audit array-reversal candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0cd58a34a535a328a11e800f34851666.md --require-evidence --require-code --noWrite
+
+      - name: Run array-reversal fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_0cd58a34a535a328a11e800f34851666
+        run: javac ReverseArray.java ReverseArrayTest.java && java ReverseArrayTest
+
+      - name: Audit K-smallest candidate
+        run: node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_0d11f525c0d8aad8db67eff8b0764f3d.md --require-evidence --require-code --noWrite
+
+      - name: Run K-smallest fixture
+        working-directory: review/content_build/answer_batch_0013/cq_q_0d11f525c0d8aad8db67eff8b0764f3d
+        run: javac KSmallest.java KSmallestTest.java && java KSmallestTest
+
+      - name: Verify no generated changes
+        run: git diff --exit-code

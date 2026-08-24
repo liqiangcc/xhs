@@ -1,0 +1,167 @@
+# promotion is intentionally idempotent and runs on both direct push and same-repo PR sync
+name: Promote reviewed content batches 0010-0011
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+    paths:
+      - .github/workflows/content-promote-reviewed-batch-0010-0011.yml
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/content-promote-reviewed-batch-0010-0011.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-promote-reviewed-batch-0010-0011
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Fast-forward to latest branch state
+        run: git pull --ff-only origin content/quality-completion
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Audit and conditionally promote reviewed candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          promote() {
+            local id="$1"
+            local require_code="${2:-false}"
+            local candidate="review/candidates/answers/${id}.md"
+            local evidence="review/evidence/${id}.json"
+
+            if node - "$id" <<'NODE'
+          const fs = require('fs');
+          const id = process.argv[2];
+          const p = `review/answers/${id}.md`;
+          if (!fs.existsSync(p)) process.exit(1);
+          const first = fs.readFileSync(p, 'utf8').split(/\r?\n/, 1)[0];
+          const m = first.match(/<!--\s*xhs-answer:\s*(\{.*\})\s*-->/);
+          if (!m) process.exit(1);
+          const meta = JSON.parse(m[1]);
+          process.exit(meta.status === 'ready' && meta.quality_tier === 'curated' ? 0 : 1);
+          NODE
+            then
+              echo "${id}: already curated-ready; skipping"
+              return
+            fi
+
+            args=(answer audit --candidate "$candidate" --require-evidence --noWrite --noManifest)
+            if [ "$require_code" = "true" ]; then args+=(--require-code); fi
+            node scripts/xhs.js "${args[@]}"
+
+            # The first 60 promotions require a real human attestation by SSOT.
+            # Absence is a truthful not-ready state, not an automation failure.
+            if ! node - "$evidence" <<'NODE'
+          const fs = require('fs');
+          const evidence = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const review = evidence.human_review;
+          process.exit(review
+            && review.reviewer_type === 'human'
+            && review.decision === 'approved'
+            && review.reviewer_id
+            && review.reviewed_at
+            && review.attestation ? 0 : 1);
+          NODE
+            then
+              echo "${id}: machine/source-first audit passed; awaiting required human review; not promoted"
+              return
+            fi
+
+            node scripts/xhs.js answer promote \
+              --canonical-id "$id" \
+              --candidate "$candidate" \
+              --evidence "$evidence" \
+              --noManifest
+          }
+
+          promote cq_gc_algorithms_3f884748
+          promote cq_deep_copy_5cfb8eb4
+          promote cq_java_oop_21912814
+          promote cq_language_compilation_0a002e6b
+          promote cq_linux_commands_76aadb5b
+          promote cq_mysql_isolation_c43c6784
+          promote cq_q_05ef104a850cbc33126f5c746e00171c true
+          promote cq_q_3f52d557f29ac6552e5dc5f5e940f810 true
+          promote cq_q_5856fb8727752874f2e1c6d8a3832d67 true
+          promote cq_q_0fdff883609d352de9fa841f0a635925 true
+
+      - name: Validate repository gates without weakening completion criteria
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer validate --strict --noWrite --noManifest
+          node scripts/xhs.js canonical check --noWrite --noManifest
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Enforce bounded mutation surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const {execFileSync} = require('child_process');
+          const allowed = new Set([
+            'data/questions/canonical_questions.jsonl',
+            'review/answers/cq_gc_algorithms_3f884748.md',
+            'review/answers/cq_deep_copy_5cfb8eb4.md',
+            'review/answers/cq_java_oop_21912814.md',
+            'review/answers/cq_language_compilation_0a002e6b.md',
+            'review/answers/cq_linux_commands_76aadb5b.md',
+            'review/answers/cq_mysql_isolation_c43c6784.md',
+            'review/answers/cq_q_05ef104a850cbc33126f5c746e00171c.md',
+            'review/answers/cq_q_3f52d557f29ac6552e5dc5f5e940f810.md',
+            'review/answers/cq_q_5856fb8727752874f2e1c6d8a3832d67.md',
+            'review/answers/cq_q_0fdff883609d352de9fa841f0a635925.md',
+          ]);
+          const out = execFileSync('git', ['status', '--porcelain'], {encoding:'utf8'}).trim();
+          const changed = out ? out.split(/\r?\n/).map(line => line.slice(3).trim()) : [];
+          const unexpected = changed.filter(p => !allowed.has(p));
+          if (unexpected.length) {
+            console.error(JSON.stringify({unexpected}, null, 2));
+            process.exit(1);
+          }
+          console.log(JSON.stringify({changed}, null, 2));
+          NODE
+
+      - name: Commit any human-approved promotions
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No human-approved promotion changes in this batch."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/questions/canonical_questions.jsonl review/answers
+          git commit -m "content: promote human-approved answer batches 0010-0011"
+          git push origin HEAD:content/quality-completion

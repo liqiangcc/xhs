@@ -1,0 +1,130 @@
+name: Content Batch 0017
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate sorted-matrix candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_23224fdbc8bddfe239dc7f0da36fd480
+        run: |
+          javac SearchSortedMatrix.java SearchSortedMatrixTest.java
+          java SearchSortedMatrixTest
+
+      - name: Audit completed sorted-matrix candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_23224fdbc8bddfe239dc7f0da36fd480.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify sorted-matrix candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_23224fdbc8bddfe239dc7f0da36fd480.md \
+            review/content_build/answer_batch_0017/cq_q_23224fdbc8bddfe239dc7f0da36fd480 \
+            review/evidence/cq_q_23224fdbc8bddfe239dc7f0da36fd480.json
+
+      - name: Validate spiral-traversal candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_2366a87ab109eca0a9aac3ebad1db2f9
+        run: |
+          javac SpiralMatrixTraversal.java SpiralMatrixTraversalTest.java
+          java SpiralMatrixTraversalTest
+
+      - name: Audit completed spiral-traversal candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_2366a87ab109eca0a9aac3ebad1db2f9.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify spiral-traversal candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_2366a87ab109eca0a9aac3ebad1db2f9.md \
+            review/content_build/answer_batch_0017/cq_q_2366a87ab109eca0a9aac3ebad1db2f9 \
+            review/evidence/cq_q_2366a87ab109eca0a9aac3ebad1db2f9.json
+
+      - name: Validate power-of-two-reduction candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_24dba68ff950ae9989f218f7f4e3d55d
+        run: |
+          javac MinPowerOfTwoOperations.java MinPowerOfTwoOperationsTest.java
+          java MinPowerOfTwoOperationsTest
+
+      - name: Audit completed power-of-two-reduction candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_24dba68ff950ae9989f218f7f4e3d55d.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify power-of-two-reduction candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_24dba68ff950ae9989f218f7f4e3d55d.md \
+            review/content_build/answer_batch_0017/cq_q_24dba68ff950ae9989f218f7f4e3d55d \
+            review/evidence/cq_q_24dba68ff950ae9989f218f7f4e3d55d.json
+
+      - name: Validate rand39-to-rand51 candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_271dea4873c463bfe83f5ef2f5d26004
+        run: |
+          javac Rand39ToRand51.java Rand39ToRand51Test.java
+          java Rand39ToRand51Test
+
+      - name: Audit completed rand39-to-rand51 candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_271dea4873c463bfe83f5ef2f5d26004.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify rand39-to-rand51 candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_271dea4873c463bfe83f5ef2f5d26004.md \
+            review/content_build/answer_batch_0017/cq_q_271dea4873c463bfe83f5ef2f5d26004 \
+            review/evidence/cq_q_271dea4873c463bfe83f5ef2f5d26004.json
+
+      - name: Validate strict-double-index candidate fixture
+        working-directory: review/content_build/answer_batch_0017/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68
+        run: |
+          javac StrictDoubleDominantIndex.java StrictDoubleDominantIndexTest.java
+          java StrictDoubleDominantIndexTest
+
+      - name: Audit completed strict-double-index candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify strict-double-index candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68.md \
+            review/content_build/answer_batch_0017/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68 \
+            review/evidence/cq_q_27d7a2728feaeca0d6b67a1e7ba30f68.json

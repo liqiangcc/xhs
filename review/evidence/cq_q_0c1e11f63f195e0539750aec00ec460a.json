@@ -1,0 +1,146 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_0c1e11f63f195e0539750aec00ec460a",
+  "candidate_sha256": "ca8f2119f797792e3023cbb035a5c6c9bf1f3c58ac4c2ebbcbc4fa0a9c1c380d",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-js-this-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-note-681cc49c-ocr",
+      "title": "Recovered image text containing the ordinary-function and arrow-function this snippet",
+      "locator": "note_img_txt/681cc49c000000002101b340.txt#图片3",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "xhs-question-0c1e11f6",
+      "title": "Tagged repository question record for the JavaScript this output question",
+      "locator": "note_tagged/681cc49c000000002101b340.json#question_id=0c1e11f63f195e0539750aec00ec460a",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "ecma262-2026-evaluate-call",
+      "title": "ECMAScript 2026 EvaluateCall and property-reference thisValue rules",
+      "locator": "https://tc39.es/ecma262/2026/multipage/ecmascript-language-expressions.html#sec-evaluatecall",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "ecma262-2026-ordinary-call-bind-this",
+      "title": "ECMAScript 2026 OrdinaryCallBindThis",
+      "locator": "https://tc39.es/ecma262/2026/multipage/ordinary-and-exotic-objects-behaviours.html#sec-ordinarycallbindthis",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "ecma262-2026-arrow-functions",
+      "title": "ECMAScript 2026 Arrow Function Definitions",
+      "locator": "https://tc39.es/ecma262/2026/multipage/ecmascript-language-functions-and-classes.html#sec-arrow-function-definitions",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "js-this-validation",
+      "title": "Deterministic Node vm validation of the recovered classic-script snippet and strict-mode boundary",
+      "locator": "review/content_build/answer_batch_0013/cq_q_0c1e11f63f195e0539750aec00ec460a/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-snippet-boundary",
+      "text": "The repository OCR contains the complete snippet with window.value, fnA/fnB/fnC, objA/objB/objC, and the three calls; the candidate answers that recovered code rather than guessing from the title alone.",
+      "source_ids": ["xhs-note-681cc49c-ocr", "xhs-question-0c1e11f6"],
+      "answer_locations": ["核心结论", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "member-call-this",
+      "text": "For objA.fn() and objB.fn(), property-reference call evaluation supplies the base object as thisValue to the ordinary function call, yielding objA and objB respectively.",
+      "source_ids": ["ecma262-2026-evaluate-call", "js-this-validation"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "claim_id": "arrow-lexical-this",
+      "text": "Arrow-function calls do not create a new ordinary dynamic this binding; this inside the arrow resolves through the enclosing lexical environment, so fnB's arrow uses fnB's objB binding and fnC's returned arrow retains fnC's outer binding.",
+      "source_ids": ["ecma262-2026-arrow-functions", "ecma262-2026-ordinary-call-bind-this", "js-this-validation"],
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "non-strict-global-this",
+      "text": "In the recovered non-strict classic-script boundary, the bare fnC() call receives an undefined/null-equivalent this argument that OrdinaryCallBindThis replaces with the Realm global this value, so the returned arrow later reads window.value and produces v.",
+      "source_ids": ["ecma262-2026-ordinary-call-bind-this", "js-this-validation"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "strict-mode-boundary",
+      "text": "If the same source is made strict, fnC's this remains undefined and the returned arrow throws TypeError when it later evaluates this.value; therefore A/B/v is not an environment-independent output claim.",
+      "source_ids": ["ecma262-2026-ordinary-call-bind-this", "js-this-validation"],
+      "answer_locations": ["3 分钟版", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "deterministic-output",
+      "text": "Executing the exact recovered snippet in a classic-script-style Node vm context with window bound to the context global produces A, B, v in order; the same fixture independently checks the strict-mode TypeError boundary.",
+      "source_ids": ["js-this-validation"],
+      "answer_locations": ["核心结论", "原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "0c1e11f63f195e0539750aec00ec460a",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "node this_binding_test.js",
+    "result": "pass",
+    "reported_stdout": "PASS classic=A,B,v strict=objC-call-TypeError",
+    "checks": [
+      "recovered classic-script snippet outputs A, B, v in order",
+      "objB arrow uses the surrounding fnB this binding",
+      "objC stored arrow does not rebind this at the later property-call site",
+      "strict-mode variant fails at the third this.value access with TypeError"
+    ],
+    "boundary_tests": [
+      {"case": "ordinary member call objA.fn()", "expected": "prints A because the property-reference base is objA", "passed": true},
+      {"case": "arrow created inside objB method call", "expected": "prints B because the arrow resolves fnB's objB this binding", "passed": true},
+      {"case": "returned arrow created by non-strict bare fnC()", "expected": "prints v because the lexical outer this is the classic-script global object", "passed": true},
+      {"case": "strict-mode variant", "expected": "third invocation throws TypeError because the lexical outer this is undefined", "passed": true}
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-js-this-20260821",
+    "review_version": "ecma262-this-binding-boundary.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate is anchored to the full recovered image-text snippet and does not infer a missing program from the canonical title.",
+      "The A and B outputs are derived from property-reference call semantics plus the lexical-this rule for the inner arrow, not from mnemonic wording.",
+      "The v output is correctly scoped to a non-strict browser classic-script boundary; the candidate explicitly rejects an unconditional environment-independent claim.",
+      "The strict-mode counterexample is executable and proves why the boundary matters.",
+      "The later objC.fn() property call is correctly distinguished from creation-time fnC(), so the answer does not mistakenly rebind the arrow to objC.",
+      "The OCR's inline expected-output comments are not used as the sole proof; the result is independently reproduced and grounded in ECMAScript 2026 semantics.",
+      "No production experience, performance metric, or browser behavior outside the recovered contract is fabricated.",
+      "Required human approval remains a separate promotion gate."
+    ]
+  }
+}

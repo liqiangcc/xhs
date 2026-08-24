@@ -1,0 +1,31 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_1f1bcfca5e814405d8f577ae7f3bab1e",
+  "checked_at": "2026-08-23",
+  "language": "java",
+  "runtime": "OpenJDK 21",
+  "command": "javac FileTopK.java FileTopKTest.java && java FileTopKTest",
+  "result": "pass",
+  "stdout": "PASS fixed=7 randomized=5000 oracle=full-sort-prefix duplicate_semantics=occurrence-preserving",
+  "implementation_contract": {
+    "input": "UTF-8 text file; each non-blank line is one signed 64-bit integer",
+    "duplicate_semantics": "occurrence-preserving; repeated values may occupy multiple Top-K positions",
+    "blank_lines": "ignored",
+    "malformed_rows": "fail fast with NumberFormatException",
+    "fewer_than_k": "return every valid number",
+    "output_order": "descending",
+    "invalid_k": "fail fast with IllegalArgumentException when k <= 0"
+  },
+  "checks": [
+    "empty file",
+    "fewer than K values",
+    "exactly K values",
+    "duplicate values preserve multiplicity",
+    "negative values",
+    "Long.MIN_VALUE and Long.MAX_VALUE",
+    "blank-line and surrounding-whitespace handling",
+    "5000 deterministic randomized files against a full-sort-prefix oracle",
+    "malformed numeric row fail-fast behavior",
+    "k <= 0 fail-fast behavior"
+  ]
+}

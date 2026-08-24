@@ -1,0 +1,184 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_59f7da662c7278b9eb2959714186406f",
+  "candidate_sha256": "6b4ceb61fac5407a396bfce742f2cbca1aeffd873ff0f339267b51df039521f2",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-paint-house-ii-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "leetcode-265-description",
+      "title": "LeetCode 265 — Paint House II",
+      "locator": "https://leetcode.com/problems/paint-house-ii/",
+      "source_type": "official_problem_statement",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "leetcode-official-articles-index-256-265",
+      "title": "LeetCode Articles index containing 256 Paint House and 265 Paint House II",
+      "locator": "https://leetcode.com/articles/?category=algorithms&page=144&search=",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "leetcode-ca-265-contract",
+      "title": "265 - Paint House II problem mirror and O(nk) follow-up",
+      "locator": "https://leetcode.ca/2016-08-21-265-Paint-House-II/",
+      "source_type": "reputable_secondary_reference",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "paint-house-ii-code-validation",
+      "title": "PaintHouseII deterministic Java differential validation",
+      "locator": "review/content_build/answer_batch_0012/cq_q_59f7da662c7278b9eb2959714186406f/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "problem-contract",
+      "text": "Paint House II uses an n-by-k cost matrix, requires adjacent houses to use different colors, and asks for the minimum total painting cost; the official examples include [[1,5,3],[2,9,4]] -> 5 and [[1,3],[2,4]] -> 5.",
+      "source_ids": [
+        "leetcode-265-description",
+        "leetcode-ca-265-contract"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "source-boundary",
+      "text": "LeetCode maintains distinct Paint House and Paint House II problem/editorial entries; the repository source question only says Paint House, dynamic programming, and Hard, so the candidate explicitly records the mapping decision rather than pretending the original note contained the full 265 statement.",
+      "source_ids": [
+        "leetcode-official-articles-index-256-265"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "optimized-dp-validation",
+      "text": "The candidate's Java implementation tracks the previous row, derives its smallest and second-smallest cumulative costs plus the smallest-cost color, and uses those to compute each next state in O(1) after the row scan. The exact implementation matches an independent O(n*k^2) DP oracle on 5000 deterministic random valid matrices and passes official and boundary cases.",
+      "source_ids": [
+        "paint-house-ii-code-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "complexity-follow-up",
+      "text": "The Paint House II follow-up asks for O(nk) runtime. The implementation performs two O(k) scans per house and stores one O(k) previous row, so its time complexity is O(nk) and auxiliary space is O(k).",
+      "source_ids": [
+        "leetcode-ca-265-contract",
+        "paint-house-ii-code-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "59f7da662c7278b9eb2959714186406f",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "question_id": "59f7da662c7278b9eb2959714186406fa",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac PaintHouseII.java PaintHouseIITest.java && java PaintHouseIITest",
+    "result": "pass",
+    "reported_stdout": "PASS random_cases=5000 seed=265 official_examples=2 boundary_cases=4",
+    "checks": [
+      "official example [[1,5,3],[2,9,4]] -> 5",
+      "official example [[1,3],[2,4]] -> 5",
+      "single-house minimum",
+      "equal cumulative minima/tie handling",
+      "two-color forced alternation",
+      "single-color multi-house impossible-input rejection",
+      "5000 deterministic random valid matrices compared against structurally simpler O(n*k^2) DP oracle"
+    ],
+    "boundary_tests": [
+      {
+        "case": "official example costs=[[1,5,3],[2,9,4]]",
+        "expected": 5,
+        "passed": true
+      },
+      {
+        "case": "equal minima costs=[[5,5,5],[5,5,5]]",
+        "expected": 10,
+        "passed": true
+      },
+      {
+        "case": "two colors require forced alternation",
+        "expected": 8,
+        "passed": true
+      },
+      {
+        "case": "one color with multiple adjacent houses",
+        "expected": "IllegalArgumentException in repository-local defensive API",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-paint-house-ii-20260821",
+    "review_version": "paint-house-ii.leetcode265.primary-source-differential.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The source note is ambiguous beyond 'Paint House', dynamic programming, and Hard; the candidate makes the 265 mapping explicit and does not attribute missing constraints to the original interview note.",
+      "The problem contract and official examples match Paint House II, while the official LeetCode articles index confirms Paint House and Paint House II are distinct entries.",
+      "The recurrence is the standard adjacent-color exclusion DP and the min1/min2 optimization preserves that recurrence.",
+      "Tie handling is correct because min2 may equal min1 when the equal costs belong to different colors.",
+      "The implementation's O(nk) time claim matches its two linear scans per house, and the O(k) space claim matches the retained previous row.",
+      "The exact implementation passes official cases, targeted boundaries, and 5000 differential cases against an independent O(n*k^2) oracle.",
+      "No project or interview experience is fabricated; human approval remains a separate promotion gate."
+    ]
+  }
+}

@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_aof_e522aa87",
-  "candidate_sha256": "9abd671978683b61e7e91cc11c2ac65a4f04ddb23d352a90bbd653be919b174a",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "72f964208c4f40deebd44e96a9299c6e606f3cc1a28cd83b86a243b8eb29983b",
+  "checked_at": "2026-08-17",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "aof-rewrite.v2"
+    "writer_version": "aof-rewrite.v3"
   },
   "sources": [
     {
@@ -13,68 +13,114 @@
       "title": "Redis persistence documentation",
       "locator": "https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "redis-bgrewriteaof",
+      "title": "Redis BGREWRITEAOF command documentation",
+      "locator": "https://redis.io/docs/latest/commands/bgrewriteaof/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "redis-info",
+      "title": "Redis INFO command documentation",
+      "locator": "https://redis.io/docs/latest/commands/info/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "source_id": "redis-aof-source",
+      "title": "Redis upstream AOF implementation",
+      "locator": "https://github.com/redis/redis/blob/unstable/src/aof.c",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-17"
     }
   ],
   "claims": [
     {
       "claim_id": "aof-rewrite-current-state",
-      "text": "AOF rewriting produces a new file containing the minimal operations needed to recreate the current data set rather than compressing the old append history.",
-      "source_ids": ["redis-persistence"],
-      "answer_locations": ["核心结论", "3 分钟版"]
+      "text": "AOF rewriting rebuilds a smaller recovery representation for the current dataset rather than compressing the previous append history.",
+      "source_ids": ["redis-persistence", "redis-bgrewriteaof"],
+      "answer_locations": ["核心结论", "3 分钟版", "常见追问"]
     },
     {
-      "claim_id": "aof-rewrite-increment",
-      "text": "For the pre-7.0 single-file flow, Redis continues appending during rewrite and appends the buffered increment to the rewritten result before switching files.",
-      "source_ids": ["redis-persistence"],
-      "answer_locations": ["1 分钟版", "原理机制", "常见追问"]
+      "claim_id": "aof-pre7-flow",
+      "text": "Before Redis 7.0, the child writes a new temporary AOF while the parent continues appending new writes to the old AOF and buffers rewrite-period changes; after child completion the parent appends the buffered changes and atomically replaces the old AOF.",
+      "source_ids": ["redis-persistence", "redis-aof-source"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
     },
     {
-      "claim_id": "aof-v7-multipart",
-      "text": "Since Redis 7.0, AOF data is split into multiple files in the configured append directory, so older single-file descriptions are version-specific.",
-      "source_ids": ["redis-persistence"],
-      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "claim_id": "aof-v7-multipart-success",
+      "text": "Since Redis 7.0, the parent opens a new incremental AOF when rewrite is scheduled, the child generates a new base AOF, and success is published through a temporary manifest that is atomically exchanged to select the new base and incremental files.",
+      "source_ids": ["redis-persistence", "redis-aof-source"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
     },
     {
-      "claim_id": "aof-cow-resource-boundary",
-      "text": "Redis documents copy-on-write memory overhead during pre-7.0 AOF rewrite when writes continue, so fork and write pressure are capacity and latency boundaries rather than a claim of zero interruption.",
-      "source_ids": ["redis-persistence"],
-      "answer_locations": ["1 分钟版", "关键细节", "原理机制", "易错点"]
+      "claim_id": "aof-v7-failure-recovery",
+      "text": "For Redis 7.0 and later, if a rewrite fails, the old base and incremental files together with the newly opened incremental file still represent the complete updated dataset, so recovery does not depend on publishing the failed new base.",
+      "source_ids": ["redis-persistence", "redis-aof-source"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
     },
     {
-      "claim_id": "aof-published-set-boundary",
-      "text": "The published AOF set is the recoverable state; operational backup guidance requires checking whether rewrite is in progress before copying the multi-part AOF directory.",
-      "source_ids": ["redis-persistence"],
-      "answer_locations": ["3 分钟版", "关键细节", "原理机制"]
+      "claim_id": "aof-trigger-semantics",
+      "text": "BGREWRITEAOF is asynchronous; Redis can trigger rewriting automatically since 2.4, and an ongoing RDB background save can cause the rewrite to be scheduled instead of started immediately.",
+      "source_ids": ["redis-bgrewriteaof", "redis-persistence"],
+      "answer_locations": ["1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "aof-operational-status",
+      "text": "INFO persistence exposes rewrite-in-progress, rewrite-scheduled, last-background-rewrite status and copy-on-write size fields; Redis persistence guidance requires checking rewrite completion and last status before restart, and warns that copying a Redis 7+ append directory during rewrite can produce an invalid backup.",
+      "source_ids": ["redis-info", "redis-persistence"],
+      "answer_locations": ["3 分钟版", "关键细节", "项目经验版", "常见追问"]
     }
   ],
   "source_question_coverage": [
     {
       "question_id": "02369c81c6df3846036f99831dd3f932",
       "covered": true,
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
     }
   ],
-  "review": {
+  "review_state": "independent_rereview_passed",
+  "prior_review": {
     "reviewer_id": "isolated-aof-reviewer",
     "review_version": "1.0",
     "independent": true,
     "decision": "revise",
     "revision_round": 2,
-    "scores": {
-      "facts_and_evidence": 22,
-      "directness_and_relevance": 19,
-      "type_specific_completeness": 17,
-      "mechanism_and_causality": 14,
-      "boundaries_and_tradeoffs": 9,
-      "followup_quality": 5,
-      "oral_quality": 4
-    },
+    "candidate_sha256": "9abd671978683b61e7e91cc11c2ac65a4f04ddb23d352a90bbd653be919b174a",
     "hard_failures": ["unsupported_factual_claim"],
     "revision_suggestions": [
       "为 Redis 7 base/incr/manifest 的发布与恢复作用补充逐项官方 claim 映射。",
       "为未完成发布时继续使用已发布集合、半成品不能作为恢复日志补充直接官方证据。",
       "在机制主链路中补齐 BGREWRITEAOF/自动触发、父进程、子进程、旧 AOF、rewrite buffer 与临时文件的角色。"
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-aof-reviewer",
+    "review_version": "r2.1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "revision_suggestions": [],
+    "findings": [
+      "Source-first rereview checked the canonical record and original source question before historical remediation records; the candidate directly answers the AOF rewrite process as a mechanism question.",
+      "Current Redis persistence documentation explicitly supports the Redis <7 single-file rewrite flow and the Redis >=7 multi-part BASE/INCR/manifest flow, including the failure-recovery invariant and atomic manifest exchange.",
+      "BGREWRITEAOF and INFO documentation support asynchronous triggering, RDB-save scheduling behavior, rewrite status fields, and copy-on-write observability used in the answer.",
+      "The revised candidate keeps the Redis 7.0 version boundary explicit, covers the failure path and resource costs, and no longer has a material unsupported factual claim."
     ]
   }
 }

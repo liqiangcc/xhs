@@ -1,0 +1,25 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_297402fd71887dbeb07d182f057a1858",
+  "validated_at": "2026-08-23",
+  "runtime": "Temurin OpenJDK 21 (GitHub Actions)",
+  "command": "javac MultiplyDecimalStrings.java MultiplyDecimalStringsTest.java && java MultiplyDecimalStringsTest",
+  "result": "pass",
+  "stdout": "PASS fixed=14 randomized=4000 oracle=BigInteger commutative=true",
+  "implementation_contract": {
+    "left": "non-empty string containing only decimal digits; leading zeros allowed",
+    "right": "non-empty string containing only decimal digits; leading zeros allowed",
+    "result": "canonical nonnegative decimal product string with no leading zeros except 0",
+    "invalid_input": "null, empty or non-digit input throws IllegalArgumentException",
+    "implementation_library_boundary": "production implementation does not use arbitrary-precision multiplication"
+  },
+  "checks": [
+    "zero and all-leading-zero normalization",
+    "identity and single-digit multiplication",
+    "carry chains including 999*999",
+    "known 9-digit multiplication result",
+    "null, empty, sign, decimal point and alphabetic rejection",
+    "4000 deterministic random pairs of 1-80 digit decimal strings checked against java.math.BigInteger",
+    "commutativity checked for every randomized pair"
+  ]
+}

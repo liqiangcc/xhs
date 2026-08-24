@@ -1,0 +1,209 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_2f278e6b489feb680f8b173047815566",
+  "candidate_sha256": "933835a7f303f5dc06dc2bfd8b735153f4871577c25893579cf783ea5e2b699b",
+  "checked_at": "2026-08-24",
+  "writer": {
+    "writer_id": "automation-content-builder-equal-sum-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-68c80460",
+      "title": "Baidu interview note containing the equal-sum split prompt",
+      "locator": "note_desc/68c80460000000001d029216.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "batch-0019-source-packet",
+      "title": "Answer Batch 0019 mechanically extracted repository-source packet",
+      "locator": "review/reports/ANSWER_BATCH_0019_SOURCE_PACKET.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "batch-0019-source-boundary-audit",
+      "title": "Answer Batch 0019 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0019/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "equal-sum-validation",
+      "title": "Deterministic Java validation against exhaustive subset enumeration oracle",
+      "locator": "review/content_build/answer_batch_0019/cq_q_2f278e6b489feb680f8b173047815566/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "equal-sum-isolated-review",
+      "title": "Source-first isolated review for the equal-sum partition candidate",
+      "locator": "review/content_build/answer_batch_0019/cq_q_2f278e6b489feb680f8b173047815566/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The retained repository source asks whether an array can be split into two arrays whose element sums are equal; it does not require contiguous subarrays or specify sign/range, non-empty groups, language, null handling, or an API shape.",
+      "source_ids": [
+        "xhs-raw-note-68c80460",
+        "batch-0019-source-packet",
+        "batch-0019-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "candidate-contract",
+      "text": "Java int[] input, non-negative elements, total sum <= Integer.MAX_VALUE, complete element partition, empty-group allowance, and null=false are explicit candidate choices rather than recovered prompt facts.",
+      "source_ids": [
+        "batch-0019-source-boundary-audit",
+        "equal-sum-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "half-sum-equivalence",
+      "text": "Under the chosen complete-partition contract, two equal-sum groups exist exactly when the total is even and some subset sums to half of the total.",
+      "source_ids": [
+        "equal-sum-validation",
+        "equal-sum-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "descending-update",
+      "text": "For one-dimensional 0/1 subset-sum DP, descending target iteration prevents the current element from being reused in the same round.",
+      "source_ids": [
+        "equal-sum-validation",
+        "equal-sum-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "For target T = total/2, the selected dynamic program uses O(nT) time and O(T) auxiliary space and is pseudo-polynomial in numeric magnitude.",
+      "source_ids": [
+        "equal-sum-validation",
+        "equal-sum-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java fixture passes 10 fixed cases and 5000 deterministic randomized arrays against an exhaustive subset-enumeration oracle while confirming the input is unchanged.",
+      "source_ids": [
+        "equal-sum-validation",
+        "equal-sum-isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "603d950161a66de0191f24236561b8df",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac EqualSumPartition.java EqualSumPartitionTest.java && java EqualSumPartitionTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=10 randomized=5000 oracle=exhaustive-subset-partition mutation=none",
+    "checks": [
+      "null/empty/single-zero candidate boundaries",
+      "odd-total rejection",
+      "even-total unreachable half",
+      "duplicates and zeros",
+      "negative-value candidate-contract rejection",
+      "5000 deterministic randomized arrays",
+      "pre/post input equality"
+    ],
+    "boundary_tests": [
+      {
+        "case": "odd total",
+        "expected": "false because two equal integer sums require an even total",
+        "passed": true
+      },
+      {
+        "case": "even total with unreachable half",
+        "expected": "false despite even total",
+        "passed": true
+      },
+      {
+        "case": "zero/empty input",
+        "expected": "true under the explicit candidate contract that permits empty groups",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic randomized arrays",
+        "expected": "dynamic-program result matches exhaustive subset oracle without mutation",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-equal-sum-20260824",
+    "review_version": "equal-sum.partition-subset-dp.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The retained repository source asks only whether one array can be split into two arrays/groups with equal element sums; the candidate does not reintroduce contiguous-subarray semantics.",
+      "Because the source does not define sign/range, non-empty-group rules, language, null behavior, or API shape, the candidate labels Java int[], non-negative values, total-sum bound, empty-group allowance, and null behavior as candidate choices.",
+      "Under the chosen complete-partition contract, equal partition is equivalent to existence of a subset summing to half of the total; odd totals therefore fail immediately.",
+      "The descending one-dimensional update is correct for 0/1 element use and avoids the same-round reuse bug that an ascending update would introduce.",
+      "The candidate explicitly calls O(nT) time and O(T) space pseudo-polynomial and does not claim source-backed optimality in the absence of input limits.",
+      "The exact Java fixture was independently executed with OpenJDK 21.0.11 and produced 'PASS fixed=10 randomized=5000 oracle=exhaustive-subset-partition mutation=none'.",
+      "No production or personal experience is fabricated; formal promotion remains blocked by the repository human-approval gate."
+    ]
+  }
+}

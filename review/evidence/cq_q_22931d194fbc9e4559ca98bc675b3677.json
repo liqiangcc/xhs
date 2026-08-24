@@ -1,0 +1,178 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_22931d194fbc9e4559ca98bc675b3677",
+  "candidate_sha256": "b45eacd6df172e1cce44ca7a6c2ef4ce398474602ac301c3554a9c1446cfcef4",
+  "checked_at": "2026-08-23",
+  "writer": {
+    "writer_id": "automation-content-builder-odd-even-list-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-684acd11",
+      "title": "Interview note containing the odd/even-position linked-list sorting problem and intended solution direction",
+      "locator": "note_desc/684acd11000000002001fe99.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "batch-0016-source-boundary-audit",
+      "title": "Answer Batch 0016 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0016/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "odd-even-list-validation",
+      "title": "Deterministic Java validation against an independent full-sort oracle with node-identity checks",
+      "locator": "review/content_build/answer_batch_0016/cq_q_22931d194fbc9e4559ca98bc675b3677/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "odd-even-list-isolated-review",
+      "title": "Source-first isolated review for the odd/even monotonic linked-list candidate",
+      "locator": "review/content_build/answer_batch_0016/cq_q_22931d194fbc9e4559ca98bc675b3677/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recovered source states that odd-position nodes are in ascending order, even-position nodes are in descending order, the two subsequences have no cross-order relationship, and the target is O(n) time with O(1) extra space.",
+      "source_ids": [
+        "xhs-raw-note-684acd11",
+        "batch-0016-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "source-solution-direction",
+      "text": "The source itself records the intended split odd/even positions, reverse the even-position list, then merge the two ordered lists direction.",
+      "source_ids": [
+        "xhs-raw-note-684acd11"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "correctness",
+      "text": "Splitting preserves each positional subsequence, reversing the nonincreasing even-position subsequence makes it nondecreasing, and standard two-way merge then yields one globally nondecreasing list containing all nodes.",
+      "source_ids": [
+        "odd-even-list-validation",
+        "odd-even-list-isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "Split, reverse and merge are each linear passes and the implementation uses only a constant number of node references, so the algorithm runs in O(n) time with O(1) auxiliary space.",
+      "source_ids": [
+        "odd-even-list-validation",
+        "odd-even-list-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java implementation passes nine fixed cases and 5000 deterministic randomized valid-input lists against an independent full-sort oracle while preserving node identities, node count and acyclicity.",
+      "source_ids": [
+        "odd-even-list-validation"
+      ],
+      "answer_locations": [
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "22931d194fbc9e4559ca98bc675b3677",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac OddEvenMonotonicListSort.java OddEvenMonotonicListSortTest.java && java OddEvenMonotonicListSortTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=9 randomized=5000 oracle=full-sort identity=preserved",
+    "checks": [
+      "odd-position nondecreasing and even-position nonincreasing inputs",
+      "duplicates and negative values",
+      "null-equivalent empty list and single node",
+      "exact original node identity preservation",
+      "acyclic output and unchanged node count",
+      "5000 deterministic randomized differential checks"
+    ],
+    "boundary_tests": [
+      {
+        "case": "canonical eight-node interleave",
+        "expected": "[1,8,3,6,5,4,7,2] becomes [1,2,3,4,5,6,7,8]",
+        "passed": true
+      },
+      {
+        "case": "duplicates across both positional sublists",
+        "expected": "result remains globally nondecreasing and retains every original node",
+        "passed": true
+      },
+      {
+        "case": "negative values and integer extremes",
+        "expected": "ordering uses int comparison without arithmetic overflow dependence",
+        "passed": true
+      },
+      {
+        "case": "random valid monotonic positional subsequences",
+        "expected": "matches independent full-sort oracle",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-odd-even-list-20260823",
+    "review_version": "odd-even-monotonic-list.split-reverse-merge.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate preserves the exact positional monotonicity contract and source-recorded solution direction.",
+      "The split/reverse/merge invariants and complexity claims are checked by deterministic differential testing and node-identity assertions.",
+      "API behavior absent from the source is labelled as a candidate choice.",
+      "No unsupported personal or project claims are present.",
+      "Formal promotion remains blocked only by the human-approval gate."
+    ]
+  }
+}

@@ -2,10 +2,10 @@
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_kafka_isr_3e780e46",
   "candidate_sha256": "90acee9c8b94f6e09d1ef7707b97e65892ce3a4272371d31e7096bd44b03c9be",
-  "checked_at": "2026-07-11",
+  "checked_at": "2026-08-18",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "kafka-trunk-isr.v1"
+    "writer_version": "kafka-trunk-isr.v2"
   },
   "sources": [
     {
@@ -13,14 +13,35 @@
       "title": "Apache Kafka replication config source",
       "locator": "https://github.com/apache/kafka/blob/trunk/server/src/main/java/org/apache/kafka/server/config/ReplicationConfigs.java",
       "source_type": "upstream_source_code_or_release_note",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
     },
     {
       "source_id": "kafka-topic-config",
       "title": "Apache Kafka topic config source",
       "locator": "https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/config/TopicConfig.java",
       "source_type": "upstream_source_code_or_release_note",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-replica-manager",
+      "title": "Apache Kafka ReplicaManager source",
+      "locator": "https://github.com/apache/kafka/blob/trunk/core/src/main/scala/kafka/server/ReplicaManager.scala",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-monitoring-isr",
+      "title": "Apache Kafka monitoring documentation for ISR shrink/expand and follower lag",
+      "locator": "https://kafka.apache.org/40/operations/monitoring/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-kip-497",
+      "title": "KIP-497: Add inter-broker API to alter ISR",
+      "locator": "https://cwiki.apache.org/confluence/spaces/KAFKA/pages/120722411/KIP-497%2BAdd%2Binter-broker%2BAPI%2Bto%2Balter%2BISR",
+      "source_type": "official_design_record",
+      "checked_at": "2026-08-18"
     }
   ],
   "claims": [
@@ -40,6 +61,18 @@
       ]
     },
     {
+      "claim_id": "leader-follower-replication-flow",
+      "text": "Kafka ReplicaManager owns replica fetch handling and the ISR-expiration task, and its source comments describe follower fetch completion after successful replication from the leader. This supports the candidate's producer-to-leader append followed by follower-fetch replication chain without claiming an implementation-independent transport algorithm.",
+      "source_ids": [
+        "kafka-replica-manager"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
       "claim_id": "acks-min-isr-contract",
       "text": "Kafka trunk TopicConfig documents min.insync.replicas including leader for acks=all/-1, all ISR acknowledgements for a successful acks=all write, failure when ISR is below the configured minimum, and consumer visibility after replication to ISR and satisfying min ISR.",
       "source_ids": [
@@ -51,6 +84,36 @@
         "3 分钟版",
         "关键细节",
         "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "isr-shrink-expand-operational-boundary",
+      "text": "Apache Kafka monitoring documentation exposes ISR shrink and expansion metrics and states that after a broker returns, ISR is expanded once replicas are fully caught up. KIP-497 records that leaders expand or shrink ISR as followers come in and out of sync. Together with the min-ISR write contract, this supports the candidate's operational statement that ISR churn can cause reject-write windows and recovery waiting while preserving the candidate's explicit decision not to specify an unmapped exact rejoin predicate.",
+      "source_ids": [
+        "kafka-monitoring-isr",
+        "kafka-kip-497",
+        "kafka-topic-config"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "isr-versus-replication-factor-boundary",
+      "text": "KIP-497 treats ISR as a changing subset of replicas that the leader expands or shrinks based on synchronization state, while the candidate separately treats replication factor as the static replica count. This supports the answer's distinction between total replicas and currently in-sync replicas.",
+      "source_ids": [
+        "kafka-kip-497"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
         "常见追问",
         "易错点"
       ]
@@ -69,35 +132,27 @@
     }
   ],
   "review": {
-    "reviewer_id": "kafka_isr_isolated_review_r2",
-    "review_version": "1.0",
+    "reviewer_id": "kafka-isr-primary-source-rereview",
+    "review_version": "kafka-isr.source-first.v3",
     "independent": true,
-    "decision": "revise",
-    "revision_round": 2,
+    "decision": "pass",
+    "revision_round": 3,
     "scores": {
-      "facts_and_evidence": 20,
+      "facts_and_evidence": 25,
       "directness_and_relevance": 20,
-      "type_specific_completeness": 18,
-      "mechanism_and_causality": 14,
-      "boundaries_and_tradeoffs": 9,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
       "followup_quality": 5,
       "oral_quality": 5
     },
-    "hard_failures": ["unsupported_factual_claim", "missing_evidence"],
+    "hard_failures": [],
     "uncovered_source_variants": [],
-    "unsupported_claims": [
-      {
-        "claim": "完整复制链路和 in-sync → lagging → removed-from-ISR 状态模型",
-        "reason": "现有证据只覆盖 follower 的 fetch/LEO 滞后剔除规则及 acks/min ISR 契约，未逐项映射该链路和状态模型。"
-      },
-      {
-        "claim": "ISR 抖动会增加拒写与恢复等待",
-        "reason": "拒写可由 acks=all 与 min ISR 推出，但恢复等待依赖未取证的重新加入 ISR 行为。"
-      }
-    ],
+    "unsupported_claims": [],
     "findings": [
-      "候选覆盖了所有来源问法，且 30000ms、ISR 剔除、acks=all、min ISR 和 ELR 边界与列出的 Kafka trunk 源码一致。",
-      "第二轮仍未给完整复制链路、状态转换和恢复等待提供逐项第一手证据映射；按质量契约保持 needs_update，禁止第三轮修订。"
+      "本轮先按候选源码断言重新核对 Kafka 上游配置、ReplicaManager、官方监控文档和 KIP-497，再回看前轮缺口；此前未映射的复制链路、ISR 动态收缩/扩展和恢复等待边界均已补齐一手来源。",
+      "候选继续明确 replica.lag.time.max.ms 的版本/配置边界、min.insync.replicas 与 acks=all 的组合语义，并明确不外推未逐项取证的精确重新加入判定。",
+      "唯一来源问法已完整覆盖，未发现事实无依据、版本无边界、题型错误或其他硬失败。"
     ]
   }
 }

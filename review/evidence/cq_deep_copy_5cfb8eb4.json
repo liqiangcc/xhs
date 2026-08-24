@@ -1,0 +1,213 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_deep_copy_5cfb8eb4",
+  "candidate_sha256": "6057434835a7df6736a3b2e0839b49efe3cfa69fed1596940797322615fcc040",
+  "checked_at": "2026-08-19",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "java-deep-copy.jdk25-source-refresh.v1"
+  },
+  "sources": [
+    {
+      "source_id": "oracle-jdk25-object-clone",
+      "title": "Object (Java SE 25 & JDK 25): clone()",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Object.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "oracle-jdk25-cloneable",
+      "title": "Cloneable (Java SE 25 & JDK 25)",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Cloneable.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "oracle-jls25-arrays",
+      "title": "Java Language Specification SE 25, Chapter 10 Arrays",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se25/html/jls-10.html",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "oracle-jdk25-arraylist",
+      "title": "ArrayList (Java SE 25 & JDK 25): clone()",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/ArrayList.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "oracle-jdk25-identityhashmap",
+      "title": "IdentityHashMap (Java SE 25 & JDK 25)",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/IdentityHashMap.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "oracle-jdk25-objectoutputstream",
+      "title": "ObjectOutputStream (Java SE 25 & JDK 25)",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/io/ObjectOutputStream.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "oracle-jdk25-javaio",
+      "title": "java.io package (Java SE 25 & JDK 25)",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/io/package-summary.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "object-clone-is-shallow",
+      "text": "Java SE 25 Object.clone() initializes the new object's fields with the same contents as if by assignment and does not clone the objects referenced by those fields, so the default operation is shallow rather than recursive deep copying.",
+      "source_ids": [
+        "oracle-jdk25-object-clone"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "cloneable-marker-boundary",
+      "text": "Cloneable is a marker interface that permits Object.clone() field-for-field copying; it contains no clone method and does not by itself make clone public or deep.",
+      "source_ids": [
+        "oracle-jdk25-cloneable",
+        "oracle-jdk25-object-clone"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "immutable-deep-structure-sharing",
+      "text": "Object.clone() documentation states that primitive fields or references to immutable objects normally need no post-clone modification, while mutable objects in the deep structure may need to be copied to achieve independence.",
+      "source_ids": [
+        "oracle-jdk25-object-clone"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "multidimensional-array-clone-is-shallow",
+      "text": "JLS 25 specifies that cloning a multidimensional array creates only one new array and shares the subarrays, so it does not constitute a recursive deep copy.",
+      "source_ids": [
+        "oracle-jls25-arrays"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "arraylist-clone-is-shallow",
+      "text": "Java SE 25 ArrayList.clone() returns a shallow copy and does not copy the elements themselves.",
+      "source_ids": [
+        "oracle-jdk25-arraylist"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "identity-node-table-preserves-topology",
+      "text": "Java SE 25 IdentityHashMap uses reference equality and documents topology-preserving transformations such as deep-copying as a typical use, where an identity-based node table tracks already-processed references.",
+      "source_ids": [
+        "oracle-jdk25-identityhashmap"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "serialization-restores-reference-sharing",
+      "text": "ObjectOutputStream serializes the closure of referenced serializable objects and encodes repeated references with a reference-sharing mechanism so the reconstructed object graph can retain the same shape.",
+      "source_ids": [
+        "oracle-jdk25-objectoutputstream"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "untrusted-deserialization-security-boundary",
+      "text": "Java SE 25 java.io documentation explicitly warns that deserialization of untrusted data is inherently dangerous, supporting the answer's security boundary around serialization-based copying.",
+      "source_ids": [
+        "oracle-jdk25-javaio"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "a156953489b7a1383bb2383470b3ad9f",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问"
+      ]
+    }
+  ],
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-deep-copy-r1",
+    "review_version": "java-deep-copy.review.jdk25.r1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "revision_suggestions": [],
+    "findings": [
+      "The fixed candidate bytes were reviewed source-first against the current canonical/source rows and current Oracle Java SE/JDK 25 primary documentation before historical evidence or remediation records were consulted.",
+      "The candidate directly covers both source variants, including nested mutable aliasing and the practical testing consequence that a shallow-copy mutation can be observed through a shared child.",
+      "Object.clone(), Cloneable, ArrayList.clone(), multidimensional-array clone, identity-based topology preservation and serialization reference sharing are all stated within their documented boundaries.",
+      "The answer keeps immutable-reference sharing, external-resource semantics, serialization security/cost and concurrent-snapshot consistency as explicit applicability boundaries rather than universal promises.",
+      "No Blocker, Critical, Major, unsupported material claim, uncovered source variant or other configured hard failure remains in the fixed candidate."
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_37245bc43848028f006b2e4eaea7500c",
+  "validated_at": "2026-08-24",
+  "runtime": "OpenJDK 21.0.11 local execution",
+  "command": "javac SinglyLinkedList.java SinglyLinkedListTest.java && java SinglyLinkedListTest",
+  "result": "pass",
+  "stdout": "PASS fixed=8 randomized_ops=5000 oracle=ArrayList invariants=head-tail-size-acyclic",
+  "implementation_contract": {
+    "source_boundary": "source requires a handwritten singly linked-list structure with create/read/update/delete behavior but does not preserve language or API shape",
+    "candidate_api": "generic Java list with add, index-based insert/get/set/remove, size/isEmpty and a test-only invariant checker",
+    "oracle": "java.util.ArrayList<Integer> differential model over the same index semantics",
+    "representation_invariants": "empty head/tail/size agreement; non-empty head/tail; tail.next null; reachable node count equals size; final reachable node equals tail; traversal bounded by size"
+  },
+  "checks": [
+    "empty list and invalid get",
+    "single-element append and removal",
+    "head, middle and tail insertion",
+    "get and set including returned old value",
+    "head, middle and tail removal",
+    "null payload handling",
+    "negative and upper-bound index rejection",
+    "5000 deterministic randomized CRUD operations compared step-by-step with ArrayList",
+    "representation invariant validation after every randomized operation"
+  ]
+}

@@ -1,0 +1,126 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_concurrent_transfer_a35181e0",
+  "candidate_sha256": "cbf21783eb9428f4b3df90df92414eb9f2e7084737d2ae4cbdad29bb98b78033",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "concurrent-transfer.v1"
+  },
+  "sources": [
+    {
+      "source_id": "jdk21-lock",
+      "title": "Java SE 21 Lock API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "oracle-java-deadlock",
+      "title": "The Java Tutorials: Deadlock",
+      "locator": "https://docs.oracle.com/javase/tutorial/essential/concurrency/deadlock.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "concurrent-transfer-executable-test",
+      "title": "Concurrent transfer candidate executable boundary and concurrency test",
+      "locator": "review/evidence/tests/cq_concurrent_transfer_a35181e0/TransferServiceTest.java",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "lock-protects-shared-state-and-finally-unlocks",
+      "text": "The Java Lock API describes locks as controlling access to shared resources, recommends lock/try/finally/unlock, and specifies successful lock/unlock memory synchronization semantics; the candidate keeps balance reads and writes under the account lock and releases in finally.",
+      "source_ids": [
+        "jdk21-lock"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "deadlock-is-circular-wait-risk",
+      "text": "Oracle's concurrency tutorial demonstrates deadlock when two threads each hold one resource while waiting for the other; the candidate removes that call-direction-dependent cycle for a pair of accounts by requiring one stable account-id lock order on every path.",
+      "source_ids": [
+        "oracle-java-deadlock"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "candidate-transfer-boundary-behavior",
+      "text": "The candidate compiles and the executable test verifies successful and insufficient-funds transfers, self-transfer, duplicate-id rejection, overflow-before-write atomicity, and two concurrent opposite-direction transfer loops completing without deadlock while preserving total balance.",
+      "source_ids": [
+        "concurrent-transfer-executable-test"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制",
+        "项目经验版"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "8e15f8812bd152496a2fa386e4920a42",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "tmpdir=$(mktemp -d); awk 'BEGIN { in_code = 0 } /^```java$/ { in_code = 1; next } in_code && /^```$/ { exit } in_code { print }' review/candidates/answers/cq_concurrent_transfer_a35181e0.md > $tmpdir/TransferService.java; javac -encoding UTF-8 -d $tmpdir $tmpdir/TransferService.java review/evidence/tests/cq_concurrent_transfer_a35181e0/TransferServiceTest.java; java -ea -cp $tmpdir TransferServiceTest",
+    "boundary_tests": [
+      {
+        "case": "successful transfer and insufficient funds",
+        "expected": "success updates both balances; insufficient funds returns false and leaves both unchanged",
+        "actual": "passed",
+        "passed": true
+      },
+      {
+        "case": "self transfer, duplicate ids, and target overflow",
+        "expected": "self transfer is a no-op; distinct accounts sharing an id are rejected; overflow throws before either balance changes",
+        "actual": "passed",
+        "passed": true
+      },
+      {
+        "case": "opposite-direction concurrent transfers",
+        "expected": "two 10,000-iteration workers complete within timeout, preserve total balance, and return both accounts to their initial balances",
+        "actual": "passed",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "concurrent-transfer-independent-review",
+    "review_version": "concurrent-transfer.review.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "revision_suggestions": []
+  }
+}

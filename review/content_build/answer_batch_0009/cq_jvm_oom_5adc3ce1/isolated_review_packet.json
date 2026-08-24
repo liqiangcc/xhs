@@ -1,0 +1,94 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_jvm_oom_5adc3ce1",
+  "prepared_at": "2026-08-18",
+  "candidate": {
+    "path": "review/candidates/answers/cq_jvm_oom_5adc3ce1.md",
+    "sha256": "80e6d13f181c9eda45b7f6d273ec054e398b2b95db6d256d545bf3d6c82a089e",
+    "answer_type": "scenario",
+    "version": 4
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0009/cq_jvm_oom_5adc3ce1/context.json",
+    "canonical_title": "JVM OOM 如何定位和处理？"
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0009/cq_jvm_oom_5adc3ce1/context.json",
+      "review/candidates/answers/cq_jvm_oom_5adc3ce1.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_jvm_oom_5adc3ce1.json",
+      "review/candidates/audits/cq_jvm_oom_5adc3ce1.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Verify heap, Metaspace, native/thread and container OOM boundaries against current primary Oracle/OpenJDK documentation.",
+      "Verify HeapDumpOnOutOfMemoryError scope and HeapDumpPath behavior; do not imply heap dumps exist for every resource exhaustion mode.",
+      "Verify jcmd command impact, NMT startup requirement, NMT baseline/diff semantics and NMT non-JVM-allocation coverage limits.",
+      "Verify JFR/GC/heap/native evidence workflow, capacity reasoning, restart/idempotency boundary, sensitive diagnostic artifact handling and rollout validation.",
+      "Verify every source question/variant is directly covered and the scenario answer contains assumptions, diagnosis, mitigation, observability, validation and trade-offs.",
+      "Reject any wording that implies fabricated personal incident experience or unsupported numeric production facts."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. Pilot human review remains a separate mandatory gate when required by config."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "oracle-jdk25-memory-leaks",
+      "title": "Oracle JDK 25 Troubleshoot Memory Leaks",
+      "locator": "https://docs.oracle.com/en/java/javase/25/troubleshoot/troubleshooting-memory-leaks.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "OutOfMemoryError has multiple causes including Java heap, native memory and GC overhead conditions",
+        "heap dumps and JFR can support memory-leak diagnosis",
+        "JFR must be running when the leak occurs and is designed for low-overhead production use"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-java-man",
+      "title": "Oracle JDK 25 java Command",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/specs/man/java.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "HeapDumpOnOutOfMemoryError and HeapDumpPath behavior and scope",
+        "diagnostic tools should match the target JDK version where required"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-jcmd",
+      "title": "Oracle JDK 25 jcmd Command",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/specs/man/jcmd.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "GC.class_histogram and GC.heap_dump are high-impact operations",
+        "VM.native_memory exposes summary/detail/baseline and diff operations",
+        "VM.metaspace and thread diagnostics are available with documented impact"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-diagnostic-tools",
+      "title": "Oracle JDK 25 Diagnostic Tools and Native Memory Tracking",
+      "locator": "https://docs.oracle.com/en/java/javase/25/troubleshoot/diagnostic-tools.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "NMT tracks HotSpot VM internal native memory and does not track non-JVM code allocations",
+        "NMT can be used with baseline and later comparisons to investigate growth"
+      ]
+    }
+  ],
+  "expected_output": {
+    "evidence_path": "review/evidence/cq_jvm_oom_5adc3ce1.json",
+    "audit_path": "review/candidates/audits/cq_jvm_oom_5adc3ce1.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_jvm_oom_5adc3ce1.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  }
+}

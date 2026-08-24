@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_redis_ff848e90",
-  "candidate_sha256": "076de6da2bbca82d796b5b29f895b011f159ba63335362054b910edd2a9bc70a",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "84049403887eed260f04f67ef15d1ef1588199fd60bac791bd834cab767460fa",
+  "checked_at": "2026-08-18",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "redis-performance-docs.v1"
+    "writer_version": "redis-performance-primary-docs-r3.v1"
   },
   "sources": [
     {
@@ -13,22 +13,37 @@
       "title": "Redis benchmark documentation",
       "locator": "https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/benchmarks/",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
     },
     {
       "source_id": "redis-latency",
-      "title": "Redis latency diagnosis documentation",
+      "title": "Diagnosing latency issues",
       "locator": "https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/latency/",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "redis-pipelining",
+      "title": "Redis pipelining",
+      "locator": "https://redis.io/docs/latest/develop/using-commands/pipelining/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "redis-lua-scripting",
+      "title": "Scripting with Lua",
+      "locator": "https://redis.io/docs/latest/develop/programmability/eval-intro/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
     }
   ],
   "claims": [
     {
-      "claim_id": "thread-network-pipeline",
-      "text": "Redis official benchmark documentation describes Redis as mostly single-threaded from command execution perspective while modern versions use threads for different work, documents event-loop scalability with epoll/kqueue, and explains that pipelining reduces per-command reads/RTT and can significantly increase operations per second.",
+      "claim_id": "memory-command-execution-model",
+      "text": "Redis official benchmark documentation describes Redis as an in-memory data store and, from the point of view of command execution, mostly single-threaded while modern Redis versions use threads for different work; official latency guidance describes client requests as sequentially served using multiplexing.",
       "source_ids": [
-        "redis-benchmark"
+        "redis-benchmark",
+        "redis-latency"
       ],
       "answer_locations": [
         "核心结论",
@@ -41,11 +56,56 @@
       ]
     },
     {
-      "claim_id": "benchmark-and-latency-boundaries",
-      "text": "Redis official benchmark and latency documentation identifies end-to-end network effects, slow commands, fork, swapping, AOF/disk I/O and related system factors as latency concerns, and warns that naïve synchronous benchmarking often measures network/client latency rather than Redis itself.",
+      "claim_id": "slow-command-and-system-latency-boundaries",
+      "text": "Redis official latency guidance states that a slow request makes other clients wait on the sequential command path and identifies slow commands, network communication, fork, swapping, AOF and disk I/O among important latency sources.",
       "source_ids": [
-        "redis-benchmark",
         "redis-latency"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "pipeline-rtt-syscall-and-buffer-tradeoff",
+      "text": "Redis official pipelining documentation explains that clients can send multiple commands without waiting for each reply, reducing per-command RTT and allowing multiple commands/replies to share read/write system calls; it also warns that the server queues replies in memory and recommends bounded batches for large pipelines.",
+      "source_ids": [
+        "redis-pipelining"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "benchmark-realism-boundary",
+      "text": "Redis official benchmark documentation states that benchmark parameters and pipelining materially affect measured throughput and advises using a pipeline length representative of the application for realistic results.",
+      "source_ids": [
+        "redis-benchmark"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "lua-atomic-blocking-boundary",
+      "text": "Redis official Lua scripting documentation guarantees atomic script execution and states that server activities are blocked during the script runtime, so slow scripts block other clients and should be kept fast.",
+      "source_ids": [
+        "redis-lua-scripting"
       ],
       "answer_locations": [
         "核心结论",
@@ -85,9 +145,27 @@
       "answer_locations": [
         "核心结论",
         "1 分钟版",
-        "3 分钟版"
+        "3 分钟版",
+        "原理机制"
       ]
     }
   ],
-  "review": {"reviewer_id":"redis-performance-independent-review-r2","review_version":"1.0","independent":true,"decision":"revise","revision_round":2,"scores":{"facts_and_evidence":21,"directness_and_relevance":18,"type_specific_completeness":15,"mechanism_and_causality":13,"boundaries_and_tradeoffs":10,"followup_quality":5,"oral_quality":5},"hard_failures":["unsupported_factual_claim"],"revision_suggestions":["为 Lua、pipeline 队列和性能处方补齐一手证据，或删除这些断言；明确 Redis 文档版本与串行命令执行保证。"]}
+  "review": {
+    "reviewer_id": "redis-performance-source-first-review-r3",
+    "review_version": "3.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "revision_suggestions": []
+  }
 }

@@ -1,0 +1,31 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_2f07ba5f8d6e6ad366d2cd13c6d1d1ab",
+  "validated_at": "2026-08-24",
+  "runtime": "OpenJDK 21.0.11 independent local execution",
+  "command": "javac GraphClone.java GraphCloneTest.java && java GraphCloneTest",
+  "result": "pass",
+  "stdout": "PASS fixed=7 randomized=3000 oracle=paired-bijection sharedNodes=0 mutation=none",
+  "implementation_contract": {
+    "input": "one possibly null start node of an undirected graph component; nodes have int value and ordered List<Node> neighbors",
+    "result": "deep clone of the entire component reachable from start",
+    "null_input": "null",
+    "representation": "preserve neighbor order, self-loops and duplicate adjacency entries",
+    "primary_implementation": "BFS with original-node identity to clone-node map",
+    "oracle": "independent paired traversal requiring a bijective identity mapping",
+    "mutation": "original graph is not modified and no cloned node shares original identity"
+  },
+  "checks": [
+    "null input",
+    "isolated node",
+    "two-node undirected edge",
+    "three-node cycle",
+    "self-loop",
+    "duplicate node values",
+    "duplicate adjacency entries",
+    "3000 deterministic connected random undirected multigraphs",
+    "paired bijection between original and clone reachable nodes",
+    "zero shared node identities",
+    "pre/post canonical serialization equality for the original graph"
+  ]
+}

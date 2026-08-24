@@ -1,0 +1,78 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_mysql_isolation_c43c6784",
+  "candidate": {
+    "path": "review/candidates/answers/cq_mysql_isolation_c43c6784.md",
+    "sha256": "30a17dae22d8efff55259fbd0ebbdbf2af813be18cd6536526f95858e595b22b",
+    "version": 1,
+    "answer_type": "concept"
+  },
+  "reviewed_at": "2026-08-19",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-mysql-isolation-r3",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "concept",
+    "historical_source_labels": [
+      "八股文_Concept"
+    ],
+    "reason": "The source wording asks for MySQL transaction isolation levels and the problems/boundaries they address. A concept/comparison answer is the narrow contract: define the four levels, compare visibility/snapshot/locking behavior on common dimensions, and state selection and engine/version boundaries without expanding into a standalone transaction-internals or system-design question."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "MySQL 8.4 Reference Manual — Transaction Isolation Levels",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html",
+      "verified_claims": [
+        "InnoDB supports READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, and SERIALIZABLE and defaults to REPEATABLE READ.",
+        "REPEATABLE READ consistent reads reuse the snapshot established by the first consistent read in the transaction.",
+        "For REPEATABLE READ locking reads, UPDATE, and DELETE, a unique-index unique search locks only the matching index record, while other search conditions can use gap or next-key locks.",
+        "READ COMMITTED gives each consistent read a fresh snapshot and normally locks index records rather than gaps, except for foreign-key and duplicate-key checks; phantom-row problems may occur.",
+        "READ UNCOMMITTED may perform dirty reads, while SERIALIZABLE is stricter and converts plain SELECT to SELECT ... FOR SHARE when autocommit is disabled."
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Reference Manual — Consistent Nonlocking Reads",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html",
+      "verified_claims": [
+        "InnoDB consistent reads use multiversioning to present a point-in-time snapshot without setting locks on accessed records.",
+        "REPEATABLE READ reuses the transaction's first consistent-read snapshot, whereas READ COMMITTED uses a fresh snapshot for each consistent read."
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Reference Manual — SET TRANSACTION Statement",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/set-transaction.html",
+      "verified_claims": [
+        "The default transaction isolation level is REPEATABLE READ and the other permitted levels are READ COMMITTED, READ UNCOMMITTED, and SERIALIZABLE.",
+        "Transaction characteristics can be set with global, session, and next-transaction scope; session/global changes do not retroactively change an already-running transaction."
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 14,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 99
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "minor",
+      "code": "NEXT_TRANSACTION_SCOPE_OPTIONAL_DETAIL",
+      "message": "The answer correctly distinguishes session-level changes from server defaults, but it does not mention MySQL's one-next-transaction isolation scope. This is not required by either source wording and does not affect the isolation-level comparison, so it is an optional precision improvement rather than a promotion blocker.",
+      "quality_dimension": "boundaries_and_tradeoffs",
+      "minimum_not_met": false
+    }
+  ],
+  "decision": "pass",
+  "promotion_allowed": true,
+  "human_review_state": "pilot_human_approval_still_required",
+  "next_required_action": "Rebind review/evidence/cq_mysql_isolation_c43c6784.json to this fresh 2026-08-19 source-first PASS and rerun answer audit --require-evidence. Keep the candidate out of curated-ready promotion until the mandatory pilot human approval is real and recorded."
+}

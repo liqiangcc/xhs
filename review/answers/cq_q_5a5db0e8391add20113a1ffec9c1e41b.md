@@ -1,5 +1,5 @@
 <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_5a5db0e8391add20113a1ffec9c1e41b","version":1,"status":"needs_update","updated_at":"2026-07-10","answer_type":"coding","quality_tier":"long_tail_baseline","generator_version":"long_tail.v1"} -->
-# 算法手撕：有序链表去除重复元素（保留/去除重复节点）。
+# 有序链表去除重复元素：给出1→2→3→3→4→4→5，返回1→2→5
 
 > 长尾复习底稿：基于题干、题型、领域与实体规则生成；用于主动回忆和追问检查。涉及版本、个人经历或具体业务数据时，按题内边界与真实材料复核。
 
@@ -70,4 +70,4 @@ static final class ProblemSpec {
 
 - 领域：算法与数据结构 / 其他
 - 关键实体：链表、remove duplicates
-- 来源问法：算法手撕：有序链表去除重复元素（保留/去除重复节点）。
+- 来源问法：有序链表去除重复元素：给出1→2→3→3→4→4→5，返回1→2→5

@@ -1,0 +1,28 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_27d7a2728feaeca0d6b67a1e7ba30f68",
+  "validated_at": "2026-08-23",
+  "runtime": "OpenJDK 21.0.11",
+  "command": "javac StrictDoubleDominantIndex.java StrictDoubleDominantIndexTest.java && java StrictDoubleDominantIndexTest",
+  "result": "pass",
+  "stdout": "PASS fixed=16 randomized=20000 oracle=quadratic-definition input=unmodified",
+  "implementation_contract": {
+    "input": "arbitrary Java int[]; negatives and duplicates are allowed",
+    "result": "smallest index i for which nums[i] is strictly greater than twice every nums[j] for j != i; -1 when no such index exists",
+    "null_or_empty": "returns -1",
+    "singleton": "returns 0",
+    "overflow": "multiplication by two is widened to long",
+    "mutation": "input array is not modified"
+  },
+  "checks": [
+    "strict greater-than boundary rather than greater-than-or-equal",
+    "ordinary positive arrays",
+    "negative arrays where a nonmaximum element may qualify",
+    "multiple qualifying indices with first-index policy",
+    "duplicate maxima",
+    "null, empty and singleton inputs",
+    "Integer.MIN_VALUE and Integer.MAX_VALUE overflow boundaries",
+    "20000 deterministic random arbitrary-int arrays compared with an independent O(n^2) definition oracle",
+    "input equality before and after the call"
+  ]
+}

@@ -1,0 +1,182 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_1b54beec356cebaa5bf68b8935cb9e0a",
+  "candidate_sha256": "11c47aa6f4d18ab932196c2386b92971bf2906e412a84fd62b8c15ba80053ef1",
+  "checked_at": "2026-08-22",
+  "writer": {
+    "writer_id": "automation-content-builder-react-useprevious-ui-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-68ca70d2",
+      "title": "Interview note containing usePrevious and UI-update follow-up",
+      "locator": "note_desc/68ca70d2000000000e00f5bb.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "batch-0015-source-boundary-audit",
+      "title": "Answer Batch 0015 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0015/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "react-useref",
+      "title": "React official useRef reference",
+      "locator": "https://react.dev/reference/react/useRef",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "react-usestate",
+      "title": "React official useState reference",
+      "locator": "https://react.dev/reference/react/useState",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "react-useprevious-model",
+      "title": "Executable history transition model and JavaScript syntax check",
+      "locator": "review/content_build/answer_batch_0015/cq_q_1b54beec356cebaa5bf68b8935cb9e0a/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "react-useprevious-isolated-review",
+      "title": "Source-first isolated review for render-visible usePrevious",
+      "locator": "review/content_build/answer_batch_0015/cq_q_1b54beec356cebaa5bf68b8935cb9e0a/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recovered interview source asks first for a usePrevious Hook that records the previous state value and then adds the requirement that changes to that value can trigger UI updates.",
+      "source_ids": [
+        "xhs-raw-note-68ca70d2",
+        "batch-0015-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "ref-does-not-render",
+      "text": "React documents that changing ref.current does not trigger a component re-render and that values used for rendering should use state instead.",
+      "source_ids": [
+        "react-useref"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "conditional-render-state",
+      "text": "React documents a conditional setState-during-render pattern for storing information from previous renders, requiring the update to target the currently rendering component and the condition to terminate.",
+      "source_ids": [
+        "react-usestate"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "history-transition",
+      "text": "The candidate's two-field history transition preserves previous as the old current when value changes and performs no transition for Object.is-equal input.",
+      "source_ids": [
+        "react-useprevious-model",
+        "react-useprevious-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "1b54beec356cebaa5bf68b8935cb9e0a",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "node --check UsePrevious.mjs && node UsePreviousStateModelTest.js",
+    "result": "pass",
+    "reported_stdout": "PASS initial=undefined transitions=1->2->3 stable_same=true object_is_edges=true",
+    "checks": [
+      "JavaScript ES module syntax",
+      "initial previous",
+      "successive history transitions",
+      "stable equal input",
+      "Object.is edge behavior"
+    ],
+    "boundary_tests": [
+      {
+        "case": "initial value 1",
+        "expected": "previous is undefined before any earlier value exists",
+        "passed": true
+      },
+      {
+        "case": "value changes 1 -> 2 -> 3",
+        "expected": "stable previous values become 1 then 2",
+        "passed": true
+      },
+      {
+        "case": "same value repeated",
+        "expected": "no history transition is scheduled",
+        "passed": true
+      },
+      {
+        "case": "NaN repeated and -0 -> 0",
+        "expected": "change detection follows Object.is semantics",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-react-useprevious-ui-20260822",
+    "review_version": "react-useprevious.render-visible-history.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The recovered source contains both the base usePrevious request and the follow-up that changes to the stored previous value must be able to update the UI; the candidate keeps both parts in scope.",
+      "React official documentation states that changing ref.current does not trigger a re-render and that information used for rendering should be state, which directly supports moving render-visible history out of a ref-only design.",
+      "The candidate avoids the naive setPrevious(value) trap by storing both current and previous, so a state-triggered rerender does not overwrite the meaning of previous with the current input.",
+      "React useState documentation explicitly permits the rare conditional set-during-render pattern for storing information from previous renders, provided it updates only the currently rendering component and the condition terminates.",
+      "The Object.is guard makes the render-time state adjustment terminating for stable inputs and aligns with React's state equality semantics.",
+      "The executable fixture separately validates the pure history transition invariant for initial, changed, unchanged, NaN and signed-zero cases; React-specific render behavior remains grounded in the official docs rather than a fake runtime.",
+      "The answer labels initial undefined, return shape, equality rule and object-reference behavior as candidate API choices rather than recovered source facts.",
+      "No production project history or hidden React-version claim is fabricated."
+    ]
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_055a106e79b4b8651c11ddb5633f467d",
+  "candidate_sha256": "de4fe0a73d5f331f11ab14d47a60a96c12ac0cb4c635cc2e309c88b46ea8f95c",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-binary-tree-diameter-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-68428064",
+      "title": "Beike interview note containing the binary-tree longest-distance coding question",
+      "locator": "note_desc/684280640000000012001d9b.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "xhs-tagged-question-68428064",
+      "title": "Structured repository question for binary-tree two-point longest distance",
+      "locator": "note_tagged/684280640000000012001d9b.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "binary-tree-diameter-validation",
+      "title": "Deterministic Java and independent graph-oracle validation for binary-tree diameter",
+      "locator": "review/content_build/answer_batch_0013/cq_q_055a106e79b4b8651c11ddb5633f467d/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The raw interview note asks for the longest distance between two points in a binary tree but does not define whether distance is measured in edges or path nodes; the candidate preserves that ambiguity instead of presenting a platform convention as source fact.",
+      "source_ids": [
+        "xhs-raw-note-68428064",
+        "xhs-tagged-question-68428064"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "postorder-invariant",
+      "text": "For edge-count diameter, a postorder traversal can return each node's maximum downward depth in nodes; if left and right returned depths are L and R, L+R is exactly the number of edges on the longest path whose lowest common ancestor is that node.",
+      "source_ids": [
+        "binary-tree-diameter-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "coverage-proof",
+      "text": "Taking the maximum L+R over every node covers every endpoint pair because each simple path has a lowest common ancestor at which its two downward portions are represented; paths contained entirely in a subtree are therefore not missed.",
+      "source_ids": [
+        "binary-tree-diameter-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "validation-and-complexity",
+      "text": "The exact Java implementation passes fixed empty/single/chain/balanced/subtree-diameter cases and 3000 deterministic random trees against an all-pairs BFS graph oracle; each tree node is visited once by the candidate algorithm, giving O(n) time and O(h) recursive-stack space.",
+      "source_ids": [
+        "binary-tree-diameter-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "055a106e79b4b8651c11ddb5633f467d",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "Java 复习实现",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac BinaryTreeDiameter.java BinaryTreeDiameterTest.java && java BinaryTreeDiameterTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed_cases=5 random_cases=3000 max_nodes=40 seed=550106",
+    "checks": [
+      "empty tree",
+      "single-node tree",
+      "skewed chain",
+      "balanced tree",
+      "diameter not passing through root",
+      "3000 deterministic random trees versus structurally different all-pairs BFS oracle"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty tree",
+        "expected": 0,
+        "passed": true
+      },
+      {
+        "case": "single node",
+        "expected": 0,
+        "passed": true
+      },
+      {
+        "case": "six-node chain",
+        "expected": 5,
+        "passed": true
+      },
+      {
+        "case": "diameter fully inside left subtree",
+        "expected": 4,
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-binary-tree-diameter-20260821",
+    "review_version": "binary-tree-diameter.postorder-depth.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate does not silently choose a source-unstated distance convention: it answers in edge count while explicitly mapping the node-count convention.",
+      "The recursive return value and the global diameter state are cleanly separated, preventing the common state-definition error.",
+      "The lowest-common-ancestor argument explains why updating L+R at every node covers paths that do not pass through the tree root.",
+      "The exact code is exercised against a structurally different all-pairs BFS oracle on 3000 deterministic random trees, in addition to fixed edge cases.",
+      "Complexity and recursion-depth boundaries are stated with their preconditions rather than as unconditional claims.",
+      "No production experience or hidden input contract is fabricated; required human approval remains a separate promotion gate."
+    ]
+  }
+}

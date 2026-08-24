@@ -1,0 +1,82 @@
+{
+  "schema_version": "answer_batch_source_boundary_review.v1",
+  "batch_id": "TASK-20260711-0313-answer-batch-0012",
+  "reviewed_at": "2026-08-21",
+  "source_first": true,
+  "historical_review_records_read_before_conclusion": false,
+  "findings": [
+    {
+      "canonical_id": "cq_q_003d76f0ea8f268ee5caca371f028eb8",
+      "current_title": "算法：DP",
+      "decision": "block_candidate_until_source_contract_recovered_or_record_disposition",
+      "severity": "major",
+      "source_records": [
+        "note_tagged/680e66cb0000000023012aa3.json",
+        "note_desc/680e66cb0000000023012aa3.txt",
+        "note_images/680e66cb0000000023012aa3_urls.txt"
+      ],
+      "evidence": [
+        "The tagged source contains only the question text '算法：DP' and the generic entity '动态规划'; it does not identify the actual problem, input/output contract, constraints, or expected result.",
+        "The repository text description for the note contains only interview dates/summary and does not recover the coding problem statement.",
+        "The source note references four image assets, but the current repository text SSOT does not contain a more specific textual coding contract for this question."
+      ],
+      "reason": "Writing a concrete DP implementation would necessarily invent the missing problem statement. A generic explanation of dynamic programming would not satisfy a Coding answer contract either.",
+      "required_next_action": "Recover the original problem contract from a stable source artifact if available; otherwise mark the Question as insufficient-source/noise with an explicit explainable reason and remove it from curated-ready Coding coverage rather than fabricating an answer."
+    },
+    {
+      "canonical_id": "cq_q_01eb7504533c120cd1401f8909417eca",
+      "current_title": "算法与 SQL：1) 爬楼梯（动态规划）；2) 合并两个有序链表；3) 重排链表（LeetCode 143）；4) SQL 查询平均成绩大于 80 分的学生记录",
+      "decision": "block_candidate_pending_question_split",
+      "severity": "major",
+      "source_records": [
+        "note_desc/680a4561000000000b014784.txt",
+        "note_tagged/680a4561000000000b014784.json"
+      ],
+      "evidence": [
+        "The raw interview note lists climbing stairs, merge two sorted linked lists, reorder list, and an average-score SQL query as separate interview items (items 4 through 7).",
+        "The tagged source incorrectly collapses those four distinct output contracts into one Question row and one Canonical.",
+        "The four tasks require different implementations, edge cases, complexity arguments, and even different execution languages (Java-style algorithm code versus SQL)."
+      ],
+      "reason": "A single combined Answer would preserve an extraction error and violate the repository's one bounded answer contract per Canonical. Canonical split alone cannot fix this because the underlying Question row itself contains four distinct questions.",
+      "required_next_action": "Split the source Question into four deterministic Question rows first, bind each to its own or an existing matching Canonical, migrate ReviewProgress/reachability, regenerate the rewrite queue, and only then curate answers."
+    },
+    {
+      "canonical_id": "cq_q_034542908e9cc6712821aa75e2c5ab7d",
+      "current_title": "算法：三个线程循环打印 0-10",
+      "decision": "block_candidate_until_ordering_contract_clarified_or_recovered",
+      "severity": "major",
+      "source_records": [
+        "note_img_txt/67d7e67c000000001e007c89.txt",
+        "note_tagged/67d7e67c000000001e007c89.json"
+      ],
+      "evidence": [
+        "The source image text contains only the shorthand '算法: 三个线程循环打印0-10'.",
+        "It does not state whether 0 through 10 are printed once in total or repeatedly, which thread owns which numbers, whether threads must alternate in a fixed order, or what the termination rule is.",
+        "The tagged record adds synchronization entities such as wait/notify and Condition, but it does not recover the missing observable output and ordering contract."
+      ],
+      "reason": "A concrete concurrency implementation must choose an ordering, ownership and termination invariant. Different plausible interpretations of the shorthand require different synchronization protocols, so selecting one silently would fabricate source detail rather than curate the recorded question.",
+      "required_next_action": "Recover a source artifact that states the required print order/ownership/termination semantics. If none exists, dispose the row as insufficient-source/noise or create a separately labeled practice contract rather than presenting an invented interpretation as the original interview question."
+    },
+    {
+      "canonical_id": "cq_q_05207e8f7529428559067438b7760ba6",
+      "current_title": "算法：DP (01字符串子集)",
+      "decision": "block_candidate_until_objective_and_budget_boundary_recovered_or_record_disposition",
+      "severity": "major",
+      "source_records": [
+        "note_img_txt/680e66cb0000000023012aa3.txt",
+        "note_structured/680e66cb0000000023012aa3.json",
+        "note_tagged/680e66cb0000000023012aa3.json",
+        "note_desc/680e66cb0000000023012aa3.txt"
+      ],
+      "evidence": [
+        "The source image text recovers more detail than the title: 'dp (n个01字符串,选子集,子集里0的数量小于m,1的数量小于n)'.",
+        "However, the shorthand never states the optimization/output objective (for example whether to maximize selected-string count, count feasible subsets, or return one subset).",
+        "It also says the zero/one counts are '小于' m/n, while common reconstructed formulations may use inclusive capacities; the source does not resolve that boundary.",
+        "The note description contains only interview timing/summary and does not restore the missing objective or comparison boundary."
+      ],
+      "reason": "The two-resource 0/1-knapsack shape is recoverable, but a Coding answer cannot be correct without an output objective and exact capacity semantics. Silently mapping the shorthand to a well-known external problem would turn a plausible guess into a source claim.",
+      "required_next_action": "Recover the original objective and strict/inclusive capacity rule from a stable source artifact. If unavailable, record the Question as insufficient-source/noise or create an explicitly separate practice-contract item; do not promote a guessed maximum-subset implementation as the original interview answer."
+    }
+  ],
+  "batch_policy": "Blocked findings stay out of formal answer promotion. They must be resolved at the Question/Canonical boundary before candidate creation so source ambiguity is not converted into fabricated content."
+}

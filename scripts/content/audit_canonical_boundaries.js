@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { normalizeQuestion } = require('../lib/hash');
 const { loadCanonicalQuestions } = require('../lib/canonical_store');
-const { readJson, readJsonl, stableStringify, writeJsonl } = require('../lib/io');
+const { readJson, stableStringify, writeJsonl } = require('../lib/io');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -29,10 +29,20 @@ function tokens(text) {
     return values;
 }
 
-function jaccard(a, b) {
+function intersectionCount(a, b) {
     let shared = 0;
     for (const value of a) if (b.has(value)) shared++;
+    return shared;
+}
+
+function jaccard(a, b) {
+    const shared = intersectionCount(a, b);
     return shared ? shared / (a.size + b.size - shared) : 0;
+}
+
+function containment(sharedCount, leftSize, rightSize) {
+    const smaller = Math.min(leftSize, rightSize);
+    return smaller > 0 ? sharedCount / smaller : 0;
 }
 
 function featureRows(canonicals) {
@@ -81,12 +91,24 @@ function buildCandidates(options = {}) {
         const [leftIndex, rightIndex] = pair.split(':').map(Number);
         const left = features[leftIndex];
         const right = features[rightIndex];
-        const titleScore = left.normalized_title === right.normalized_title ? 1 : jaccard(left.tokens, right.tokens);
+        const exactTitle = left.normalized_title === right.normalized_title;
+        const sharedTitleTokens = intersectionCount(left.tokens, right.tokens);
+        const titleScore = exactTitle ? 1 : jaccard(left.tokens, right.tokens);
+        const titleContainment = containment(sharedTitleTokens, left.tokens.size, right.tokens.size);
         const sharedEntities = [...left.entities].filter((entity) => right.entities.has(entity));
         const entityScore = sharedEntities.length ? 1 : 0;
+        const entityContainment = containment(sharedEntities.length, left.entities.size, right.entities.size);
+        const smallerEntityCount = Math.min(left.entities.size, right.entities.size);
         const domainScore = left.domain_key === right.domain_key ? 1 : 0;
         const score = Number((titleScore * 0.7 + entityScore * 0.2 + domainScore * 0.1).toFixed(4));
-        if (!(left.normalized_title === right.normalized_title || (titleScore >= 0.55 && (entityScore || domainScore)))) continue;
+        const titleEligible = titleScore >= 0.55 && (entityScore || domainScore);
+        const containedVariantEligible = domainScore === 1
+            && sharedEntities.length >= 2
+            && smallerEntityCount <= 3
+            && entityContainment === 1
+            && titleContainment >= 0.65
+            && titleScore >= 0.35;
+        if (!(exactTitle || titleEligible || containedVariantEligible)) continue;
         const [a, b] = [left.canonical, right.canonical].sort((x, y) => x.canonical_id.localeCompare(y.canonical_id));
         const candidateId = `boundary_${a.canonical_id}_${b.canonical_id}`;
         const decision = decisions.get(candidateId);
@@ -96,12 +118,16 @@ function buildCandidates(options = {}) {
             canonical_ids: [a.canonical_id, b.canonical_id],
             algorithm_score: score,
             evidence: {
-                exact_normalized_title: left.normalized_title === right.normalized_title,
+                exact_normalized_title: exactTitle,
                 title_token_jaccard: Number(titleScore.toFixed(4)),
+                title_token_containment: Number(titleContainment.toFixed(4)),
                 shared_entities: sharedEntities.sort(),
+                shared_entity_count: sharedEntities.length,
+                entity_containment: Number(entityContainment.toFixed(4)),
                 same_domain: domainScore === 1,
+                contained_variant_signal: containedVariantEligible,
             },
-            proposed_action: left.normalized_title === right.normalized_title ? 'merge_review' : 'boundary_review',
+            proposed_action: exactTitle ? 'merge_review' : 'boundary_review',
             reviewer_decision: decision?.decision || 'pending',
             reviewer_note: decision?.note || null,
         });

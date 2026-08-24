@@ -1,0 +1,54 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_08a054b37d559194555ce32cf4b65130",
+  "candidate_sha256": "332d472e9dda8dcdba06bbdce08f4ad46d245cbdc0cf15a69dabe2e2e19da0fa",
+  "checked_at": "2026-08-21",
+  "writer": {"writer_id": "automation-content-builder-bank-card-grouping-v1", "writer_version": "xhs-answer-curator.v1"},
+  "sources": [
+    {"source_id": "xhs-note-68c2f9a8-desc", "title": "Recovered Tencent front-end interview note containing the bank-card grouping prompt", "locator": "note_desc/68c2f9a8000000001d02803d.txt", "source_type": "repository_source_record", "checked_at": "2026-08-21"},
+    {"source_id": "xhs-note-68c2f9a8-structured", "title": "Structured interview note containing the every-four-digits example", "locator": "note_structured/68c2f9a8000000001d02803d.json", "source_type": "repository_source_record", "checked_at": "2026-08-21"},
+    {"source_id": "xhs-question-08a054b3", "title": "Tagged repository coding-question record for bank-card grouping", "locator": "note_tagged/68c2f9a8000000001d02803d.json#question_id=08a054b37d559194555ce32cf4b65130", "source_type": "repository_structured_source", "checked_at": "2026-08-21"},
+    {"source_id": "bank-card-grouping-validation", "title": "Deterministic Node validation against a non-regex linear-scan oracle", "locator": "review/content_build/answer_batch_0013/cq_q_08a054b37d559194555ce32cf4b65130/code_validation.json", "source_type": "executable_test_or_reproducible_experiment", "checked_at": "2026-08-21"}
+  ],
+  "claims": [
+    {"claim_id": "source-contract", "text": "The recovered source asks to implement bank-card-number grouping and gives every four digits plus a space as the example; it does not define input cleaning or non-digit behavior.", "source_ids": ["xhs-note-68c2f9a8-desc", "xhs-note-68c2f9a8-structured", "xhs-question-08a054b3"], "answer_locations": ["核心结论", "3 分钟版", "关键细节"]},
+    {"claim_id": "grouping-behavior", "text": "The exact JavaScript implementation inserts a space after a four-digit group only when at least one following digit remains, so exact multiples of four do not acquire a trailing separator.", "source_ids": ["bank-card-grouping-validation"], "answer_locations": ["核心结论", "1 分钟版", "原理机制", "易错点"]},
+    {"claim_id": "input-boundary", "text": "The implementation accepts an ASCII-digit string including the empty string and explicitly rejects non-string or non-digit input rather than silently defining an unstated cleaning policy.", "source_ids": ["xhs-question-08a054b3", "bank-card-grouping-validation"], "answer_locations": ["核心结论", "3 分钟版", "关键细节", "常见追问"]},
+    {"claim_id": "independent-oracle", "text": "The deterministic fixture compares the regex implementation with a structurally different character-by-character grouping oracle for 5000 fixed-seed digit strings of lengths zero through sixty-four.", "source_ids": ["bank-card-grouping-validation"], "answer_locations": ["原理机制"]},
+    {"claim_id": "edge-coverage", "text": "Fixed validation covers empty, shorter-than-four, exactly-four, five-digit, multiple-of-four, non-multiple-of-four, leading-zero, and invalid-input cases.", "source_ids": ["bank-card-grouping-validation"], "answer_locations": ["1 分钟版", "关键细节", "原理机制"]}
+  ],
+  "source_question_coverage": [{"question_id": "08a054b37d559194555ce32cf4b65130", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}],
+  "validation": {
+    "command": "node formatBankCardNumberTest.js",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=8 invalid=4 randomized=5000 oracle=linear-scan",
+    "checks": ["no trailing space for exact groups of four", "final partial group is preserved", "non-digit/non-string inputs are rejected under the declared contract", "5000 deterministic digit strings match the linear-scan oracle"],
+    "boundary_tests": [
+      {"case": "empty, shorter-than-four, and exactly-four digit strings", "expected": "content is preserved and no separator is added unless another group follows", "passed": true},
+      {"case": "five digits and exact multiples of four", "expected": "spaces appear only between non-empty groups and never at the end", "passed": true},
+      {"case": "leading-zero digit strings", "expected": "leading zeroes are preserved because formatting stays in string semantics", "passed": true},
+      {"case": "spaces, hyphens, letters, or numeric values supplied as input", "expected": "TypeError is thrown instead of silently cleaning or coercing input", "passed": true}
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-bank-card-grouping-20260821",
+    "review_version": "bank-card-grouping.explicit-input-contract.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {"facts_and_evidence": 25, "directness_and_relevance": 20, "type_specific_completeness": 20, "mechanism_and_causality": 15, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 5},
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate preserves the narrow source contract and does not invent a silent normalization policy for pasted or malformed input.",
+      "The lookahead formulation directly addresses the trailing-separator failure mode for lengths divisible by four.",
+      "The input contract is explicit and is independently exercised with invalid strings and a non-string value.",
+      "The randomized oracle is a character-by-character implementation rather than another regular expression, reducing circular validation risk.",
+      "Leading zeroes stay in string semantics and are covered by a fixed case.",
+      "No production metric or personal project story is invented.",
+      "Required human approval remains a separate promotion gate."
+    ]
+  }
+}

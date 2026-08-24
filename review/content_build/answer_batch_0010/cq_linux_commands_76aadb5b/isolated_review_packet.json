@@ -1,0 +1,125 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_linux_commands_76aadb5b",
+  "prepared_at": "2026-08-19",
+  "candidate": {
+    "path": "review/candidates/answers/cq_linux_commands_76aadb5b.md",
+    "sha256": "d58cfe61f4d0471d67e0019fcfa7bf96b85678afcc7ffcc84c0d34fbb2322f8e",
+    "answer_type": "concept",
+    "version": 3
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0010/cq_linux_commands_76aadb5b/context.json",
+    "canonical_title": "Linux 线上排查常用命令有哪些？",
+    "source_question_ids": [
+      "8d9992418a6375c3794f055e17aa55b4"
+    ],
+    "source_rows": 2
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0010/cq_linux_commands_76aadb5b/context.json",
+      "review/candidates/answers/cq_linux_commands_76aadb5b.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_linux_commands_76aadb5b.json",
+      "review/candidates/audits/cq_linux_commands_76aadb5b.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Verify the answer covers both restored source rows asking for common Linux commands while honoring the canonical's online-troubleshooting scope rather than drifting into a generic system-design template.",
+      "Verify load average is not equated to CPU utilization and that runnable/uninterruptible-task interpretation is bounded to Linux semantics and cross-checked with CPU, blocked-task and pressure evidence.",
+      "Verify iostat sampling semantics are correct: the first report normally covers time since boot, later reports cover the sampling interval, and -y omits the first report.",
+      "Verify iostat %util is not treated as a universal saturation limit for parallel devices such as RAID and modern SSDs.",
+      "Verify PSI and cgroup-v2 memory.current, memory.events and memory.pressure are used as scoped pressure/accounting evidence rather than inferred from host totals alone.",
+      "Verify sar is presented as a historical activity source only when collection data exists, not as guaranteed retrospective data on every host.",
+      "Verify strace/perf are scoped deep-diagnosis tools with explicit production overhead and sensitive-output boundaries rather than default global probes.",
+      "Verify the concept-answer contract remains orally usable, gives selection/next-step conditions and contains at least three topic-specific answered follow-ups without fabricated incident metrics."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. This canonical remains in the pilot review scope and requires the repository's mandatory human-review attestation after evidence and deterministic audit pass."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "linux-kernel-procfs",
+      "title": "The /proc Filesystem — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/filesystems/proc.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "/proc/loadavg exposes load averages and runnable-task information",
+        "/proc and related procfs entries expose process and system state used by monitoring tools"
+      ]
+    },
+    {
+      "source_id": "linux-man-pages-proc-loadavg",
+      "title": "proc_loadavg(5) — Linux man-pages",
+      "locator": "https://man7.org/linux/man-pages/man5/proc_loadavg.5.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "Linux load average includes tasks that are runnable or in uninterruptible state and therefore is not CPU utilization"
+      ]
+    },
+    {
+      "source_id": "linux-kernel-psi",
+      "title": "PSI - Pressure Stall Information — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/accounting/psi.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "CPU, memory and I/O pressure are exported through /proc/pressure",
+        "PSI quantifies time impact from resource contention rather than merely reporting capacity totals"
+      ]
+    },
+    {
+      "source_id": "linux-kernel-cgroup-v2",
+      "title": "Control Group v2 — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/admin-guide/cgroup-v2.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "memory.current reports cgroup memory use, memory.events reports memory-limit/pressure events, and memory.pressure exposes scoped PSI"
+      ]
+    },
+    {
+      "source_id": "sysstat-iostat",
+      "title": "iostat manual — sysstat upstream",
+      "locator": "https://github.com/sysstat/sysstat/blob/master/man/iostat.in",
+      "source_type": "upstream_source_code_or_release_note",
+      "claims_to_check": [
+        "the first report normally covers time since boot and subsequent reports cover time since the previous report; -y omits the first report",
+        "%util near 100% indicates saturation for serial request-serving devices but does not reflect performance limits for parallel devices such as RAID and modern SSDs"
+      ]
+    },
+    {
+      "source_id": "sysstat-sar",
+      "title": "sar manual — sysstat upstream",
+      "locator": "https://github.com/sysstat/sysstat/blob/master/man/sar.in",
+      "source_type": "upstream_source_code_or_release_note",
+      "claims_to_check": [
+        "sar can collect, save and later report system activity data when collection has been configured"
+      ]
+    },
+    {
+      "source_id": "strace-upstream",
+      "title": "strace project documentation",
+      "locator": "https://strace.io/",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "strace traces interactions including system calls and signals and can be filtered/scoped for diagnosis"
+      ]
+    }
+  ],
+  "expected_output": {
+    "isolated_review_result_path": "review/content_build/answer_batch_0010/cq_linux_commands_76aadb5b/isolated_review_result.json",
+    "evidence_path": "review/evidence/cq_linux_commands_76aadb5b.json",
+    "audit_path": "review/candidates/audits/cq_linux_commands_76aadb5b.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_linux_commands_76aadb5b.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  }
+}

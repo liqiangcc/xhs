@@ -1,0 +1,130 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_message_exactly_once_4aede2ce",
+  "prepared_at": "2026-08-18",
+  "candidate": {
+    "path": "review/candidates/answers/cq_message_exactly_once_4aede2ce.md",
+    "sha256": "6c68044f147b4151b3fd4bdf70054cba3ce81957f94aa15340b2a8d668fc26ba",
+    "answer_type": "scenario",
+    "version": 4
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0009/cq_message_exactly_once_4aede2ce/context.json",
+    "canonical_title": "如何实现消息处理的 exactly-once 业务效果？"
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0009/cq_message_exactly_once_4aede2ce/context.json",
+      "review/candidates/answers/cq_message_exactly_once_4aede2ce.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_message_exactly_once_4aede2ce.json",
+      "review/candidates/audits/cq_message_exactly_once_4aede2ce.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Resolve the mixed-source-question-type risk from authoritative context before judging scope; reject a merged answer if source variants require distinct Canonicals.",
+      "Verify Kafka 4.3 producer idempotence, transactional.id, sendOffsetsToTransaction and read_committed/LSO semantics against current Apache Kafka primary sources.",
+      "Verify MySQL 8.4 InnoDB transaction semantics and the processed_event dedup invariant, including explicit NOT NULL key columns because MySQL UNIQUE indexes permit multiple NULL values; distinguish database atomicity from MQ acknowledgement and external API effects.",
+      "Verify outbox relay claims against current Debezium official documentation and require a stable non-null event id plus downstream idempotency/result-query/compensation boundaries for non-database side effects.",
+      "Check stable event-id scope, concurrent duplicate races, retention/replay windows, offset ordering, ambiguous sends, DLQ/recovery, observability and capacity reasoning.",
+      "Verify all source variants are directly answered and hypothetical project examples cannot be read as fabricated personal experience."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. Pilot human review remains a separate mandatory gate when required by config."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "kafka-43-producer-config",
+      "title": "Apache Kafka 4.3 Producer Configs",
+      "locator": "https://kafka.apache.org/43/configuration/producer-configs/",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "enable.idempotence guarantees one copy for producer retries within its documented boundary and is enabled by default when configs do not conflict",
+        "idempotence requires acks=all, retries greater than zero and max.in.flight.requests.per.connection less than or equal to five"
+      ]
+    },
+    {
+      "source_id": "kafka-43-producer-api",
+      "title": "Apache Kafka 4.3.1 KafkaProducer API",
+      "locator": "https://kafka.apache.org/43/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "transactional.id enables transactional producer APIs and idempotence",
+        "sendOffsetsToTransaction marks offsets as part of the current transaction and they commit only if the transaction commits",
+        "Kafka transactional guarantees require transaction-aware downstream consumption"
+      ]
+    },
+    {
+      "source_id": "kafka-43-consumer-config",
+      "title": "Apache Kafka 4.3 Consumer Configs",
+      "locator": "https://kafka.apache.org/43/configuration/consumer-configs/",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "read_committed returns only committed transactional messages",
+        "read_committed is bounded by the last stable offset while transactions are open"
+      ]
+    },
+    {
+      "source_id": "mysql-84-innodb",
+      "title": "MySQL 8.4 Introduction to InnoDB",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-introduction.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "InnoDB DML follows ACID transactions with commit, rollback and crash recovery"
+      ]
+    },
+    {
+      "source_id": "mysql-84-unique",
+      "title": "MySQL 8.4 PRIMARY KEY and UNIQUE Index Constraints",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/constraint-primary-key.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "duplicate primary/unique-key values produce constraint violations with transactional rollback behavior"
+      ]
+    },
+    {
+      "source_id": "mysql-84-columns-nullability",
+      "title": "MySQL 8.4 INFORMATION_SCHEMA COLUMNS",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "a UNIQUE index permits multiple NULL values, so correctness-critical dedup columns must independently be NOT NULL"
+      ]
+    },
+    {
+      "source_id": "debezium-outbox",
+      "title": "Debezium Outbox Event Router",
+      "locator": "https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "the default outbox event id is not null and provides a unique event id usable for duplicate removal",
+        "outbox relay does not itself make arbitrary external API side effects exactly-once"
+      ]
+    }
+  ],
+  "expected_output": {
+    "evidence_path": "review/evidence/cq_message_exactly_once_4aede2ce.json",
+    "audit_path": "review/candidates/audits/cq_message_exactly_once_4aede2ce.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_message_exactly_once_4aede2ce.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  },
+  "remediation_context": {
+    "previous_candidate_sha256": "75c7a4e45ebcbde6da8fe817811ba11ea31c988cdede1fb62316b8868c57a180",
+    "closed_finding_codes": ["DEDUP_UNIQUE_NULLABILITY_GAP"],
+    "changes": [
+      "made consumer_scope and event_id explicitly NOT NULL",
+      "defined the correctness boundary as a composite PRIMARY KEY or equivalent NOT NULL UNIQUE key",
+      "added empty/missing event_id fault-injection coverage and aligned the hypothetical project example"
+    ],
+    "fresh_isolated_rereview_required": true
+  }
+}

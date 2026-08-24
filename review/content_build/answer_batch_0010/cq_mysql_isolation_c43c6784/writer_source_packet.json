@@ -1,0 +1,67 @@
+{
+  "schema_version": "writer_source_packet.v1",
+  "canonical_id": "cq_mysql_isolation_c43c6784",
+  "prepared_at": "2026-08-19",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "mysql-8.4-isolation.primary-source-refresh.v2"
+  },
+  "candidate": {
+    "path": "review/candidates/answers/cq_mysql_isolation_c43c6784.md",
+    "sha256": "30a17dae22d8efff55259fbd0ebbdbf2af813be18cd6536526f95858e595b22b",
+    "answer_type": "concept",
+    "version": 1
+  },
+  "context_path": "review/content_build/answer_batch_0010/cq_mysql_isolation_c43c6784/context.json",
+  "context_status": "restored_from_current_question_data",
+  "source_question_ids": [
+    "a02480184c54507fcc77cd5b7ff5d7bf"
+  ],
+  "source_rows": 2,
+  "primary_sources": [
+    {
+      "source_id": "mysql-8-4-innodb-isolation-levels",
+      "title": "MySQL 8.4 Reference Manual — Transaction Isolation Levels",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "InnoDB supports READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, and SERIALIZABLE, with REPEATABLE READ as the default.",
+        "Under REPEATABLE READ, consistent reads in one transaction use the snapshot established by the first consistent read; unique-index unique searches lock the found record while other search conditions can use gap or next-key locks.",
+        "Under READ COMMITTED, each consistent read gets a fresh snapshot and locking reads/UPDATE/DELETE normally lock records rather than gaps except for foreign-key and duplicate-key checks, so phantom-row problems may occur.",
+        "READ UNCOMMITTED permits dirty reads, while SERIALIZABLE is stricter and converts plain SELECT to SELECT ... FOR SHARE when autocommit is disabled."
+      ]
+    },
+    {
+      "source_id": "mysql-8-4-innodb-consistent-read",
+      "title": "MySQL 8.4 Reference Manual — Consistent Nonlocking Reads",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "InnoDB consistent reads use multiversioning to present a point-in-time snapshot without setting locks on the accessed records.",
+        "REPEATABLE READ reuses the first consistent-read snapshot within a transaction, whereas READ COMMITTED uses a fresh snapshot for each consistent read."
+      ]
+    },
+    {
+      "source_id": "mysql-8-4-set-transaction",
+      "title": "MySQL 8.4 Reference Manual — SET TRANSACTION Statement",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/set-transaction.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19",
+      "claims": [
+        "Transaction isolation can be configured at global, session, or next-transaction scope, and the default isolation level is REPEATABLE READ.",
+        "A session-level change applies to subsequent transactions in that session and does not retroactively change the current transaction; a global change affects subsequent sessions rather than existing sessions."
+      ]
+    }
+  ],
+  "writer_checks": [
+    "Restored both current valid source rows before evaluating the candidate; both share question id a02480184c54507fcc77cd5b7ff5d7bf and normalize to the same MySQL isolation-level concept canonical.",
+    "Re-checked the fixed candidate against current MySQL 8.4 official documentation on isolation-level behavior, consistent nonlocking reads, locking behavior, SERIALIZABLE/autocommit semantics, and transaction-characteristic scope.",
+    "Confirmed the candidate keeps the storage-engine/version boundary explicit and does not flatten plain consistent reads, locking reads, UPDATE, and DELETE into one MVCC slogan.",
+    "Confirmed READ COMMITTED and REPEATABLE READ are compared on snapshot lifetime and gap-lock behavior rather than only by memorized ANSI anomaly names.",
+    "Confirmed the project-experience section requests real engine/isolation/transaction/SQL/lock evidence and does not fabricate production metrics or personal outcomes.",
+    "No candidate byte change was required by this writer-side refresh; the fixed SHA remains 30a17dae22d8efff55259fbd0ebbdbf2af813be18cd6536526f95858e595b22b."
+  ],
+  "next_required_action": "Perform a clean-context isolated source-first review of the fixed candidate bytes using the restored context and current MySQL 8.4 primary sources before consulting historical evidence/remediation records; if that passes, rebind evidence to the fresh review and rerun answer audit --require-evidence before requesting mandatory pilot human approval."
+}

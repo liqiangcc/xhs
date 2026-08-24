@@ -1,0 +1,134 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_08084c56954c213d036776b7cddffdf7",
+  "candidate_sha256": "9cfe3cb244f9f9053524ada1c3436bb987a8d32de24e5187ae026b1246c5960b",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-linked-list-intersection-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-note-68c36f32-structured",
+      "title": "Recovered interview note containing the linked-list common-node prompt",
+      "locator": "note_structured/68c36f32000000001d00c805.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "xhs-question-08084c56",
+      "title": "Tagged repository question record for the first common linked-list node",
+      "locator": "note_tagged/68c36f32000000001d00c805.json#question_id=08084c56954c213d036776b7cddffdf7",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "linked-list-common-node-validation",
+      "title": "Deterministic Java validation for all three requested algorithms",
+      "locator": "review/content_build/answer_batch_0013/cq_q_08084c56954c213d036776b7cddffdf7/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recovered source explicitly asks for the first common node of two linked lists and names three approaches: two-pointer switching, hashing, and length alignment; it does not specify cyclic-list handling.",
+      "source_ids": ["xhs-note-68c36f32-structured", "xhs-question-08084c56"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "identity-semantics",
+      "text": "The validated implementations and tests define a common node by object identity, including a negative case where equal node values belong to disjoint node objects.",
+      "source_ids": ["linked-list-common-node-validation"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节", "易错点"]
+    },
+    {
+      "claim_id": "three-implementations",
+      "text": "The exact Java implementation contains the three requested strategies and the deterministic test executes all three against the same expected node identity.",
+      "source_ids": ["linked-list-common-node-validation"],
+      "answer_locations": ["1 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "edge-and-random-validation",
+      "text": "The deterministic fixture covers null inputs, same-head intersection, a single shared tail node, unequal private-prefix lengths, equal-valued but disjoint nodes, and 3000 fixed-seed structures with independently retained expected shared-node references.",
+      "source_ids": ["linked-list-common-node-validation"],
+      "answer_locations": ["关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "acyclic-boundary",
+      "text": "The candidate scopes the standard algorithms to acyclic singly linked lists and explicitly declines to claim direct correctness for cyclic inputs, because the recovered source does not state a cycle contract and the provided implementations are not cycle-aware.",
+      "source_ids": ["xhs-note-68c36f32-structured", "xhs-question-08084c56", "linked-list-common-node-validation"],
+      "answer_locations": ["核心结论", "关键细节", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "08084c56954c213d036776b7cddffdf7",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "javac LinkedListFirstCommonNode.java LinkedListFirstCommonNodeTest.java && java LinkedListFirstCommonNodeTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=6 randomized=3000 methods=3 identity=verified",
+    "checks": [
+      "all three requested algorithms return the same expected node identity",
+      "equal node values without shared identity do not create a false intersection",
+      "fixed null/same-head/shared-tail/unequal-prefix cases pass",
+      "3000 fixed-seed generated structures pass"
+    ],
+    "boundary_tests": [
+      {
+        "case": "both lists are null or exactly one list is null",
+        "expected": "all three methods return null",
+        "passed": true
+      },
+      {
+        "case": "both heads are the same node object",
+        "expected": "the shared head is returned immediately as the first common node",
+        "passed": true
+      },
+      {
+        "case": "lists have unequal private prefixes followed by a retained shared tail",
+        "expected": "all three methods return the retained first shared-tail node identity",
+        "passed": true
+      },
+      {
+        "case": "two disjoint lists contain the same sequence of integer values",
+        "expected": "all three methods return null because equal values are not shared node identity",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-linked-list-common-node-20260821",
+    "review_version": "linked-list-common-node.three-methods.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate answers exactly the three approaches named by the source instead of replacing the prompt with a generic linked-list template.",
+      "Object identity versus value equality is made explicit and is exercised by a dedicated disjoint equal-values test.",
+      "The two O(1)-space approaches are explained through path-length and distance-to-tail invariants rather than only presenting code.",
+      "Cycle handling is treated as an explicit out-of-scope boundary instead of silently claiming the acyclic algorithms handle cyclic inputs.",
+      "The deterministic fixture retains the expected shared node at construction time and tests 3000 fixed-seed structures, avoiding a circular oracle based on one of the three implementations.",
+      "No personal project results or production metrics are invented.",
+      "Required human approval remains a separate promotion gate and is not treated as satisfied by this automated isolated review."
+    ]
+  }
+}

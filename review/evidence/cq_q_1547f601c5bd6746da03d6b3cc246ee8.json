@@ -1,0 +1,138 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_1547f601c5bd6746da03d6b3cc246ee8",
+  "candidate_sha256": "0f079fcd767d5c40f298fda0851d1030895aba5425e5dae91c64103a1a990108",
+  "checked_at": "2026-08-22",
+  "writer": {
+    "writer_id": "automation-content-builder-fibonacci-string-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-67d6d9fd",
+      "title": "Interview note containing the contiguous Fibonacci-string partition question",
+      "locator": "note_desc/67d6d9fd000000001d026e12.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "batch-0015-source-boundary-audit",
+      "title": "Answer Batch 0015 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0015/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "fibonacci-string-validation",
+      "title": "Deterministic Java validation against a recursive all-partitions oracle",
+      "locator": "review/content_build/answer_batch_0015/cq_q_1547f601c5bd6746da03d6b3cc246ee8/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "fibonacci-string-isolated-review",
+      "title": "Source-first isolated review for the Fibonacci-string candidate",
+      "locator": "review/content_build/answer_batch_0015/cq_q_1547f601c5bd6746da03d6b3cc246ee8/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recovered source restricts the input alphabet to 1-9, requires a contiguous partition of the whole string into at least three numbers satisfying the Fibonacci recurrence, and returns Boolean; it does not preserve a maximum length or integer-width contract.",
+      "source_ids": ["xhs-raw-note-67d6d9fd", "batch-0015-source-boundary-audit"],
+      "answer_locations": ["核心结论", "关键细节"]
+    },
+    {
+      "claim_id": "forced-suffix-invariant",
+      "text": "After choosing the first two cuts, every later numeric segment is uniquely determined as the decimal representation of the sum of the preceding two values, so a mismatch at the current input position proves that split pair cannot succeed.",
+      "source_ids": ["fibonacci-string-validation", "fibonacci-string-isolated-review"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "numeric-boundary",
+      "text": "BigInteger is an explicit candidate implementation choice that avoids introducing an unstated int/long overflow boundary; its memory and arithmetic costs grow with digit width and are not presented as source requirements.",
+      "source_ids": ["batch-0015-source-boundary-audit", "fibonacci-string-validation", "fibonacci-string-isolated-review"],
+      "answer_locations": ["核心结论", "关键细节", "常见追问"]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java implementation passes eight fixed cases including a value beyond long range and 5000 deterministic randomized 1-9 strings against a recursive all-partitions oracle, while enforcing complete input consumption.",
+      "source_ids": ["fibonacci-string-validation"],
+      "answer_locations": ["原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "1547f601c5bd6746da03d6b3cc246ee8",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "javac FibonacciString.java FibonacciStringTest.java && java FibonacciStringTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=8 randomized=5000 oracle=recursive-all-partitions big_integer=true full_consumption=true",
+    "checks": [
+      "minimum three-term success",
+      "multi-term and multi-digit valid partitions",
+      "complete-consumption failure cases",
+      "source-domain negative cases",
+      "arbitrary-precision case beyond long range",
+      "5000 deterministic randomized source-domain strings against a recursive all-partitions oracle",
+      "null and out-of-domain character candidate API behavior"
+    ],
+    "boundary_tests": [
+      {
+        "case": "valid sequence with a multi-digit continuation",
+        "expected": "the generated sum consumes exactly the next contiguous decimal segment",
+        "passed": true
+      },
+      {
+        "case": "valid Fibonacci prefix followed by extra characters",
+        "expected": "returns false unless the entire input can be consumed by one sequence",
+        "passed": true
+      },
+      {
+        "case": "values beyond long range",
+        "expected": "BigInteger arithmetic preserves exact addition without fixed-width overflow",
+        "passed": true
+      },
+      {
+        "case": "zero or non-1-9 input",
+        "expected": "fails fast as outside the candidate API domain inherited from the source alphabet",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-fibonacci-string-20260822",
+    "review_version": "fibonacci-string.forced-suffix.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate is source-bounded and separates source facts from API/numeric implementation choices.",
+      "The forced-suffix invariant is sufficient to justify pruning once the first two terms are selected.",
+      "Complete input consumption and the minimum-three-term condition are explicit in both the algorithm and proof.",
+      "The recursive partition oracle is structurally different from the candidate and covers 5000 deterministic randomized source-domain inputs.",
+      "The arbitrary-precision fixed case verifies the candidate does not depend on an unstated long boundary.",
+      "No online-judge attribution, hidden size bound or fabricated project claim was introduced.",
+      "Formal promotion remains blocked only by the pilot human-approval gate."
+    ]
+  }
+}

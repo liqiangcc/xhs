@@ -1,0 +1,128 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_deep_copy_5cfb8eb4",
+  "prepared_at": "2026-08-19",
+  "candidate": {
+    "path": "review/candidates/answers/cq_deep_copy_5cfb8eb4.md",
+    "sha256": "6057434835a7df6736a3b2e0839b49efe3cfa69fed1596940797322615fcc040",
+    "answer_type": "concept",
+    "version": 3
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0010/cq_deep_copy_5cfb8eb4/context.json",
+    "canonical_title": "Java 浅拷贝与深拷贝的区别",
+    "source_question_ids": [
+      "a156953489b7a1383bb2383470b3ad9f"
+    ],
+    "source_rows": 2
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0010/cq_deep_copy_5cfb8eb4/context.json",
+      "review/candidates/answers/cq_deep_copy_5cfb8eb4.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_deep_copy_5cfb8eb4.json",
+      "review/candidates/audits/cq_deep_copy_5cfb8eb4.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Verify the candidate directly answers both restored source rows, including aliasing in complex nested structures and the practical testing impact of shared mutable children.",
+      "Verify Object.clone() is described as a field-for-field shallow copy and that mutable deep structure is not implied to be recursively cloned.",
+      "Verify Cloneable is treated as a marker controlling Object.clone() eligibility, not as a clone method contract or an automatic deep-copy mechanism.",
+      "Verify array and collection examples preserve the one-level boundary: multidimensional array clone creates one new outer array with shared subarrays, and ArrayList.clone() does not clone elements.",
+      "Verify deep-copy graph traversal preserves cycles and repeated-reference topology by tracking already-processed nodes by reference identity rather than equals().",
+      "Verify immutable references may be shared when their semantics are actually immutable, while mutable state that must evolve independently is copied according to explicit business semantics.",
+      "Verify Java serialization is presented as a serializable object-graph traversal option with reference sharing, compatibility/custom-serialization cost, and untrusted-deserialization security boundaries rather than a universal low-cost solution.",
+      "Verify copy-after-completion isolation is not conflated with obtaining a concurrency-consistent snapshot while the source graph is being mutated.",
+      "Verify the concept-answer contract includes a concise definition, shared comparison dimensions, selection conditions, inapplicable boundaries, concrete confusions/counterexamples, and at least three topic-specific answered follow-ups."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. This canonical is in the pilot review scope and requires the repository's mandatory human-review attestation after evidence and deterministic audit pass."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "oracle-jdk25-object-clone",
+      "title": "Object (Java SE 25 & JDK 25): clone()",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Object.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "Object.clone() initializes fields as if by assignment, does not clone field contents, and therefore performs a shallow copy",
+        "independence may require copying mutable objects in the deep structure while immutable references normally need no modification"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-cloneable",
+      "title": "Cloneable (Java SE 25 & JDK 25)",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Cloneable.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "Cloneable indicates that Object.clone() may make a field-for-field copy",
+        "Cloneable contains no clone method and Object.clone() remains protected by default"
+      ]
+    },
+    {
+      "source_id": "oracle-jls25-arrays",
+      "title": "Java Language Specification SE 25, Chapter 10 Arrays",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se25/html/jls-10.html",
+      "source_type": "official_specification_or_standard",
+      "claims_to_check": [
+        "array clone creates a new array object",
+        "a multidimensional array clone is shallow and shares subarrays"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-arraylist",
+      "title": "ArrayList (Java SE 25 & JDK 25): clone()",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/ArrayList.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "ArrayList.clone() returns a shallow copy and does not copy the elements"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-identityhashmap",
+      "title": "IdentityHashMap (Java SE 25 & JDK 25)",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/IdentityHashMap.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "IdentityHashMap compares keys by reference identity",
+        "topology-preserving transformations such as deep-copying use an identity-based node table of already-processed references"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-objectoutputstream",
+      "title": "ObjectOutputStream (Java SE 25 & JDK 25)",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/io/ObjectOutputStream.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "ObjectOutputStream writes graphs of serializable objects transitively",
+        "reference sharing is encoded so an object graph can be restored with the same shape"
+      ]
+    },
+    {
+      "source_id": "oracle-jdk25-javaio",
+      "title": "java.io package (Java SE 25 & JDK 25)",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/io/package-summary.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "deserialization of untrusted data is inherently dangerous and should be avoided or strictly validated"
+      ]
+    }
+  ],
+  "expected_output": {
+    "isolated_review_result_path": "review/content_build/answer_batch_0010/cq_deep_copy_5cfb8eb4/isolated_review_result.json",
+    "evidence_path": "review/evidence/cq_deep_copy_5cfb8eb4.json",
+    "audit_path": "review/candidates/audits/cq_deep_copy_5cfb8eb4.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_deep_copy_5cfb8eb4.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  }
+}

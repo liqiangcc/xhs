@@ -1,0 +1,159 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_10b16ccc8b909fb29e93c5d4a67ddf71",
+  "candidate_sha256": "64ca3b4d4c259434626de0e78925d5eaa76488f0d9d43742699aa7f01b0fdd92",
+  "checked_at": "2026-08-22",
+  "writer": {
+    "writer_id": "automation-content-builder-linked-list-big-integer-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-image-text-694512cd",
+      "title": "Interview-note image transcription containing the linked-list big-integer addition problem",
+      "locator": "note_img_txt/694512cd000000001e004d1a.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "xhs-tagged-question-694512cd",
+      "title": "Structured source record for linked-list big-integer addition",
+      "locator": "note_tagged/694512cd000000001e004d1a.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "linked-list-big-integer-validation",
+      "title": "Deterministic Java validation against java.math.BigInteger and input-immutability checks",
+      "locator": "review/content_build/answer_batch_0014/cq_q_10b16ccc8b909fb29e93c5d4a67ddf71/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-22"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The preserved source asks to add two big integers represented by linked lists, with the most-significant digit at the head and the ones digit at the tail, return a new result list, and discuss time and space complexity; it does not specify null handling, leading-zero normalization, or permission to mutate inputs.",
+      "source_ids": [
+        "xhs-raw-image-text-694512cd",
+        "xhs-tagged-question-694512cd"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "direction-and-carry",
+      "text": "Because the list traversal direction is most-significant to least-significant while decimal carry propagates from least-significant to most-significant, two stacks expose the next unprocessed low-order digits without mutating the source lists; prepending each result digit restores the required most-significant-first list order.",
+      "source_ids": [
+        "linked-list-big-integer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java implementation passes eight fixed cases and 5000 deterministic randomized cases up to 80 digits against java.math.BigInteger, while also verifying that both input lists remain unchanged and that null/invalid-digit implementation contracts fail fast.",
+      "source_ids": [
+        "linked-list-big-integer-validation"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The implementation pushes each of m+n source digits once and pops each at most once, so it runs in O(m+n) time and uses O(m+n) auxiliary stack space in addition to the output list.",
+      "source_ids": [
+        "linked-list-big-integer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "10b16ccc8b909fb29e93c5d4a67ddf71",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac LinkedListBigIntegerAdd.java LinkedListBigIntegerAddTest.java && java LinkedListBigIntegerAddTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=8 randomized=5000 oracle=java.math.BigInteger input_immutable=true null=fail-fast invalid_digit=fail-fast",
+    "checks": [
+      "zero plus zero",
+      "single carry",
+      "equal-length no-final-carry",
+      "carry creating a new most-significant digit",
+      "unequal lengths",
+      "very large decimal values beyond fixed-width integers",
+      "5000 deterministic randomized values up to 80 digits against java.math.BigInteger",
+      "input lists remain digit-sequence equivalent after the call",
+      "null and invalid-digit fail-fast implementation contracts"
+    ],
+    "boundary_tests": [
+      {
+        "case": "999 + 1",
+        "expected": "1000",
+        "passed": true
+      },
+      {
+        "case": "1 + 999999999999999999999999999999",
+        "expected": "1000000000000000000000000000000",
+        "passed": true
+      },
+      {
+        "case": "two 20-digit all-nine values",
+        "expected": "199999999999999999998",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-linked-list-big-integer-20260822",
+    "review_version": "linked-list-big-integer.stack-carry.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate stays within the recovered source contract and explicitly labels null, leading-zero, digit-range, and input-mutation behavior as implementation choices rather than source facts.",
+      "The two-stack design directly resolves the mismatch between list traversal direction and carry propagation direction without mutating the inputs.",
+      "The carry invariant and head-prepend argument are explicit enough to explain correctness rather than relying only on passing examples.",
+      "The executable test uses java.math.BigInteger as a structurally different oracle on 5000 deterministic random cases up to 80 digits, so the validation does not duplicate the candidate algorithm.",
+      "The test also detects accidental mutation of either input list and locks down the candidate's fail-fast API boundary.",
+      "After the first machine-audit finding, the follow-up section was rewritten into five explicit question-specific 问/答 entries instead of relying on bold bullet formatting that the quality gate could not recognize.",
+      "The alternative reverse-list approach is presented as a tradeoff conditioned on permission to mutate input, not as an unconditional improvement.",
+      "No project experience, missing sample data, or unstated online-problem constraints are fabricated; required human approval remains a separate promotion gate."
+    ]
+  }
+}

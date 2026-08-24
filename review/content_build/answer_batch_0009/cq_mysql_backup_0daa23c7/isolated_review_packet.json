@@ -1,0 +1,101 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_mysql_backup_0daa23c7",
+  "prepared_at": "2026-08-18",
+  "candidate": {
+    "path": "review/candidates/answers/cq_mysql_backup_0daa23c7.md",
+    "sha256": "7eb7d1d936ff1ad6afbf24ee4a647177d88cfe8ca426c8c74653aad53d809968",
+    "answer_type": "mechanism",
+    "version": 4
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0009/cq_mysql_backup_0daa23c7/context.json",
+    "canonical_title": "MySQL 备份与基于 binlog 的恢复流程"
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0009/cq_mysql_backup_0daa23c7/context.json",
+      "review/candidates/answers/cq_mysql_backup_0daa23c7.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_mysql_backup_0daa23c7.json",
+      "review/candidates/audits/cq_mysql_backup_0daa23c7.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Resolve the source_type_overridden risk from authoritative source rows before deciding whether mechanism is the correct final answer type.",
+      "Verify MySQL 8.4 mysqldump --single-transaction and --source-data consistency/locking semantics, including nontransactional-table and concurrent-DDL boundaries.",
+      "Verify PITR prerequisites, binary-log continuity, mysqlbinlog time-vs-position usage and exact stop-boundary semantics from current MySQL primary documentation.",
+      "Verify physical-vs-logical and online-backup claims and reject any implication that copying a live InnoDB data directory is automatically a consistent backup.",
+      "Check restore verification, RPO/RTO evidence boundaries, retention/gap detection, isolation-instance workflow, rollback/cutover and sensitive backup handling.",
+      "Verify every source variant is directly answered and hypothetical recovery examples cannot be read as fabricated production experience."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. Pilot human review remains a separate mandatory gate when required by config."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "mysql-84-backup-policy",
+      "title": "MySQL 8.4 Establishing a Backup Policy",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/backup-policy.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "--source-data with --single-transaction acquires a global read lock initially, reads binary-log coordinates, then releases it while InnoDB dump continues",
+        "nontransactional tables must not change during the backup for consistency"
+      ]
+    },
+    {
+      "source_id": "mysql-84-backup-types",
+      "title": "MySQL 8.4 Backup and Recovery Types",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/backup-types.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "physical and logical backups have distinct portability/performance properties",
+        "online physical backups require appropriate locking or a backup tool that supplies consistency",
+        "backup encryption protects backed-up data against unauthorized access and belongs in backup policy"
+      ]
+    },
+    {
+      "source_id": "mysql-84-pitr",
+      "title": "MySQL 8.4 Point-in-Time Recovery",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "PITR starts from a full backup and applies subsequent binary-log changes incrementally"
+      ]
+    },
+    {
+      "source_id": "mysql-84-pitr-binlog",
+      "title": "MySQL 8.4 Point-in-Time Recovery Using Binary Log",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery-binlog.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "binary logging is required for PITR and is enabled by default in MySQL 8.4",
+        "mysqlbinlog supports selecting events by time and position"
+      ]
+    },
+    {
+      "source_id": "mysql-84-backup-lock",
+      "title": "MySQL 8.4 LOCK INSTANCE FOR BACKUP",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/lock-instance-for-backup.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "instance backup lock permits DML while preventing operations that could make an online snapshot inconsistent"
+      ]
+    }
+  ],
+  "expected_output": {
+    "evidence_path": "review/evidence/cq_mysql_backup_0daa23c7.json",
+    "audit_path": "review/candidates/audits/cq_mysql_backup_0daa23c7.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_mysql_backup_0daa23c7.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  }
+}

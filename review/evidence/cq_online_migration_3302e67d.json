@@ -1,0 +1,118 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_online_migration_3302e67d",
+  "candidate_sha256": "8a2c0f776a71f20211d9d7c347ed3ab28ff57de332919daea9f581432ad0f331",
+  "checked_at": "2026-08-19",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "online-migration-primary-sources.v1"
+  },
+  "sources": [
+    {
+      "source_id": "debezium-mysql-stable",
+      "title": "Debezium Documentation: Connector for MySQL",
+      "locator": "https://debezium.io/documentation/reference/stable/connectors/mysql.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "mysql-84-innodb",
+      "title": "MySQL 8.4 Reference Manual: Introduction to InnoDB",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-introduction.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "mysql-84-online-ddl",
+      "title": "MySQL 8.4 Reference Manual: InnoDB and Online DDL",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-online-ddl.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "mysql-84-online-ddl-operations",
+      "title": "MySQL 8.4 Reference Manual: Online DDL Operations",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-online-ddl-operations.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-19"
+    },
+    {
+      "source_id": "online-migration-capacity-arithmetic",
+      "title": "Reproducible capacity arithmetic for the hypothetical 4 TiB at 200 MiB/s example",
+      "locator": "repro: (4 * 1024 * 1024 MiB) / (200 MiB/s) / 3600 s/h = 5.8254222222 h",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-19"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "consistent-snapshot-binlog-watermark",
+      "text": "Debezium documents an initial consistent MySQL snapshot using repeatable-read semantics, records the current binlog position, and then streams changes from that position. The candidate correctly requires full-copy and incremental CDC to share one recoverable time boundary instead of copying first and opening the change stream later.",
+      "source_ids": ["debezium-mysql-stable"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "cdc-restart-duplicate-and-retention-boundary",
+      "text": "Debezium documents that replacement/restarted tasks can regenerate events already processed before a crash, and that a purged required binlog position can make the old position unavailable and require a new snapshot/baseline. The candidate therefore makes target writes idempotent and treats binlog retention as a hard recovery boundary.",
+      "source_ids": ["debezium-mysql-stable"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "项目经验版", "易错点"]
+    },
+    {
+      "claim_id": "innodb-transaction-boundary",
+      "text": "MySQL 8.4 documents InnoDB DML as ACID transaction processing with commit, rollback and crash recovery. The candidate correctly keeps one-side database transaction guarantees separate from application dual-write across old and new storage topologies and does not claim those two writes become one atomic transaction.",
+      "source_ids": ["mysql-84-innodb"],
+      "answer_locations": ["核心结论", "3 分钟版", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "mysql84-online-ddl-is-operation-dependent",
+      "text": "MySQL 8.4 documents ALGORITHM and LOCK controls for online DDL, while operation tables show that concurrency and rebuild/copy behavior vary by operation. The candidate correctly says only some InnoDB DDL permits concurrent DML and explicitly avoids presenting online DDL as universally instant or lock-free.",
+      "source_ids": ["mysql-84-online-ddl", "mysql-84-online-ddl-operations"],
+      "answer_locations": ["关键细节", "易错点"]
+    },
+    {
+      "claim_id": "cutover-rollback-and-operational-design",
+      "text": "Route epochs/fencing, shadow reads, batch pause thresholds, reverse synchronization during a rollback window, reconciliation, fault injection and virtual-bucket routing are presented as explicit scenario design choices rather than undocumented MySQL or Debezium guarantees. They consistently preserve the documented snapshot/CDC and transactional boundaries: stale writers must be fenced, application dual-write is not assumed atomic, and rollback after new-primary writes requires the old side to be current before routing back.",
+      "source_ids": ["debezium-mysql-stable", "mysql-84-innodb"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "项目经验版", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "scenario-scale-and-hypothetical-capacity",
+      "text": "The candidate explicitly asks for production scale inputs and labels the 4 TiB at 200 MiB/s calculation as a hypothetical lower-bound example rather than a production fact. Its stated theoretical copy time of about 5.8 hours is arithmetically consistent, and it separately calls out CDC, verification, retries and peak throttling as additional planning cost.",
+      "source_ids": ["online-migration-capacity-arithmetic"],
+      "answer_locations": ["3 分钟版", "项目经验版"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "54ff22b9be2e9ddd945d1f822c906fa8",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-online-migration-r1",
+    "review_version": "online-migration-primary-sources-source-first.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 18,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Both duplicate source rows are directly covered by the same explicit zero-downtime 16-to-64-table migration design.",
+      "The snapshot/binlog boundary, replay tolerance and purged-log recovery boundary are consistent with current Debezium MySQL documentation.",
+      "Cutover and rollback preserve a single write-authority model: old writers are fenced by route epoch, application dual-write is not claimed atomic, and routing back requires the old side to be current.",
+      "The MySQL 8.4 online-DDL wording is version-bounded and operation-dependent rather than universal.",
+      "The project section is a mapping prompt and explicitly hypothetical capacity example, not fabricated personal production experience."
+    ]
+  }
+}

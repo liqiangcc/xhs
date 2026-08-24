@@ -1,0 +1,42 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_17b558215583de1ad3b47eda00479a00",
+  "candidate_sha256": "fc60201c3872f96726f48d2d5e72b7740e9f189c9450cb97176350c19277a513",
+  "reviewed_at": "2026-08-22",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-sql-top2-per-day-20260822",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "note_desc/6800eaac000000001c033334.txt",
+    "review/content_build/answer_batch_0015/source_boundary_audit.md",
+    "https://dev.mysql.com/doc/refman/8.4/en/window-functions-usage.html",
+    "review/content_build/answer_batch_0015/cq_q_17b558215583de1ad3b47eda00479a00/code_validation.json"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 100
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The candidate preserves the recoverable source boundary: one table has id, date and daily purchase quantity, and the task is to obtain a per-day top two; it does not pretend the source preserved a SQL dialect, exact identifiers or a tie contract.",
+    "The answer explicitly chooses the at-most-two-rows interpretation and therefore uses ROW_NUMBER rather than silently treating tied values as additional winners.",
+    "The secondary id ordering turns tied purchase quantities into a deterministic total order under the stated candidate assumption that id is unique.",
+    "MySQL 8.4 official documentation supports PARTITION BY for per-group windows, ROW_NUMBER for row numbering within a partition, and the need for ORDER BY in the window definition when deterministic numbering is required.",
+    "The CTE separates window calculation from the outer rn <= 2 filter, matching MySQL's documented evaluation boundary for window functions.",
+    "The executable fixture covers three dates, ordinary ranking, a top-value tie and a three-way tie, and asserts both the exact selected rows and the maximum-two-rows property.",
+    "The candidate distinguishes the alternative DENSE_RANK interpretation and correctly states that preserving the top two distinct ranks can return more than two rows per date.",
+    "No production history, schema details, index behavior or performance result is fabricated; optimization claims remain conditional on the real schema and execution plan."
+  ],
+  "promotion_blockers": [
+    "human_approval_required_for_pilot_promotion"
+  ]
+}

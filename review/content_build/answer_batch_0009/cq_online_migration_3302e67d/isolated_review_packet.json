@@ -1,0 +1,95 @@
+{
+  "schema_version": "isolated_answer_review_packet.v1",
+  "canonical_id": "cq_online_migration_3302e67d",
+  "prepared_at": "2026-08-18",
+  "candidate": {
+    "path": "review/candidates/answers/cq_online_migration_3302e67d.md",
+    "sha256": "8a2c0f776a71f20211d9d7c347ed3ab28ff57de332919daea9f581432ad0f331",
+    "answer_type": "scenario",
+    "version": 1
+  },
+  "context": {
+    "path": "review/content_build/answer_batch_0009/cq_online_migration_3302e67d/context.json",
+    "canonical_title": "如何不停服地将 16 张分表迁移到 64 张？",
+    "source_question_ids": ["54ff22b9be2e9ddd945d1f822c906fa8"],
+    "source_rows": 2
+  },
+  "review_contract": {
+    "mode": "source_first_isolated",
+    "required_quality_contract": "config/answer_quality.json",
+    "required_content_standard": "docs/refactor/09_answer_content_standard.md",
+    "allowed_repository_inputs": [
+      "review/content_build/answer_batch_0009/cq_online_migration_3302e67d/context.json",
+      "review/candidates/answers/cq_online_migration_3302e67d.md",
+      "config/answer_quality.json",
+      "docs/refactor/09_answer_content_standard.md",
+      ".agents/skills/xhs-answer-curator/SKILL.md"
+    ],
+    "forbidden_before_conclusion": [
+      "review/evidence/cq_online_migration_3302e67d.json",
+      "review/candidates/audits/cq_online_migration_3302e67d.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.json",
+      "review/reports/FINAL_SOURCE_FIRST_REVIEW.md",
+      "historical review/remediation records",
+      "writer rationale or self-score"
+    ],
+    "required_checks": [
+      "Verify the candidate directly covers both duplicate source rows and the explicit zero-downtime 16-table to 64-table migration scenario rather than drifting into generic sharding theory.",
+      "Verify the full-snapshot plus incremental CDC boundary: the snapshot/binlog or GTID watermark must close the copy/stream gap and recovery must tolerate connector restart/replay without silently losing writes.",
+      "Verify the cutover consistency boundary: route version/epoch or an equivalent fencing mechanism must prevent stale writers after a bucket becomes new-primary; application dual-write must not be represented as atomic.",
+      "Verify rollback semantics: once new-primary writes exist, rollback is only safe if the old side has remained current through reverse CDC/controlled dual-write or is otherwise reconciled before routing back.",
+      "Verify the scenario contract includes explicit scale inputs, a clearly hypothetical capacity calculation, idempotency/order handling, timeout/retry/compensation, observability, reconciliation, fault injection, rollout and at least one alternative/tradeoff.",
+      "Verify MySQL 8.4 online-DDL wording is version-bounded and does not imply that every DDL operation is instant or lock-free.",
+      "Verify project-experience content is only a mapping prompt/hypothetical calculation and cannot be read as fabricated personal production experience."
+    ],
+    "promotion_boundary": "Do not promote or fabricate human approval. Pilot human review remains a separate mandatory gate when required by config."
+  },
+  "primary_sources_to_verify_independently": [
+    {
+      "source_id": "debezium-mysql-stable",
+      "title": "Debezium connector for MySQL",
+      "locator": "https://debezium.io/documentation/reference/stable/connectors/mysql.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "the connector performs an initial consistent snapshot, records the current binlog position and streams subsequent changes from that position",
+        "connector restart can regenerate already-processed events and target processing must tolerate duplicates",
+        "if the required binlog position has been purged, continuing from the old position is impossible without re-establishing a suitable snapshot/baseline"
+      ]
+    },
+    {
+      "source_id": "mysql-84-innodb",
+      "title": "MySQL 8.4 Introduction to InnoDB",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-introduction.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "InnoDB DML follows ACID transaction semantics with commit, rollback and crash recovery"
+      ]
+    },
+    {
+      "source_id": "mysql-84-online-ddl",
+      "title": "MySQL 8.4 InnoDB and Online DDL",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-online-ddl.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "ALGORITHM and LOCK clauses control available online-DDL behavior and an operation can fail immediately when the requested concurrency level is unavailable",
+        "online DDL is operation-dependent and should not be generalized as universally lock-free"
+      ]
+    },
+    {
+      "source_id": "mysql-84-online-ddl-operations",
+      "title": "MySQL 8.4 Online DDL Operations",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-online-ddl-operations.html",
+      "source_type": "official_documentation",
+      "claims_to_check": [
+        "some index and primary-key operations permit concurrent DML while other operations can rebuild/copy data or disallow the same concurrency"
+      ]
+    }
+  ],
+  "expected_output": {
+    "isolated_review_result_path": "review/content_build/answer_batch_0009/cq_online_migration_3302e67d/isolated_review_result.json",
+    "evidence_path": "review/evidence/cq_online_migration_3302e67d.json",
+    "audit_path": "review/candidates/audits/cq_online_migration_3302e67d.json",
+    "audit_command": "node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_online_migration_3302e67d.md --require-evidence --noWrite",
+    "reviewer_must_not_equal_writer": true
+  }
+}

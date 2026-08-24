@@ -80,6 +80,11 @@ function main(argv = process.argv) {
     const actual = fs.existsSync(paths.audit) ? fs.readFileSync(paths.audit, 'utf8') : '';
     const ok = !check || actual === expected;
     if (!check) writeJson(paths.audit, value);
+    if (check && !ok && process.env.GITHUB_ACTIONS === 'true') {
+        const diagnosticsDir = path.join(root, 'audit-diagnostics');
+        fs.mkdirSync(diagnosticsDir, { recursive: true });
+        fs.writeFileSync(path.join(diagnosticsDir, 'pilot_answer_audit.generated.json'), expected, 'utf8');
+    }
     console.log(JSON.stringify({ schema_version: 'pilot_answer_audit_report.v1', ok, check, pilot_size: value.pilot_size, output: path.relative(root, paths.audit) }, null, 2));
     return ok ? 0 : 1;
 }

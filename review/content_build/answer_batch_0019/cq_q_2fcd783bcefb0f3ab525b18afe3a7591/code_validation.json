@@ -1,0 +1,35 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_2fcd783bcefb0f3ab525b18afe3a7591",
+  "validated_at": "2026-08-24",
+  "runtime": "Node.js v22.16.0 independent local execution",
+  "command": "node promise_all_test.js",
+  "result": "pass",
+  "stdout": "PASS fixed=12 randomized=2000 oracle=native-Promise.all iterable=supported order=input reject=first-observed thenable=adopted empty=fulfilled",
+  "implementation_contract": {
+    "api": "standalone myPromiseAll(iterable) returning a native Promise",
+    "input": "synchronous iterable of plain values, Promises, or thenables",
+    "result_order": "input iteration order",
+    "value_assimilation": "Promise.resolve",
+    "empty_input": "fulfill with []",
+    "rejection": "first observed rejection settles aggregate rejected",
+    "cancellation": "none; already-started inputs continue",
+    "constructor_genericity": "not implemented; native Promise is fixed",
+    "oracle": "native Promise.all with fresh inputs built from identical descriptors"
+  },
+  "checks": [
+    "empty array",
+    "plain values",
+    "input order preserved across out-of-order completion",
+    "nested Promise adoption",
+    "fulfilling thenable adoption",
+    "first observed rejection",
+    "Set iterable",
+    "generator iterable",
+    "sparse array holes become undefined",
+    "iterator throw rejects aggregate",
+    "rejecting thenable",
+    "empty iterable then callback remains asynchronous",
+    "2000 deterministic randomized mixed inputs against native Promise.all"
+  ]
+}

@@ -1,0 +1,1080 @@
+# Answer Batch 0022 — Repository Source Packet
+
+This file is mechanically extracted from repository source only. It makes no answer-content inference and must be reviewed source-first before any candidate is authored.
+Both caption text (`note_desc`) and image transcripts (`note_img_txt`) are included when present so structured/tagged questions can be checked against the strongest repository-local source.
+
+## `cq_q_3aa1637d60f1dbea7bb4279a4ae3f6a1`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "代码输出：闭包作用域 (where 变量 inside/outside)?"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3aa1637d60f1dbea7bb4279a4ae3f6a1",
+  "canonical_title": "代码输出：闭包作用域 (where 变量 inside/outside)?",
+  "companies": [
+    "百度"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "其他",
+    "l2": "其他"
+  },
+  "primary_entities": [
+    "闭包",
+    "作用域"
+  ],
+  "question_ids": [
+    "3aa1637d60f1dbea7bb4279a4ae3f6a1"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `681cc49c000000002101b340`
+
+- tagged: `note_tagged/681cc49c000000002101b340.json`
+- caption: `note_desc/681cc49c000000002101b340.txt`
+- image transcript: `note_img_txt/681cc49c000000002101b340.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3aa1637d60f1dbea7bb4279a4ae3f6a1",
+  "original_question": "代码输出：闭包作用域 (where 变量 inside/outside)?",
+  "domain": {
+    "l1": "前端",
+    "l2": "JavaScript基础"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "闭包",
+    "作用域"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+拷打了一个多小时
+
+💼基本情况
+工作情况
+工作中如何和后端交互
+项目有几个人，主要负责什么业务
+离职原因
+
+📒 八股
+同源策略是什么，如何解决跨域
+哪些 HTML 标签不受同源策略限制
+开发环境如何解决跨域问题
+浏览器遇到 script 标签会做什么，async, defer 的作用。如何保证脚本按顺序执行
+var let 的区别（作用域、变量提升、重复声明）
+作用域有哪些（全局、函数、块级）
+原型链怎么理解
+`class A extens B` a 和 b 的原型链是什么关系
+什么样的对象有 prototype，箭头函数有 prototype 吗
+箭头函数和普通函数的区别
+箭头函数可以做构造函数吗？为什么？
+new 操作符创建新对象时做了哪些事
+
+💻 代码题
+给了三段代码，说打印。又让手写了一个题
+作用域（图一）
+微任务、宏任务的打印顺序 （图二）
+普通函数和箭头函数的this指向（图三）
+手写题：一个数从 1 开始，每一步只能乘 3 或加 5，目标值为 1024，写代码找出一种解法或所有解法。
+
+⬇️ 项目延伸
+
+C 端项目做过吗
+性能优化有什么思路
+B 端到 C 端怎么转变
+让你学习 C 端，有什么思路和经验
+AI 工具有用过吗？有什么心得
+
+-------------------
+二面问的还是挺全面的，不过总体感觉还是偏基础吧。框架这些都没怎么问。
+﻿#前端面经[话题]#﻿ ﻿#互联网大厂[话题]#﻿ ﻿#前端[话题]#﻿
+```
+
+Image transcript:
+
+```text
+图片中的内容识别成文字输出如下：
+
+**图片1 (downloaded_images/681cc49c000000002101b340/3.webp):**
+```javascript
+function fn() {
+  const where = "inside"; // 如果注释掉这一行，打印什么
+
+  return function () {
+    console.log(where);
+  };
+}
+
+function caller() {
+  const where = "outside";
+  fn()();
+}
+
+caller();
+```
+
+**图片2 (downloaded_images/681cc49c000000002101b340/2.webp):**
+```javascript
+console.log(1);
+setTimeout(() => console.log(2));
+Promise.resolve().then(() => console.log(3));
+Promise.resolve().then(() => setTimeout(() => console.log(4)));
+Promise.resolve().then(() => console.log(5));
+setTimeout(() => console.log(6));
+console.log(7);
+
+// 1 7 3 5 2 6 4
+```
+
+**图片3 (downloaded_images/681cc49c000000002101b340/1.webp):**
+```javascript
+window.value = "v";
+
+function fnA() {
+  console.log(this.value);
+}
+
+function fnB() {
+  const arrowFn = () => {
+    console.log(this.value);
+  };
+  arrowFn();
+}
+
+function fnC() {
+  const arrowFn = () => {
+    console.log(this.value);
+  };
+  return arrowFn;
+}
+
+const objA = {
+  value: "A",
+  fn: fnA,
+};
+
+const objB = {
+  value: "B",
+  fn: fnB,
+};
+
+const objC = {
+  value: "C",
+  fn: fnC(),
+};
+
+objA.fn(); //a
+objB.fn(); // b
+objC.fn(); // v
+```
+```
+
+## `cq_q_3ae198b1c39ab778836b9d3b8bd106b0`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法：不同路径 II (LeetCode 63)"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3ae198b1c39ab778836b9d3b8bd106b0",
+  "canonical_title": "算法：不同路径 II (LeetCode 63)",
+  "companies": [
+    "滴滴"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "算法与数据结构",
+    "l2": "其他"
+  },
+  "primary_entities": [
+    "动态规划"
+  ],
+  "question_ids": [
+    "3ae198b1c39ab778836b9d3b8bd106b0"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `677632b5000000000b016b05`
+
+- tagged: `note_tagged/677632b5000000000b016b05.json`
+- caption: `note_desc/677632b5000000000b016b05.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3ae198b1c39ab778836b9d3b8bd106b0",
+  "original_question": "算法：不同路径 II (LeetCode 63)",
+  "domain": {
+    "l1": "算法",
+    "l2": "其他"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "动态规划"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+bg：末流211本，base北京
+
+1️⃣面
+* 自我介绍
+* 介绍实习
+- 实习做的新功能中的数据模型和表结构怎么设计的？
+- ES 怎么实现的地理查询？除了 ES 还有别的实现方法吗？
+- 实习中说的新的数据过滤方式是怎么做的？
+- 介绍一下 MySQL 索引，底层结构，“性别”能不能当索引？
+- 说一下 Java 的基本数据类型，集合类型，ArrayList 和 LinkedList 的区别和应用，ArrayList 扩容机制？
+- 说一下 Java 垃圾回收，判断对象是否可回收的方法，内存模型，程序计数器是干嘛用的？
+* 手撕：63. 不同路径 II
+2️⃣面
+* 自我介绍
+* 介绍实习
+- 实习中说的新的数据过滤方式是怎么做的？
+- 你的自定义注解为什么能标识需要过滤的方法？就你这拦截请求的原理是怎么实现的，介绍一下 AOP？
+- cglib 动态生成的代理类是如何加载进 JVM 的？介绍一下类加载机制？
+- 你用 DATAX 实现数据同步，那介绍一下 DATAX，还知道别的数据同步方案吗？
+- 那现在如果让你在正在运营的生产环境里实现动态的数据同步，你怎么做？
+- 那静态的呢，就没有新数据进来，怎么保证同步的数据一致性，你是觉得一定不会出问题吗？
+- 实习写的垂直分表怎么做的？
+- 说一下 MySQL 隔离级别，默认是哪个？可重复读解决了什么问题？
+- 现在有个表，一列 id，一列 name，说一下幻读是怎么发生的？
+- 你提到了锁，那你写个加锁的 sql 解决你刚刚说的幻读？加的什么锁？
+- for share 和 for update 有什么区别？
+- where id > 10 会加锁吗？什么锁？id > 20 的记录会不会被锁？
+- where name > "test1" 会加锁吗？为什么？
+* 手撕：1490. 克隆 N 叉树
+3️⃣面
+* 自我介绍
+- Java 线程模型？一个 32 位操作系统，4G 内存能开多少线程？一个线程占用内存的数量级觉得应该是多少？
+- Java 线程池的底层结构？如果没有空闲线程，任务怎么办？等待的任务会占用 CPU 吗？
+- Java 有哪些并发工具类？介绍一下你提到的 synchronized 和 ReentrantLock？该怎么选用？
+* 手撕：三线程交替输出斐波那契数列
+- Redis 的 zset 类型查询单个数据的时间复杂度？能优化成O(1)吗？插入的复杂度呢？
+- 还有哪些结构插入和查询复杂度是O的？MySQL 索引用的什么结构？为什么要用 B+ 树？
+- MySQL 一张表能创建几个 B+ 树？什么情况会回表？
+- 现在线上有一个接口延迟高，你怎么优化和排查？
+- 那要是我在测试环境延迟正常，但在生产环境延迟高，你觉得什么原因？
+- 那现在下游服务接口延迟高但是暂时没法优化，怎么办？
+```
+
+## `cq_q_3bd9ce7e8b983c0e09e7b573588a0d3a`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法：股票卖出的最佳时机（贪心/动归）。"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3bd9ce7e8b983c0e09e7b573588a0d3a",
+  "canonical_title": "算法：股票卖出的最佳时机（贪心/动归）。",
+  "companies": [
+    "美团"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "其他",
+    "l2": "其他"
+  },
+  "primary_entities": [
+    "best time to buy and sell stock"
+  ],
+  "question_ids": [
+    "3bd9ce7e8b983c0e09e7b573588a0d3a"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `66a27afa000000000600d084`
+
+- tagged: `note_tagged/66a27afa000000000600d084.json`
+- caption: `note_desc/66a27afa000000000600d084.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3bd9ce7e8b983c0e09e7b573588a0d3a",
+  "original_question": "算法：股票卖出的最佳时机（贪心/动归）。",
+  "domain": {
+    "l1": "其他",
+    "l2": "算法"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "best time to buy and sell stock"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+平台业务部
+1.问项目，项目中穿插八股，一段实习一段项目
+2.为什么用Nacos，你还用过其他的注册中心
+3.Eruka和Nacos有什么区别？
+4.http的状态码有哪些
+5.http和https的区别
+6.非对称加密是怎么实现的
+7.网关的作用
+8.主键索引和复合索引的
+9.数据库的优化方式
+10.redis和mysql如何保证数据一致性
+11.项目为什么这样划分(我自己的学习项目)
+12.ES的查询过程
+13.ES为什么要分片
+14.消息如何实时推送到前端
+两道算法
+1.类似于 股票卖出的最佳时机  用for循环直接写了，然后又讲了动归的思路。
+2.判断版本号 的大小 （我当时想到了网上很火的那个考GPT的问题 13.8和13.11谁大，然后我看错了示例，我看成了1.2版本大于1.10，写了一堆没用的，面试官说我想复杂了，然后我改了，但是时间不够了）1h
+目前状态没变
+```
+
+## `cq_q_3bf259d7b6e7b206848ba45de660e99a`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "编程实现：给定字符串（如 \"ab12cd34\"），编写代码提取其中的指定子串（如 \"12\"）。要求口述或编写正则表达式方案"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3bf259d7b6e7b206848ba45de660e99a",
+  "canonical_title": "编程实现：给定字符串（如 \"ab12cd34\"），编写代码提取其中的指定子串（如 \"12\"）。要求口述或编写正则表达式方案",
+  "companies": [
+    "未知大厂"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "算法与数据结构",
+    "l2": "字符串"
+  },
+  "primary_entities": [
+    "regex"
+  ],
+  "question_ids": [
+    "3bf259d7b6e7b206848ba45de660e99a"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `67ef221f000000001b03ae6a`
+
+- tagged: `note_tagged/67ef221f000000001b03ae6a.json`
+- caption: `note_desc/67ef221f000000001b03ae6a.txt`
+- image transcript: `note_img_txt/67ef221f000000001b03ae6a.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3bf259d7b6e7b206848ba45de660e99a",
+  "original_question": "编程实现：给定字符串（如 \"ab12cd34\"），编写代码提取其中的指定子串（如 \"12\"）。要求口述或编写正则表达式方案",
+  "domain": {
+    "l1": "算法",
+    "l2": "字符串"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L1_Principle",
+  "tech_entities": [
+    "regex"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+1. 开头介绍了技术架构：
+服务层我们按照ddd架构将业务划分为策略`活动、奖品、积分和返利，微服务之间通过dubbo调用，用nacos做注册机。
+因为前后端分离，需要把接口暴露给app使用，引入api网关控制更加细粒度的接口权限，结合nginx做反向代理，lvs负载均衡。因为api网关是集中化管理，因此对所有接入流量在发起调用时，可以增加各种拦截挡板去相应安全日志、限流熔断的控制，保证稳定性。
+服务层往下是基础设施层支撑，用redis缓存热点数据减轻数据库压力，mysql采用dbrouter实现分库分表，根据userid等字段进行路由，mq消息队列做异步处理，es与canal配合，通过binlog实现全文检索和复杂查询。
+2. 为什么要把业务拆成这5个微服务，为什么不拆成4个？那5个和4个之间的差别是什么？基于一个什么样的参考标准去做这样的划分？
+3. 月活用户是多少？分多少库多少表？限流和熔断总接口的qps
+4. 业务的活跃接口是什么
+5.  机房是云服务器还是我们自己的
+6. mysql版本，为啥选用可重复读事务隔离级别
+7. 机器多少
+8. redis几主几从
+9.  输入ab12cd34，输出12。用正则表达式解决的。
+#后端开发[话题]# #社招[话题]#
+```
+
+Image transcript:
+
+```text
+10 import java.util.regex.Pattern;
+// TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
+// click the icon src="AllIcons.Actions.Execute"/> icon in the gutter.
+//输入ab12cd34ef,输出12
+//遍历、提取连续数字、转换返回
+new
+public class StringToInt{
+public static int strToInt(String s){
+Pattern pattern = Pattern.compile(regex: "\\d+");
+Matcher matcher = pattern.matcher(s);
+return matcher.find() ? Integer.parseInt(matcher.group()) : 0;
+}
+new
+public static void main(String[] args){
+System.out.println(strToInt(s: "ab12cd34ef"));
+}
+}
+[滴滴出行】 面试邀请函
+12:31
+hr@didiglobal.com
+详情く
+滴滴 | 招聘
+需求,现诚邀您来参加我公司的面试。(此邮件为系统发送,无需回复)
+应聘职位:
+高级后端研发工程师-安全
+面试时间:
+2025-04-02 19:00
+面试地点/链接:
+https://z.didi.cn/ObuPkFz
+面试形式:
+视频面试
+(请提前下载腾讯会议app或者客户端,届时直接点击会议链接进入即可)
+HR联系人:
+马琳(yumima_l@didiglobal.com),联系电话:15291975815 (咨询职
+位、修改面试时间)
+现场接待人:
+无(咨询路线、现场协调)
+备注:
+关于我们:滴滴出行(www.didiglobal.com)是全球领先的一站式移动出
+行平台,希望您与我们一起让出行更美好。
+滴滴 | 招聘
+```
+
+## `cq_q_3c1de47a37045804edd3e2e78ec3856d`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "手撕：二维数组找 target"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3c1de47a37045804edd3e2e78ec3856d",
+  "canonical_title": "手撕：二维数组找 target",
+  "companies": [
+    "腾讯云智"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "其他",
+    "l2": "其他"
+  },
+  "primary_entities": [
+    "查找算法",
+    "二维数组"
+  ],
+  "question_ids": [
+    "3c1de47a37045804edd3e2e78ec3856d"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `67ea79ff000000001b03c94a`
+
+- tagged: `note_tagged/67ea79ff000000001b03c94a.json`
+- caption: `note_desc/67ea79ff000000001b03c94a.txt`
+- image transcript: `note_img_txt/67ea79ff000000001b03c94a.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3c1de47a37045804edd3e2e78ec3856d",
+  "original_question": "手撕：二维数组找 target",
+  "domain": {
+    "l1": "其他",
+    "l2": "算法"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L3_Diagnostic",
+  "tech_entities": [
+    "二维数组",
+    "查找算法"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+腾讯云智一面
+1. 你这里实现了一个多端数据同步用到了redis和rabbitmq，具体实现流程，redis和rabbitmq分别用在哪里？
+2. netty底层用到了java中的NIO吗
+3. java中你比较熟悉的技术是哪些
+4. 说一下你了解的垃圾回收的方法流程，优势在哪里（stop world）
+5. 进程间通信方式#后端开发[话题]# #java[话题]# #大厂[话题]#
+6. 信号量应用场景
+7. 介绍一下弱引用，java中有哪些应用场景
+8. threadlocal键如果使用强引用怎么解决内存泄漏的问题？
+9. 红黑树的特征优势？描述一下插入节点的流程
+10. netty底层为什么能支持一个高并发
+11. 具体怎么实现IO多路复用的
+12. 解决hash冲突的方式
+13. 项目中用到的聚类方法
+14. 数据切片以及提取
+15. 手撕：二维数组找target
+```
+
+Image transcript:
+
+```text
+腾讯云智
+一面
+```
+
+## `cq_q_3c7d96b17f91a649fa290bd93958f08c`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法：计算二叉树中叶子节点间距离小于指定 distance 的节点对数 (Tree DP)"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3c7d96b17f91a649fa290bd93958f08c",
+  "canonical_title": "算法：计算二叉树中叶子节点间距离小于指定 distance 的节点对数 (Tree DP)",
+  "companies": [
+    "快手"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "算法与数据结构",
+    "l2": "树"
+  },
+  "primary_entities": [
+    "二叉树"
+  ],
+  "question_ids": [
+    "3c7d96b17f91a649fa290bd93958f08c"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `6783d73d000000000203cb38`
+
+- tagged: `note_tagged/6783d73d000000000203cb38.json`
+- caption: `note_desc/6783d73d000000000203cb38.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3c7d96b17f91a649fa290bd93958f08c",
+  "original_question": "算法：计算二叉树中叶子节点间距离小于指定 distance 的节点对数 (Tree DP)",
+  "domain": {
+    "l1": "算法",
+    "l2": "树"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "二叉树"
+  ],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+快手-效率工程-一面 9.29
+常规自我介绍3 mins、项目介绍10 mins
+聊一聊Java的锁
+Java中synchronized和Lock的区别
+JVM的GC阶段都会有那些动作，聊一下CMS的操作
+MySQL的各种索引？B+树和B树
+MySQL是如何实现可重复读的？
+Redis的几种部署架构，都分别解决了什么问题
+Redis获取数据的时间复杂度？为什么能这么快
+聊一聊RPC框架，对Dubbo是否有了解？
+Kafka和RocketMQ的对比
+了解雪花算法么，请你设计一个订单系统，要求如下：订单ID长为32位；每天的增量为1千万；订单号中要包含商品属性、时间属性、国家等因素
+
+快手-流量业务-一面 12.09（通过）
+常规自我介绍 2 mins，项目介绍20 mins
+MySQL是如何实现事务的
+分库分表的具体实现？
+MySQL主从同步的具体流程
+binlog 的格式，都有什么类型
+binlog的写入时机
+MySQL的锁都有哪些？插入意向锁是怎么用的
+MySQL全表更新
+Redo Log、Undo Log、Binlog
+死锁的四个特性？
+Redisson的实现机理？
+Redis Lua脚本的劣势？
+Redis的原生集群模式可能会有什么问题？
+
+快手-流量业务-二面 12.11（通过）
+常规自我介绍 2 mins，项目介绍15 mins
+聊一下ES的分布式架构
+Redis的哨兵机制和持久化机制
+Redis的分布式锁Redisson
+Java synchronized实现原理？锁升级的过程？
+场景题：实现一个分库分表，采用灰度的方式，在新的库中会按照新的映射方式
+分布式事务的实现手段
+ThreadLocal的内存泄漏问题和扩容机制
+Java的volatile和CAS
+
+快手-流量业务-三面 12.12（通过）
+项目介绍（25 mins）：
+健康度模块的架构设计以及对于整个系统的收益
+重构时期的新老数据迁移是怎么做的
+系统的可用性保障措施？Flink任务的保障措施？
+聊一聊做过的慢SQL优化，提了两点：
+join连接替换子查询
+小表join大表 -》延伸问题：如果是大表join大表有什么优化手段
+算法题：算出一棵树里面叶子节点之间距离小于指定距离distance的pair数
+
+快手-流量业务-HR面 12.16
+工作亮点
+为什么离职？
+过去的绩效如何？晋升原因和时间？
+你在上一份工作的工作沉淀？
+期望薪酬
+。。。
+
+#java后端#2年经验#大厂背景#java面试#经验分享
+```
+
+## `cq_q_3d550dfc40061007739e893f666d49f2`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "SQL：查询购买两个及以上不同产品的用户信息 (user_id, count(distinct product_id) >= 2)"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3d550dfc40061007739e893f666d49f2",
+  "canonical_title": "SQL：查询购买两个及以上不同产品的用户信息 (user_id, count(distinct product_id) >= 2)",
+  "companies": [
+    "未知"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "数据库",
+    "l2": "SQL优化"
+  },
+  "primary_entities": [
+    "sql"
+  ],
+  "question_ids": [
+    "3d550dfc40061007739e893f666d49f2"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `68257aa6000000000c03b24b`
+
+- tagged: `note_tagged/68257aa6000000000c03b24b.json`
+- caption: `note_desc/68257aa6000000000c03b24b.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3d550dfc40061007739e893f666d49f2",
+  "original_question": "SQL：查询购买两个及以上不同产品的用户信息 (user_id, count(distinct product_id) >= 2)",
+  "domain": {
+    "l1": "数据库",
+    "l2": "SQL优化"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "sql"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+八股 + 项目
+1.自我介绍
+2.HashMap 底层实现原理？线程安全问题？
+3.在高并发的情况下使用Map有哪些做法？
+4.Java内存的区域划分
+5.垃圾回收算法，每种算法的优缺点
+6.MVCC实现原理
+7.自己想一个例子来说明DNS的工作原理和工作流程
+9.项目问题。
+10.算法：15.三数之和 11.盛水最多的容器
+11.sql题目：有一个user表有user_id, user_name，一个order表，order表中有order_id, user_id, product_id，查出来购买两个及以上不同产品的用户信息
+12.实验室相关问题。
+反问
+- 简历改进
+- 技术栈学习
+```
+
+## `cq_q_3de03dc6dea1f4c4fa3022b5283db2ea`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法：[200，1，100，2，90，3，80，4]奇数递增，偶数递减的链表排序"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3de03dc6dea1f4c4fa3022b5283db2ea",
+  "canonical_title": "算法：[200，1，100，2，90，3，80，4]奇数递增，偶数递减的链表排序",
+  "companies": [
+    "腾讯云智"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "算法与数据结构",
+    "l2": "链表"
+  },
+  "primary_entities": [
+    "链表拆分排序合并"
+  ],
+  "question_ids": [
+    "3de03dc6dea1f4c4fa3022b5283db2ea"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `6809e0d6000000001c015fe6`
+
+- tagged: `note_tagged/6809e0d6000000001c015fe6.json`
+- caption: `note_desc/6809e0d6000000001c015fe6.txt`
+- image transcript: `note_img_txt/6809e0d6000000001c015fe6.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3de03dc6dea1f4c4fa3022b5283db2ea",
+  "original_question": "算法：[200，1，100，2，90，3，80，4]奇数递增，偶数递减的链表排序",
+  "domain": {
+    "l1": "算法与数据结构",
+    "l2": "链表"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L3_Diagnostic",
+  "tech_entities": [
+    "链表拆分排序合并"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+自我介绍
+项目介绍
+拷打项目
+
+八股
+
+Java面向对象三大特征
+Linkedlist和Arraylist区别
+死锁四大条件
+Hashmap扩容机制
+ACID介绍下
+索引介绍下
+缓存三件套
+三握四挥
+
+手撕
+1.  [200，1，100，2，90，3，80，4]奇数递增，偶数递减的链表排序
+2.  hot100原题 （leetcode169.多数元素）
+
+反问
+部门主要技术栈，部门主要做什么
+
+ps面试官人贼好，很有耐心，奈何我太菜了[哭惹R][哭惹R]#java[话题]# #面经[话题]# #后端面试[话题]#
+```
+
+Image transcript:
+
+```text
+--- 图片 1 ---
+腾讯云智26
+后台开发
+一面
+
+--- 笔记描述文本 ---
+自我介绍
+项目介绍
+拷打项目
+
+八股
+
+Java面向对象三大特征
+Linkedlist和Arraylist区别
+死锁四大条件
+Hashmap扩容机制
+ACID介绍下
+索引介绍下
+缓存三件套
+三握四挥
+
+手撕
+1.  [200，1，100，2，90，3，80，4]奇数递增，偶数递减的链表排序
+2.  hot100原题 （leetcode169.多数元素）
+
+反问
+部门主要技术栈，部门主要做什么
+
+ps面试官人贼好，很有耐心，奈何我太菜了[哭惹R][哭惹R]#java[话题]# #面经[话题]# #后端面试[话题]#
+```
+
+## `cq_q_3e0fe4f12f951128a2a1fb250199dcd6`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法手撕：对称二叉树（Symmetric Tree）。"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3e0fe4f12f951128a2a1fb250199dcd6",
+  "canonical_title": "算法手撕：对称二叉树（Symmetric Tree）。",
+  "companies": [
+    "未知"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "操作系统",
+    "l2": "其他"
+  },
+  "primary_entities": [
+    "二叉树"
+  ],
+  "question_ids": [
+    "3e0fe4f12f951128a2a1fb250199dcd6"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `68b91ba2000000001c00e8bf`
+
+- tagged: `note_tagged/68b91ba2000000001c00e8bf.json`
+- caption: `note_desc/68b91ba2000000001c00e8bf.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3e0fe4f12f951128a2a1fb250199dcd6",
+  "original_question": "算法手撕：对称二叉树（Symmetric Tree）。",
+  "domain": {
+    "l1": "计算机基础",
+    "l2": "算法"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L1_Principle",
+  "tech_entities": [
+    "二叉树"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+1.对称二叉树
+2.写一个排序算法
+3.项目拷打
+4.kafka和rabbitmq区别，为什么大家都使用kafka（不会rabbitmq）
+5.解释什么是kafka
+6.他的优势是什么？（数据不丢失balabala，副本，offset）打断了说的不对
+7.sql优化
+8.hdfs和Hive的区别
+9.spark和hive的区别
+10.hive中存储格式
+11.Application、job、stage、task区别
+12.宽依赖窄依赖
+13.scala里object和class方法的区别
+14.dateframe和dataset的区别
+15.TCPIp
+16.OSI七层
+17.java垃圾回收机制
+#校招[话题]# #面经[话题]#
+```
+
+## `cq_q_3e406e6dedb661f2b0b02d4355917de0`
+
+### Canonical record
+
+```json
+{
+  "aliases": [
+    "算法：贪心+双指针"
+  ],
+  "answer_status": "needs_update",
+  "canonical_id": "cq_q_3e406e6dedb661f2b0b02d4355917de0",
+  "canonical_title": "算法：贪心+双指针",
+  "companies": [
+    "贝壳"
+  ],
+  "frequency": 1,
+  "primary_domain": {
+    "l1": "算法与数据结构",
+    "l2": "其他"
+  },
+  "primary_entities": [
+    "双指针"
+  ],
+  "question_ids": [
+    "3e406e6dedb661f2b0b02d4355917de0"
+  ],
+  "review_priority": "P2",
+  "schema_version": "canonical_question.v1"
+}
+```
+
+### Source hits (1)
+
+#### Source 1: `684280640000000012001d9b`
+
+- tagged: `note_tagged/684280640000000012001d9b.json`
+- caption: `note_desc/684280640000000012001d9b.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "3e406e6dedb661f2b0b02d4355917de0",
+  "original_question": "算法：贪心+双指针",
+  "domain": {
+    "l1": "算法",
+    "l2": "贪心算法"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L2_Mechanism",
+  "tech_entities": [
+    "双指针"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+一面：
+面试内容：
+考察项目经验（项目的核心数据是什么，有哪些维度，是否有真实业务流量，数据库分库分表策略，数据库设计思路，如何应对未来可能的大流量）。主要是为了考察是否有过实际上线的项目经验
+2.java基础考察(事务隔离级别和其机制、业务中做过的索引优化、redis持久化、redis集群模式)
+3.Juc考察（wait和sleep区别，synchronize和lock）
+4.算法题（二叉树两点之间最长距离）
+面试体验：
+和善并且易于沟通，项目以及八股偏多
+
+二面：
+面试内容：
+1.询问项目亮点、挑战以及如何解决（面试官想要看出我处理问题的思路与能力以及对问题思考的深度）
+2.八股（线程池参数、如何将核心线程一次性全部创建、CAS和AQS，AOP的失效场景，索引的缺点，UUID的缺点）
+3.代码题（贪心加双指针）
+面试体验：
+不追问需要自己往深处答，主要考察八股
+
+三面：
+面试内容：
+1.为什么选择计算机行业（职业规划是否清晰）
+2.从学生转变为职场人的话，有什么一些认知上的变化？（考察是否知道职场需要什么，以及是否能适应这种转变）
+3.从哪里了解到我们贝壳（对公司和其文化是否有做过了解）
+对于工作地点的考虑和家人对工作地点的想法（考察是否有长期培养可能）
+北京都投递了哪些企业（调研公司在学生这的竞争力）
+你觉得在团队合作里面最主要的是什么（是否能够适应团队合作的工作环境）
+面试体验：
+面试官相当友善和专业，面试侧重于询问经历和判断三观是否契合
+
+💌本份面经由OfferShow精英群用户提供，未经允许，请勿转载
+﻿#互联网大厂[话题]#﻿﻿#面经[话题]#﻿﻿#面试经验[话题]#﻿﻿#面试经历[话题]#﻿﻿#互联网大厂面经[话题]#﻿﻿#贝壳面试[话题]#﻿ ﻿#贝壳开发面试[话题]#﻿ ﻿#贝壳开发[话题]#﻿ ﻿#贝壳面试题[话题]#﻿
+```

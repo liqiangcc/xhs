@@ -1,0 +1,137 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_12ddfcc24143adac1b20b63f547516e7",
+  "candidate_sha256": "fb8e583f6871369c0ca063d6bda5709c88744e5c8009d6adbb670c7a96798bd8",
+  "checked_at": "2026-08-22",
+  "writer": {
+    "writer_id": "automation-content-builder-reverse-between-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-67dcc3ec",
+      "title": "Interview note containing the one-pass linked-list subrange reversal question",
+      "locator": "note_desc/67dcc3ec000000001c007e3a.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "batch-0015-source-boundary-audit",
+      "title": "Answer Batch 0015 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0015/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "reverse-between-validation",
+      "title": "Deterministic Java validation against an array subrange-reversal oracle",
+      "locator": "review/content_build/answer_batch_0015/cq_q_12ddfcc24143adac1b20b63f547516e7/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-22"
+    },
+    {
+      "source_id": "reverse-between-isolated-review",
+      "title": "Source-first isolated review for the reverse-between candidate",
+      "locator": "review/content_build/answer_batch_0015/cq_q_12ddfcc24143adac1b20b63f547516e7/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-22"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recovered source asks for a one-pass reversal of linked-list nodes from m through n, but does not preserve indexing convention, invalid-range behavior, null-input behavior or whether mutation is required.",
+      "source_ids": ["xhs-raw-note-67dcc3ec", "batch-0015-source-boundary-audit"],
+      "answer_locations": ["核心结论", "关键细节"]
+    },
+    {
+      "claim_id": "head-insertion-invariant",
+      "text": "Keeping before immediately ahead of the reversed region and current at that region's tail lets each current.next node be detached and inserted at the front while preserving connectivity until the whole interval is reversed.",
+      "source_ids": ["reverse-between-validation", "reverse-between-isolated-review"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "space-and-time",
+      "text": "The implementation performs one forward positioning/traversal path without restarting from the head and stores only a dummy node plus a constant number of references, yielding linear time and O(1) auxiliary space.",
+      "source_ids": ["reverse-between-validation", "reverse-between-isolated-review"],
+      "answer_locations": ["核心结论", "关键细节", "常见追问"]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java implementation passes seven fixed interval cases and 5000 deterministic randomized valid linked-list/range combinations against an array-reversal oracle while checking result length and absence of extra nodes or cycles.",
+      "source_ids": ["reverse-between-validation"],
+      "answer_locations": ["原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "12ddfcc24143adac1b20b63f547516e7",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "javac ReverseBetween.java ReverseBetweenTest.java && java ReverseBetweenTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=7 randomized=5000 oracle=array-subrange-reversal ordered=true acyclic=true",
+    "checks": [
+      "middle, prefix, suffix and full-list reversal",
+      "m == n no-op and single-element list",
+      "two-element full reversal",
+      "5000 deterministic randomized valid ranges against an array-subrange-reversal oracle",
+      "result length preservation and no extra node or cycle",
+      "null-head fail-fast candidate behavior",
+      "m < 1 fail-fast candidate behavior"
+    ],
+    "boundary_tests": [
+      {
+        "case": "range begins at the head",
+        "expected": "dummy predecessor permits the same pointer-rewiring loop without a head-specific branch",
+        "passed": true
+      },
+      {
+        "case": "range ends at the tail",
+        "expected": "tail remains null and the suffix boundary stays connected",
+        "passed": true
+      },
+      {
+        "case": "single-node range",
+        "expected": "returns the original ordering without pointer movement",
+        "passed": true
+      },
+      {
+        "case": "candidate invalid-input boundary",
+        "expected": "null and m < 1 fail fast; n beyond length remains outside the declared candidate contract",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-reverse-between-20260822",
+    "review_version": "reverse-between.head-insertion.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate is source-bounded and clearly separates recovered requirements from selected API assumptions.",
+      "The pointer invariant and one-forward-traversal explanation match the Java implementation.",
+      "The independent oracle exercises both fixed edge positions and 5000 deterministic randomized valid ranges without reusing the linked-list algorithm.",
+      "The tests guard against result truncation, extra nodes and cycles in addition to value-order correctness.",
+      "No unsupported project, online-judge or hidden-constraint claims were introduced.",
+      "Formal promotion remains blocked only by the pilot human-approval gate."
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_cache_consistency_a83eeb36","version":1,"status":"draft","updated_at":"2026-07-11","answer_type":"scenario","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_cache_consistency_a83eeb36","version":2,"status":"draft","updated_at":"2026-07-11","answer_type":"scenario","quality_tier":"candidate"} -->
 # 如何保证 MySQL 与 Redis 的缓存一致性？
 
 ## 核心结论
@@ -41,7 +41,11 @@ binlog 监听不是第二个真源，而是同一 MySQL 变更流的纠偏消费
 
 ## 项目经验版
 
-项目映射提示：请补充真实表结构、key 规则、读写比例、可接受陈旧窗口、当前 CDC/消息组件、binlog 保留配置、报警阈值与一次故障演练记录。不要虚构“延迟双删解决过线上问题”或具体 QPS；面试时应明确哪些是已上线事实、哪些是设计方案。
+以下是一个**假设性落地示例，不代表真实个人项目经历**。假设商品详情服务以 MySQL 8.4 为真源、Redis 为 cache-aside 读缓存，写请求在一个 InnoDB 事务内更新商品行并插入 outbox 失效事件。事务提交后，CDC/worker 按商品主键路由事件并执行 `DEL cache:product:{id}`；重复事件允许重复删除，同一个 key 不存在时再次删除不会把旧值写回。
+
+如果失效消费者暂停，数据库仍是正确真值，但缓存会在显式失效到达或 TTL 到期前继续提供旧值，因此应同时观察最老 outbox 事件年龄、CDC 位点/延迟、Redis 删除失败率、热点 miss 回源率和数据库读放大。恢复时先从持久位点重放失效事件；如果位点已超出 binlog 保留窗口，则按受影响实体/时间窗做受控批量失效或重建，而不是假装链路仍连续。
+
+上线验证至少覆盖：DB 提交后立即杀掉失效 worker、Redis 超时、同一失效事件重复投递、消费者暂停后恢复、热点 key 同时过期、以及旧读请求跨越写事务完成后再回填等竞态。验收目标不是“任何时刻缓存和数据库字节完全相同”，而是已提交数据库变更都有可恢复的失效路径，陈旧窗口受业务约束和 TTL/告警共同界定，且故障恢复不会把缓存误当成真源。
 
 ## 常见追问
 

@@ -1,0 +1,127 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_0d11f525c0d8aad8db67eff8b0764f3d",
+  "candidate_sha256": "e27d765b13a0956a590e02b2fd6d7f92e7cfc64b2bca2c0fc40e3417410cfdaf",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-k-smallest-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-note-66a8afa7-structured",
+      "title": "Structured Kuaishou interview note containing the K-smallest prompt",
+      "locator": "note_structured/66a8afa700000000090150f0.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "xhs-question-0d11f525",
+      "title": "Tagged repository question record for K smallest array elements",
+      "locator": "note_tagged/66a8afa700000000090150f0.json#question_id=0d11f525c0d8aad8db67eff8b0764f3d",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "k-smallest-validation",
+      "title": "Deterministic Java validation against full-sort-prefix oracle",
+      "locator": "review/content_build/answer_batch_0013/cq_q_0d11f525c0d8aad8db67eff8b0764f3d/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The recovered source says only to find K smallest elements in an array and does not specify distinctness, result ordering, input mutation, or invalid-K behavior; the candidate explicitly declares those implementation contracts.",
+      "source_ids": ["xhs-note-66a8afa7-structured", "xhs-question-0d11f525"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "heap-invariant",
+      "text": "With a max-heap capped at K, after each processed prefix the heap contains that prefix's K smallest values under multiplicity semantics; the heap maximum is exactly the boundary candidate that can be replaced by a smaller new value.",
+      "source_ids": ["k-smallest-validation"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+    },
+    {
+      "claim_id": "duplicates-and-order-contract",
+      "text": "The implementation preserves duplicate occurrences, does not mutate input, and sorts only the final K candidates to provide a deterministic ascending output under the candidate's declared contract.",
+      "source_ids": ["k-smallest-validation"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The capped-heap scan costs O(n log K) time and O(K) heap space; ascending output adds O(K log K) sorting, while an unordered result can omit that final sort.",
+      "source_ids": ["k-smallest-validation"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "comparison-boundary",
+      "text": "Using Comparator.reverseOrder rather than subtraction avoids an overflow-prone integer comparator on MIN_VALUE/MAX_VALUE inputs.",
+      "source_ids": ["k-smallest-validation"],
+      "answer_locations": ["3 分钟版", "关键细节", "易错点"]
+    },
+    {
+      "claim_id": "deterministic-validation",
+      "text": "Eight fixed cases and 5000 fixed-seed arrays match an independent oracle that fully sorts a copy then takes its first K values; tests also verify source immutability and explicit invalid-input behavior.",
+      "source_ids": ["k-smallest-validation"],
+      "answer_locations": ["原理机制", "常见追问"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "0d11f525c0d8aad8db67eff8b0764f3d",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "javac KSmallest.java KSmallestTest.java && java KSmallestTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=8 randomized=5000 oracle=full-sort-prefix input_immutable=true invalid_k=fail-fast",
+    "checks": [
+      "K=0 and K=n boundaries",
+      "duplicate multiplicity, negative values, and integer extremes",
+      "5000 fixed-seed arrays match a full-sort-prefix oracle",
+      "input remains unchanged",
+      "null, negative K, and K greater than length fail fast"
+    ],
+    "boundary_tests": [
+      {"case": "duplicates [1,1,2], K=2", "expected": "[1,1] under multiplicity contract", "passed": true},
+      {"case": "Integer.MIN_VALUE/MAX_VALUE", "expected": "correct ordering without subtraction-comparator overflow", "passed": true},
+      {"case": "K=0 and K=n", "expected": "empty result or complete sorted result", "passed": true},
+      {"case": "5000 fixed-seed random arrays", "expected": "result equals sorted-copy prefix", "passed": true},
+      {"case": "source immutability", "expected": "input bytes remain unchanged", "passed": true}
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-k-smallest-20260821",
+    "review_version": "k-smallest.heap-contract.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The source-first boundary is preserved: distinctness, result order, mutation, and invalid-K behavior are declared candidate contracts rather than attributed to the original interview note.",
+      "The max-heap choice is justified by the replacement boundary and is accompanied by a prefix invariant rather than a memorized Top-K slogan.",
+      "Duplicate multiplicity is explicitly covered, preventing accidental Set semantics.",
+      "The implementation avoids subtraction-based comparator overflow and the fixed tests include integer extremes.",
+      "The deterministic oracle uses full sorting rather than reproducing the heap algorithm, and randomized coverage checks input immutability as a separate property.",
+      "The answer distinguishes heap, full-sort, and Quickselect tradeoffs without pretending the source required one specific algorithm.",
+      "No project or production claims are fabricated.",
+      "Required human approval remains a separate promotion gate."
+    ]
+  }
+}

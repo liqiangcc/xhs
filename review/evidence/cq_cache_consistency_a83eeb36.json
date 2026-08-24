@@ -1,93 +1,116 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_cache_consistency_a83eeb36",
-  "candidate_sha256": "f83c93f51468987c4a509faae3bd3da265f23fd8d4fc7a9c60048d94224d1a8d",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "f2fed77ca442690af439dc02bbe14a2bd4fcb7b811d0b8971d6cf4e00c701397",
+  "checked_at": "2026-08-18",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "cache-consistency.v1"
+    "writer_version": "cache-consistency-primary-sources.v2"
   },
   "sources": [
     {
+      "source_id": "redis-cache-aside",
+      "title": "Redis Docs: Cache-aside",
+      "locator": "https://redis.io/docs/latest/develop/use-cases/cache-aside/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
       "source_id": "redis-del",
-      "title": "Redis DEL command",
+      "title": "Redis Docs: DEL",
       "locator": "https://redis.io/docs/latest/commands/del/",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
     },
     {
-      "source_id": "mysql-binlog",
-      "title": "MySQL 8.4 Binary Log",
+      "source_id": "mysql-84-binary-log",
+      "title": "MySQL 8.4 Reference Manual: The Binary Log",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/binary-log.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
     },
     {
-      "source_id": "mysql-replication-flow",
-      "title": "MySQL 8.4 Replication Implementation",
-      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication-implementation.html",
+      "source_id": "mysql-84-transactions",
+      "title": "MySQL 8.4 Reference Manual: START TRANSACTION, COMMIT, and ROLLBACK",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/commit.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
     },
     {
-      "source_id": "cache-invalidation-trace",
-      "title": "Cache invalidation state-model trace",
-      "locator": "review/evidence/tests/cq_cache_consistency_a83eeb36/cache_invalidation_trace.test.js",
-      "source_type": "executable_test_or_reproducible_experiment",
-      "checked_at": "2026-07-11"
+      "source_id": "debezium-outbox",
+      "title": "Debezium Documentation: Outbox Event Router",
+      "locator": "https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
     }
   ],
   "claims": [
     {
-      "claim_id": "redis-delete-idempotent-boundary",
-      "text": "Redis DEL deletes specified keys and ignores absent keys, so repeated cache invalidation can use a delete operation without requiring the key to exist.",
+      "claim_id": "cache-aside-read-invalidate-ttl",
+      "text": "Redis documents cache-aside as reading Redis first, falling back to the primary on a miss, writing the fetched value back to Redis, and invalidating the cache key on updates. TTL bounds how long stale data can be served, while popular-key expiration can create a cache stampede.",
+      "source_ids": ["redis-cache-aside"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "redis-del-side-effect-boundary",
+      "text": "Redis DEL removes keys and ignores keys that do not exist. The candidate correctly limits repeated deletion to an idempotent cache-key side effect and does not claim that DEL establishes end-to-end distributed exactly-once delivery.",
       "source_ids": ["redis-del"],
-      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问"]
     },
     {
-      "claim_id": "mysql-binlog-change-stream",
-      "text": "MySQL binary logging records database changes and MySQL replication transfers requested binary-log events for later execution, which supports treating a controlled binlog subscriber as a change-driven invalidation input rather than a second source of truth.",
-      "source_ids": ["mysql-binlog", "mysql-replication-flow"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+      "claim_id": "mysql-commit-binlog-ordering",
+      "text": "MySQL 8.4 documents that binary logging happens after a statement or transaction completes but before locks are released or commit is done, and that transactional InnoDB changes are cached until COMMIT and written as the entire transaction to the binary log before COMMIT executes. COMMIT makes the transaction changes permanent. The candidate therefore keeps database durability and binlog ordering separate from whether an external cache-invalidation consumer has processed the change.",
+      "source_ids": ["mysql-84-binary-log", "mysql-84-transactions"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "易错点"]
     },
     {
-      "claim_id": "outbox-delete-state-model",
-      "text": "The reproducible state model verifies the conditional design invariant: after a committed DB version has a delivered invalidation event, repeated deletion leaves the cache absent and the next read-through rebuild observes the DB version; it also demonstrates that a DB commit can precede invalidation.",
-      "source_ids": ["cache-invalidation-trace"],
-      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "claim_id": "binlog-retention-recovery-boundary",
+      "text": "MySQL 8.4 warns not to delete old binary logs until consumers that still need them are accounted for and documents replay through mysqlbinlog. The candidate correctly treats a lost or expired CDC position as a recovery boundary that requires controlled invalidation or rebuild rather than silent continuation.",
+      "source_ids": ["mysql-84-binary-log"],
+      "answer_locations": ["3 分钟版", "关键细节", "项目经验版"]
+    },
+    {
+      "claim_id": "debezium-outbox-routing-and-dedup",
+      "text": "Debezium documents the outbox pattern as a way to avoid inconsistencies between a service's persisted internal state and events consumed by other services. A configured connector captures outbox-table changes and applies the outbox event router SMT; event id can be used to remove duplicates and aggregate id is used as the emitted event key for partition ordering. The candidate keeps this CDC role distinct from Redis deletion semantics.",
+      "source_ids": ["debezium-outbox"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问"]
+    },
+    {
+      "claim_id": "scenario-race-and-operations-boundaries",
+      "text": "The delayed-double-delete race explanation, hot-key singleflight or mutex or limiting controls, retry and dead-letter handling, read-your-writes bypass choices, observability metrics, and load or fault-injection plan are explicitly presented as scenario design choices or failure controls rather than undocumented Redis or MySQL defaults. They are consistent with the documented cache-aside staleness, stampede, transaction, and binary-log boundaries.",
+      "source_ids": ["redis-cache-aside", "mysql-84-binary-log"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "易错点"]
     }
   ],
   "source_question_coverage": [
     {
       "question_id": "398169cd09bbf07891d26502dffe815f",
       "covered": true,
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
     }
   ],
-  "validation": {
-    "command": "node review/evidence/tests/cq_cache_consistency_a83eeb36/cache_invalidation_trace.test.js",
-    "result": "passed"
-  },
   "review": {
-    "reviewer_id": "cache-consistency-isolated-reviewer",
-    "review_version": "v1",
+    "reviewer_id": "source-first-isolated-reviewer-cache-consistency-r1",
+    "review_version": "cache-consistency-primary-sources-source-first.v1",
     "independent": true,
     "decision": "pass",
     "revision_round": 1,
     "scores": {
-      "facts_and_evidence": 23,
+      "facts_and_evidence": 25,
       "directness_and_relevance": 20,
       "type_specific_completeness": 18,
-      "mechanism_and_causality": 14,
-      "boundaries_and_tradeoffs": 9,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
       "followup_quality": 5,
-      "oral_quality": 4
+      "oral_quality": 5
     },
     "hard_failures": [],
-    "revision_suggestions": [
-      "明确旧读窗口依赖 TTL、正确回填源和后续失效；删除先发生、旧读后回填仍可能留下一个 TTL 窗口。",
-      "补充以 R/W/C/T 为变量的容量验算模板。",
-      "补充 outbox 完成事件的保留与清理边界。"
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate directly covers delayed double-delete, binlog listening, cache-aside invalidation, stale-read windows, recoverable asynchronous invalidation, hot-key stampede, retries, observability and recovery without claiming Redis and MySQL form a single strong-consistency transaction.",
+      "Redis DEL is scoped only to repeated cache-key deletion; the answer does not turn it into an end-to-end exactly-once guarantee.",
+      "The project section is explicitly hypothetical and cannot reasonably be read as a fabricated personal production claim."
     ]
   }
 }

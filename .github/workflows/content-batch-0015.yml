@@ -1,0 +1,154 @@
+name: Content Batch 0015
+
+on:
+  push:
+    branches:
+      - content/quality-completion
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go 1.26.6
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.6'
+          cache: false
+
+      - name: Validate reverse-between candidate fixture
+        working-directory: review/content_build/answer_batch_0015/cq_q_12ddfcc24143adac1b20b63f547516e7
+        run: |
+          javac ReverseBetween.java ReverseBetweenTest.java
+          java ReverseBetweenTest
+
+      - name: Audit completed reverse-between candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_12ddfcc24143adac1b20b63f547516e7.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Validate three-array median candidate fixture
+        working-directory: review/content_build/answer_batch_0015/cq_q_149617b44a4092a42317fcdc4912ca2d
+        run: |
+          javac MedianOfThreeSortedArrays.java MedianOfThreeSortedArraysTest.java
+          java MedianOfThreeSortedArraysTest
+
+      - name: Audit completed three-array median candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_149617b44a4092a42317fcdc4912ca2d.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Validate Fibonacci-string candidate fixture
+        working-directory: review/content_build/answer_batch_0015/cq_q_1547f601c5bd6746da03d6b3cc246ee8
+        run: |
+          javac FibonacciString.java FibonacciStringTest.java
+          java FibonacciStringTest
+
+      - name: Audit completed Fibonacci-string candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_1547f601c5bd6746da03d6b3cc246ee8.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Validate per-day Top 2 SQL candidate fixture
+        working-directory: review/content_build/answer_batch_0015/cq_q_17b558215583de1ad3b47eda00479a00
+        run: |
+          python3 Top2PerDayTest.py
+
+      - name: Audit completed per-day Top 2 SQL candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_17b558215583de1ad3b47eda00479a00.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Validate render-visible usePrevious candidate fixture
+        working-directory: review/content_build/answer_batch_0015/cq_q_1b54beec356cebaa5bf68b8935cb9e0a
+        run: |
+          node --check UsePrevious.mjs
+          node UsePreviousStateModelTest.js
+
+      - name: Audit completed render-visible usePrevious candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_1b54beec356cebaa5bf68b8935cb9e0a.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Validate ordered goroutine candidate fixture
+        working-directory: review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2
+        run: |
+          go test -race -count=20 OrderedPrint.go OrderedPrint_test.go
+
+      - name: Verify ordered goroutine source-language and concurrency gates
+        run: |
+          node - <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const candidatePath = 'review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md';
+          const evidencePath = 'review/evidence/cq_q_187c619f3c62046184546a4f04cc40f2.json';
+          const reviewPath = 'review/content_build/answer_batch_0015/cq_q_187c619f3c62046184546a4f04cc40f2/concurrency_review_result.json';
+          const candidate = fs.readFileSync(candidatePath, 'utf8');
+          const candidateHash = crypto.createHash('sha256').update(candidate).digest('hex');
+          const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+          const review = JSON.parse(fs.readFileSync(reviewPath, 'utf8'));
+          if (!/(?:```|~~~)go\b/i.test(candidate)) throw new Error('runnable Go code fence missing');
+          if (evidence.candidate_sha256 !== candidateHash) throw new Error('evidence candidate hash mismatch');
+          if (evidence.validation?.result !== 'pass') throw new Error('Go validation evidence did not pass');
+          if (!String(evidence.validation?.command || '').includes('go test -race')) throw new Error('Go race command missing from evidence');
+          if (review.schema_version !== 'concurrency_review.v1') throw new Error('invalid concurrency review schema');
+          if (review.canonical_id !== 'cq_q_187c619f3c62046184546a4f04cc40f2') throw new Error('canonical mismatch');
+          if (review.candidate_sha256 !== candidateHash) throw new Error('concurrency review candidate hash mismatch');
+          if (review.decision !== 'pass') throw new Error('concurrency review did not pass');
+          if (!Array.isArray(review.open_findings) || review.open_findings.length !== 0) throw new Error('open concurrency findings remain');
+          if (review.concurrency_model?.race_detector !== 'pass') throw new Error('race detector evidence missing');
+          NODE
+
+      - name: Audit completed ordered goroutine candidate
+        run: |
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify candidate inputs are immutable under validation
+        run: |
+          git diff --exit-code -- \
+            review/candidates/answers/cq_q_12ddfcc24143adac1b20b63f547516e7.md \
+            review/candidates/answers/cq_q_149617b44a4092a42317fcdc4912ca2d.md \
+            review/candidates/answers/cq_q_1547f601c5bd6746da03d6b3cc246ee8.md \
+            review/candidates/answers/cq_q_17b558215583de1ad3b47eda00479a00.md \
+            review/candidates/answers/cq_q_1b54beec356cebaa5bf68b8935cb9e0a.md \
+            review/candidates/answers/cq_q_187c619f3c62046184546a4f04cc40f2.md \
+            review/content_build/answer_batch_0015 \
+            review/evidence/cq_q_12ddfcc24143adac1b20b63f547516e7.json \
+            review/evidence/cq_q_149617b44a4092a42317fcdc4912ca2d.json \
+            review/evidence/cq_q_1547f601c5bd6746da03d6b3cc246ee8.json \
+            review/evidence/cq_q_17b558215583de1ad3b47eda00479a00.json \
+            review/evidence/cq_q_1b54beec356cebaa5bf68b8935cb9e0a.json \
+            review/evidence/cq_q_187c619f3c62046184546a4f04cc40f2.json

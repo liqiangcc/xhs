@@ -1,0 +1,128 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_linux_commands_76aadb5b",
+  "candidate": {
+    "path": "review/candidates/answers/cq_linux_commands_76aadb5b.md",
+    "sha256": "d58cfe61f4d0471d67e0019fcfa7bf96b85678afcc7ffcc84c0d34fbb2322f8e",
+    "version": 3,
+    "answer_type": "concept"
+  },
+  "reviewed_at": "2026-08-19",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-linux-commands-r1",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "concept",
+    "historical_source_labels": [
+      "八股文_Concept"
+    ],
+    "reason": "Both restored source rows ask the same broad Linux common-command concept question. The normalized canonical narrows the useful interview scope to online troubleshooting, so a qualifying answer should organize commands by diagnostic purpose, explain how observations narrow the search space, state interpretation boundaries, and remain orally usable rather than become an unstructured command catalog."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "The /proc Filesystem — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/filesystems/proc.html",
+      "verified_claims": [
+        "procfs exposes process and system state used by monitoring and diagnosis, including load and task-related information",
+        "procfs data is an observation source that must be interpreted in the relevant process/system scope"
+      ]
+    },
+    {
+      "title": "proc_loadavg(5) — Linux man-pages",
+      "locator": "https://man7.org/linux/man-pages/man5/proc_loadavg.5.html",
+      "verified_claims": [
+        "Linux load average accounts for runnable tasks and tasks in uninterruptible sleep, so it is not equivalent to CPU utilization"
+      ]
+    },
+    {
+      "title": "PSI - Pressure Stall Information — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/accounting/psi.html",
+      "verified_claims": [
+        "PSI exposes CPU, memory and I/O pressure through /proc/pressure",
+        "pressure metrics quantify workload stall impact from resource contention rather than merely reporting capacity totals"
+      ]
+    },
+    {
+      "title": "Control Group v2 — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/admin-guide/cgroup-v2.html",
+      "verified_claims": [
+        "cgroup v2 provides scoped memory usage, event and pressure interfaces such as memory.current, memory.events and memory.pressure"
+      ]
+    },
+    {
+      "title": "iostat manual — sysstat upstream",
+      "locator": "https://github.com/sysstat/sysstat/blob/master/man/iostat.in",
+      "verified_claims": [
+        "the first iostat report normally covers time since system startup while subsequent reports cover the interval since the preceding report; -y omits the first report",
+        "%util near 100% is a saturation indication for devices that serve requests serially, but it does not express the performance limit of parallel devices such as RAID arrays and modern SSDs"
+      ]
+    },
+    {
+      "title": "sar manual — sysstat upstream",
+      "locator": "https://github.com/sysstat/sysstat/blob/master/man/sar.in",
+      "verified_claims": [
+        "sar can collect, save and later report system activity records, so retrospective incident analysis depends on collection having been configured and retained"
+      ]
+    },
+    {
+      "title": "strace project documentation",
+      "locator": "https://strace.io/",
+      "verified_claims": [
+        "strace traces system calls and signals and is appropriate as a scoped process-level diagnostic tool rather than a first-step global monitor"
+      ]
+    },
+    {
+      "title": "Perf events and tool security — Linux Kernel documentation",
+      "locator": "https://docs.kernel.org/admin-guide/perf-security.html",
+      "verified_claims": [
+        "performance-monitoring data can expose sensitive execution information and therefore requires an explicit access and production-safety boundary"
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 24,
+    "directness_and_relevance": 19,
+    "type_specific_completeness": 19,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 9,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 96
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "note",
+      "id": "LINUX-SF-001",
+      "finding": "The candidate directly answers the restored Linux common-command source rows through the canonical online-troubleshooting scope and uses each command as evidence in a narrowing diagnostic flow instead of drifting into the prior generic system-design template."
+    },
+    {
+      "severity": "note",
+      "id": "LINUX-SF-002",
+      "finding": "Load average is correctly separated from CPU utilization and cross-checked against CPU count, runnable/blocked tasks and pressure evidence, avoiding the common single-metric diagnosis error."
+    },
+    {
+      "severity": "note",
+      "id": "LINUX-SF-003",
+      "finding": "The iostat section correctly states first-report sampling semantics and preserves the upstream modern SSD/RAID boundary for %util instead of treating 100% as a universal storage saturation threshold."
+    },
+    {
+      "severity": "note",
+      "id": "LINUX-SF-004",
+      "finding": "The answer distinguishes host totals from cgroup-scoped memory accounting and PSI pressure, which is necessary for container/resource-limit diagnosis."
+    },
+    {
+      "severity": "note",
+      "id": "LINUX-SF-005",
+      "finding": "Historical sar use is conditional on retained collection data, strace/perf are scoped as deeper probes with operational and sensitive-data boundaries, and the project section explicitly refuses to invent incident metrics or outcomes."
+    }
+  ],
+  "decision": "pass",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_evidence_and_deterministic_audit_pass",
+  "next_required_action": "Bind the fixed candidate SHA to an answer_evidence sidecar, run the deterministic candidate audit with --require-evidence, then obtain the mandatory pilot human approval before atomic promotion. Do not fabricate approval or promotion state."
+}

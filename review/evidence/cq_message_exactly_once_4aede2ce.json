@@ -1,35 +1,146 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_message_exactly_once_4aede2ce",
-  "candidate_sha256": "4454d293b49d2d8273dbc282f94fca8a3997dbb1c5c6ca41d806dddbd8219323",
-  "checked_at": "2026-07-11",
-  "writer": {"writer_id": "answer-curator", "writer_version": "business-exactly-once-kafka-4-3.v1"},
+  "candidate_sha256": "d0ffb196270e5017f1b215fd63a2d18cb0dbb894bf60a547d40fe817f0e76ca6",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "business-exactly-once-kafka-4-3.v2"
+  },
   "sources": [
-    {"source_id": "kafka-4-3-producer-configs", "title": "Apache Kafka 4.3 Producer Configs", "locator": "https://kafka.apache.org/43/configuration/producer-configs/", "source_type": "official_documentation", "checked_at": "2026-07-11"},
-    {"source_id": "kafka-2-6-consumer-configs", "title": "Apache Kafka Consumer Configs: isolation.level", "locator": "https://kafka.apache.org/26/configuration/consumer-configs/", "source_type": "official_documentation", "checked_at": "2026-07-11"},
-    {"source_id": "kafka-delivery-semantics", "title": "Apache Kafka message delivery semantics", "locator": "https://kafka.apache.org/090/quickstart.html", "source_type": "official_documentation", "checked_at": "2026-07-11"},
-    {"source_id": "business-exactly-once-state-model", "title": "Reproducible processed-event, outbox and retry state-model test", "locator": "review/evidence/tests/cq_message_exactly_once_4aede2ce/exactly_once_state_model.test.js", "source_type": "executable_test_or_reproducible_experiment", "checked_at": "2026-07-11"}
+    {
+      "source_id": "kafka-4-3-producer-configs",
+      "title": "Apache Kafka 4.3 Producer Configs",
+      "locator": "https://kafka.apache.org/43/configuration/producer-configs/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-4-3-consumer-configs",
+      "title": "Apache Kafka 4.3 Consumer and Share Consumer Configs",
+      "locator": "https://kafka.apache.org/43/configuration/consumer-configs/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "kafka-4-3-design",
+      "title": "Apache Kafka 4.3 Design: Message Delivery Semantics and Using Transactions",
+      "locator": "https://kafka.apache.org/43/design/design/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "business-exactly-once-state-model",
+      "title": "Reproducible processed-event, outbox and retry state-model test",
+      "locator": "review/evidence/tests/cq_message_exactly_once_4aede2ce/exactly_once_state_model.test.js",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-18"
+    }
   ],
   "claims": [
-    {"claim_id": "kafka-idempotent-producer-and-transactional-id", "text": "Kafka 4.3 documents that enable.idempotence prevents producer-retry duplicates, and that transactional.id implies idempotence and provides recovery semantics across producer sessions; the candidate limits this to Kafka transport semantics.", "source_ids": ["kafka-4-3-producer-configs"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]},
-    {"claim_id": "kafka-read-committed-boundary", "text": "Kafka consumer documentation states that read_committed returns only committed transactional messages and may stop at the Last Stable Offset while transactions remain in flight.", "source_ids": ["kafka-2-6-consumer-configs"], "answer_locations": ["3 分钟版", "关键细节", "易错点"]},
-    {"claim_id": "kafka-exactly-once-destination-cooperation", "text": "Kafka delivery semantics documentation states that exactly-once requires cooperation with the destination storage system and explains coordinating consumer position with stored output. The candidate uses a single database transaction for processed-event state, business state, and outbox as its proposed destination-side design.", "source_ids": ["kafka-delivery-semantics"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]},
-    {"claim_id": "business-exactly-once-design-assumptions", "text": "The capacity values, processed-event schema, outbox flow, retry/degradation/compensation, observability, and rollout procedure are explicit design assumptions and acceptance requirements, not claims about a particular deployed system.", "source_ids": ["kafka-delivery-semantics", "business-exactly-once-state-model"], "answer_locations": ["3 分钟版", "关键细节", "原理机制", "项目经验版"]},
-    {"claim_id": "business-exactly-once-state-model", "text": "The executable state-model test verifies that duplicate delivery after an uncommitted offset does not create a second business or outbox record, and that a relay retry retains the same downstream event ID after an ambiguous send. The candidate explicitly requires production database transaction/unique-constraint and downstream-idempotency contracts in addition to this model.", "source_ids": ["business-exactly-once-state-model"], "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "关键细节", "常见追问", "易错点"]}
+    {
+      "claim_id": "kafka-idempotent-producer-and-transactional-id",
+      "text": "Kafka 4.3 documents idempotent producer semantics for producer retries and that configuring transactional.id enables transactional delivery with idempotence; the candidate explicitly limits this guarantee to Kafka transport/transaction boundaries.",
+      "source_ids": [
+        "kafka-4-3-producer-configs",
+        "kafka-4-3-design"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "kafka-read-committed-boundary",
+      "text": "Kafka 4.3 consumer documentation states that read_committed returns only committed transactional messages and can stop at the Last Stable Offset while a transaction remains open.",
+      "source_ids": [
+        "kafka-4-3-consumer-configs"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "destination-cooperation-boundary",
+      "text": "Kafka 4.3 design documentation separates Kafka transactional exactly-once processing from destination-storage cooperation. The candidate therefore does not claim that Kafka transactions atomically include arbitrary business databases or third-party APIs.",
+      "source_ids": [
+        "kafka-4-3-design"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "business-state-machine-design",
+      "text": "Stable event IDs, a database transaction covering processed-event state, business state and outbox, downstream idempotency, retention, observability, rollout and SLO inputs are explicit design requirements in the candidate rather than claims about a deployed production system.",
+      "source_ids": [
+        "kafka-4-3-design",
+        "business-exactly-once-state-model"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "business-exactly-once-state-model",
+      "text": "The executable model verifies that duplicate delivery after a committed business effect but before offset acknowledgement does not create a second business/outbox record, and that an outbox retry retains the same downstream event ID after an ambiguous send. The candidate explicitly treats real database transaction/unique-constraint semantics and downstream contracts as production prerequisites.",
+      "source_ids": [
+        "business-exactly-once-state-model"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    }
   ],
   "source_question_coverage": [
-    {"question_id": "12159127938867974d2acf61c575b233", "covered": true, "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]}
+    {
+      "question_id": "12159127938867974d2acf61c575b233",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
   ],
   "review": {
-    "reviewer_id": "isolated-reviewer",
-    "review_version": "isolated-r2.v1",
+    "reviewer_id": "message-exactly-once-source-first-rereview",
+    "review_version": "message-exactly-once.source-first.v3",
     "independent": true,
-    "decision": "revise",
-    "revision_round": 2,
-    "scores": {"facts_and_evidence": 25, "directness_and_relevance": 20, "type_specific_completeness": 15, "mechanism_and_causality": 15, "boundaries_and_tradeoffs": 10, "followup_quality": 5, "oral_quality": 3},
+    "decision": "pass",
+    "revision_round": 3,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
     "hard_failures": [],
     "uncovered_source_variants": [],
     "unsupported_claims": [],
-    "findings": ["场景假设缺少端到端 SLO/业务规模或待澄清验收目标。", "3 分钟版不可在三分钟内口述。"]
+    "findings": [
+      "本轮先按候选答案中的 Kafka 断言重新核对 Kafka 4.3 producer、consumer 与 Design 官方文档，再检查历史 revise 缺口；未发现把 Kafka 事务错误外推到任意外部数据库/API 的事实问题。",
+      "此前缺少场景输入/SLO 边界的问题已收口：候选明确要求峰值/积压、延迟、RPO/RTO、重放窗口和外部幂等能力；2 万条/秒与 30 天仅作为容量计算示例，不冒充真实生产指标。",
+      "3 分钟版已压缩为语义边界、主状态机、下游 outbox、Kafka 边界和验收/灰度五段，保留故障注入与可观测性闭环，来源问法完整覆盖。"
+    ]
   }
 }

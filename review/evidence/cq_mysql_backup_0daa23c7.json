@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_mysql_backup_0daa23c7",
-  "candidate_sha256": "76edc4933e0aca110b81ffc1bbf5c051762ed48f804011c0377e7c1b32d99db1",
-  "checked_at": "2026-07-11",
+  "candidate_sha256": "67fc49381e1f3ab17299adfa9bfc17df78ecb7d8048c22e4f06c0ad12cc682b1",
+  "checked_at": "2026-08-18",
   "writer": {
     "writer_id": "answer-curator",
-    "writer_version": "mysql-8.4-backup-pitr.v1"
+    "writer_version": "mysql-8.4-backup-pitr-r3.v1"
   },
   "sources": [
     {
@@ -13,84 +13,205 @@
       "title": "MySQL 8.4 backup and recovery types",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/backup-types.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "mysql-8-4-backup-methods",
+      "title": "MySQL 8.4 database backup methods",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/backup-methods.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "mysql-8-4-mysqldump",
+      "title": "MySQL 8.4 mysqldump — A Database Backup Program",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
     },
     {
       "source_id": "mysql-8-4-pitr-overview",
       "title": "MySQL 8.4 point-in-time recovery",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
     },
     {
       "source_id": "mysql-8-4-pitr-binlog",
       "title": "MySQL 8.4 point-in-time recovery using binary log",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery-binlog.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
     },
     {
       "source_id": "mysql-8-4-pitr-positions",
       "title": "MySQL 8.4 point-in-time recovery using event positions",
       "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery-positions.html",
       "source_type": "official_documentation",
-      "checked_at": "2026-07-11"
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "mysql-8-4-binary-log",
+      "title": "MySQL 8.4 binary log",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/binary-log.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
     }
   ],
   "claims": [
     {
-      "claim_id": "mysql-physical-logical-backup-tradeoffs",
-      "text": "MySQL 8.4 documents that physical backups are raw directory/file copies and are suitable for large important databases needing fast recovery; logical backups store database structure and content representations and are suitable for smaller data, editable values or structures, and recreation on different machine architectures.",
-      "source_ids": ["mysql-8-4-backup-types"],
-      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制", "常见追问", "易错点"]
+      "claim_id": "mysql-physical-logical-and-online-consistency",
+      "text": "MySQL 8.4 documents physical backups as raw data-file copies suitable for large databases needing fast recovery, logical backups as portable structure/content representations, and warns that online backups need appropriate locking or equivalent tool mechanisms so concurrent modifications do not compromise backup integrity.",
+      "source_ids": [
+        "mysql-8-4-backup-types",
+        "mysql-8-4-backup-methods"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
     },
     {
-      "claim_id": "mysql-pitr-full-backup-baseline",
-      "text": "MySQL 8.4 defines point-in-time recovery as typically restoring a full backup to the state at backup time and then bringing the server forward incrementally from the full-backup time to a more recent time.",
-      "source_ids": ["mysql-8-4-pitr-overview"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "claim_id": "mysql-single-transaction-consistency-and-engine-boundary",
+      "text": "MySQL 8.4 mysqldump documentation states that --single-transaction uses REPEATABLE READ plus START TRANSACTION and gives a consistent state for transactional tables such as InnoDB without long-lived application blocking; only InnoDB tables are guaranteed consistent by this option, while MyISAM or MEMORY tables may change during the dump.",
+      "source_ids": [
+        "mysql-8-4-mysqldump"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
     },
     {
-      "claim_id": "mysql-pitr-binlog-replay",
-      "text": "MySQL 8.4 documents that PITR information comes from binary logs generated after the full backup; binary logging must be enabled, MySQL 8.4 enables it by default, SHOW BINARY LOGS lists log files, SHOW BINARY LOG STATUS reports the current log, and mysqlbinlog can select log sections by event time or position. Applying its output reexecutes represented data modifications.",
-      "source_ids": ["mysql-8-4-pitr-binlog"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "claim_id": "mysql-source-data-coordinate-binding",
+      "text": "MySQL 8.4 mysqldump documents --source-data with --single-transaction as an online InnoDB backup suitable before PITR: a global read lock is acquired briefly at the beginning, binary-log coordinates are read, the lock is released, and the remainder of the dump is lock free for ordinary reads and writes.",
+      "source_ids": [
+        "mysql-8-4-mysqldump"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
     },
     {
-      "claim_id": "mysql-pitr-baseline-and-event-boundary",
-      "text": "MySQL 8.4's event-position recovery example says to restore the last full backup before the desired point, use the last restored binary-log position supplied by the backup/restore tool rather than infer it from InnoDB display output, find the precise event position before the point of interest by inspecting mysqlbinlog output, and apply from the restored start position to the stop position before the unwanted event. It explicitly recommends using datetime options only to locate actual event positions, then using start/stop position to apply the range because datetime range application has higher risk of missing events.",
-      "source_ids": ["mysql-8-4-pitr-positions"],
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+      "claim_id": "mysql-single-transaction-ddl-boundary",
+      "text": "MySQL 8.4 mysqldump documentation explicitly warns that ALTER TABLE, CREATE TABLE, DROP TABLE, RENAME TABLE, and TRUNCATE TABLE during a --single-transaction dump can produce incorrect table contents or binary-log coordinates, or cause the dump SELECT to fail.",
+      "source_ids": [
+        "mysql-8-4-mysqldump"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "mysql-pitr-full-backup-and-binlog-chain",
+      "text": "MySQL 8.4 defines point-in-time recovery as restoring a full backup and then applying binary-log changes generated after that backup; binary logging must be enabled and the relevant log files must be available, while mysqlbinlog can select events by time or position and applying its output reexecutes represented data modifications.",
+      "source_ids": [
+        "mysql-8-4-pitr-overview",
+        "mysql-8-4-pitr-binlog",
+        "mysql-8-4-binary-log"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "mysql-pitr-position-boundary",
+      "text": "MySQL 8.4 event-position recovery guidance says to restore the last suitable full backup, use the binlog position recorded by the backup/restore process, inspect mysqlbinlog output to identify the event position before the unwanted operation, and use start/stop positions for application; datetime options are better used to locate positions than as the final applied range.",
+      "source_ids": [
+        "mysql-8-4-pitr-positions"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "mysql-nontransactional-recovery-boundary",
+      "text": "MySQL 8.4 binary-log documentation distinguishes transactional and nontransactional changes: updates to nontransactional tables are logged immediately and cannot be rolled back through ordinary transaction rollback semantics, so storage-engine mix is a material recovery and validation boundary.",
+      "source_ids": [
+        "mysql-8-4-binary-log"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版"
+      ]
     }
   ],
   "source_question_coverage": [
     {
       "question_id": "9c4c443f12f61cd121a7eade74e5c2db",
       "covered": true,
-      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
     }
   ],
   "review": {
-    "reviewer_id": "isolated-reviewer-r2",
-    "review_version": "mysql-pitr-isolated.v1",
+    "reviewer_id": "mysql-pitr-source-first-review-r3",
+    "review_version": "2.0",
     "independent": true,
-    "decision": "revise",
+    "decision": "pass",
     "revision_round": 2,
     "scores": {
-      "facts_and_evidence": 24,
+      "facts_and_evidence": 25,
       "directness_and_relevance": 20,
-      "type_specific_completeness": 15,
-      "mechanism_and_causality": 14,
-      "boundaries_and_tradeoffs": 9,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
       "followup_quality": 5,
       "oral_quality": 5
     },
     "hard_failures": [],
     "uncovered_source_variants": [],
     "unsupported_claims": [],
+    "revision_suggestions": [],
     "findings": [
-      "备份方式、PITR 的 position 起止边界、连续日志链、隔离验证和演练已覆盖。",
-      "备份一致性坐标与备份基线的对应、以及并发写入、DDL、非事务表边界缺少一手证据；机制题专项维度低于最低分。"
+      "The revised mechanism now binds an InnoDB consistency snapshot to an explicit binary-log coordinate instead of inferring the start point from backup completion time.",
+      "Primary MySQL 8.4 mysqldump documentation closes the earlier evidence gap for concurrent DML, nontransactional tables, and DDL during --single-transaction dumps.",
+      "The answer distinguishes backup consistency, PITR log continuity, exact stop-position selection, and restore validation as separate failure boundaries.",
+      "No material factual claim depends on fabricated production experience or an unsupported universal RPO/RTO value."
     ]
   }
 }

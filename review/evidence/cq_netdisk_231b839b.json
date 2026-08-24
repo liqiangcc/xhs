@@ -1,0 +1,127 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_netdisk_231b839b",
+  "candidate_sha256": "7c65c1ff8c74efb4d74e7a251c19c85287a8da728d8bf2a4b54d5a74a122f9bc",
+  "checked_at": "2026-08-20",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "netdisk-source-first.v1"
+  },
+  "sources": [
+    {
+      "source_id": "aws-s3-multipart-overview",
+      "title": "Uploading and copying objects using multipart upload in Amazon S3",
+      "locator": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-20"
+    },
+    {
+      "source_id": "aws-s3-list-parts",
+      "title": "ListParts - Amazon S3 API Reference",
+      "locator": "https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-20"
+    },
+    {
+      "source_id": "aws-s3-object-integrity",
+      "title": "Checking object integrity for data uploads in Amazon S3",
+      "locator": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-20"
+    },
+    {
+      "source_id": "aws-s3-abort-multipart",
+      "title": "Aborting a multipart upload - Amazon S3",
+      "locator": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/abort-mpu.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-20"
+    },
+    {
+      "source_id": "rfc9110-range",
+      "title": "RFC 9110: HTTP Semantics",
+      "locator": "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "source_type": "standards_document",
+      "checked_at": "2026-08-20"
+    },
+    {
+      "source_id": "halevi-proof-of-ownership",
+      "title": "Proofs of Ownership in Remote Storage Systems",
+      "locator": "https://eprint.iacr.org/2011/207.pdf",
+      "source_type": "primary_research",
+      "checked_at": "2026-08-20"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "s3-multipart-lifecycle",
+      "text": "Amazon S3 documents multipart upload as CreateMultipartUpload followed by one or more UploadPart operations and CompleteMultipartUpload, with uploaded parts managed as the units of the in-progress upload.",
+      "source_ids": ["aws-s3-multipart-overview"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "s3-list-parts-contract",
+      "text": "Amazon S3 ListParts lists uploaded parts for a specific upload ID; the multipart overview also recommends maintaining the application-side list of part numbers and returned ETags needed for completion.",
+      "source_ids": ["aws-s3-list-parts", "aws-s3-multipart-overview"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "claim_id": "s3-checksum-contract",
+      "text": "Amazon S3 documents part-level checksum support for multipart uploads and checksum validation as part of multipart object integrity handling.",
+      "source_ids": ["aws-s3-object-integrity", "aws-s3-multipart-overview"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "s3-incomplete-parts-cleanup",
+      "text": "Amazon S3 documents that uploaded parts remain stored for an initiated multipart upload until the upload is completed or aborted, so incomplete uploads require explicit completion/abort or lifecycle cleanup.",
+      "source_ids": ["aws-s3-abort-multipart", "aws-s3-multipart-overview"],
+      "answer_locations": ["3 分钟版", "关键细节", "易错点"]
+    },
+    {
+      "claim_id": "http-range-contract",
+      "text": "RFC 9110 defines byte-range requests through the Range header and the 206 Partial Content response semantics for transferring selected portions of a representation.",
+      "source_ids": ["rfc9110-range"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "claim_id": "dedup-proof-of-ownership",
+      "text": "Halevi et al. identify the security problem in client-side deduplication where knowledge of a short hash is insufficient evidence of file possession and formalize proof-of-ownership protocols for remote storage systems.",
+      "source_ids": ["halevi-proof-of-ownership"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "1a4be75261259d98d10fb7996d618084",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "question_id": "368e04c6417641b4f500a303d986df7a",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节"]
+    },
+    {
+      "question_id": "beae54b5da522a3da7871fb7e5aee27f",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节"]
+    }
+  ],
+  "review": {
+    "reviewer_id": "isolated_netdisk_source_first_reviewer",
+    "review_version": "1.0",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 18,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "revision_suggestions": []
+  }
+}

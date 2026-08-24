@@ -1,0 +1,32 @@
+name: Automation Short Video Audit Diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run audit diagnostics without mutating the branch
+        shell: bash
+        run: |
+          set -u
+          echo '## candidate audit'
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_short_video_bcbcf234.md --require-evidence --noWrite
+          echo "candidate_audit_exit=$?"
+          echo '## pilot ledger check'
+          node scripts/content/build_pilot_answer_audit.js --check
+          echo "pilot_check_exit=$?"
+          echo '## strict answer validation'
+          node scripts/xhs.js answer validate --strict --noWrite
+          echo "strict_exit=$?"
+          echo '## canonical check'
+          node scripts/xhs.js canonical check --noWrite
+          echo "canonical_exit=$?"

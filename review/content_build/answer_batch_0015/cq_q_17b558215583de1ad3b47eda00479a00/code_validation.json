@@ -1,0 +1,26 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_17b558215583de1ad3b47eda00479a00",
+  "checked_at": "2026-08-22",
+  "language": "sql",
+  "runtime": "Python 3 sqlite3 executable fixture; query syntax kept MySQL 8.4 compatible",
+  "command": "python3 Top2PerDayTest.py",
+  "result": "pass",
+  "stdout": "PASS dates=3 rows=6 tie_policy=row_number id_tiebreak=true",
+  "implementation_contract": {
+    "source_columns": "one table carrying id, date, and daily purchase quantity",
+    "fixture_schema": "purchases(id, purchase_date, purchase_count); names/types are candidate test choices, not recovered source names",
+    "top2_semantics": "at most two rows per date",
+    "tie_policy": "purchase_count DESC then unique id ASC",
+    "dialect_target": "MySQL 8.4-compatible window function syntax",
+    "null_policy": "fixture declares date and purchase_count NOT NULL because source did not preserve NULL semantics"
+  },
+  "checks": [
+    "independent ranking per date",
+    "top two rows by descending purchase_count",
+    "deterministic id ascending tie break",
+    "exactly two rows retained when three rows tie",
+    "multiple dates do not compete in one ranking",
+    "fixture returns no more than two rows per date"
+  ]
+}

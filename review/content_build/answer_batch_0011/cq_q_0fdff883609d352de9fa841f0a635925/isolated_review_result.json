@@ -1,0 +1,87 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_q_0fdff883609d352de9fa841f0a635925",
+  "candidate": {
+    "path": "review/candidates/answers/cq_q_0fdff883609d352de9fa841f0a635925.md",
+    "sha256": "e8e2ef569c9c5e195a93e1b9533c01c1f5e344abaa1074d8594e632e4bde42c5",
+    "version": 1,
+    "answer_type": "coding"
+  },
+  "reviewed_at": "2026-08-20",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-swap-pairs-20260820",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "coding",
+    "historical_source_labels": [
+      "算法手撕_Coding"
+    ],
+    "reason": "The retained source explicitly names Swap Nodes in Pairs, and the official LeetCode 24 contract requires a concrete linked-list node-rewiring algorithm that exchanges adjacent node identities without modifying node values."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "LeetCode 24 — Swap Nodes in Pairs",
+      "locator": "https://leetcode.com/problems/swap-nodes-in-pairs/",
+      "verified_claims": [
+        "The task swaps every two adjacent linked-list nodes and returns the resulting head.",
+        "Node values must not be modified; the nodes themselves must be rearranged.",
+        "The official examples include [1,2,3,4] -> [2,1,4,3], [] -> [], [1] -> [1], and [1,2,3] -> [2,1,3]."
+      ]
+    },
+    {
+      "title": "SwapNodesInPairs deterministic Java validation",
+      "locator": "review/content_build/answer_batch_0011/cq_q_0fdff883609d352de9fa841f0a635925/code_validation.json",
+      "verified_claims": [
+        "The candidate implementation compiles under javac 21.0.11.",
+        "Six deterministic cases pass, including empty, single-node, two-node, odd-length, official even-length, and duplicate-value identity-sensitive cases.",
+        "For every generated list length from 0 through 64, the oracle confirms pairwise node-identity order, no cycle, unchanged node count, unchanged identity set, and unchanged node values."
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 100
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "note",
+      "id": "SWAP-PAIRS-SF-001",
+      "finding": "The candidate directly satisfies the LeetCode 24 constraint that adjacent nodes themselves are swapped rather than only exchanging node values."
+    },
+    {
+      "severity": "note",
+      "id": "SWAP-PAIRS-SF-002",
+      "finding": "The dummy-head invariant and the prev -> first -> second -> rest rewiring sequence are internally consistent with the Java implementation and preserve connectivity while advancing the processed prefix by two nodes per iteration."
+    },
+    {
+      "severity": "note",
+      "id": "SWAP-PAIRS-SF-003",
+      "finding": "The answer handles empty, single-node, even-length, and odd-length boundaries without introducing special-case value mutation or losing the trailing node."
+    },
+    {
+      "severity": "note",
+      "id": "SWAP-PAIRS-SF-004",
+      "finding": "The identity-sensitive oracle materially strengthens the evidence beyond value-sequence examples because duplicate values cannot hide an implementation that swaps values instead of node identities."
+    },
+    {
+      "severity": "note",
+      "id": "SWAP-PAIRS-SF-005",
+      "finding": "The O(n) time and O(1) auxiliary-space claims match the iterative implementation, and the follow-ups cover dummy-head rationale, prev advancement, recursive tradeoffs, cycle/loss detection, and the no-fabricated-project-experience boundary."
+    }
+  ],
+  "decision": "pass",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_evidence_and_deterministic_audit_pass",
+  "next_required_action": "Bind this fixed candidate SHA to an answer_evidence sidecar, run the deterministic candidate audit with --require-evidence and --require-code, then obtain the mandatory pilot human approval before atomic promotion. Do not fabricate approval or promotion state."
+}

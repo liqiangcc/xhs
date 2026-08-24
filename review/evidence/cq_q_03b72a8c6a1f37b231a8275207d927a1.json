@@ -1,0 +1,172 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_03b72a8c6a1f37b231a8275207d927a1",
+  "candidate_sha256": "5abc12fb8fdf427648a0ba16418e3dbd2343efad830945445efad26dbca158a8",
+  "checked_at": "2026-08-21",
+  "writer": {
+    "writer_id": "automation-content-builder-student-total-score-sql-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-67dcc3ec",
+      "title": "Kuaishou Java interview source note containing student-score SQL tasks",
+      "locator": "note_desc/67dcc3ec000000001c007e3a.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "xhs-tagged-question-67dcc3ec",
+      "title": "Structured repository question for per-student total score",
+      "locator": "note_tagged/67dcc3ec000000001c007e3a.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "mysql-8.4-aggregate-functions",
+      "title": "MySQL 8.4 Reference Manual 14.19.1 Aggregate Function Descriptions",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/aggregate-functions.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "mysql-8.4-group-by",
+      "title": "MySQL 8.4 Reference Manual 14.19.3 MySQL Handling of GROUP BY",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/group-by-handling.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-21"
+    },
+    {
+      "source_id": "student-total-score-validation",
+      "title": "Student total-score deterministic SQL fixture validation",
+      "locator": "review/content_build/answer_batch_0012/cq_q_03b72a8c6a1f37b231a8275207d927a1/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-21"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The raw interview note states a table with student name, subject name and score, then separately asks for each student's name and total score; the candidate keeps exactly that one aggregation task and does not merge it with the adjacent max-score SQL question.",
+      "source_ids": [
+        "xhs-raw-note-67dcc3ec",
+        "xhs-tagged-question-67dcc3ec"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "sum-group-by-semantics",
+      "text": "MySQL aggregate functions operate on sets of values and are commonly used with GROUP BY; SUM returns the sum and aggregate functions ignore NULL values unless documented otherwise.",
+      "source_ids": [
+        "mysql-8.4-aggregate-functions"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "strict-grouping-shape",
+      "text": "Selecting student_name together with SUM(score) while grouping by student_name avoids relying on a nonaggregated column that is absent from the GROUP BY key; this is compatible with strict ONLY_FULL_GROUP_BY-style semantics.",
+      "source_ids": [
+        "mysql-8.4-group-by"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "fixture-validation",
+      "text": "The exact SQL returns Alice=170, Bob=70, Carol=NULL and Dave=180 on an 8-row deterministic fixture, verifying grouping, SUM and NULL behavior for the documented contract.",
+      "source_ids": [
+        "student-total-score-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "03b72a8c6a1f37b231a8275207d927a1",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "python3 student_total_score_test.py",
+    "result": "pass",
+    "reported_stdout": "PASS fixture_rows=8 groups=4 null_score_semantics=verified",
+    "checks": [
+      "per-student grouping",
+      "multiple subjects",
+      "single NULL score",
+      "all-NULL group",
+      "stable ordered output"
+    ],
+    "boundary_tests": [
+      {
+        "case": "Alice: 90,80",
+        "expected": 170,
+        "passed": true
+      },
+      {
+        "case": "Bob: 70,NULL",
+        "expected": 70,
+        "passed": true
+      },
+      {
+        "case": "Carol: NULL only",
+        "expected": null,
+        "passed": true
+      },
+      {
+        "case": "Dave: 60,60,60",
+        "expected": 180,
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-student-total-score-sql-20260821",
+    "review_version": "student-total-score.mysql84.group-by-sum.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate answers only the source's first SQL sub-question and keeps the adjacent Zhang-surname/max-score task separate.",
+      "The SQL has the correct result grain: one group and one output row per student_name under the source's minimal three-column schema.",
+      "The answer explicitly treats the table/column identifiers as examples because the source does not provide physical names.",
+      "NULL handling and strict grouping claims are grounded in current MySQL 8.4 documentation rather than generic template assertions.",
+      "The deterministic fixture verifies the exact SQL and includes an all-NULL group, which prevents silently assuming NULL means zero.",
+      "The candidate identifies same-name students as a source-model limitation and does not pretend names are universally unique.",
+      "No production experience is fabricated; required human approval remains a separate promotion gate."
+    ]
+  }
+}

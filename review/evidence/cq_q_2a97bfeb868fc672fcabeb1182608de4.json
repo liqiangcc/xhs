@@ -1,0 +1,189 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_2a97bfeb868fc672fcabeb1182608de4",
+  "candidate_sha256": "ddfa6b5a21ee3fea06940da7a780acd7cde17dfe2d0c682864d47547e4164f96",
+  "checked_at": "2026-08-23",
+  "writer": {
+    "writer_id": "automation-content-builder-binary-tree-right-view-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-67e7d5c3",
+      "title": "Interview note containing the binary-tree right-side-view prompt",
+      "locator": "note_desc/67e7d5c3000000000900da5a.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "batch-0018-source-packet",
+      "title": "Answer Batch 0018 mechanically extracted repository-source packet",
+      "locator": "review/reports/ANSWER_BATCH_0018_SOURCE_PACKET.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "batch-0018-source-boundary-audit",
+      "title": "Answer Batch 0018 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0018/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "binary-tree-right-view-validation",
+      "title": "Deterministic Java validation against BFS last-node-per-level oracle",
+      "locator": "review/content_build/answer_batch_0018/cq_q_2a97bfeb868fc672fcabeb1182608de4/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-23"
+    },
+    {
+      "source_id": "binary-tree-right-view-isolated-review",
+      "title": "Source-first isolated review for the binary-tree right-side-view candidate",
+      "locator": "review/content_build/answer_batch_0018/cq_q_2a97bfeb868fc672fcabeb1182608de4/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-23"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recoverable repository source states only the binary-tree right-side-view prompt and does not specify node type, return representation, empty-tree behavior, language or traversal strategy.",
+      "source_ids": [
+        "xhs-raw-note-67e7d5c3",
+        "batch-0018-source-packet",
+        "batch-0018-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "candidate-api-boundary",
+      "text": "int node values, null-as-empty, returning visible values top-down, Java API shape and non-mutation are explicit candidate choices rather than source facts.",
+      "source_ids": [
+        "batch-0018-source-boundary-audit",
+        "binary-tree-right-view-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "right-first-dfs-correctness",
+      "text": "With root-right-left traversal, the first node reached at each depth is the node visible from the right under the candidate value-list contract.",
+      "source_ids": [
+        "binary-tree-right-view-validation",
+        "binary-tree-right-view-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The implementation visits every node once for O(n) time and uses O(h) recursion stack where h is tree height; result size is at most O(h).",
+      "source_ids": [
+        "binary-tree-right-view-validation",
+        "binary-tree-right-view-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java fixture passes 8 fixed trees and 5000 deterministic random trees against an independent BFS last-node-per-level oracle while confirming the tree is not mutated.",
+      "source_ids": [
+        "binary-tree-right-view-validation",
+        "binary-tree-right-view-isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "2a97bfeb868fc672fcabeb1182608de4",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac BinaryTreeRightSideView.java BinaryTreeRightSideViewTest.java && java BinaryTreeRightSideViewTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=8 randomized=5000 oracle=bfs-last-per-level order=top-down mutation=none",
+    "checks": [
+      "empty and single-node trees",
+      "full, right-skewed and left-skewed trees",
+      "right-side gap where a deeper left-subtree node remains visible",
+      "duplicate and negative values",
+      "5000 deterministic random trees with 0-60 nodes checked against independent BFS oracle",
+      "pre/post full structural serialization equality"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty tree",
+        "expected": "empty view",
+        "passed": true
+      },
+      {
+        "case": "right subtree missing at a deeper level",
+        "expected": "visible node may come from left subtree",
+        "passed": true
+      },
+      {
+        "case": "duplicate values",
+        "expected": "duplicates preserved by depth/position semantics",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic randomized trees",
+        "expected": "matches BFS last-node-per-level oracle without mutation",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-binary-tree-right-view-20260823",
+    "review_version": "binary-tree-right-view.right-first-dfs.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate keeps the raw source boundary narrow and labels its API choices explicitly.",
+      "The right-first DFS invariant, complexity claims and independent BFS validation are mutually consistent.",
+      "The gap case, recursion-depth tradeoff and no-mutation contract are handled explicitly.",
+      "No unsupported production, personal or hidden online-judge facts are asserted.",
+      "Formal promotion remains blocked only by the required human-approval gate."
+    ]
+  }
+}

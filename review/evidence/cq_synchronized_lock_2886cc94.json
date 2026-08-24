@@ -1,0 +1,199 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_synchronized_lock_2886cc94",
+  "candidate_sha256": "56f9e4a95ce2b213862c8c157ca71e930dce847f077696e348aa3368649a95eb",
+  "checked_at": "2026-08-18",
+  "writer": {
+    "writer_id": "answer-curator",
+    "writer_version": "synchronized-lock-java21.v1"
+  },
+  "sources": [
+    {
+      "source_id": "jls21-14-19-synchronized",
+      "title": "Java Language Specification SE 21 §14.19 The synchronized Statement",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.19",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "jls21-17-locks-memory-model",
+      "title": "Java Language Specification SE 21 Chapter 17 Threads and Locks",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "jdk21-lock-api",
+      "title": "Java SE 21 Lock API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "jdk21-reentrantlock-api",
+      "title": "Java SE 21 ReentrantLock API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    },
+    {
+      "source_id": "jdk21-condition-api",
+      "title": "Java SE 21 Condition API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Condition.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-18"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "synchronized-monitor-lifecycle-and-reentrancy",
+      "text": "JLS SE 21 specifies that synchronized acquires the monitor for the target object, executes the block, and unlocks the same monitor on both normal and abrupt completion; a single thread may acquire that lock more than once.",
+      "source_ids": [
+        "jls21-14-19-synchronized",
+        "jls21-17-locks-memory-model"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "memory-synchronization-equivalence",
+      "text": "JLS SE 21 states that monitor unlock synchronizes-with subsequent lock on the same monitor, and the Java SE 21 Lock API requires successful lock/unlock operations to have the same memory synchronization effects as corresponding monitor lock/unlock actions.",
+      "source_ids": [
+        "jls21-17-locks-memory-model",
+        "jdk21-lock-api"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "lock-api-flexibility-and-release-responsibility",
+      "text": "The Java SE 21 Lock API documents nonblocking tryLock, timed tryLock, interruptible acquisition, flexible non-block-structured locking, and recommends lock/try/finally/unlock because explicit locks do not get synchronized's automatic lexical-scope release.",
+      "source_ids": [
+        "jdk21-lock-api"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "reentrantlock-extended-capabilities-and-fairness-boundary",
+      "text": "Java SE 21 documents ReentrantLock as a reentrant mutual exclusion Lock with the same basic behavior and semantics as the implicit monitor plus extended capabilities; it supports optional fairness, warns fair mode may reduce throughput and does not imply thread-scheduling fairness, and states that untimed tryLock may barge even for a fair lock.",
+      "source_ids": [
+        "jdk21-reentrantlock-api"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "condition-multiple-wait-sets-and-await-flow",
+      "text": "The Java SE 21 Condition API defines Conditions as distinct objects that can provide multiple wait-sets per Lock, shows separate notFull/notEmpty Conditions, and specifies that await atomically releases the associated lock, waits, then reacquires it before return; spurious wakeups require waiting in a predicate loop.",
+      "source_ids": [
+        "jdk21-condition-api",
+        "jdk21-lock-api"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "lock-interface-not-equal-reentrantlock-or-aqs",
+      "text": "The Lock API is an interface whose implementations may have differing properties and may allow concurrent access; the API does not require AQS or ReentrantLock as the implementation, so implementation-specific properties must not be generalized to all Lock implementations.",
+      "source_ids": [
+        "jdk21-lock-api",
+        "jdk21-reentrantlock-api"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "135f7a669ccfd1fd9e2800d0f287a953",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "常见追问"
+      ]
+    },
+    {
+      "question_id": "611e0b24ee6a59dc00a7dd3bdc45a998",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "常见追问"
+      ]
+    },
+    {
+      "question_id": "bd8563be6430ad80b596586c29237657",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "review": {
+    "reviewer_id": "synchronized-lock-independent-review",
+    "review_version": "synchronized-lock.concept.review.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "候选明确区分 synchronized、Lock 接口与常见 ReentrantLock 实现，按统一维度比较生命周期、获取方式、等待条件、选型与边界，并避免把 AQS、公平性或可重入性错误推广到所有 Lock。",
+      "JLS SE 21 与 Java SE 21 API 足以支撑 monitor 生命周期、happens-before、显式锁扩展 API、ReentrantLock 公平性边界及 Condition 多等待集；未使用版本敏感的 HotSpot 锁优化传闻。",
+      "当前 pilot SSOT 将该题归为 concept 且标记 mixed_source_question_type；候选以比较与选择为主，并保留一条来源原理深度所需的机制链路，满足 concept 主类型与来源变体覆盖。"
+    ]
+  }
+}

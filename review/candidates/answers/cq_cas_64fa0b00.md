@@ -1,39 +1,48 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_cas_64fa0b00","version":1,"status":"draft","updated_at":"2026-07-11","answer_type":"mechanism","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_cas_64fa0b00","version":1,"status":"draft","updated_at":"2026-08-17","answer_type":"mechanism","quality_tier":"candidate"} -->
 # CAS 的原理、ABA 问题与解决方案
 
 ## 核心结论
 
-CAS（Compare-And-Set）把“当前值仍等于预期值吗”和“写入新值”合成一次原子条件更新：相等则成功写入，否则失败并由调用方决定重读、重试或返回冲突。ABA 的关键不是值曾经变化就必然出错，而是业务若只比较当前引用/值，`A → B → A` 会让 CAS 重新看到 A，无法区分它是否经历过中间变化；此时可把版本号/时间戳作为比较条件的一部分，例如 Java 的 `AtomicStampedReference` 同时比较 reference 与 stamp。
+CAS（Compare-And-Set）把“当前值仍等于期望值吗”和“写入新值”合成一次原子条件更新：相等则成功写入，否则失败并由调用方决定重读、重算、重试或返回冲突。ABA 的关键不是值曾经变化就必然出错，而是业务若只比较当前引用/值，`A → B → A` 会让 CAS 重新看到 A，无法区分它是否经历过中间变化；此时可把版本号/时间戳作为比较条件的一部分，例如 Java 的 `AtomicStampedReference` 同时比较 reference 与 stamp。CAS 本身不等于“竞争免费”：如果调用方用 CAS 重试循环实现复合更新，竞争越强，失败后的重读和重新计算就可能越多，所以要把重试成本和退化边界一起设计。
 
 ## 1 分钟版
 
 - CAS 的输入是期望值与新值；当前值匹配期望值时原子更新，失败说明状态已不是本次读取时的状态。
-- CAS 失败只表示当前状态不满足本次 expected 条件；调用方必须明确定义失败后是重新读取还是返回冲突，不能把失败当作已提交。
+- CAS 失败只表示当前状态不满足本次 expected 条件；调用方必须明确定义失败后是重新读取、重新计算、重试还是返回冲突，不能把失败当作已提交。
 - ABA 是“当前值相同但历史变化对业务有意义”的问题：线程读到 A，别的线程改成 B 又改回 A，普通 CAS 仍可能成功。
 - 若业务只关心当前值，ABA 未必是问题；若必须识别版本变化，比较 `(value, stamp)`，每次有效变更同步推进 stamp，CAS 同时校验两者。
+- CAS 重试循环在竞争时会重复执行更新函数或计算；JDK 也明确提醒 `AtomicReference` 的函数式原子更新在竞争失败时可能重新应用函数，因此更新逻辑应无副作用，并用重试次数/失败率和尾延迟验证热点是否已经进入退化区间。
 
 ## 3 分钟版
 
-CAS 的状态流是：`读取 observed → 计算 candidate → compareAndSet(observed, candidate) → 成功提交或失败重试/退出`。Java SE 21 的 `AtomicReference.compareAndSet` 按引用恒等 `==` 比较 current 与 expected，匹配时原子设置新值并返回成功。因此读取与写入之间没有把整个业务流程锁住；竞争者先完成更新时，本次 CAS 失败，调用方必须重新读取和计算，不能继续使用旧推导。
+CAS 的状态流是：`读取 observed → 计算 candidate → compareAndSet(observed, candidate) → 成功提交或失败后重读/重算/退出`。Java SE 21 的 `AtomicReference.compareAndSet` 按引用恒等 `==` 比较 current 与 expected，匹配时原子设置新值并返回成功。因此读取与写入之间没有把整个业务流程锁住；竞争者先完成更新时，本次 CAS 失败，调用方必须重新读取和计算，不能继续使用旧推导。
+
+这也决定了 CAS 的资源成本边界：一次 CAS 失败本身不会替调用方完成后续业务，采用自旋/重试循环时，失败意味着至少要重新读取状态，并且通常要重新计算候选值再尝试。Java SE 21 对 `AtomicReference.getAndUpdate`、`updateAndGet`、`getAndAccumulate` 等函数式原子更新明确要求更新函数应无副作用，因为竞争导致尝试失败时函数可能被重复应用。因此不能把“无锁”理解成“高竞争下成本恒定”；应在压测中观察 CAS 失败/重试次数、CPU 消耗和 p95/p99 延迟，并为持续高冲突设置退避、分片、串行化或其他更合适的数据结构边界。
 
 ABA 发生在“只比较当前 reference 是否还是 expected”不足以表达业务前提时。设线程 T1 读到 A；T2 完成 `A→B→A`；T1 再按 expected=A 发起普通 CAS，API 只比较此刻 reference 是否 `== A`，它无法从这个比较本身知道中间状态。若 A 的回归不改变业务语义，例如只关心当前空位是否可用，不必为了名词强加版本号；若中间变化意味着资源已被取走又归还、节点已被复用等，必须把版本纳入条件。
 
 Java 的 `AtomicStampedReference.compareAndSet` 只有在 current reference 与 expected reference 都以 `==` 匹配、且 current stamp 等于 expected stamp 时，才原子更新 reference 和 stamp。于是将状态建模成 `(reference, stamp)`：T1 读取 `(A, 7)`，T2 即使把 reference 改回 A 也把 stamp 推进为 9，T1 带 `(A, 7)` 的 CAS 会失败并重新判断。stamp 的正确性前提是每次业务上相关的变更都与 stamp 的更新一同进入这个条件更新；若遗漏该状态迁移，API 本身不能补回遗漏的业务版本。
+
+若热点只是“多线程累加统计值”，不要把 `LongAdder` 当成所有 CAS 场景的通用替代，而要利用它展示选择边界：Java SE 21 文档明确说明，高更新竞争下 `LongAdder` 相比 `AtomicLong` 预期吞吐更高，但以更多空间为代价；同时 `sum()` 不是并发更新期间的原子快照。这说明缓解单点 CAS 竞争通常要交换语义或资源，而不是免费优化。
 
 ## 关键细节
 
 - Java SE 21 `AtomicReference.compareAndSet` 的匹配是 reference `==`，不是 `equals`；可变对象内部字段变化不等于 reference 已变化。
 - `AtomicStampedReference.compareAndSet` 同时校验 reference 与 stamp，并在成功时原子设置二者；它是“版本作为状态”的 API 支撑，不替业务定义何时递增版本。
 - ABA 只在中间状态对本次决策有意义时是缺陷。若业务断言仅为“当前仍是 A”，普通 CAS 的可见状态已足够。
-- `compareAndSet` 的失败是 API 的正常返回路径；必须把重读、重算或返回冲突写入调用方状态机，不能把旧候选值继续当作已验证状态。
+- `compareAndSet` 的失败是 API 的正常返回路径；必须把重读、重算、重试或返回冲突写入调用方状态机，不能把旧候选值继续当作已验证状态。
+- 对 CAS 重试循环，更新计算必须允许重复执行；如果计算有外部副作用，应把副作用移到成功提交之后或改用能明确保证一次性语义的协调方式。
+- 高竞争是否需要换方案必须用真实负载验证。对热点计数这类允许弱化快照语义的场景，可考虑 `LongAdder`；它通过分散更新降低竞争，但增加空间，并且 `sum()` 在并发更新时不是原子快照。
 
 ## 原理机制
 
 普通 CAS 的可验证前提只有 `current == expected`，成功后状态变为 `newValue`。因此它保证的是一次条件写的原子性，不是“从读取到提交期间没有任何状态历史”。引入 stamp 后，前提变为 `(currentReference == expectedReference) ∧ (currentStamp == expectedStamp)`；参与 stamp 更新的中间变更会破坏旧前提，使旧 CAS 返回失败。额外状态是 stamp；失败后的重读、重算或冲突返回属于调用方状态机，而不是 API 自动替它完成的事务。
 
+从竞争成本看，`成功一次`并不意味着`只尝试一次`。若 N 个线程围绕同一状态执行“读→算→CAS”，任一线程成功都会让其他仍携带旧 expected 的尝试失败；失败者若选择重试，就再次执行“读→算→CAS”。所以可验证的性能边界不是抽象地说“CAS 很快”，而是测量单位成功更新对应的尝试次数、失败率、CPU 和尾延迟是否随并发上升而恶化；一旦持续高冲突让重试成本不可接受，就应通过退避、分片、降低共享热点或改变同步模型来收敛竞争。
+
 ## 项目经验版
 
-项目映射提示：补充真实共享状态、状态迁移图、失败后是否重试、并发度、冲突率、ABA 中间变化为什么有业务意义、stamp 生成规则、监控与降级策略。没有这些事实时，不要虚构“CAS 替换锁后吞吐量提升了多少”。
+项目映射提示：补充真实共享状态、状态迁移图、失败后是否重试、并发度、CAS 尝试/失败/重试次数、冲突率、p95/p99 延迟、ABA 中间变化为什么有业务意义、stamp 生成规则、监控与降级策略。压测至少要比较低竞争与高竞争下“每次成功更新平均尝试次数”和尾延迟；若是纯统计热点，还可把 `AtomicLong` 与 `LongAdder` 放在相同负载下比较吞吐与语义差异。没有这些事实时，不要虚构“CAS 替换锁后吞吐量提升了多少”。
 
 ## 常见追问
 
@@ -41,6 +50,8 @@ Java 的 `AtomicStampedReference.compareAndSet` 只有在 current reference 与 
 - 问：ABA 一定要用版本号吗？答：不一定。先判断中间变化是否影响业务正确性；只有需要识别历史变化时，才把版本/stamp 纳入 CAS 条件。
 - 问：`AtomicStampedReference` 如何发现 ABA？答：它同时比较 reference 与 stamp。中间变更若同步更新 stamp，即使 reference 回到 A，旧 stamp 也不匹配。
 - 问：CAS 成功是否等于整个业务操作成功？答：不等于。它只证明这一次 reference（以及使用 stamped API 时的 stamp）满足条件并完成更新；多步骤业务的其他不变量仍需由调用方单独建模和校验。
+- 问：为什么高竞争下 CAS 可能变慢？答：调用方的重试循环会在失败后重新读取和计算；JDK 的函数式原子更新也明确允许因竞争而重复应用更新函数。应看成功更新对应的尝试次数、失败率和尾延迟，而不是只看是否“无锁”。
+- 问：什么时候可以用 `LongAdder` 缓解热点？答：适合多个线程更新共享统计和计数、又不要求读取时获得严格原子快照的场景；它以更多空间和更弱的并发读取快照语义换取高竞争下更好的预期吞吐，不是任意 CAS 状态机的替代品。
 
 ## 易错点
 
@@ -48,3 +59,4 @@ Java 的 `AtomicStampedReference.compareAndSet` 只有在 current reference 与 
 - 不要把 ABA 描述成“只要 A 回来 CAS 就一定错”；错误取决于中间变化是否破坏业务前提。
 - 不要只加一个 stamp 字段却不定义哪些迁移必须推进它；那样无法建立版本检测的前提。
 - 不要把 CAS 返回 `false` 当成可以忽略的分支；旧 observed 已不再证明当前状态，必须重新读取、重算或明确返回冲突。
+- 不要把“lock-free/原子操作”直接等价成“高竞争性能一定好”；重试和共享热点仍有成本，替代方案也会交换空间或一致性语义。

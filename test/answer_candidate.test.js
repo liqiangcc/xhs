@@ -75,6 +75,34 @@ test('context includes source variants and candidate rendering stays isolated', 
     fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('source scenario taxonomy wins over technical conflict wording in title', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-type-scenario-'));
+    writeJson(path.join(root, 'config', 'answer_quality.json'), QUALITY);
+    writeJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'), [{
+        schema_version: 'canonical_question.v1',
+        canonical_id: 'cq_short_url',
+        canonical_title: '百亿级短 URL 如何生成无冲突短码？',
+        aliases: ['场景：短URL生成器设计：百亿URL怎么做到无冲突？'],
+        question_ids: ['q-short-url'],
+        primary_domain: { l1: '系统设计', l2: '分布式ID与幂等' },
+        primary_entities: ['短链接', '无冲突'],
+        companies: ['阿里'],
+        frequency: 1,
+        review_priority: 'P2',
+        answer_status: 'needs_update',
+    }]);
+    writeJsonl(path.join(root, 'data', 'questions', 'questions.jsonl'), [{
+        question_id: 'q-short-url',
+        canonical_id: 'cq_short_url',
+        original_question: '场景：短URL生成器设计：百亿URL怎么做到无冲突？',
+        question_type: '场景设计_Scenario',
+        company: '阿里',
+    }]);
+    const context = buildAnswerContext({ root, canonicalId: 'cq_short_url' });
+    assert.equal(context.answer_type, 'scenario');
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('structured candidate rendering excludes generic type guidance', () => {
     const root = fixtureRoot();
     const specPath = path.join(root, 'structured-candidate.json');
@@ -106,5 +134,42 @@ test('curated tier audit reads formal answers without treating them as candidate
     assert.equal(report.candidate_count, 1);
     assert.equal(report.rows[0].quality_tier, 'curated');
     assert.equal(report.rows[0].errors.some((row) => row.error === 'invalid_candidate_tier'), false);
+    fs.rmSync(root, { recursive: true, force: true });
+});
+
+
+test('require-code accepts and compiles a Go coding candidate', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-go-candidate-'));
+    writeJson(path.join(root, 'config', 'answer_quality.json'), QUALITY);
+    writeJsonl(path.join(root, 'data', 'questions', 'canonical_questions.jsonl'), [{
+        schema_version: 'canonical_question.v1', canonical_id: 'cq_go', canonical_title: '100 个 goroutine 依次打印 1-100',
+        aliases: [], question_ids: ['q-go'], primary_domain: { l1: 'Go', l2: '并发' }, primary_entities: ['goroutine'],
+        companies: [], frequency: 1, review_priority: 'P0', answer_status: 'needs_update',
+    }]);
+    writeJsonl(path.join(root, 'data', 'questions', 'questions.jsonl'), [{
+        question_id: 'q-go', canonical_id: 'cq_go', original_question: '100个协程依次打印1-100', question_type: 'coding',
+    }]);
+    const candidateDir = path.join(root, 'review', 'candidates', 'answers');
+    ensureDir(candidateDir);
+    const candidatePath = path.join(candidateDir, 'cq_go.md');
+    const sections = ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '项目经验版', '常见追问', '易错点'];
+    const lines = [
+        '<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_go","version":1,"status":"draft","quality_tier":"candidate","answer_type":"coding","updated_at":"2026-08-22"} -->',
+        '# 100 个 goroutine 依次打印 1-100',
+    ];
+    for (const title of sections) {
+        lines.push('', `## ${title}`, '');
+        if (title === '3 分钟版') lines.push('```go', 'package orderedprint', 'func Value() int { return 100 }', '```');
+        else if (title === '常见追问') lines.push('- 问：为什么需要顺序协调？答：因为多个 goroutine 的调度顺序不确定。', '- 问：怎样验证没有竞态？答：用 race detector 与重复测试。', '- 问：如何避免 goroutine 泄漏？答：确保退出路径和同步协议闭合。');
+        else lines.push(`${title}的 Go 并发题目专属内容。`);
+    }
+    fs.writeFileSync(candidatePath, `${lines.join('\n')}\n`, 'utf8');
+
+    const report = runAnswerAudit({ root, candidate: candidatePath, noWrite: true, 'require-code': true });
+    assert.equal(report.candidate_count, 1);
+    assert.equal(report.rows.length, 1);
+    assert.equal(report.rows[0].errors.some((row) => row.error === 'coding_block_required'), false);
+    assert.equal(report.rows[0].errors.some((row) => row.error === 'go_validation_failed'), false);
+    assert.equal(report.rows[0].hard_failures.includes('placeholder_implementation'), false);
     fs.rmSync(root, { recursive: true, force: true });
 });

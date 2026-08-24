@@ -1,0 +1,39 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_redis_lock_ec98b854",
+  "candidate_sha256": "9bc81bf71b2daafe6420b77c738362bc8445a48fcf19e631c33fcd9d29be03ca",
+  "checked_at": "2026-08-18",
+  "writer": {"writer_id":"answer-curator","writer_version":"redis-distributed-lock-current-docs.v1"},
+  "sources": [
+    {"source_id":"redis-distributed-locks","title":"Redis Docs: Distributed Locks with Redis","locator":"https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/","source_type":"official_documentation","checked_at":"2026-08-18"},
+    {"source_id":"redis-set","title":"Redis Docs: SET","locator":"https://redis.io/docs/latest/commands/set/","source_type":"official_documentation","checked_at":"2026-08-18"},
+    {"source_id":"redis-lua","title":"Redis Docs: Scripting with Lua","locator":"https://redis.io/docs/latest/develop/programmability/eval-intro/","source_type":"official_documentation","checked_at":"2026-08-18"}
+  ],
+  "claims": [
+    {"claim_id":"single-instance-acquire-release","text":"Redis documents single-instance lock acquisition as SET resource_name unique_value NX PX ttl. The value must be unique per client/request; Redis 8.4+ documents DELEX IFEQ for safe conditional release, while previous versions use an atomic compare-and-delete Lua script.","source_ids":["redis-distributed-locks","redis-set"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","原理机制","常见追问","易错点"]},
+    {"claim_id":"async-replication-failover-race","text":"Redis documents that replication is asynchronous and gives the race where a master crashes before the lock write reaches its replica, the replica is promoted, and another client acquires the same lock, violating mutual exclusion.","source_ids":["redis-distributed-locks"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","常见追问","易错点"]},
+    {"claim_id":"lease-validity-extension-retry","text":"Redis defines the lock validity time as both the auto-release time and the time available for the holder to finish before another client may acquire the lock. Its Redlock guidance uses bounded validity, recommends random delay on retry, allows token-checked extension, and says the number of reacquisition attempts must be limited for liveness.","source_ids":["redis-distributed-locks"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","项目经验版","常见追问","易错点"]},
+    {"claim_id":"redlock-assumptions-and-fencing","text":"Redis documents Redlock using independent masters, majority acquisition and elapsed-time/validity checks; it also calls out clock-drift assumptions and explicitly recommends considering fencing tokens for consistency-sensitive processes that can take significant time.","source_ids":["redis-distributed-locks"],"answer_locations":["1 分钟版","3 分钟版","关键细节","原理机制","常见追问","易错点"]},
+    {"claim_id":"lua-atomicity-scope","text":"Redis guarantees atomic execution of server-side Lua scripts. The candidate limits that guarantee to Redis-side script effects and does not claim that external databases or services become part of the same atomic operation.","source_ids":["redis-lua"],"answer_locations":["3 分钟版","关键细节","常见追问","易错点"]},
+    {"claim_id":"scenario-design-boundaries","text":"Key granularity, acquisition timeout, maximum retries, monitoring fields, fault-injection cases and downstream stale-holder rejection are explicit scenario design requirements in the candidate, not claimed Redis defaults. They operationalize the failure modes and lease/fencing boundaries documented by Redis.","source_ids":["redis-distributed-locks"],"answer_locations":["3 分钟版","关键细节","原理机制","项目经验版"]}
+  ],
+  "source_question_coverage": [
+    {"question_id":"608f3fa34746f247e3ff67c3a7b07f61","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","原理机制","常见追问"]}
+  ],
+  "review": {
+    "reviewer_id":"isolated-reviewer-redis-lock-r1",
+    "review_version":"redis-lock-current-docs-source-first.v1",
+    "independent":true,
+    "decision":"pass",
+    "revision_round":1,
+    "scores":{"facts_and_evidence":25,"directness_and_relevance":20,"type_specific_completeness":20,"mechanism_and_causality":15,"boundaries_and_tradeoffs":10,"followup_quality":5,"oral_quality":5},
+    "hard_failures":[],
+    "uncovered_source_variants":[],
+    "unsupported_claims":[],
+    "findings":[
+      "来源问法的 SETNX/Redlock 核心已被当前 Redis 官方文档重新核验；候选按当前文档补上 Redis 8.4 DELEX IFEQ 与旧版本 Lua 的明确版本边界。",
+      "候选没有把普通主从 failover、Redlock、续期或 Lua 描述成无条件正确；异步复制竞态、TTL 有效窗口、随机退避、有限续期、时钟与 fencing 前提均显式呈现。",
+      "场景题所需的 key/token 设计、竞争策略、故障路径、观测与故障注入形成闭环；运维阈值保持为项目待填参数，没有虚构生产数据。"
+    ]
+  }
+}

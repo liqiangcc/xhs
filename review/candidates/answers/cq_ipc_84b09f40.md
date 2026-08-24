@@ -1,52 +1,65 @@
-<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_ipc_84b09f40","version":1,"status":"draft","updated_at":"2026-07-11","answer_type":"concept","quality_tier":"candidate"} -->
+<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_ipc_84b09f40","version":1,"status":"draft","updated_at":"2026-08-17","answer_type":"concept","quality_tier":"candidate"} -->
 # 进程间通信（IPC）有哪些方式？
 
 ## 核心结论
 
-IPC 不应只背名词，应按“数据单元/边界、方向或连接形态、同步责任、命名或发现方式、作用范围”分类。以下比较限定 Linux/POSIX 的本机 IPC：管道/FIFO 传字节流；POSIX 消息队列传带边界的消息；共享内存让进程映射同一内存区域但必须另配同步；信号传递事件通知；AF_UNIX 套接字提供本机进程间端点。选型先看数据形态、边界要求、同步责任和是否需要连接端点。
+限定 Linux/POSIX 本机 IPC，可以按“传什么、谁负责同步、端点语义是什么”来区分：`pipe()` 提供单向进程间数据通道；POSIX message queue 以消息为单位收发；POSIX shared memory 让多个进程映射同一共享对象，但访问顺序要由 semaphore 等同步机制协调；signal 更适合事件通知；AF_UNIX/AF_LOCAL socket 提供本机进程端点，并按 `SOCK_STREAM`、`SOCK_DGRAM`、Linux `SOCK_SEQPACKET` 给出不同的连接与消息边界语义。不要把这些机制只按“谁更快”排序，先匹配通信契约。
 
 ## 1 分钟版
 
-- 管道：内核缓冲的单向字节通道；读端与写端通过两个 fd 使用。
-- 消息队列：进程以名称打开同一队列，按消息发送/接收且有优先级；适合需要消息边界和队列语义的本机通信。
-- 共享内存：把同一对象映射到多个进程地址空间，适合共享数据；它只共享数据，不自动解决并发访问。
-- 信号与套接字：信号用于事件通知；AF_UNIX 套接字用于同机进程通信并可选流、数据报或顺序包语义。
+- 管道：`pipe()` 返回读端和写端两个 fd，是单向 IPC 数据通道；写入内容由内核缓冲，读端再取出。
+- POSIX 消息队列：队列有名称，通过 `mq_open` 打开，用 `mq_send`/`mq_receive` 传消息；接收按消息优先级处理。
+- POSIX 共享内存：`shm_open` 创建/打开对象，通常配合 `ftruncate` 和 `mmap` 映射；共享数据本身不等于同步，进程通常还要用 semaphore 等机制协调。
+- 信号：`kill` 可向进程发送信号，`sigqueue` 可给实时信号附带数据；它是通知机制，不应当作通用业务消息队列。
+- AF_UNIX socket：只在本机进程间通信；`SOCK_STREAM` 是面向连接的流，`SOCK_DGRAM` 是保留消息边界的数据报，Linux `SOCK_SEQPACKET` 面向连接并保留消息边界与顺序。
 
 ## 3 分钟版
 
-先用统一维度答题：数据单元是字节流、消息、共享区域还是通知；形态是单向端点、命名队列还是 socket；同步责任由内核收发语义还是协作进程承担；范围限定为本文的 Linux/POSIX 本机机制。
+先看数据模型。`pipe()` 的契约是“读端 + 写端”的单向数据通道：发送方写入，数据进入内核缓冲，接收方从读端读取。本文只使用当前 `pipe(2)` 证据支持的管道契约，不把 FIFO/命名管道的额外语义混进来；如果题目专门追问 FIFO，应单独补对应的一手文档再回答。
 
-管道 `pipe()` 是单向数据通道，返回读端和写端 fd，写入的数据由内核缓冲至读端读取。因此它天然适合字节流，不代表一条业务消息一定有边界；双向通信用两条单向通道或换 socket。FIFO 是具有名称的管道变体，但本题重点是“管道传流”。POSIX 消息队列由名称标识，两个进程以同名 `mq_open` 操作同一队列，使用 `mq_send`/`mq_receive` 传递消息；消息按优先级先交付，适合需要离散消息而非纯字节流的场景。
+POSIX message queue 的单位是消息而不是共享内存区域。进程通过队列名称调用 `mq_open`，再用 `mq_send`/`mq_receive` 发送和接收；Linux `mq_overview(7)` 还规定优先级更高的消息先被交付。因此它适合需要明确“队列 + 消息”契约的场景，但容量、阻塞方式等细节仍应按具体 API 和配置核验，不能从“消息队列”四个字外推。
 
-POSIX 共享内存以 `shm_open`、`ftruncate`、`mmap` 把对象映射进进程虚拟地址空间，但共享内存不是并发协议。Linux man-pages 明确指出进程通常需要借助 POSIX semaphore 等同步对共享对象访问；因此它的取舍是共享数据与显式同步责任，而不是一句“共享内存最快”。POSIX semaphore 的 `sem_wait`/`sem_post` 用于进程或线程同步；它本身不是承载业务负载的消息通道，常和共享内存组合。
+POSIX shared memory 走另一条路径：`shm_open` 得到共享内存对象，调整大小后通过 `mmap` 映射到进程地址空间。多个进程能看到同一共享对象，不代表并发访问自动正确；`shm_overview(7)` 明确说明通常需要 semaphore 等同步机制。POSIX semaphore 用 `sem_wait`/`sem_post` 协调进程或线程；process-shared 的 unnamed semaphore 可以放在共享内存中。因此这里要把“共享数据”和“同步协议”分成两个职责。
 
-信号是事件/控制通知：`kill` 可向指定进程发送信号，`sigqueue` 可向实时信号附带数据；本题将它和“承载业务数据的队列”分开回答。AF_UNIX/AF_LOCAL socket 用于同机进程通信，支持 stream、datagram 和 Linux 的 sequenced-packet 等 socket 类型，还可传递文件描述符或进程凭据；它适合需要连接端点、双向交互或 fd 传递的本机组件。跨机器网络协议不在本文的 Linux/POSIX 本机 IPC 比较契约内。
+signal 用于通知。`signal(7)` 记录了向指定进程发送信号的 `kill`，以及给实时信号附带数据的 `sigqueue`；接收既可以通过异步 handler，也可以使用同步接收相关 API。回答时应把它与 POSIX message queue 区分：前者首先是信号/事件语义，后者是命名队列中的消息收发。
+
+AF_UNIX/AF_LOCAL 是本机 socket family。Linux `unix(7)` 区分三类：`SOCK_STREAM` 是面向连接的字节流，不保留消息边界；`SOCK_DGRAM` 是数据报语义并保留消息边界；Linux 的 `SOCK_SEQPACKET` 面向连接，同时保留消息边界并按发送顺序交付。AF_UNIX 还支持通过 ancillary data 传递文件描述符或进程凭据。选择 socket 时不能只说“socket 可双向”，还要明确所选 type 的边界和连接语义。
 
 ## 关键细节
 
-- Linux `pipe()` 创建单向 IPC 数据通道；写端数据在内核缓冲，直至读端读取。
-- POSIX 消息队列按消息交换数据；同名队列可被多个进程打开，接收方按优先级先获得消息。
-- POSIX 共享内存通过 `mmap` 映射对象；共享对象通常需要同步，POSIX semaphore 可放在共享内存中用于进程间同步。
-- AF_UNIX 是同机通信 socket family；`SOCK_STREAM`、`SOCK_DGRAM` 和 Linux 的 `SOCK_SEQPACKET` 的消息边界/连接语义不同，不能混称“socket 都是可靠字节流”。
+- 本答案的证据边界是 Linux/POSIX 本机 IPC；跨主机网络通信不是这里的比较对象。
+- 管道只依据 `pipe(2)` 说明单向数据通道、读写 fd 与内核缓冲；不在没有 FIFO 一手证据时扩展命名管道结论。
+- POSIX message queue 保留“消息”这一数据单元，并带优先级；这和管道的数据通道语义不同。
+- 共享内存负责共享数据，semaphore 负责同步；二者经常组合，但不能把 semaphore 说成业务负载传输通道。
+- AF_UNIX 三种 type 要分开：stream 面向连接且无消息边界，datagram 保留消息边界，seqpacket 面向连接并保留消息边界与顺序。
 
 ## 原理机制
 
-管道/消息队列的路径是 `发送方写入内核管理对象 → 内核缓冲或排队 → 接收方读取`；共享内存的路径是 `多个进程映射同一对象 → 读写同一数据区域 → 借 semaphore/锁等同步决定访问顺序`。前者由内核对象提供收发路径，后者把一致性责任显式交给协作进程。信号路径是 `发送 → 内核投递 → 处理器或同步等待者接收`，在本题分类中作为通知；套接字的端点与类型则决定连接、字节流或消息边界语义。
+可以把五类机制映射成五条状态路径：
+
+1. pipe：`pipe() → read fd/write fd → writer 写入内核缓冲 → reader 读取`。
+2. message queue：`队列名称 → mq_open → mq_send(message, priority) → mq_receive`。
+3. shared memory：`shm_open → ftruncate → mmap → 多进程读写共享对象`，旁边还必须有独立同步协议，例如 `sem_wait/sem_post`。
+4. signal：`发送信号 → 内核投递 → handler 或同步等待 API 接收`。
+5. AF_UNIX socket：`创建本机 socket → 按 type 建立对应端点关系 → 依 stream/datagram/seqpacket 契约收发`。
+
+这五条路径的核心差别不是 API 名字，而是数据边界、连接形态和同步责任分别落在哪里。
 
 ## 项目经验版
 
-项目映射提示：补充真实通信双方、同机还是跨机、数据大小/频率、消息边界、崩溃处理、权限、同步方式、背压指标和压测结果。没有这些事实时，不要虚构“共享内存使延迟降低多少”或“队列永不丢消息”。
+项目映射时记录真实通信双方、是否仅本机、消息或共享数据的大小与频率、是否需要消息边界、同步方案、权限和资源清理方式，再做压测和故障验证。没有实测证据时不要宣称“共享内存一定最快”或“某类 socket 一定零丢失”。
 
 ## 常见追问
 
-- 问：共享内存为什么还需要信号量？答：共享内存只让进程看到同一数据区域；读写顺序、互斥和缓冲区所有权仍需同步机制，POSIX 文档明确建议通常用 semaphore 等协调。
-- 问：管道和消息队列的核心区别？答：管道是字节流通道；POSIX 消息队列以消息为单位收发并带优先级。是否需要保留业务消息边界是重要选择条件。
-- 问：信号和消息队列是否是一类机制？答：不是。本题中信号按事件/控制通知回答，POSIX 消息队列按命名队列和 `mq_send`/`mq_receive` 的消息收发回答；不要混成同一传输契约。
-- 问：本机服务间为何选择 AF_UNIX socket？答：它是同机 socket family，可提供双向端点、不同 socket 类型，并能传递 fd/凭据；若只需共享数据仍要比较共享内存与同步成本。
+- 问：共享内存为什么还要信号量？答：共享内存只提供共同可见的数据区域；访问顺序与互斥仍需同步。Linux POSIX shared-memory 文档明确说明进程通常要借 semaphore 等机制协调。
+- 问：消息队列与管道最直接的区别是什么？答：这里的 POSIX message queue 明确以消息为单位并有优先级；`pipe()` 的一手契约是单向数据通道。不要给管道补上当前证据没有证明的 FIFO 细节。
+- 问：AF_UNIX 的三种 type 有什么区别？答：`SOCK_STREAM` 面向连接、无消息边界；`SOCK_DGRAM` 保留数据报边界；Linux `SOCK_SEQPACKET` 面向连接并保留消息边界和顺序。
+- 问：信号能代替消息队列吗？答：不能直接等同。signal 的主契约是信号投递/通知；POSIX message queue 的主契约是命名队列中的消息发送与接收。
 
 ## 易错点
 
-- 不要把信号量列为“传业务消息”的方式；它解决同步，不承载共享内存中的业务数据。
-- 不要说共享内存天然线程/进程安全；映射同一内存不等于定义了并发协议。
-- 不要把管道默认说成双向、有业务消息边界；Linux `pipe()` 是单向字节通道。
-- 不要把 AF_UNIX 与网络 socket 混为同一范围或可靠性契约；本文只比较 Linux/POSIX 本机 IPC，AF_UNIX 是本机进程通信 family。
+- 不要在没有对应一手证据时把 FIFO/命名管道细节塞进普通 `pipe()` 结论。
+- 不要把 semaphore 当成承载业务消息的数据通道。
+- 不要把 AF_UNIX 三种 socket type 混称成同一种“可靠字节流”。
+- 不要把共享内存映射等同于并发正确性；同步协议必须单独设计。
+- 不要把本文的 Linux/POSIX 本机边界外推到跨主机网络 IPC。

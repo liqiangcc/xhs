@@ -1,0 +1,114 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_gc_algorithms_3f884748",
+  "candidate": {
+    "path": "review/candidates/answers/cq_gc_algorithms_3f884748.md",
+    "sha256": "376228158d730d3d46e4bd06ee340d9f82ffc3f4975c0a7a517fd54af588ddc6",
+    "version": 2,
+    "answer_type": "concept"
+  },
+  "reviewed_at": "2026-08-19",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-gc-algorithms-r2",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "concept",
+    "historical_source_labels": [
+      "八股文_Concept"
+    ],
+    "reason": "Both restored source rows ask the same broad JVM garbage-collection-algorithm concept question. The answer must distinguish textbook reclamation mechanisms and organization strategies from concrete HotSpot collectors, compare them on shared dimensions, state version and applicability boundaries, and give collector-selection conditions rather than provide runnable code or a single implementation flow."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Introduction to Garbage Collection Tuning",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/introduction-garbage-collection-tuning.html",
+      "verified_claims": [
+        "HotSpot provides multiple garbage collectors for different application requirements and explicitly selecting or tuning a collector can be necessary when defaults do not match performance goals",
+        "HotSpot uses generational scavenging and aging, parallel or concurrent work, and compaction of live objects as GC implementation techniques"
+      ]
+    },
+    {
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Garbage Collector Implementation",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/garbage-collector-implementation.html",
+      "verified_claims": [
+        "generational collection is motivated by the weak generational hypothesis that most objects survive only a short time",
+        "the Serial collector implementation example has Eden and two Survivor spaces, with survivors copied between spaces and eventually aged into old",
+        "young-collection cost is strongly related to the amount of live data and GC tuning trades latency, throughput, footprint and promptness against one another",
+        "GC logs expose collection type, cause, memory before and after, duration and evacuation phase information and are an appropriate starting point for evidence-driven diagnosis"
+      ]
+    },
+    {
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Available Collectors",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/available-collectors.html",
+      "verified_claims": [
+        "the JDK 25 guide documents Serial, Parallel, G1 and ZGC as the collector choices discussed for HotSpot",
+        "Serial performs GC work with a single thread; Parallel is the throughput collector and is generational; G1 is mostly concurrent and targets pause-time goals while retaining high throughput; ZGC is intended for low latency"
+      ]
+    },
+    {
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Ergonomics",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/ergonomics.html",
+      "verified_claims": [
+        "G1 is the default on server-class machines and Serial is selected otherwise, so the default-collector claim requires an environment boundary",
+        "pause-time and throughput goals are competing behavior goals and heap sizing also affects footprint and collection behavior"
+      ]
+    },
+    {
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Garbage-First (G1) Garbage Collector",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/garbage-first-g1-garbage-collector1.html",
+      "verified_claims": [
+        "G1 is generational, incremental, parallel, mostly concurrent, stop-the-world and evacuating",
+        "G1 divides the heap into regions and performs incremental space reclamation in stop-the-world collection pauses while longer whole-heap operations such as global marking can run concurrently"
+      ]
+    },
+    {
+      "title": "Oracle JDK 25 HotSpot GC Tuning Guide: Garbage-First Garbage Collector Tuning",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/garbage-first-garbage-collector-tuning.html",
+      "verified_claims": [
+        "G1 tuning guidance recommends starting with default settings and observing GC behavior before applying targeted changes",
+        "Full GC or long-pause diagnosis is cause-specific; evacuation failure and humongous-object fragmentation are documented examples rather than evidence for a single universal cause"
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 24,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 19,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 9,
+    "followup_quality": 5,
+    "oral_quality": 5,
+    "total": 97
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "note",
+      "id": "GC-SF-001",
+      "finding": "The candidate correctly separates reclamation mechanisms from concrete collectors and explicitly prevents the common one-to-one mapping error, which directly addresses the broad source question without cross-topic contamination."
+    },
+    {
+      "severity": "note",
+      "id": "GC-SF-002",
+      "finding": "Version-sensitive collector and default-selection statements are bounded to Oracle JDK 25 and the server-class condition; CMS is treated only as historical context rather than as a current supported collector."
+    },
+    {
+      "severity": "note",
+      "id": "GC-SF-003",
+      "finding": "The Serial Eden/two-Survivor layout is explicitly scoped to its documented implementation example, while G1 is separately described through regions and evacuation, avoiding a universalized young-generation layout claim."
+    },
+    {
+      "severity": "note",
+      "id": "GC-SF-004",
+      "finding": "The tuning section maintains the non-fabrication boundary and requires production-like workload evidence and GC logs instead of inventing incident metrics or prescribing collector changes from a single symptom."
+    }
+  ],
+  "decision": "pass",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_evidence_and_deterministic_audit_pass",
+  "next_required_action": "Bind this fixed candidate SHA to a refreshed answer_evidence sidecar, run the deterministic candidate audit with --require-evidence, then obtain the mandatory pilot human approval before atomic promotion. Do not fabricate approval or promotion state."
+}

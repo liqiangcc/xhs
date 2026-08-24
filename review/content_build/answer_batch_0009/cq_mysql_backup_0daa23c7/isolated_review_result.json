@@ -1,0 +1,107 @@
+{
+  "schema_version": "isolated_answer_review_result.v1",
+  "canonical_id": "cq_mysql_backup_0daa23c7",
+  "candidate": {
+    "path": "review/candidates/answers/cq_mysql_backup_0daa23c7.md",
+    "sha256": "9252451e72955988580e1c73d531752eede3fad37a240f8bfa49ceb4024eec80",
+    "version": 3,
+    "answer_type": "mechanism"
+  },
+  "reviewed_at": "2026-08-18",
+  "reviewer": {
+    "reviewer_id": "source-first-isolated-reviewer-mysql-backup-r3",
+    "independent_from_writer": true,
+    "historical_review_read_before_conclusion": false
+  },
+  "source_type_decision": {
+    "decision": "mechanism",
+    "historical_source_labels": ["八股文_Concept"],
+    "reason": "The source wording asks for the backup/PITR integration flow and its consistency boundaries. The expected response is an entry-to-result recovery mechanism, so the historical Concept taxonomy is treated as a coarse source label rather than the final answer contract. Scenario requirements such as capacity sizing would add unrelated obligations to this question."
+  },
+  "primary_sources_checked": [
+    {
+      "title": "MySQL 8.4 mysqldump — A Database Backup Program",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html",
+      "verified_claims": [
+        "--single-transaction uses REPEATABLE READ and START TRANSACTION for a consistent InnoDB snapshot",
+        "MyISAM and MEMORY are not guaranteed consistent under --single-transaction",
+        "ALTER/CREATE/DROP/RENAME/TRUNCATE during the dump can invalidate table contents or binary-log coordinates",
+        "--source-data with --single-transaction briefly acquires a global read lock to record binary-log coordinates and then releases it"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Point-in-Time Recovery Using Event Positions",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery-positions.html",
+      "verified_claims": [
+        "datetime filters are recommended for locating the actual event positions rather than defining the final applied range",
+        "start/stop positions are used for the applied range and recovery stops just before the stop position"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Backup and Recovery Types",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/backup-types.html",
+      "verified_claims": [
+        "physical and logical backups have distinct speed, size, and portability tradeoffs",
+        "online backups require consistency protection",
+        "backup scheduling, compression, and encryption are explicit backup-policy concerns; encryption protects backed-up data from unauthorized access"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Establishing a Backup Policy",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/backup-policy.html",
+      "verified_claims": [
+        "full backup and matching binary-log coordinates form the recovery baseline",
+        "nontransactional tables must not change during the online dump for consistency"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 Point-in-Time Recovery Using Binary Log",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/point-in-time-recovery-binlog.html",
+      "verified_claims": [
+        "PITR requires binary logging and the subsequent binary-log files",
+        "binary logging is enabled by default in MySQL 8.4",
+        "mysqlbinlog can select by time or position and replay reexecutes represented data changes"
+      ]
+    },
+    {
+      "title": "MySQL 8.4 LOCK INSTANCE FOR BACKUP",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/lock-instance-for-backup.html",
+      "verified_claims": [
+        "an instance backup lock permits DML while blocking operations that could make an online snapshot inconsistent"
+      ]
+    }
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 17,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 4,
+    "total": 96
+  },
+  "hard_failures": [],
+  "uncovered_source_variants": [],
+  "unsupported_claims": [],
+  "findings": [
+    {
+      "severity": "major",
+      "code": "BACKUP_BEST_PRACTICE_SECURITY_GAP",
+      "message": "The source wording explicitly asks for backup best practices and the isolated packet requires sensitive-backup handling, but the candidate never tells the reader to protect backup/binlog artifacts. MySQL 8.4 documentation explicitly calls out encryption of backup output as protection against unauthorized access. Add a concise operational boundary for encryption/access isolation and key/credential handling without turning the answer into a security digression.",
+      "quality_dimension": "directness_and_relevance",
+      "minimum_not_met": true
+    },
+    {
+      "severity": "minor",
+      "code": "PROJECT_SECTION_NOT_MAPPING_PROMPT",
+      "message": "The candidate clearly labels its recovery drill as hypothetical, so it does not fabricate personal experience. However, the repository content standard says that when no user facts exist the 项目经验版 should be a project-mapping prompt. Reframe the section as a fillable mapping/checklist and keep any hypothetical drill explicitly subordinate to that boundary.",
+      "quality_dimension": "oral_quality",
+      "minimum_not_met": false
+    }
+  ],
+  "decision": "revise",
+  "promotion_allowed": false,
+  "human_review_state": "not_requested_until_isolated_revision_passes",
+  "next_required_action": "Revise only the two recorded findings, regenerate the candidate hash/evidence binding, then perform a fresh isolated source-first re-review. Do not fabricate pilot human approval."
+}
