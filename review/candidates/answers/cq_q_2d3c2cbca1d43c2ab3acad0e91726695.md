@@ -42,15 +42,29 @@
 ## 原理机制
 
 ```java
-public static boolean sameTree(Node a, Node b) {
-    if (a == null || b == null) {
-        return a == b;
+public final class TreeEquality {
+    public static final class Node {
+        public final int value;
+        public Node left;
+        public Node right;
+
+        public Node(int value) {
+            this.value = value;
+        }
     }
-    if (a.value != b.value) {
-        return false;
+
+    private TreeEquality() {}
+
+    public static boolean sameTree(Node a, Node b) {
+        if (a == null || b == null) {
+            return a == b;
+        }
+        if (a.value != b.value) {
+            return false;
+        }
+        return sameTree(a.left, b.left)
+            && sameTree(a.right, b.right);
     }
-    return sameTree(a.left, b.left)
-        && sameTree(a.right, b.right);
 }
 ```
 
@@ -68,11 +82,11 @@ PASS fixed=8 randomized=5000 oracle=bfs-paired-tree-equality mutation=none
 
 ## 常见追问
 
-- **两个空树算相等吗？** 当前候选契约里算相等，因为每个对应位置都一致；这是显式 API 选择。
-- **为什么不能只比较前序遍历结果？** 如果不编码空节点位置，不同结构可能得到相同值序列；结构比较会丢失。
-- **为什么不能直接写 `a == b`？** 那是对象身份比较；两个独立对象可以拥有完全相同的结构和值。
-- **如果节点值允许重复会怎样？** 算法不受影响，因为比较的是对应位置，而不是按值寻找节点；测试包含重复值。
-- **递归会不会栈溢出？** 极度倾斜树的递归深度可到 `O(n)`；若输入可能很深，可用显式栈/队列实现同一成对比较逻辑。
+- 问：两个空树算相等吗？答：当前候选契约里算相等，因为每个对应位置都一致；这是显式 API 选择。
+- 问：为什么不能只比较前序遍历结果？答：如果不编码空节点位置，不同结构可能得到相同值序列；结构比较会丢失。
+- 问：为什么不能直接写 `a == b`？答：那是对象身份比较；两个独立对象可以拥有完全相同的结构和值。
+- 问：如果节点值允许重复会怎样？答：算法不受影响，因为比较的是对应位置，而不是按值寻找节点；测试包含重复值。
+- 问：递归会不会栈溢出？答：极度倾斜树的递归深度可到 `O(n)`；若输入可能很深，可用显式栈/队列实现同一成对比较逻辑。
 
 ## 易错点
 
