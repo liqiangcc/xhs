@@ -89,6 +89,25 @@ function normalizeExpectedQuestionIds(value, label) {
     return normalized;
 }
 
+function normalizeExpectedRevisions(value, label) {
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) {
+        throw new Error(`${label} must be an array when provided`);
+    }
+    return value.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            throw new Error(`${label}[${index}] must be an object`);
+        }
+        if (!item.resource || typeof item.resource !== 'string') {
+            throw new Error(`${label}[${index}].resource is required`);
+        }
+        if (!item.revision || typeof item.revision !== 'string') {
+            throw new Error(`${label}[${index}].revision is required`);
+        }
+        return { resource: item.resource, revision: item.revision };
+    });
+}
+
 function assertReviewedMergeScope(input, targetRecord, sourceRecord) {
     const expectedSourceQuestionIds = normalizeExpectedQuestionIds(
         input.expected_source_question_ids,
@@ -220,6 +239,10 @@ function createMergeCanonicalUseCase(dependencies = {}) {
         assertReviewSnapshot(reviewSnapshot);
         assertAnswerSnapshot(answerSnapshot);
         assertReviewedMergeScope(input, targetSnapshot.record, sourceSnapshot.record);
+        const reviewedOwnershipExpectedRevisions = normalizeExpectedRevisions(
+            input.expected_reviewed_ownership_revisions,
+            'expected_reviewed_ownership_revisions',
+        );
 
         const merged = mergeCanonical(targetSnapshot.record, sourceSnapshot.record);
         const mergedQuestionIds = uniqueSorted(merged.question_ids);
@@ -264,6 +287,7 @@ function createMergeCanonicalUseCase(dependencies = {}) {
                 expectedRevision(sourceBindingSnapshot),
                 expectedRevision(reviewSnapshot),
                 expectedRevision(answerSnapshot),
+                ...reviewedOwnershipExpectedRevisions,
                 ...questionSnapshots.map(expectedRevision),
             ],
             changes: {
