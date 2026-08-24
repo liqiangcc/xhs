@@ -1,0 +1,79 @@
+name: Content Batch 0019 Tree Equality Gate
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate tree-equality fixture
+        working-directory: review/content_build/answer_batch_0019/cq_q_2d3c2cbca1d43c2ab3acad0e91726695
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac TreeEquality.java TreeEqualityTest.java
+          stdout="$(java TreeEqualityTest)"
+          echo "$stdout"
+          test "$stdout" = "PASS fixed=8 randomized=5000 oracle=bfs-paired-tree-equality mutation=none"
+
+      - name: Verify candidate, evidence and isolated review binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          cid = 'cq_q_2d3c2cbca1d43c2ab3acad0e91726695'
+          candidate = Path(f'review/candidates/answers/{cid}.md').read_bytes()
+          candidate_sha = hashlib.sha256(candidate).hexdigest()
+          evidence = json.loads(Path(f'review/evidence/{cid}.json').read_text(encoding='utf-8'))
+          review = json.loads(Path(f'review/content_build/answer_batch_0019/{cid}/isolated_review_result.json').read_text(encoding='utf-8'))
+          validation = json.loads(Path(f'review/content_build/answer_batch_0019/{cid}/code_validation.json').read_text(encoding='utf-8'))
+
+          expected_sha = '607d1d1368f460f2475fde8e51fe110a4255b54fe8493e0d4003260fa09a0295'
+          expected_stdout = 'PASS fixed=8 randomized=5000 oracle=bfs-paired-tree-equality mutation=none'
+          assert candidate_sha == expected_sha
+          assert validation['result'] == 'pass'
+          assert validation['stdout'] == expected_stdout
+          assert evidence['schema_version'] == 'answer_evidence.v1'
+          assert evidence['review_state'] == 'independent_source_first_review_passed'
+          assert review['schema_version'] == 'isolated_review.v1'
+          assert review['decision'] == 'pass'
+          assert review['promotion_blockers'] == ['human_approval_required_for_pilot_promotion']
+          assert evidence['candidate_sha256'] == expected_sha
+          assert review['candidate_sha256'] == expected_sha
+          coverage = evidence['source_question_coverage']
+          assert coverage == [{
+              'question_id': '2d3c2cbca1d43c2ab3acad0e91726695',
+              'covered': True,
+              'answer_locations': ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '常见追问'],
+          }]
+          PY
+
+      - name: Verify source-first boundary artifact exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f review/content_build/answer_batch_0019/source_boundary_audit.md
+          grep -Fq 'cq_q_2d3c2cbca1d43c2ab3acad0e91726695' review/content_build/answer_batch_0019/source_boundary_audit.md
+          grep -Fq 'candidate-qualified' review/content_build/answer_batch_0019/source_boundary_audit.md
