@@ -15,7 +15,9 @@ explicit RelationDecision
   ↓
 ApplyDecision
   ↓
-Canonical planning
+current ownership resolution
+  ↓
+Canonical planning / reviewed Canonical consolidation
   ↓
 MutationPlan
   ↓
@@ -113,10 +115,25 @@ Explicit Pair 的 source revision 只覆盖被选择的 Question snapshot；任�
 - 重新加载 persisted Decision；
 - 再验证 freshness；
 - 生成 fresh `RelationApplyIntent`；
-- 调用 Canonical planning / mutation；
+- 从 Port 重新读取当前 Question→Canonical ownership，Interface 不能提供或覆盖 source Canonical；
+- 若 `same/alias` 的 reviewed Questions 没有其它 Canonical owner，走普通 Question-group Canonical planning；
+- 若 `same/alias` 跨越一个已有 source Canonical，并且该 source Canonical 的**全部 Question 都在当前已审核 RelationCandidate 内**，Application 才可把 source Canonical 合并进指定 target Canonical；
+- Canonical consolidation 复用正式 Merge transaction，因此同步迁移 ReviewProgress/session、归档 source Answer、使 target Answer 失效、重建索引并执行完整 post-commit integrity；
+- 若一个 Question 多 owner、跨多个非 target Canonical、target 不存在，或 source Canonical 含任何未审核 Question，Apply 必须 fail-closed；需要扩大 source-first review，不能顺手移动未审核内容；
 - 执行 `preflight → commit → post-commit validation`。
 
-Interface 不得注入 snapshot、revision、MutationPlan 或 commit evidence。
+Interface 不得注入 snapshot、revision、source Canonical、ApplyStrategy、MutationPlan 或 commit evidence。
+
+这意味着：
+
+```text
+Explicit Pair + same/alias Decision
+  ↓
+Application reloads current ownership
+  ├─ no external owner → Question-group canonicalization
+  └─ one fully-reviewed source Canonical → reviewed Canonical consolidation
+       └─ source contains unreviewed member → FAIL CLOSED
+```
 
 ## 4. 已有 Canonical 的维护
 
@@ -138,6 +155,8 @@ node scripts/xhs.js canonical stats
 ```
 
 `merge/split` 只维护**已经存在的 Canonical 正式状态**，不能代替 Detect/Select → Decide。若 source-first 内容审查要求先形成新的关系结论，即使两边已经有 Canonical，也必须先用 Explicit Pair 产生 fresh RelationCandidate，再显式 Decide / Apply；不能用 `canonical merge` 绕过关系审核。
+
+当显式 `same/alias` Decision 证明两个已存在 Canonical 需要收敛时，`dedup apply` 会在 Application 内根据**当前 ownership**选择 reviewed consolidation，并调用与 `canonical merge` 相同的正式事务能力；caller 仍然只能指定 target，不能指定 source，也不能让未进入本次 review 的 source members 被连带迁移。
 
 ## 5. Legacy `canonical accept`
 
@@ -200,7 +219,7 @@ canonical suggest
   ↓
 dedup decide
   ↓
-dedup apply（same / alias）
+dedup apply（same / alias；必要时内部执行 reviewed Canonical consolidation）
   或 relation-only apply（related / parent_child / followup / unrelated）
   或 canonical merge / split（仅维护已有正式 Canonical，不能绕过新增关系审核）
   ↓
@@ -215,7 +234,7 @@ canonical check
 node scripts/xhs.js canonical suggest --question-ids '<qid1>,<qid2>'
 ```
 
-随后仍必须完成 explicit Decision；不得因为历史 Canonical 状态、旧 review 记录或 similarity 结果直接应用关系。
+随后仍必须完成 explicit Decision；不得因为历史 Canonical 状态、旧 review 记录或 similarity 结果直接应用关系。若 Decision 为 `same/alias` 且两题属于不同 Canonical，`dedup apply` 只能在 source Canonical 的全部成员都已被本次 review 覆盖时收敛 Canonical，否则 fail-closed。
 
 ## 8. Agent 规则
 
@@ -225,10 +244,12 @@ Agent 必须遵守：
 2. 不根据 similarity 自动决定 `same`；
 3. 新增/吸收关系走 Suggest/Select → Decide → Apply；
 4. 已有 Canonical 之间若 source-first 审查要求新的关系判断，先走 Explicit Pair → Decide → Apply；
-5. 只有不涉及新增关系判断的既有 Canonical 维护才直接走 Merge/Split；
-6. 正式写入前保留 explicit review、freshness、CAS；
-7. Explicit Pair 必须恰好两个 Question，且 selection evidence 永远不代表 relation inference；
-8. 不恢复任何 legacy Accept runtime/data path。
+5. `same/alias` Apply 的 source Canonical 由 Application 根据当前 ownership 推导，Agent 不得注入；
+6. 若 source Canonical 包含当前 RelationCandidate 未审核的 Question，不扩大授权，必须 fail-closed 并先扩展 review；
+7. 只有不涉及新增关系判断的既有 Canonical 维护才直接走 Merge/Split；
+8. 正式写入前保留 explicit review、freshness、CAS；
+9. Explicit Pair 必须恰好两个 Question，且 selection evidence 永远不代表 relation inference；
+10. 不恢复任何 legacy Accept runtime/data path。
 
 ## 9. 文档优先级
 
@@ -257,6 +278,9 @@ RelationCandidate 需要 explicit Decision
 Entity / Hotspot 仍只发现未 canonicalized Question
 Explicit Pair 可比较已 canonicalized Question，但不推断 relation
 Explicit Pair 任一 Question 变化后 Decision / Apply fail-closed
+same/alias 跨 Canonical 时 source owner 由 Application 当前状态推导
+source Canonical 含未审核 Question 时 reviewed consolidation fail-closed
+reviewed consolidation 复用 Canonical Merge 的 review/answer/index/integrity 事务边界
 stale source 在 Decision / Apply 前 fail-closed
 DecisionStore / MutationStore CAS 生效
 Canonical post-commit invariants 通过
