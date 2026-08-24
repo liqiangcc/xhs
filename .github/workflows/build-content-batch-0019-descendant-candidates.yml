@@ -18,6 +18,11 @@ jobs:
         with:
           ref: content/quality-completion
 
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
@@ -46,6 +51,21 @@ jobs:
             echo "$stdout"
             test "$stdout" = 'PASS fixed=10 randomized=5000 oracle=sort-deduplicate-scan mutation=none'
           )
+
+      - name: Run formal candidate audits
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_84bd83ff8f06510515f6b71534cd2ac5.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_2a5006d66e022875a36106ef0c25c2c2.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
 
       - name: Verify candidate, evidence and isolated-review bindings
         shell: bash
