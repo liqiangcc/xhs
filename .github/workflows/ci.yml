@@ -198,3 +198,100 @@ jobs:
           fi
           git commit -m 'content: normalize batch 0019 equal-sum partition question'
           git push --force origin "HEAD:refs/heads/$STAGING_BRANCH"
+
+  batch0019_split_source_question:
+    if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'automation/batch0019-controller')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CONTENT_BRANCH: content/quality-completion
+      STAGING_BRANCH: automation/batch-0019-split-source-question
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Check prerequisite and pending state
+        id: prereq
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md'
+          if ! grep -Fq 'Four source-unrecoverable singleton Questions are excluded without inventing coding contracts' "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Source-unrecoverable prerequisite is not recorded.'
+          elif ! grep -Fq 'cq_q_2f278e6b489feb680f8b173047815566` is normalized from misleading contiguous `子数组` wording' "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Equal-sum prerequisite is not recorded.'
+          elif grep -Fq 'cq_q_2e26508950e5da505c44621129f41a26` is retired and split into two source-exact Canonicals' "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Split normalization is already recorded.'
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 21
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Go
+        if: steps.prereq.outputs.ready == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Extract and run repository split logic
+        if: steps.prereq.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow='.github/workflows/remediate-content-batch-0019-split-source-question.yml'
+          awk 'BEGIN{capture=0} /python3 - <<'"'"'PY'"'"'/{capture=1; next} capture && /^          PY$/{exit} capture {sub(/^          /, ""); print}' "$workflow" > /tmp/batch0019_split.py
+          test -s /tmp/batch0019_split.py
+          grep -Fq "OLD_CANONICAL = f'cq_q_{OLD_QID}'" /tmp/batch0019_split.py
+          python3 /tmp/batch0019_split.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify repository gates
+        if: steps.prereq.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Export verified split normalization
+        if: steps.prereq.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No split normalization changes to export.'
+            exit 0
+          fi
+          git commit -m 'content: split batch 0019 source question into exact canonicals'
+          git push --force origin "HEAD:refs/heads/$STAGING_BRANCH"
