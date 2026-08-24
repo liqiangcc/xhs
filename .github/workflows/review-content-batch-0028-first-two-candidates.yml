@@ -1,0 +1,287 @@
+name: Review Content Batch 0028 First Two Candidates
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0028-first-two-candidates.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-first-two-isolated-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  review:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard exact independently reviewed candidate bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object review/candidates/answers/cq_q_5a5db0e8391add20113a1ffec9c1e41b.md)" = "1571db4976bfe7d604e91d49dbc4deaa379206b7"
+          test "$(git hash-object review/candidates/answers/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2.md)" = "e781696ebb8a96929f7630ce5e69775fa6cf078c"
+          grep -Fq 'fcd6c7cbfba95b407ed6dfd83adeb926' review/content_build/answer_batch_0028/source_boundary_audit.md
+          grep -Fq 'be5212d5e7ffdfedf22de7bae65f3f78' .github/workflows/remediate-content-batch-0028-core-boundaries.yml
+
+      - name: Re-run exact Java fixtures before recording review
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd review/content_build/answer_batch_0028/cq_q_5a5db0e8391add20113a1ffec9c1e41b
+            javac -encoding UTF-8 RemoveAllDuplicates.java RemoveAllDuplicatesTest.java
+            test "$(java RemoveAllDuplicatesTest)" = "PASS cases=10 sample=1->2->5 head-middle-tail-all-duplicates-covered"
+          )
+          (
+            cd review/content_build/answer_batch_0028/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2
+            javac -encoding UTF-8 Ipv4ToInt.java Ipv4ToIntTest.java
+            test "$(java Ipv4ToIntTest)" = "PASS valid=6 invalid=12 unsigned-boundaries=2 leading-zero-contract=decimal"
+          )
+
+      - name: Record source-first isolated reviews and evidence binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto = require('crypto');
+          const fs = require('fs');
+          const path = require('path');
+
+          const checkedAt = '2026-08-25';
+          const reviewerId = 'source-first-isolated-reviewer-batch-0028-20260825-v1';
+          const scores = {
+            facts_and_evidence: 25,
+            directness_and_relevance: 20,
+            type_specific_completeness: 20,
+            mechanism_and_causality: 15,
+            boundaries_and_tradeoffs: 10,
+            followup_quality: 5,
+            oral_quality: 5,
+          };
+
+          function hashFile(file) {
+            return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+          }
+          function writeJson(file, value) {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+          }
+          function reviewObject(id, hash, reviewVersion, findings, sourcePacket) {
+            return {
+              schema_version: 'isolated_review.v1',
+              canonical_id: id,
+              candidate_sha256: hash,
+              reviewed_at: checkedAt,
+              review_mode: 'source_first_isolated',
+              reviewer_id: reviewerId,
+              decision: 'pass',
+              revision_round: 0,
+              source_packet: sourcePacket,
+              scores,
+              hard_failures: [],
+              unsupported_claims: [],
+              uncovered_source_variants: [],
+              findings,
+              promotion_blockers: ['human_approval_required_for_pilot_promotion'],
+              review_version: reviewVersion,
+            };
+          }
+
+          const linked = {
+            id: 'cq_q_5a5db0e8391add20113a1ffec9c1e41b',
+            qid: 'fcd6c7cbfba95b407ed6dfd83adeb926',
+            reviewVersion: 'batch-0028.sorted-list-remove-all.v1',
+            findings: [
+              'The raw source sample 1→2→3→3→4→4→5 -> 1→2→5 uniquely selects the remove-all-duplicated-values contract; the candidate does not conflate it with the keep-one variant.',
+              'The dummy/prev/cur invariant is correct for a sorted list: singleton groups are retained and duplicate groups are bypassed as a whole, including head and tail groups.',
+              'The exact Java fixture passes the source sample plus empty, singleton, no-duplicate, all-duplicate, head, middle and tail duplicate boundaries.',
+              'The O(n) time and O(1) auxiliary-space claims match the monotone cursor implementation; the nested loop does not restart or backtrack.',
+              'No personal or production experience is fabricated. Formal promotion remains blocked only by the repository human-approval gate.'
+            ],
+            sources: [
+              { source_id: 'repo-source', title: 'Answer Batch 0028 repository source packet', locator: 'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md', source_type: 'repository_source_record', checked_at: checkedAt },
+              { source_id: 'boundary-audit', title: 'Answer Batch 0028 source-first boundary audit', locator: 'review/content_build/answer_batch_0028/source_boundary_audit.md', source_type: 'repository_structured_source', checked_at: checkedAt },
+              { source_id: 'fixture', title: 'Remove-all-duplicates deterministic Java validation', locator: 'review/content_build/answer_batch_0028/cq_q_5a5db0e8391add20113a1ffec9c1e41b/code_validation.json', source_type: 'executable_test_or_reproducible_experiment', checked_at: checkedAt },
+              { source_id: 'isolated-review', title: 'Source-first isolated review', locator: 'review/content_build/answer_batch_0028/cq_q_5a5db0e8391add20113a1ffec9c1e41b/isolated_review_result.json', source_type: 'repository_structured_source', checked_at: checkedAt },
+            ],
+            claims: [
+              { claim_id: 'source-contract', text: 'The source sample requires deleting every node whose value occurs more than once, not retaining one representative.', source_ids: ['repo-source', 'boundary-audit'], answer_locations: ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '常见追问'] },
+              { claim_id: 'group-invariant', text: 'For a sorted list, equal values are contiguous, so a single forward scan can retain singleton groups and bypass every group with length greater than one.', source_ids: ['fixture', 'isolated-review'], answer_locations: ['1 分钟版', '3 分钟版', '原理机制'] },
+              { claim_id: 'complexity', text: 'The implementation advances cur monotonically without restart, so total traversal is O(n) with O(1) auxiliary state apart from the constant dummy node.', source_ids: ['fixture', 'isolated-review'], answer_locations: ['1 分钟版', '关键细节', '常见追问'] },
+              { claim_id: 'validation', text: 'The exact Java fixture passes the source sample and the declared head/middle/tail/all-duplicate boundary cases.', source_ids: ['fixture'], answer_locations: ['关键细节', '易错点'] },
+            ],
+            validation: {
+              command: 'javac -encoding UTF-8 RemoveAllDuplicates.java RemoveAllDuplicatesTest.java && java RemoveAllDuplicatesTest',
+              result: 'pass',
+              reported_stdout: 'PASS cases=10 sample=1->2->5 head-middle-tail-all-duplicates-covered',
+              checks: ['source sample', 'empty input', 'singleton', 'no duplicates', 'all duplicated', 'duplicate groups at head, middle and tail'],
+              boundary_tests: [
+                { case: 'source sample', expected: '1->2->5', passed: true },
+                { case: 'all nodes duplicated', expected: 'empty list', passed: true },
+                { case: 'head/middle/tail duplicate groups', expected: 'all duplicate groups removed', passed: true },
+              ],
+            },
+          };
+
+          const ipv4 = {
+            id: 'cq_q_5a87a04d4bc934eadb1cf42e28fcaed2',
+            qid: 'be5212d5e7ffdfedf22de7bae65f3f78',
+            reviewVersion: 'batch-0028.ipv4-to-int.v1',
+            findings: [
+              'The authoritative repository source asks only ipv4转int; the candidate correctly treats reverse conversion as outside the required answer boundary.',
+              'RFC 791 supports the four-octet/32-bit address-width claim; the candidate does not present its dotted-decimal leading-zero choice as an RFC requirement.',
+              'Java SE 21 Integer.toUnsignedLong documents that the high 32 long bits are zero and the low 32 bits equal the int argument, supporting the signed-int/unsigned-view explanation.',
+              'The shift-and-or state invariant preserves octet order, and every segment is range-checked before it is inserted into the 32-bit pattern.',
+              'The exact Java fixture passes byte-order, signed/unsigned boundary, explicit decimal-leading-zero and malformed-input cases. Formal promotion remains blocked only by the repository human-approval gate.'
+            ],
+            sources: [
+              { source_id: 'repo-source', title: 'Answer Batch 0028 repository source packet', locator: 'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md', source_type: 'repository_source_record', checked_at: checkedAt },
+              { source_id: 'boundary-audit', title: 'Answer Batch 0028 source-first boundary audit', locator: 'review/content_build/answer_batch_0028/source_boundary_audit.md', source_type: 'repository_structured_source', checked_at: checkedAt },
+              { source_id: 'rfc791', title: 'RFC 791 — Internet Protocol', locator: 'https://www.rfc-editor.org/rfc/rfc791.html', source_type: 'official_specification_or_standard', checked_at: checkedAt },
+              { source_id: 'jdk21-integer', title: 'Java SE 21 Integer.toUnsignedLong', locator: 'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Integer.html#toUnsignedLong(int)', source_type: 'official_documentation', checked_at: checkedAt },
+              { source_id: 'fixture', title: 'IPv4 deterministic Java validation', locator: 'review/content_build/answer_batch_0028/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2/code_validation.json', source_type: 'executable_test_or_reproducible_experiment', checked_at: checkedAt },
+              { source_id: 'isolated-review', title: 'Source-first isolated review', locator: 'review/content_build/answer_batch_0028/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2/isolated_review_result.json', source_type: 'repository_structured_source', checked_at: checkedAt },
+            ],
+            claims: [
+              { claim_id: 'source-contract', text: 'The repository source asks for IPv4 string to int conversion; reverse int to text is not a source requirement.', source_ids: ['repo-source', 'boundary-audit'], answer_locations: ['核心结论', '1 分钟版', '易错点'] },
+              { claim_id: 'address-width', text: 'IPv4 internet addresses are four octets / 32 bits.', source_ids: ['rfc791'], answer_locations: ['核心结论', '3 分钟版', '原理机制'] },
+              { claim_id: 'unsigned-view', text: 'Integer.toUnsignedLong preserves the int argument bits in the low 32 bits of a nonnegative long unsigned conversion.', source_ids: ['jdk21-integer'], answer_locations: ['核心结论', '3 分钟版', '关键细节', '原理机制', '常见追问'] },
+              { claim_id: 'implementation', text: 'The implementation validates exactly four non-empty decimal segments in 0..255 and appends each octet by left-shifting the accumulated bit pattern eight bits before OR-ing the next octet.', source_ids: ['fixture', 'isolated-review'], answer_locations: ['1 分钟版', '3 分钟版', '关键细节', '原理机制'] },
+              { claim_id: 'validation', text: 'The exact Java fixture passes byte-order, signed/unsigned boundaries, explicit decimal leading-zero behavior and malformed-input rejection.', source_ids: ['fixture'], answer_locations: ['关键细节', '常见追问', '易错点'] },
+            ],
+            validation: {
+              command: 'javac -encoding UTF-8 Ipv4ToInt.java Ipv4ToIntTest.java && java Ipv4ToIntTest',
+              result: 'pass',
+              reported_stdout: 'PASS valid=6 invalid=12 unsigned-boundaries=2 leading-zero-contract=decimal',
+              checks: ['ordinary byte order', '127/128 signed boundary', 'unsigned 32-bit maximum', 'explicit leading-zero decimal contract', 'malformed segment count/content/range rejection'],
+              boundary_tests: [
+                { case: '255.255.255.255', expected: 'int -1; unsigned long 4294967295', passed: true },
+                { case: '001.002.003.004', expected: 'explicit candidate contract parses decimal as 1.2.3.4', passed: true },
+                { case: 'malformed addresses', expected: 'IllegalArgumentException', passed: true },
+              ],
+            },
+          };
+
+          for (const spec of [linked, ipv4]) {
+            const candidate = `review/candidates/answers/${spec.id}.md`;
+            const hash = hashFile(candidate);
+            const reviewPath = `review/content_build/answer_batch_0028/${spec.id}/isolated_review_result.json`;
+            const evidencePath = `review/evidence/${spec.id}.json`;
+            const review = reviewObject(spec.id, hash, spec.reviewVersion, spec.findings, [
+              'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md',
+              'review/content_build/answer_batch_0028/source_boundary_audit.md',
+              candidate,
+              `review/content_build/answer_batch_0028/${spec.id}/code_validation.json`,
+              'config/answer_quality.json',
+              'docs/refactor/09_answer_content_standard.md',
+            ]);
+            writeJson(reviewPath, review);
+            writeJson(evidencePath, {
+              schema_version: 'answer_evidence.v1',
+              canonical_id: spec.id,
+              candidate_sha256: hash,
+              checked_at: checkedAt,
+              writer: { writer_id: 'content-batch-0028-candidate-builder', writer_version: 'xhs-answer-curator.v1' },
+              sources: spec.sources,
+              claims: spec.claims,
+              source_question_coverage: [{ question_id: spec.qid, covered: true, answer_locations: ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '常见追问'] }],
+              validation: spec.validation,
+              review_state: 'independent_source_first_review_passed',
+              review: {
+                reviewer_id: reviewerId,
+                review_version: spec.reviewVersion,
+                independent: true,
+                decision: 'pass',
+                revision_round: 0,
+                scores,
+                hard_failures: [],
+                uncovered_source_variants: [],
+                unsupported_claims: [],
+                findings: spec.findings,
+              },
+            });
+          }
+          NODE
+
+      - name: Candidate audits require evidence and runnable code
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_5a5db0e8391add20113a1ffec9c1e41b.md --require-evidence --require-code --noWrite --noManifest
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2.md --require-evidence --require-code --noWrite --noManifest
+
+      - name: Verify repository gates without promoting pilot candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only the reviewed evidence slice if branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during review validation: $base_head -> $remote_head"
+            echo 'Discarding this result; a later trigger must review the current candidate bytes.'
+            exit 0
+          fi
+          git add review/evidence/cq_q_5a5db0e8391add20113a1ffec9c1e41b.json \
+                  review/evidence/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2.json \
+                  review/content_build/answer_batch_0028/cq_q_5a5db0e8391add20113a1ffec9c1e41b/isolated_review_result.json \
+                  review/content_build/answer_batch_0028/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2/isolated_review_result.json
+          if git diff --cached --quiet; then
+            echo 'Exact review/evidence bindings already recorded.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0028 first two candidates source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
