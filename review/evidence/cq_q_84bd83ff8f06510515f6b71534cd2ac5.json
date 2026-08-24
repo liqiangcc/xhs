@@ -1,0 +1,201 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_84bd83ff8f06510515f6b71534cd2ac5",
+  "candidate_sha256": "2a94c934588d5d0753c3347292602a31975ca74334dd4826b3df609d0709eca6",
+  "checked_at": "2026-08-24",
+  "writer": {
+    "writer_id": "automation-content-builder-path-sum-descendant-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-68ad5735",
+      "title": "Interview note preserving the two source-exact coding task titles",
+      "locator": "note_desc/68ad5735000000001c033a19.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "xhs-tagged-note-68ad5735",
+      "title": "Normalized source projection containing the source-exact descendant Question",
+      "locator": "note_tagged/68ad5735000000001c033a19.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "batch-0019-source-packet",
+      "title": "Answer Batch 0019 frozen original repository-source packet",
+      "locator": "review/reports/ANSWER_BATCH_0019_SOURCE_PACKET.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "batch-0019-source-boundary-audit",
+      "title": "Answer Batch 0019 source-first boundary audit and descendant disposition",
+      "locator": "review/content_build/answer_batch_0019/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "candidate-code-validation",
+      "title": "Deterministic Java validation for this source-bounded candidate",
+      "locator": "review/content_build/answer_batch_0019/cq_q_84bd83ff8f06510515f6b71534cd2ac5/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "candidate-isolated-review",
+      "title": "Source-first isolated review for this candidate",
+      "locator": "review/content_build/answer_batch_0019/cq_q_84bd83ff8f06510515f6b71534cd2ac5/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The retained repository source preserves only the title “二叉树路径和”; it does not preserve a target contract, path direction, result shape, language, node type, or API.",
+      "source_ids": [
+        "xhs-raw-note-68ad5735",
+        "xhs-tagged-note-68ad5735",
+        "batch-0019-source-boundary-audit"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "candidate-contract-boundary",
+      "text": "Root-to-leaf boolean existence, Java, int node values, long target, null=false, and non-mutation are explicit candidate choices rather than recovered prompt facts.",
+      "source_ids": [
+        "batch-0019-source-boundary-audit",
+        "candidate-isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "algorithm-correctness",
+      "text": "For the chosen contract, subtracting the current node value reduces the problem to the same root-to-leaf predicate on each child; at a leaf the remaining target must be exactly zero.",
+      "source_ids": [
+        "candidate-code-validation",
+        "candidate-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity-and-resource-bound",
+      "text": "The recursive implementation visits each node at most once in the worst case, so time is O(n), with O(h) recursion depth; it does not rely on non-negative-value pruning.",
+      "source_ids": [
+        "candidate-code-validation",
+        "candidate-isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java fixture passes 10 fixed cases and 5000 deterministic random trees against an independent iterative root-to-leaf enumeration oracle while confirming no input mutation.",
+      "source_ids": [
+        "candidate-code-validation",
+        "candidate-isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "84bd83ff8f06510515f6b71534cd2ac5",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac BinaryTreePathSum.java BinaryTreePathSumTest.java && java BinaryTreePathSumTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=10 randomized=5000 oracle=iterative-root-to-leaf-enumeration mutation=none",
+    "checks": [
+      "null tree",
+      "single-node exact and mismatch",
+      "multiple root-to-leaf paths",
+      "internal-prefix-only target does not count",
+      "negative values",
+      "zero values",
+      "int boundary sum represented by long target",
+      "5000 deterministic random trees checked against iterative root-to-leaf enumeration oracle",
+      "full tree serialization compared before and after calls to detect mutation"
+    ],
+    "boundary_tests": [
+      {
+        "case": "null root",
+        "expected": "false under explicit candidate contract",
+        "passed": true
+      },
+      {
+        "case": "internal prefix sums to target but node is not a leaf",
+        "expected": "false because the declared path must end at a leaf",
+        "passed": true
+      },
+      {
+        "case": "negative and zero values",
+        "expected": "handled without monotonic pruning",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic randomized trees",
+        "expected": "recursive result matches iterative root-to-leaf enumeration oracle without mutation",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-path-sum-descendant-20260824",
+    "review_version": "path-sum.root-to-leaf-existence.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The repository source supports only the title “二叉树路径和”; the candidate does not claim a hidden LeetCode number, path-count contract, arbitrary-start path contract, language, or API.",
+      "The candidate explicitly labels root-to-leaf boolean existence, Java, int node values, long target, null behavior, and non-mutation as implementation choices.",
+      "The recursive remaining-target invariant is correct for the declared contract, including the required leaf check that prevents an internal-prefix hit from being accepted.",
+      "Negative and zero node values are handled without invalid monotonic pruning, and the long target avoids narrowing the path-sum domain to int accumulation.",
+      "The exact OpenJDK 21.0.11 fixture passed 10 fixed cases and 5000 deterministic randomized trees against an independent iterative root-to-leaf enumeration oracle with mutation checks.",
+      "No personal or production experience is fabricated; formal promotion remains blocked by the repository human-approval gate."
+    ]
+  }
+}
