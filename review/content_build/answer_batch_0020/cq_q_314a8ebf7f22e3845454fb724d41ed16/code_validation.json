@@ -1,0 +1,25 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_314a8ebf7f22e3845454fb724d41ed16",
+  "validated_at": "2026-08-25",
+  "runtime": "TypeScript 5.8.3 compile check plus Node.js 22.16.0 deterministic JavaScript runtime mirror",
+  "command": "tsc --strict --noEmit --target ES2020 --lib ES2020,DOM Debounce.ts && node debounce_runtime_test.js",
+  "result": "pass",
+  "stdout": "PASS fixed=6 fake_clock=deterministic trailing=last-call leading=immediate-no-trailing this-and-args=preserved",
+  "implementation_contract": {
+    "source_supported": "TypeScript debounce; repository boundary audit records delayed debounce semantics and a source-reference immediate option",
+    "candidate_choices": "finite non-negative waitMs; trailing-only by default; immediate=true means leading-only; preserve dynamic this and args; no cancel/flush; callback return ignored",
+    "type_check": "Debounce.ts passes strict TypeScript no-emit compilation",
+    "runtime_oracle": "deterministic fake clock validates a JavaScript mirror with identical timer/control-flow semantics"
+  },
+  "checks": [
+    "strict TypeScript compile under ES2020+DOM libs",
+    "single trailing call is deferred exactly to the quiet-window boundary in fake time",
+    "burst trailing calls execute only the last call and its arguments",
+    "immediate=true executes once on entry and suppresses calls until a full quiet window",
+    "independent debounce instances do not share timer state",
+    "0ms trailing mode remains deferred until the timer turn",
+    "negative and infinite wait values are rejected",
+    "dynamic this and arguments are preserved"
+  ]
+}
