@@ -1,0 +1,136 @@
+name: Audit Content Batch 0029 Source Boundaries
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/audit-content-batch-0029-source-boundaries.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0029-source-boundary-audit
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Capture current source-first contexts for exact batch scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='review/content_build/answer_batch_0029'
+          mkdir -p "$root/source_context"
+          for cid in \
+            cq_q_5feff10b4655bf428fa0b06241a887e1 \
+            cq_q_60a7b0fe580fecd852c13c4e3c279272 \
+            cq_q_61854a441767eb044ad35c61e02c7daa \
+            cq_q_61dd7ba9e664cb0daf72240b4d3c85d6 \
+            cq_q_627564a8b30741a84b27a1367b3d22f6 \
+            cq_q_64fba5a4c506e237a3a3cf3a91414c8b \
+            cq_q_6634a5c9294a3f0117a0a029020256ae \
+            cq_q_67ba9bfbae99a725c25a0d4ac0b19f98 \
+            cq_q_69f2feb994cbec17e8d5e0d1b7f24188 \
+            cq_q_6a03e4ded0b05d96bb54b43ae3e980be; do
+            node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$root/source_context/$cid.json"
+          done
+
+      - name: Freeze lossless source-boundary audit packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const root='review/content_build/answer_batch_0029';
+          const ids=['cq_q_5feff10b4655bf428fa0b06241a887e1','cq_q_60a7b0fe580fecd852c13c4e3c279272','cq_q_61854a441767eb044ad35c61e02c7daa','cq_q_61dd7ba9e664cb0daf72240b4d3c85d6','cq_q_627564a8b30741a84b27a1367b3d22f6','cq_q_64fba5a4c506e237a3a3cf3a91414c8b','cq_q_6634a5c9294a3f0117a0a029020256ae','cq_q_67ba9bfbae99a725c25a0d4ac0b19f98','cq_q_69f2feb994cbec17e8d5e0d1b7f24188','cq_q_6a03e4ded0b05d96bb54b43ae3e980be'];
+          const rows=[];
+          for(const cid of ids){
+            const p=`${root}/source_context/${cid}.json`,ctx=JSON.parse(fs.readFileSync(p,'utf8'));
+            if(!ctx.ok) throw new Error(`${cid}: answer context failed`);
+            if(ctx.canonical?.canonical_id!==cid) throw new Error(`${cid}: canonical identity drifted`);
+            if(ctx.answer_type!=='coding') throw new Error(`${cid}: task says coding but context says ${ctx.answer_type}`);
+            const qs=ctx.source_questions||[];
+            if(!qs.length) throw new Error(`${cid}: no source questions; fail closed`);
+            for(const q of qs){if(!q.question_id||typeof q.original_question!=='string'||!q.original_question.trim())throw new Error(`${cid}: source question is not losslessly recoverable in current context`);}
+            rows.push({canonical_id:cid,canonical_title:ctx.canonical?.title||null,answer_type:ctx.answer_type,question_count:qs.length,source_questions:qs,candidate_exists:fs.existsSync(`review/candidates/answers/${cid}.md`),formal_answer_exists:fs.existsSync(`review/answers/${cid}.md`)});
+          }
+          const packet={schema_version:'answer_batch_source_boundary_audit.v1',batch:'0029',captured_at:'2026-08-25',capture_mode:'current_repository_answer_context_source_first',canonical_count:rows.length,source_question_count:rows.reduce((n,r)=>n+r.question_count,0),canonicals:rows};
+          fs.writeFileSync(`${root}/source_boundary_audit.json`,JSON.stringify(packet,null,2)+'\n');
+          const esc=s=>String(s).replace(/\|/g,'\\|').replace(/\r?\n/g,' ');
+          let md='# Answer Batch 0029 — Source-First Boundary Audit\n\n';
+          md+='This packet is captured from the current repository `answer context` for the exact task scope before candidate authoring or relation decisions. It preserves source wording and current ownership facts only; it does not treat long-tail baseline answers as factual sources and it makes no `same`/`related`/`unrelated` relation decision.\n\n';
+          md+=`- Canonicals: ${rows.length}\n- Source Questions: ${packet.source_question_count}\n- Capture date: 2026-08-25\n- Fail-closed rule: any missing/blank source wording aborts this audit.\n\n`;
+          for(const r of rows){
+            md+=`## ${r.canonical_id}\n\n- Current title: ${r.canonical_title?esc(r.canonical_title):'(none)'}\n- Answer type: \`${r.answer_type}\`\n- Source Question count: ${r.question_count}\n- Candidate already exists: ${r.candidate_exists}\n- Formal Answer already exists: ${r.formal_answer_exists}\n\n`;
+            r.source_questions.forEach((q,i)=>{md+=`### Source ${i+1}: \`${q.question_id}\`\n\n- Original question: ${esc(q.original_question)}\n- Current source record (lossless JSON):\n\n\`\`\`json\n${JSON.stringify(q,null,2)}\n\`\`\`\n\n`;});
+          }
+          md+='## Next gate\n\nRun fresh relation discovery/review against current repository state for each boundary before any candidate is authored or any Canonical ownership mutation is applied. Any source whose wording combines independent questions must be split through the repository source-question workflow first.\n';
+          fs.writeFileSync(`${root}/source_boundary_audit.md`,md);
+          NODE
+
+      - name: Advance batch task only to source-audited in-progress state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md';
+          let text=fs.readFileSync(task,'utf8');
+          if(text.includes('- Status: `pending`')) text=text.replace('- Status: `pending`','- Status: `in_progress`');
+          const note='- [x] Source-first boundary packet frozen from current AnswerContext for all 10 Canonicals; no relation or candidate conclusion is implied. See `review/content_build/answer_batch_0029/source_boundary_audit.{md,json}`.';
+          if(!text.includes(note)) text+=(text.endsWith('\n')?'':'\n')+'\n## Progress\n\n'+note+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Verify source packet and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Commit audit only if source branch remained stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during boundary audit: $base_head -> $remote_head; fail closed and regenerate next run."; exit 0; fi
+          git add review/content_build/answer_batch_0029/source_context review/content_build/answer_batch_0029/source_boundary_audit.json review/content_build/answer_batch_0029/source_boundary_audit.md tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md
+          git diff --cached --check
+          git config user.name 'xhs-content-audit-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: freeze batch 0029 source boundaries'
+          git push origin "HEAD:$CONTENT_BRANCH"
