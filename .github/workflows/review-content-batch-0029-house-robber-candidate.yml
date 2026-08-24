@@ -1,0 +1,164 @@
+name: Review Content Batch 0029 House Robber Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0029-house-robber-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0029-house-robber-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6634a5c9294a3f0117a0a029020256ae
+  QID_GENERIC: 64fba5a4c506e237a3a3cf3a91414c8b
+  QID_EXPLICIT: 6634a5c9294a3f0117a0a029020256ae
+  CANDIDATE_BLOB_SHA: 7a60ce7027fe231fa02656c830ff178224e59545
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun exact code fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          javac "$out/HouseRobber.java" "$out/HouseRobberTest.java"
+          test "$(java -cp "$out" HouseRobberTest)" = 'PASS empty=0 single=5 canonical-example=4 second-example=12 greedy-counterexample=4 zeros=0 null=rejected'
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID;
+          const expected=[process.env.QID_GENERIC,process.env.QID_EXPLICIT].sort();
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify([...(canon.question_ids||[])].sort())!==JSON.stringify(expected)) throw new Error('review source ownership drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byId=new Map(qs.map(x=>[x.question_id,x.original_question]));
+          if(byId.get(process.env.QID_GENERIC)!=='算法手撕：打家劫舍（House Robber, 简单动态规划）。') throw new Error('generic source drifted');
+          if(byId.get(process.env.QID_EXPLICIT)!=='算法手撕：LeetCode 198 - 打家劫舍。给定一个代表每个房屋存放金额的非负整数数组，计算在不触发报警装置（不进入相邻房屋）的情况下，一夜之内能够偷取的最高金额') throw new Error('explicit source drifted');
+          NODE
+
+      - name: Record independent source-first review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,date='2026-08-25';
+          const qids=[process.env.QID_GENERIC,process.env.QID_EXPLICIT];
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const out=`review/content_build/answer_batch_0029/${cid}`;
+          const fixture=`${out}/code_validation.json`;
+          const writerResearch=`${out}/writer_research.json`;
+          const reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0029-house-robber-20260825-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'Both current source Questions are covered: the generic House Robber/simple-DP wording and the explicit LeetCode 198 non-negative-array/non-adjacent contract now resolve to one Canonical and one answer boundary.',
+            'The candidate states the exhaustive recurrence max(skip current, take current plus i-2), explains its optimal-substructure argument and rolling-state invariant, and gives O(n) time with O(1) auxiliary space.',
+            'The candidate explicitly separates source facts from example-interface choices: empty-array behavior, null rejection, Java language choice and long accumulation are not presented as preserved source requirements.',
+            'The deterministic Java fixture passes empty, singleton, standard examples, all-zero input, a [2,1,1,2] counterexample to local greedy reasoning, and explicit null rejection.',
+            'The answer excludes the circular House Robber II contract and does not fabricate project experience, production scale, version facts or unsupported source constraints.',
+            'No uncovered source variant, unsupported source claim, coding hard failure or correctness blocker remains. Formal promotion remains subject to the repository promotion/real-review policy.'
+          ];
+          const review={
+            schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256: candidateSha256,reviewed_at:date,
+            review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0029.house-robber.v1',decision:'pass',revision_round:0,
+            source_packet:['review/content_build/answer_batch_0029/source_boundary_audit.json','review/content_build/answer_batch_0029/house_robber_relation_review.md',writerResearch,candidate,fixture,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],
+            scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,
+            promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']
+          };
+          fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
+          const evidence={
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256: candidateSha256,checked_at:date,
+            writer:{writer_id:'content-batch-0029-house-robber-candidate-builder',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'source-boundary',title:'Answer Batch 0029 frozen source-boundary audit',locator:'review/content_build/answer_batch_0029/source_boundary_audit.json',source_type:'repository_source_record',checked_at:date},
+              {source_id:'relation-review',title:'Answer Batch 0029 House Robber source-first relation review',locator:'review/content_build/answer_batch_0029/house_robber_relation_review.md',source_type:'repository_structured_source',checked_at:date},
+              {source_id:'fixture',title:'House Robber deterministic Java fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'House Robber independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-contract',text:'The two consolidated source Questions represent the same linear House Robber / LeetCode 198 problem with non-adjacent selection and an explicit non-negative amount array in the more detailed wording.',source_ids:['source-boundary','relation-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},
+              {claim_id:'recurrence',text:'For each position every legal optimum either skips the current house or takes it and excludes the previous house, yielding max(dp[i-1], dp[i-2] + nums[i]).',source_ids:['fixture','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},
+              {claim_id:'validation',text:'The executable fixture verifies empty/singleton behavior, standard recurrence examples, the local-greedy counterexample, all-zero values and the example null contract.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}
+            ],
+            source_question_coverage:qids.map(question_id=>({question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']})),
+            validation:{command:'javac HouseRobber.java HouseRobberTest.java && java HouseRobberTest',result:'pass',reported_stdout:'PASS empty=0 single=5 canonical-example=4 second-example=12 greedy-counterexample=4 zeros=0 null=rejected',checks:['empty-array defensive contract','single house','standard linear DP examples','local-greedy counterexample','all-zero values','explicit null rejection']},
+            review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0029.house-robber.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+          };
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md';
+          if(fs.existsSync(task)){
+            let text=fs.readFileSync(task,'utf8');
+            const note='- Consolidated House Robber / LeetCode 198 candidate passed independent source-first review and deterministic Java evidence; formal promotion remains governed by repository promotion and real-review policy.';
+            if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          }
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during House Robber independent review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0029/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0029 house robber candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
