@@ -27,7 +27,27 @@ jobs:
           ref: content/quality-completion
           fetch-depth: 0
 
+      - name: Check frozen source-packet state
+        id: packet_state
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md'
+          json='review/reports/ANSWER_BATCH_0019_SOURCE_PACKET.json'
+          md='review/reports/ANSWER_BATCH_0019_SOURCE_PACKET.md'
+          if grep -Fq 'Boundary coverage: `10/10` original batch Canonicals reviewed source-first before candidate generation.' "$task"; then
+            if [ ! -s "$json" ] || [ ! -s "$md" ]; then
+              echo 'Frozen batch-0019 source packet is declared complete but one or both artifacts are missing.' >&2
+              exit 1
+            fi
+            echo 'frozen=true' >> "$GITHUB_OUTPUT"
+            echo 'Frozen source-packet boundary is already complete; preserve the historical 10-Canonical snapshot.'
+          else
+            echo 'frozen=false' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract repository-source packet for batch 0019
+        if: steps.packet_state.outputs.frozen != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -41,7 +61,7 @@ jobs:
           task = task_path.read_text(encoding='utf-8')
           canonical_ids = list(dict.fromkeys(re.findall(r'`(cq_q_[0-9a-f]{32})`', task)))
           if len(canonical_ids) != 10:
-              raise SystemExit(f'expected 10 unique batch canonicals, got {len(canonical_ids)}')
+              raise SystemExit(f'expected 10 unique batch canonicals before source-boundary freeze, got {len(canonical_ids)}')
 
           canon_rows = {}
           for line in pathlib.Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines():
@@ -149,7 +169,7 @@ jobs:
           if packet.get('schema_version') != 'answer_batch_source_packet.v2':
               raise SystemExit('unexpected source packet schema')
           if len(packet.get('canonicals') or []) != 10:
-              raise SystemExit('packet canonical count != 10')
+              raise SystemExit('frozen packet canonical count != 10')
           missing = [e['canonical_id'] for e in packet['canonicals'] if not e.get('source_hits')]
           print('source-hit-missing:', missing)
           image_backed = [e['canonical_id'] for e in packet['canonicals'] if any(h.get('note_img_txt') for h in e.get('source_hits') or [])]
