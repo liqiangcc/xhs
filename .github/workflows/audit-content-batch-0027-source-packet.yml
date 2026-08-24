@@ -161,7 +161,9 @@ jobs:
                   if hit['note_img_txt'] is not None: lines += ['Image transcript:', '', '```text', hit['note_img_txt'].rstrip(), '```', '']
               if not entry['source_hits']:
                   lines += ['No exact-id or unique exact-normalized source hit found.', '']
-          out_md.write_text('\n'.join(lines).rstrip() + '\n', encoding='utf-8')
+          rendered = '\n'.join(lines).rstrip()
+          rendered = re.sub(r'[ \t]+$', '', rendered, flags=re.MULTILINE)
+          out_md.write_text(rendered + '\n', encoding='utf-8')
           missing_hits = [cid for cid in ids if not hits[cid]]
           print('source-hit-missing:', missing_hits)
           if missing_hits:
