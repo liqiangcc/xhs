@@ -1,0 +1,216 @@
+name: Inventory Content Batch 0028 SQL Relations
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/inventory-content-batch-0028-sql-relations.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-sql-relation-inventory
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SOURCE_QID: e9c5bb8468fd0b37bd3f0abf72df80aa
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Capture stable content head
+        id: state
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run fresh current-state relation discovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='${{ steps.state.outputs.head }}'
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          qid = os.environ['SOURCE_QID']
+          questions = [json.loads(line) for line in Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          source = next((row for row in questions if row.get('question_id') == qid), None)
+          if source is None:
+              raise SystemExit(f'missing SQL source Question {qid}')
+          if source.get('canonical_id') != f'cq_q_{qid}' or source.get('is_valid_for_library') is not True:
+              raise SystemExit(f'SQL source Question ownership/validity drifted: {source}')
+
+          seeds = []
+          for value in source.get('tech_entities') or []:
+              value = str(value).strip()
+              if value and value not in seeds:
+                  seeds.append(value)
+          if 'SQL' not in seeds:
+              seeds.append('SQL')
+
+          runs = []
+          matched = {}
+          for seed in seeds:
+              proc = subprocess.run(
+                  ['node', 'scripts/xhs.js', 'canonical', 'suggest', '--entity', seed, '--limit', '100', '--noManifest'],
+                  check=True,
+                  text=True,
+                  capture_output=True,
+              )
+              result = json.loads(proc.stdout)
+              hits = [row for row in result.get('relation_candidates', []) if qid in (row.get('question_ids') or [])]
+              runs.append({
+                  'mode': 'entity',
+                  'seed': seed,
+                  'detection_count': result.get('detection_count'),
+                  'candidate_count': result.get('candidate_count'),
+                  'matching_source_candidate_count': len(hits),
+                  'matching_candidates': hits,
+              })
+              for candidate in hits:
+                  matched[candidate['relation_candidate_key']] = candidate
+
+          proc = subprocess.run(
+              ['node', 'scripts/xhs.js', 'canonical', 'suggest', '--hotspot', '--limit', '200', '--noManifest'],
+              check=True,
+              text=True,
+              capture_output=True,
+          )
+          result = json.loads(proc.stdout)
+          hits = [row for row in result.get('relation_candidates', []) if qid in (row.get('question_ids') or [])]
+          runs.append({
+              'mode': 'hotspot',
+              'seed': 'hotspot',
+              'detection_count': result.get('detection_count'),
+              'candidate_count': result.get('candidate_count'),
+              'matching_source_candidate_count': len(hits),
+              'matching_candidates': hits,
+          })
+          for candidate in hits:
+              matched[candidate['relation_candidate_key']] = candidate
+
+          by_qid = {row['question_id']: row for row in questions}
+          neighbors = []
+          neighbor_ids = sorted({member_qid for candidate in matched.values() for member_qid in candidate.get('question_ids', []) if member_qid != qid})
+          for neighbor_qid in neighbor_ids:
+              row = by_qid.get(neighbor_qid)
+              if row is None:
+                  raise SystemExit(f'suggested neighbor missing from Question store: {neighbor_qid}')
+              neighbors.append({
+                  'question_id': neighbor_qid,
+                  'canonical_id': row.get('canonical_id'),
+                  'original_question': row.get('original_question'),
+                  'question_type': row.get('question_type'),
+                  'tech_entities': row.get('tech_entities'),
+                  'domain': row.get('domain'),
+              })
+
+          inventory = {
+              'schema_version': 'answer_batch_0028_sql_relation_discovery.v1',
+              'source_question': {
+                  'question_id': qid,
+                  'canonical_id': source.get('canonical_id'),
+                  'original_question': source.get('original_question'),
+                  'question_type': source.get('question_type'),
+                  'tech_entities': source.get('tech_entities'),
+                  'domain': source.get('domain'),
+              },
+              'fresh_application_runs': runs,
+              'matching_candidate_count': len(matched),
+              'matching_candidates': list(matched.values()),
+              'neighbor_questions': neighbors,
+              'interpretation_boundary': 'Suggestion output is discovery evidence only; it does not authorize same/related/unrelated and must be source-first reviewed before any Decision.',
+          }
+          Path('/tmp/sql_relation_discovery.json').write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          lines = [
+              '# Answer Batch 0028 — SQL Relation Discovery',
+              '',
+              'Fresh discovery was executed through the current Application `canonical suggest` path after the source split. These results are discovery evidence only and do not authorize any relation.',
+              '',
+              f"- source: `{qid}` / `{source.get('canonical_id')}` — {source.get('original_question')}",
+              f"- source type: `{source.get('question_type')}`",
+              f"- source entities: `{source.get('tech_entities')}`",
+              f"- distinct matching RelationCandidates across fresh runs: `{len(matched)}`",
+              '',
+              '## Runs',
+              '',
+          ]
+          for run in runs:
+              lines.append(f"- `{run['mode']}` seed `{run['seed']}`: detections `{run['detection_count']}`, emitted `{run['candidate_count']}`, source matches `{run['matching_source_candidate_count']}`")
+          lines += ['', '## Suggested neighbors', '']
+          if neighbors:
+              for row in neighbors:
+                  lines.append(f"- `{row['question_id']}` / `{row['canonical_id']}` — {row['original_question']}")
+          else:
+              lines.append('- None from the current entity/hotspot suggestion paths.')
+          lines += [
+              '',
+              '## Review boundary',
+              '',
+              'A source-first reviewer must compare the SQL source contract against every suggested neighbor (if any), and may only then record an explicit relation Decision. If discovery produces no reusable same-boundary neighbor, the source-exact split Canonical remains distinct and candidate authoring may proceed with schema names stated only as answer assumptions.',
+              '',
+          ]
+          Path('/tmp/sql_relation_discovery.md').write_text('\n'.join(lines), encoding='utf-8')
+          print(json.dumps(inventory, ensure_ascii=False, indent=2))
+          PY
+
+          # canonical suggest publishes ephemeral queues. Do not persist those as
+          # review authorization; restore the captured repository state and keep
+          # only the bounded discovery evidence generated above.
+          git reset --hard "$base"
+          git clean -fd
+          mkdir -p review/content_build/answer_batch_0028
+          cp /tmp/sql_relation_discovery.json review/content_build/answer_batch_0028/sql_relation_discovery.json
+          cp /tmp/sql_relation_discovery.md review/content_build/answer_batch_0028/sql_relation_discovery.md
+
+      - name: Verify repository integrity after restoring discovery side effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+
+      - name: Commit discovery only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.state.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during discovery: $base_head -> $remote_head"
+            echo 'Discarding discovery report; a later run can regenerate against current state.'
+            exit 0
+          fi
+          git add review/content_build/answer_batch_0028/sql_relation_discovery.json review/content_build/answer_batch_0028/sql_relation_discovery.md
+          if git diff --cached --quiet; then
+            echo 'SQL relation discovery is already current.'
+            exit 0
+          fi
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git diff --cached --check
+          git commit -m 'content: discover batch 0028 SQL relations'
+          git push origin "HEAD:$CONTENT_BRANCH"
