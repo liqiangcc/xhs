@@ -1,0 +1,294 @@
+name: Build Content Batch 0028 IPv4 Candidate Retry
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0028-ipv4-candidate-retry.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-ipv4-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_5a87a04d4bc934eadb1cf42e28fcaed2
+  SOURCE_QID: be5212d5e7ffdfedf22de7bae65f3f78
+
+jobs:
+  build-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify normalized source boundary from current repository state
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs = require('fs');
+          const cid = process.env.CANONICAL_ID;
+          const qid = process.env.SOURCE_QID;
+          const ctx = JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0028/${cid}/context.json`, 'utf8'));
+          if (!ctx.ok || ctx.canonical?.canonical_id !== cid) throw new Error('Canonical context missing');
+          if (ctx.answer_type !== 'coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if (ctx.canonical?.canonical_title !== 'IPv4 转 int') throw new Error(`title drifted: ${ctx.canonical?.canonical_title}`);
+          if (JSON.stringify(ctx.canonical?.question_ids || []) !== JSON.stringify([qid])) throw new Error(`Canonical ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const ids = (ctx.source_questions || []).map((row) => row.question_id).sort();
+          if (JSON.stringify(ids) !== JSON.stringify([qid])) throw new Error(`source projection drifted: ${JSON.stringify(ids)}`);
+          if (ctx.source_questions[0]?.original_question !== 'IPv4 转 int') throw new Error(`source wording drifted: ${ctx.source_questions[0]?.original_question}`);
+          NODE
+
+      - name: Write candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            echo 'Candidate already exists; refusing to overwrite writer bytes.'
+            exit 1
+          fi
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_5a87a04d4bc934eadb1cf42e28fcaed2","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # IPv4 转 int
+
+          ## 核心结论
+
+          把 IPv4 的四个十进制段依次校验到 `0..255`，每处理一段执行 `result = (result << 8) | octet`，四段后得到完整 32 位位模式。Java `int` 是有符号 32 位，因此最高位为 1 时结果会显示为负数；若需要 `0..4294967295` 的无符号数值，用 `Integer.toUnsignedLong(result)` 查看同一位模式。
+
+          ## 1 分钟版
+
+          - 来源只要求 **IPv4 字符串 -> int**，不把反向转换扩成题目要求。
+          - 输入契约是四段十进制数字，每段 `0..255`；下面实现明确允许前导零并按十进制解释。
+          - 从左到右追加字节：旧结果左移 8 位，再把当前段写入低 8 位。
+          - `255.255.255.255` 的位模式是 `0xffffffff`，Java `int` 显示为 `-1`，无符号解释为 `4294967295`。
+          - 单次扫描，时间 `O(n)`，额外空间 `O(1)`。
+
+          ## 3 分钟版
+
+          关键不变量是：处理完前 `k` 段后，`result` 的低 `8k` 位按顺序保存这 `k` 个 octet。处理下一段时左移 8 位腾出低字节，再按位或写入当前段；四段后得到完整 32 位地址位模式。每段必须先验证非空、只含十进制数字、最多三位且数值不超过 255，否则非法输入可能被错误映射成另一个地址。
+
+          Java 的 `int` 能保存全部 32 个比特，只是按有符号补码解释。需要无符号打印或更宽数值表示时，用 `Integer.toUnsignedLong`；这不会改变低 32 位内容。来源没有规定前导零语义，所以实现必须把它当作自身契约而不是协议事实；这里选择允许，并始终按十进制解析。
+
+          ```java
+          public final class Ipv4ToInt {
+              public static int parse(String ip) {
+                  if (ip == null || ip.isEmpty()) throw new IllegalArgumentException("IPv4 text is required");
+                  int result = 0;
+                  int octets = 0;
+                  int value = 0;
+                  int digits = 0;
+                  for (int i = 0; i <= ip.length(); i++) {
+                      char ch = i == ip.length() ? '.' : ip.charAt(i);
+                      if (ch == '.') {
+                          if (digits == 0 || octets >= 4) throw new IllegalArgumentException("IPv4 must contain exactly four non-empty octets");
+                          result = (result << 8) | value;
+                          octets++;
+                          value = 0;
+                          digits = 0;
+                          continue;
+                      }
+                      if (ch < '0' || ch > '9' || digits == 3) throw new IllegalArgumentException("octet must contain one to three decimal digits");
+                      value = value * 10 + (ch - '0');
+                      digits++;
+                      if (value > 255) throw new IllegalArgumentException("IPv4 octet out of range: " + value);
+                  }
+                  if (octets != 4) throw new IllegalArgumentException("IPv4 must contain exactly four octets");
+                  return result;
+              }
+
+              public static long asUnsignedLong(int bits) {
+                  return Integer.toUnsignedLong(bits);
+              }
+
+              private Ipv4ToInt() {}
+          }
+          ```
+
+          ## 关键细节
+
+          - 输入是恰好四段的十进制 IPv4 文本；输出是保存同一 32 位模式的 Java `int`。
+          - 本实现拒绝 `null`、空串、缺段、多段、空段、非数字、超过三位或数值大于 255 的段。
+          - 本实现明确允许 `001.002.003.004` 并按十进制解释为 `1.2.3.4`；这只是实现契约。
+          - Java `int` 为负不代表位模式错误，需要无符号数值时使用 `Integer.toUnsignedLong`。
+          - 先校验段值再写入 8 位位置，避免非法值越界污染相邻字节。
+          - 每个字符处理一次，时间 `O(n)`，只使用固定整数变量，额外空间 `O(1)`。
+
+          ## 原理机制
+
+          四段 `a,b,c,d` 对应的 32 位模式等价于 `(a << 24) | (b << 16) | (c << 8) | d`。流式写法只是把它改写成四次相同的状态转移：已有结果左移一个字节，再写入当前低字节。每个段已限制在 `0..255`，因此不会占用超过 8 位。`Integer.toUnsignedLong` 把 `int` 的低 32 位原样扩展到 `long` 并在高位补零，因此可得到相同位模式的无符号数值解释。
+
+          ## 项目经验版
+
+          来源没有提供真实项目经历，不能编造线上使用结果。真实项目映射时，如果只需要内存中的紧凑键，可比较 32 位位模式；如果要写数据库或跨语言接口，应先确认字段的有符号/无符号契约，必要时用 `long` 表达 `0..4294967295`，并用固定地址样例验证跨系统一致性。
+
+          ## 常见追问
+
+          - 问：为什么 `255.255.255.255` 得到 `-1`？答：32 位全为 1，Java 有符号 `int` 按补码解释为 `-1`；低 32 位本身仍正确。
+          - 问：为什么必须检查每段 `<=255`？答：一个 octet 只有 8 位，超范围值会占用额外高位，破坏地址位布局。
+          - 问：左移加按位或和乘 256 有什么区别？答：在已校验范围内数值递推等价；位移更直接表达“追加一个字节”的状态变化。
+          - 问：前导零是否允许？答：题目没规定，本实现明确选择允许且按十进制解释；若模拟具体 JDK、代理或网关，应遵循那个组件的正式解析契约。
+          - 问：一百万个 IPv4 转 int 后就一定更省内存吗？答：转换只提供 32 位键；实际内存还取决于集合实现、装箱和数据布局，来源没有规定唯一存储方案。
+
+          ## 易错点
+
+          - 把“IPv4 转 int”扩写成双向转换。
+          - 把负的 Java `int` 误判成转换错误。
+          - 不校验段数、空段、字符和 `0..255` 范围。
+          - 拼接方向写反导致字节顺序颠倒。
+          - 把某个库的前导零解析习惯说成通用协议规则。
+          EOF
+
+          cat > "$out/Ipv4ToInt.java" <<'EOF'
+          public final class Ipv4ToInt {
+              public static int parse(String ip) {
+                  if (ip == null || ip.isEmpty()) throw new IllegalArgumentException("IPv4 text is required");
+                  int result = 0, octets = 0, value = 0, digits = 0;
+                  for (int i = 0; i <= ip.length(); i++) {
+                      char ch = i == ip.length() ? '.' : ip.charAt(i);
+                      if (ch == '.') {
+                          if (digits == 0 || octets >= 4) throw new IllegalArgumentException("IPv4 must contain exactly four non-empty octets");
+                          result = (result << 8) | value;
+                          octets++;
+                          value = 0;
+                          digits = 0;
+                          continue;
+                      }
+                      if (ch < '0' || ch > '9' || digits == 3) throw new IllegalArgumentException("octet must contain one to three decimal digits");
+                      value = value * 10 + (ch - '0');
+                      digits++;
+                      if (value > 255) throw new IllegalArgumentException("IPv4 octet out of range: " + value);
+                  }
+                  if (octets != 4) throw new IllegalArgumentException("IPv4 must contain exactly four octets");
+                  return result;
+              }
+              public static long asUnsignedLong(int bits) { return Integer.toUnsignedLong(bits); }
+              private Ipv4ToInt() {}
+          }
+          EOF
+
+          cat > "$out/Ipv4ToIntTest.java" <<'EOF'
+          public final class Ipv4ToIntTest {
+              public static void main(String[] args) {
+                  expect("0.0.0.0", 0, 0L);
+                  expect("1.2.3.4", 0x01020304, 16909060L);
+                  expect("127.0.0.1", 0x7f000001, 2130706433L);
+                  expect("128.0.0.0", 0x80000000, 2147483648L);
+                  expect("255.255.255.255", 0xffffffff, 4294967295L);
+                  expect("001.002.003.004", 0x01020304, 16909060L);
+                  reject(null); reject(""); reject("1.2.3"); reject("1.2.3.4.5"); reject("1..3.4"); reject(".1.2.3"); reject("1.2.3."); reject("256.1.1.1"); reject("0000.1.1.1"); reject("1.2.a.4"); reject("1.2.-1.4"); reject("1.2. 3.4");
+                  System.out.println("PASS valid=6 invalid=12 unsigned-boundaries=2 leading-zero-contract=decimal");
+              }
+              private static void expect(String ip, int expectedBits, long expectedUnsigned) {
+                  int actual = Ipv4ToInt.parse(ip);
+                  if (actual != expectedBits) throw new AssertionError(ip + " bits");
+                  if (Ipv4ToInt.asUnsignedLong(actual) != expectedUnsigned) throw new AssertionError(ip + " unsigned");
+              }
+              private static void reject(String ip) {
+                  try { Ipv4ToInt.parse(ip); throw new AssertionError("expected rejection: " + ip); }
+                  catch (IllegalArgumentException expected) { }
+              }
+              private Ipv4ToIntTest() {}
+          }
+          EOF
+
+      - name: Run executable fixture and write writer research packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          pushd "$out" >/dev/null
+          javac -encoding UTF-8 Ipv4ToInt.java Ipv4ToIntTest.java
+          stdout="$(java Ipv4ToIntTest)"
+          popd >/dev/null
+          echo "$stdout"
+          test "$stdout" = 'PASS valid=6 invalid=12 unsigned-boundaries=2 leading-zero-contract=decimal'
+          STDOUT="$stdout" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          cid = 'cq_q_5a87a04d4bc934eadb1cf42e28fcaed2'
+          qid = 'be5212d5e7ffdfedf22de7bae65f3f78'
+          out = Path('review/content_build/answer_batch_0028') / cid
+          (out/'code_validation.json').write_text(json.dumps({'schema_version':'answer_code_validation.v1','canonical_id':cid,'result':'pass','stdout':os.environ['STDOUT'],'checks':['byte order','signed/unsigned boundaries','leading-zero decimal contract','malformed input rejection']},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          packet = {
+            'schema_version':'answer_writer_research.v1','canonical_id':cid,'checked_at':'2026-08-25','review_state':'writer_complete_isolated_review_pending',
+            'sources':[
+              {'source_id':'repository-source','title':'Answer Batch 0028 Repository Source Packet','locator':'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md','source_type':'repository_source_record','checked_at':'2026-08-25'},
+              {'source_id':'rfc791','title':'RFC 791 — Internet Protocol','locator':'https://www.rfc-editor.org/rfc/rfc791.html','source_type':'official_specification_or_standard','checked_at':'2026-08-25'},
+              {'source_id':'jdk21-integer','title':'Java SE 21 Integer.toUnsignedLong','locator':'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Integer.html#toUnsignedLong(int)','source_type':'official_documentation','checked_at':'2026-08-25'},
+              {'source_id':'fixture','title':'IPv4 deterministic Java fixture','locator':f'review/content_build/answer_batch_0028/{cid}/code_validation.json','source_type':'executable_test_or_reproducible_experiment','checked_at':'2026-08-25'}],
+            'claims':[
+              {'claim_id':'source-boundary','text':'Repository source asks IPv4 转 int only.','source_ids':['repository-source'],'answer_locations':['核心结论','1 分钟版','易错点']},
+              {'claim_id':'four-octets','text':'IPv4 address is four octets / 32 bits.','source_ids':['rfc791'],'answer_locations':['核心结论','3 分钟版','原理机制']},
+              {'claim_id':'unsigned-view','text':'Integer.toUnsignedLong preserves the low 32 int bits in a nonnegative long representation.','source_ids':['jdk21-integer'],'answer_locations':['核心结论','关键细节','原理机制','常见追问']},
+              {'claim_id':'implementation','text':'Executable fixture verifies byte order, boundaries and malformed-input rejection.','source_ids':['fixture'],'answer_locations':['3 分钟版','关键细节','常见追问','易错点']}],
+            'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(packet,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          find "$out" -name '*.class' -delete
+
+      - name: Validate candidate-only slice and repository invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "review/candidates/answers/$CANONICAL_ID.md"
+          test ! -f "review/evidence/$CANONICAL_ID.json"
+          grep -Fq '"status":"draft"' "review/candidates/answers/$CANONICAL_ID.md"
+          grep -Fq 'isolated_independent_review_not_yet_performed' "review/content_build/answer_batch_0028/$CANONICAL_ID/writer_research.json"
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          npm test
+
+      - name: Record bounded progress and commit with CAS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md')
+          text=p.read_text(encoding='utf-8')
+          relation='- [x] Apply and verify reviewed relation decisions: linked-list reversal=`same`, deep-copy implementation=`related`, big-number split child=`same`; SQL split child remains its own Canonical after fresh discovery found no candidate.\n'
+          candidate='- IPv4 candidate writer slice is frozen under `review/candidates/answers/cq_q_5a87a04d4bc934eadb1cf42e28fcaed2.md` with source-first research and executable Java validation; formal Answer remains `needs_update` and promotion is blocked pending isolated independent review.\n'
+          if relation not in text: text += '\n'+relation
+          if candidate not in text: text += candidate
+          p.write_text(text,encoding='utf-8')
+          PY
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced: $base_head -> $remote_head; discarding local slice."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0028/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md
+          git diff --cached --check
+          git config user.name 'xhs-content-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft batch 0028 IPv4 candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
