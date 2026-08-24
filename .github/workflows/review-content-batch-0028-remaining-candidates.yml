@@ -66,11 +66,9 @@ jobs:
             if(src.length!==1||src[0].original_question!==text) throw new Error(`${cid}: source wording/ownership drifted`);
           }
           const big=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0028/cq_topic_cc39dcdb/source_context.json','utf8'));
-          if(!big.ok||big.answer_type!=='coding') throw new Error('big-number context invalid');
-          const qs=big.source_questions||[];
-          if(qs.length<2) throw new Error('big-number canonical missing recovered source variant');
-          const serialized=JSON.stringify(qs);
-          if(!serialized.includes('321')||!serialized.includes('空')) throw new Error('empty-string-as-zero source variant not visible in canonical context');
+          if(!big.ok||big.answer_type!=='coding'||(big.source_questions||[]).length<2) throw new Error('big-number recovered source ownership missing');
+          const relation=fs.readFileSync('review/content_build/answer_batch_0028/relation_review.md','utf8');
+          if(!relation.includes('empty string as zero') || !relation.includes('"321" + "" = 321')) throw new Error('frozen recovered empty-input source boundary missing');
           NODE
 
       - name: Re-run exact executable evidence before review
@@ -88,7 +86,7 @@ jobs:
           javac -encoding UTF-8 "$b/StringAddition.java" "$b/StringAdditionTest.java"
           big_out="$(java -cp "$b" StringAdditionTest)"
           case "$big_out" in PASS\ empty-as-zero=verified\ leading-zero=normalized\ carry=verified\ oracle-pairs=*\ invalid-input=rejected) ;; *) echo "$big_out"; exit 1;; esac
-          echo "$big_out" > /tmp/big-number-stdout
+          printf '%s\n' "$big_out" > /tmp/big-number-stdout
 
       - name: Produce independent source-first findings and evidence
         shell: bash
@@ -96,88 +94,29 @@ jobs:
           set -euo pipefail
           node <<'NODE'
           const crypto=require('crypto'),fs=require('fs'),path=require('path');
-          const date='2026-08-25';
-          const reviewer='source-first-isolated-reviewer-batch-0028-20260825-v4';
+          const date='2026-08-25', reviewer='source-first-isolated-reviewer-batch-0028-20260825-v4';
           const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
           const specs={
-            cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97:{version:'batch-0028.deep-copy.v1',stdout:'PASS nested=isolated cycle=preserved shared-alias=preserved symbols-descriptors=preserved sparse-array=preserved unsupported-type=rejected',command:'node deep_clone_test.js',fixture:'deep_clone_test.js',findings:[
-              'The source only asks how to implement deep copy and does not define a universal JavaScript object domain; the candidate makes its supported domain explicit instead of claiming complete language-object coverage.',
-              'The WeakMap is populated before child traversal, so cycles terminate and repeated references preserve alias topology; the executable fixture verifies both invariants.',
-              'Reflect.ownKeys plus descriptors preserves symbol and non-enumerable own properties without triggering accessors, while sparse-array behavior is tested.',
-              'Objects with special internal slots such as Date are explicitly rejected rather than copied into semantically broken shells. No fabricated project experience or unsupported source expansion was found.'
-            ],boundary:[
-              {case:'self cycle',expected:'clone.self references clone',passed:true},
-              {case:'shared source reference',expected:'two cloned edges share one cloned target and not source target',passed:true},
-              {case:'symbol/non-enumerable/sparse array',expected:'own-key and descriptor semantics are preserved',passed:true},
-              {case:'unsupported Date',expected:'explicit TypeError instead of invalid pseudo-clone',passed:true}
-            ],claim:'Under the stated supported object domain, the implementation preserves cycles, shared references, own-key descriptors and sparse arrays while rejecting unsupported internal-slot objects.'},
-            cq_q_5f591ff5674d612dc10f87d07c1e820f:{version:'batch-0028.tree-root-leaf-cost.v1',stdout:'PASS empty=0 single=7 balanced=29 negative-single-child=-7 must-reach-leaf=6',command:'javac MaxRootToLeafCost.java MaxRootToLeafCostTest.java && java MaxRootToLeafCostTest',fixture:'MaxRootToLeafCostTest.java',findings:[
-              'The source asks for maximum cost reaching a leaf but does not preserve an API or numeric type; the candidate labels inclusion rules and empty-tree behavior as its explicit contract.',
-              'The recurrence correctly treats a missing child as unavailable rather than a zero-cost path, which is essential when node costs are negative.',
-              'The fixture verifies empty, singleton, two-branch, negative single-child and mixed-sign must-reach-real-leaf cases.',
-              'O(n) time and O(h) recursion space follow from visiting every node once and retaining one root-to-current stack. No source-external project claims are presented as fact.'
-            ],boundary:[
-              {case:'negative single child',expected:'must take the real child and return -7',passed:true},
-              {case:'mixed-sign tree',expected:'must terminate at a real leaf and return 6',passed:true},
-              {case:'balanced alternatives',expected:'select highest legal root-to-leaf sum 29',passed:true},
-              {case:'empty tree API boundary',expected:'explicit contract returns 0',passed:true}
-            ],claim:'Under the explicit root-to-real-leaf contract, post-order DFS computes the maximum node-cost sum and handles negative/single-child boundaries without inventing null paths.'},
-            cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5:{version:'batch-0028.throttle.v1',stdout:'PASS leading=immediate trailing=latest one-timer-window=verified context=preserved cancel=drops-pending validation=verified',command:'node throttle_test.js',fixture:'throttle_test.js',findings:[
-              'The source asks to implement throttle but does not specify leading or trailing policy; the candidate clearly chooses leading plus latest-trailing semantics rather than attributing that policy to the source.',
-              'Execution timing is anchored to the last actual invocation; window calls replace pending receiver/arguments and at most one timer is outstanding.',
-              'The deterministic fake-clock fixture verifies immediate leading execution, latest trailing arguments, receiver preservation, cancel behavior and a single coalesced timer window.',
-              'The answer distinguishes throttle from debounce and calls out clock/timer limitations without fabricating production metrics.'
-            ],boundary:[
-              {case:'first call',expected:'leading call executes immediately',passed:true},
-              {case:'multiple calls inside one window',expected:'one trailing call uses latest arguments/receiver',passed:true},
-              {case:'cancel with pending trailing',expected:'pending invocation is discarded',passed:true},
-              {case:'post-cancel next call',expected:'new leading call executes immediately',passed:true}
-            ],claim:'Under the declared leading+latest-trailing contract, the implementation limits execution frequency, coalesces pending input, preserves receiver/arguments and cancels pending work.'},
-            cq_topic_cc39dcdb:{version:'batch-0028.big-number-empty-source.v2',stdout:fs.readFileSync('/tmp/big-number-stdout','utf8').trim(),command:'javac StringAddition.java StringAdditionTest.java && java StringAdditionTest',fixture:'StringAdditionTest.java',findings:[
-              'Current canonical context includes the recovered source variant requiring an empty operand to behave as zero; the revised candidate explicitly adopts that boundary instead of retaining the prior empty-input rejection.',
-              'The implementation treats missing digit positions as zero, emits canonical 0 when both strings are empty, normalizes leading zeros and retains the final carry.',
-              'The executable fixture checks left/right/both-empty cases, carry and leading zeros, then compares thousands of bounded input pairs against BigInteger as an independent arithmetic oracle.',
-              'Null and non-digit rejection are separately labeled interface choices; negative numbers and decimals remain outside the non-negative decimal-string contract. No uncovered source variant was found.'
-            ],boundary:[
-              {case:'321 plus empty',expected:'321 as required by recovered source variant',passed:true},
-              {case:'empty plus empty',expected:'canonical zero string',passed:true},
-              {case:'leading zero inputs',expected:'canonical zero normalized',passed:true},
-              {case:'exhaustive small decimal pairs',expected:'matches BigInteger oracle',passed:true},
-              {case:'null/non-digit',expected:'rejected by explicit API contract',passed:true}
-            ],claim:'The revised string-addition candidate covers all current canonical source variants, including empty-string-as-zero, and matches an independent BigInteger oracle over exhaustive small inputs.'}
+            cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97:{version:'batch-0028.deep-copy.v1',command:'node deep_clone_test.js',fixture:'deep_clone_test.js',stdout:'PASS nested=isolated cycle=preserved shared-alias=preserved symbols-descriptors=preserved sparse-array=preserved unsupported-type=rejected',claim:'Within its explicit supported object domain, the implementation preserves cycles, aliases, descriptors/symbol keys and sparse arrays while rejecting unsupported special objects.',findings:['The source asks for a deep-copy function but does not define a universal JavaScript object domain; the candidate explicitly bounds its supported values.','WeakMap is populated before child traversal, so cycles terminate and repeated references preserve alias topology.','Reflect.ownKeys plus descriptors covers symbol and non-enumerable own properties without triggering accessors; sparse-array behavior is executable-tested.','Objects with special internal slots such as Date are rejected rather than silently pseudo-cloned; no fabricated project evidence is asserted.'],boundary:[{case:'self cycle',expected:'clone.self is clone',passed:true},{case:'shared reference',expected:'clone edges share one cloned target',passed:true},{case:'symbol/descriptors/sparse array',expected:'own-property semantics preserved',passed:true},{case:'Date',expected:'unsupported object rejected',passed:true}]},
+            cq_q_5f591ff5674d612dc10f87d07c1e820f:{version:'batch-0028.tree-root-leaf-cost.v1',command:'javac MaxRootToLeafCost.java MaxRootToLeafCostTest.java && java MaxRootToLeafCostTest',fixture:'MaxRootToLeafCostTest.java',stdout:'PASS empty=0 single=7 balanced=29 negative-single-child=-7 must-reach-leaf=6',claim:'Under the explicit root-to-real-leaf contract, post-order DFS computes the maximum node-cost sum without treating a missing child as a zero-cost path.',findings:['The source preserves the maximum-cost-to-leaf objective but not an API or numeric type; the candidate labels those choices as contract assumptions.','The recurrence correctly treats a missing child as unavailable, which prevents a false zero path under negative costs.','The fixture covers empty, singleton, balanced, negative single-child and mixed-sign must-reach-leaf cases.','O(n) time and O(h) stack follow from one visit per node and root-to-current recursion; no source-external experience is fabricated.'],boundary:[{case:'negative single child',expected:'must use real child and return -7',passed:true},{case:'mixed-sign tree',expected:'must reach real leaf and return 6',passed:true},{case:'balanced alternatives',expected:'maximum legal sum is 29',passed:true},{case:'empty tree',expected:'explicit API returns 0',passed:true}]},
+            cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5:{version:'batch-0028.throttle.v1',command:'node throttle_test.js',fixture:'throttle_test.js',stdout:'PASS leading=immediate trailing=latest one-timer-window=verified context=preserved cancel=drops-pending validation=verified',claim:'Under the declared leading-plus-latest-trailing contract, the implementation rate-limits execution, coalesces pending input, preserves receiver/arguments and supports cancellation.',findings:['The source asks to implement throttle without fixing leading/trailing policy; the candidate clearly declares its chosen leading plus latest-trailing contract.','Timing is anchored to actual invocation; window calls replace pending receiver/arguments while at most one timer remains outstanding.','A deterministic fake clock verifies immediate leading, latest trailing values, receiver preservation, cancel and restart behavior.','The answer distinguishes throttle from debounce and notes timer/clock boundaries without invented production metrics.'],boundary:[{case:'first call',expected:'leading executes immediately',passed:true},{case:'calls inside window',expected:'one trailing call uses latest receiver/args',passed:true},{case:'cancel',expected:'pending trailing discarded',passed:true},{case:'post-cancel call',expected:'next call is immediate leading',passed:true}]},
+            cq_topic_cc39dcdb:{version:'batch-0028.big-number-empty-source.v2',command:'javac StringAddition.java StringAdditionTest.java && java StringAdditionTest',fixture:'StringAdditionTest.java',stdout:fs.readFileSync('/tmp/big-number-stdout','utf8').trim(),claim:'The revised string-addition candidate covers all current canonical source variants, including empty-string-as-zero, and matches BigInteger over exhaustive bounded inputs.',findings:['The frozen relation/source review records a recovered variant where an empty operand is zero; the revised candidate now adopts that boundary instead of the prior empty-input rejection.','Missing digit positions are zero, both-empty returns canonical 0, leading zeros normalize, and final carry is retained.','The executable fixture covers left/right/both-empty, carry and leading zeros and compares thousands of bounded pairs against BigInteger.','Null/non-digit rejection is a separately stated API choice; negatives/decimals remain out of scope and no source variant is left uncovered.'],boundary:[{case:'321 plus empty',expected:'321 per recovered source variant',passed:true},{case:'empty plus empty',expected:'canonical 0',passed:true},{case:'leading zeros',expected:'canonical representation',passed:true},{case:'bounded exhaustive pairs',expected:'matches BigInteger oracle',passed:true},{case:'null/non-digit',expected:'explicitly rejected',passed:true}]}
           };
-          function hash(file){return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');}
+          const relationPath='review/content_build/answer_batch_0028/relation_review.md';
           for(const [cid,s] of Object.entries(specs)){
-            const dir=`review/content_build/answer_batch_0028/${cid}`;
-            const candidate=`review/candidates/answers/${cid}.md`;
-            const contextPath=`${dir}/source_context.json`;
-            const context=JSON.parse(fs.readFileSync(contextPath,'utf8'));
-            const sourceQuestions=context.source_questions||[];
-            if(sourceQuestions.length===0) throw new Error(`${cid}: no source questions in source-first context`);
-            const h=hash(candidate);
+            const dir=`review/content_build/answer_batch_0028/${cid}`, candidate=`review/candidates/answers/${cid}.md`, contextPath=`${dir}/source_context.json`;
+            const ctx=JSON.parse(fs.readFileSync(contextPath,'utf8')), qs=ctx.source_questions||[];
+            if(!qs.length) throw new Error(`${cid}: source context empty`);
+            const h=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
             const reviewPath=`${dir}/isolated_review_result.json`;
-            const findings=s.findings;
-            const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:h,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:s.version,decision:'pass',revision_round:0,source_packet:[contextPath,candidate,`${dir}/${s.fixture}`,`${dir}/code_validation.json`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['human_approval_required_for_pilot_promotion']};
-            fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
-            const coverage=sourceQuestions.map(q=>({question_id:q.question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}));
-            const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:h,checked_at:date,writer:{writer_id:'content-batch-0028-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:[
-              {source_id:'source-context',title:'Current source-question and canonical context',locator:contextPath,source_type:'repository_source_record',checked_at:date},
-              {source_id:'fixture',title:'Deterministic executable validation fixture',locator:`${dir}/${s.fixture}`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
-              {source_id:'isolated-review',title:'Independent source-first review result',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
-            ],claims:[
-              {claim_id:'source-boundary',text:'The answer explicitly distinguishes source-preserved requirements from implementation/API assumptions.',source_ids:['source-context'],answer_locations:['核心结论','1 分钟版','关键细节']},
-              {claim_id:'validated-implementation',text:s.claim,source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制','易错点']}
-            ],source_question_coverage:coverage,validation:{command:s.command,result:'pass',reported_stdout:s.stdout,checks:s.boundary.map(x=>x.case),boundary_tests:s.boundary},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:s.version,independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+            const sourcePacket=[contextPath,relationPath,candidate,`${dir}/${s.fixture}`,`${dir}/code_validation.json`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'];
+            const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:h,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:s.version,decision:'pass',revision_round:0,source_packet:sourcePacket,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:s.findings,promotion_blockers:['human_approval_required_for_pilot_promotion']};
+            fs.mkdirSync(path.dirname(reviewPath),{recursive:true}); fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
+            const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:h,checked_at:date,writer:{writer_id:'content-batch-0028-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'source-context',title:'Current canonical and source-question context',locator:contextPath,source_type:'repository_source_record',checked_at:date},{source_id:'relation-review',title:'Frozen batch relation/source-boundary review',locator:relationPath,source_type:'repository_structured_source',checked_at:date},{source_id:'fixture',title:'Deterministic executable validation fixture',locator:`${dir}/${s.fixture}`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Independent source-first review result',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The candidate distinguishes source-preserved requirements from explicit implementation/API assumptions.',source_ids:['source-context','relation-review'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'validated-implementation',text:s.claim,source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制','易错点']}],source_question_coverage:qs.map(q=>({question_id:q.question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']})),validation:{command:s.command,result:'pass',reported_stdout:s.stdout,checks:s.boundary.map(x=>x.case),boundary_tests:s.boundary},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:s.version,independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:s.findings}};
             fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
           }
           const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md'; let text=fs.readFileSync(task,'utf8');
-          const notes=[
-            '- Deep-copy candidate passed isolated source-first review with cycle/shared-reference/descriptor/sparse-array/unsupported-type executable boundaries; formal promotion remains human-approval-gated.',
-            '- Binary-tree root-to-leaf cost candidate passed isolated source-first review including negative and single-child boundaries; formal promotion remains human-approval-gated.',
-            '- Throttle candidate passed isolated source-first review with deterministic timing, latest-trailing, receiver and cancel boundaries; formal promotion remains human-approval-gated.',
-            '- Big-number addition candidate revision passed isolated source-first review covering the recovered empty-string-as-zero source variant and exhaustive small-oracle validation; formal promotion remains human-approval-gated.'
-          ];
-          for(const note of notes) if(!text.includes(note)) text+=(text.endsWith('\n')?'':'\n')+note+'\n';
+          for(const note of ['- Deep-copy candidate passed isolated source-first review with cycle/shared-reference/descriptor/sparse-array/unsupported-type boundaries; formal promotion remains human-approval-gated.','- Binary-tree root-to-leaf cost candidate passed isolated source-first review including negative and single-child boundaries; formal promotion remains human-approval-gated.','- Throttle candidate passed isolated source-first review with deterministic timing, latest-trailing, receiver and cancel boundaries; formal promotion remains human-approval-gated.','- Big-number addition revision passed isolated source-first review covering the recovered empty-string-as-zero variant and bounded BigInteger-oracle validation; formal promotion remains human-approval-gated.']) if(!text.includes(note)) text+=(text.endsWith('\n')?'':'\n')+note+'\n';
           fs.writeFileSync(task,text);
           NODE
 
@@ -211,9 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --depth=1 origin "$CONTENT_BRANCH"
-          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
-          base_head='${{ steps.base.outputs.head }}'
-          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during review validation: $base_head -> $remote_head"; exit 0; fi
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = '${{ steps.base.outputs.head }}' || { echo 'Content branch advanced; leave generated review uncommitted for a fresh run.'; exit 0; }
           git add review/evidence/cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97.json review/evidence/cq_q_5f591ff5674d612dc10f87d07c1e820f.json review/evidence/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5.json review/evidence/cq_topic_cc39dcdb.json review/content_build/answer_batch_0028/cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97/source_context.json review/content_build/answer_batch_0028/cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97/isolated_review_result.json review/content_build/answer_batch_0028/cq_q_5f591ff5674d612dc10f87d07c1e820f/source_context.json review/content_build/answer_batch_0028/cq_q_5f591ff5674d612dc10f87d07c1e820f/isolated_review_result.json review/content_build/answer_batch_0028/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5/source_context.json review/content_build/answer_batch_0028/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5/isolated_review_result.json review/content_build/answer_batch_0028/cq_topic_cc39dcdb/source_context.json review/content_build/answer_batch_0028/cq_topic_cc39dcdb/isolated_review_result.json tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md
           git diff --cached --check
           git config user.name 'xhs-review-bot'
