@@ -1,0 +1,225 @@
+name: Remediate Content Batch 0027 Source Boundaries
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0027-boundaries.yml
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0027-source-boundaries
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Capture stable base head
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether bounded remediation is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0027.md'
+          boundary='review/content_build/answer_batch_0027/source_boundary_audit.md'
+          if [ -f "$boundary" ] \
+             && grep -Fq 'Active after source-boundary remediation: `9`' "$task" \
+             && grep -Fq 'cq_q_5598debbce04bff1fcb9dbd8f09e9d68' "$boundary"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Apply source-first boundary dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/content/remediate_batch_0027_boundaries.py
+          python3 scripts/content/remediate_batch_0027_boundaries.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify exact batch 0027 dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import re
+
+          root = pathlib.Path('.')
+          retired = 'cq_q_5598debbce04bff1fcb9dbd8f09e9d68'
+          required = {
+              'cq_q_555486cb901cc4cd56776f7eeaa0d5b5',
+              'cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc',
+              'cq_q_55dffdc4ce650cf4146064792fc919ca',
+              'cq_q_567ffeb91924fcb3677322177357773b',
+              'cq_q_57aa151b635ea5536749fec03c6db22d',
+              'cq_q_580b69f633d51b4f6c6262690a0fdf9c',
+              'cq_q_58149c934c9b77f14e10c21cebff411c',
+              'cq_q_5873d2a550ca02cc41b2862b6aefaa77',
+              'cq_q_59c84ea33afa81784f39f85a824a2d94',
+          }
+          normalized = {
+              'cq_q_58149c934c9b77f14e10c21cebff411c': ('094694a29ed8e1276d4c392d99d56302', '手写一个用数组实现的循环队列，只需要入队和出队；如何改进以避免浪费一个数组空间？'),
+              'cq_q_5873d2a550ca02cc41b2862b6aefaa77': ('b1effe2d30fbefb17fab84fe768fbdac', '两个线程交替打印abababab'),
+              'cq_q_59c84ea33afa81784f39f85a824a2d94': ('a49d8c5d9ec12aa92ccea9a5f2bb4302', 'LeetCode 16.26 计算器：如何让乘除法优先计算？'),
+          }
+          old_qids = {
+              '58149c934c9b77f14e10c21cebff411c',
+              '5873d2a550ca02cc41b2862b6aefaa77',
+              '59c84ea33afa81784f39f85a824a2d94',
+              retired.removeprefix('cq_q_'),
+          }
+
+          canon = [json.loads(x) for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          if retired in by_cid:
+              raise SystemExit('unrecoverable batch 0027 Canonical remains active')
+          missing = sorted(required - by_cid.keys())
+          if missing:
+              raise SystemExit(f'recoverable batch 0027 Canonicals disappeared: {missing}')
+          for cid, (qid, title) in normalized.items():
+              row = by_cid[cid]
+              if row.get('canonical_title') != title or row.get('question_ids') != [qid] or row.get('aliases') != [title]:
+                  raise SystemExit(f'{cid}: source-backed Canonical normalization drifted: {row}')
+          if by_cid['cq_q_567ffeb91924fcb3677322177357773b'].get('primary_entities') != ['Top K']:
+              raise SystemExit('Top-100 Canonical still encodes solution-specific algorithm entities')
+
+          questions = [json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          if any(row.get('question_id') in old_qids for row in questions):
+              raise SystemExit('retired/inflated batch 0027 Question id survived rebuild')
+          by_qid = {row.get('question_id'): row for row in questions}
+          for cid, (qid, title) in normalized.items():
+              row = by_qid.get(qid)
+              if not row or row.get('canonical_id') != cid or row.get('original_question') != title:
+                  raise SystemExit(f'{cid}: normalized Question projection missing/misbound')
+          puzzle = by_qid.get('580b69f633d51b4f6c6262690a0fdf9c')
+          if not puzzle or puzzle.get('canonical_id') != 'cq_q_580b69f633d51b4f6c6262690a0fdf9c' or puzzle.get('question_type') != '八股文_Concept':
+              raise SystemExit('12-ball puzzle validity/type repair did not survive rebuild')
+          topk = by_qid.get('567ffeb91924fcb3677322177357773b')
+          if not topk or topk.get('tech_entities') != ['Top K']:
+              raise SystemExit('Top-100 Question still encodes solution-specific algorithm entities')
+
+          progress = json.loads((root/'review/progress.json').read_text(encoding='utf-8'))
+          items = progress.get('items', []) if isinstance(progress, dict) else progress
+          progress_ids = {row.get('canonical_id') for row in items}
+          if retired in progress_ids:
+              raise SystemExit('retired batch 0027 Canonical still has ReviewProgress')
+          if not required <= progress_ids:
+              raise SystemExit('recoverable batch 0027 Canonical lost ReviewProgress')
+
+          active = root/'review/answers'/f'{retired}.md'
+          archived = root/'review/archive/answers'/f'{retired}.md'
+          if active.exists() or not archived.exists():
+              raise SystemExit('retired batch 0027 Answer archive state is invalid')
+          puzzle_answer = (root/'review/answers/cq_q_580b69f633d51b4f6c6262690a0fdf9c.md').read_text(encoding='utf-8').splitlines()[0]
+          meta = json.loads(puzzle_answer[len('<!-- xhs-answer: '):-len(' -->')])
+          if meta.get('answer_type') != 'concept':
+              raise SystemExit('12-ball baseline Answer still carries an artificial coding type')
+
+          audit = json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8'))
+          retire_decision = [row for row in audit.get('decisions', []) if row.get('question_id') == retired.removeprefix('cq_q_')]
+          if len(retire_decision) != 1 or retire_decision[0].get('decision') != 'exclude' or retire_decision[0].get('exclusion_reason') != 'incomplete_or_unreadable':
+              raise SystemExit('validity audit missing batch 0027 fail-closed exclusion')
+          puzzle_decision = [row for row in audit.get('decisions', []) if row.get('question_id') == '580b69f633d51b4f6c6262690a0fdf9c']
+          if len(puzzle_decision) != 1 or puzzle_decision[0].get('decision') != 'include':
+              raise SystemExit('validity audit does not preserve the real 12-ball puzzle')
+
+          task = (root/'tasks/answer-batches/TASK-20260711-0313-answer-batch-0027.md').read_text(encoding='utf-8')
+          if 'Active after source-boundary remediation: `9`' not in task or '- [x] Apply and verify the frozen source-boundary remediation' not in task:
+              raise SystemExit('batch 0027 task remediation state not updated')
+          boundary = root/'review/content_build/answer_batch_0027/source_boundary_audit.md'
+          disposition_ids = set(re.findall(r'^\| `(cq_q_[0-9a-f]{32})` \|', boundary.read_text(encoding='utf-8'), flags=re.MULTILINE))
+          if disposition_ids != required | {retired}:
+              raise SystemExit('batch 0027 frozen boundary no longer covers original 10')
+          PY
+
+      - name: Verify repository integrity and full quality gates
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content head stayed stable during validation
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding this verified local mutation; a later trigger will retry against the newer source state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'No batch 0027 source-boundary remediation changes remain.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: apply batch 0027 source-boundary dispositions"
+          git push origin "HEAD:$CONTENT_BRANCH"
