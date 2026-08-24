@@ -1,0 +1,172 @@
+name: Remediate Content Batch 0021 Source Boundaries
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0021-boundaries.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0021-source-boundaries
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Synchronize and capture base head
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          git reset --hard "origin/$CONTENT_BRANCH"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether bounded remediation is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md'
+          boundary='review/content_build/answer_batch_0021/source_boundary_audit.md'
+          if [ -f "$boundary" ] \
+             && grep -Fq 'Active after source-boundary audit: `9`' "$task" \
+             && grep -Fq 'normalized to source-preserving package interval peak wording' "$task" \
+             && grep -Fq 'source only says “二叉树相关操作”' "$task"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Batch 0021 source-boundary remediation already complete.'
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+            echo 'Batch 0021 source-boundary remediation is pending.'
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Apply source-first boundary dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/content/remediate_batch_0021_boundaries.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+
+      - name: Verify exact batch 0021 dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          retired = 'cq_q_36adef6f4fb0a868fca32118d03969a5'
+          normalized_cid = 'cq_q_3a1c2667429257c4fbe7e2d8d8012096'
+          normalized_qid = 'f2d52be391d5a320a5460d80e4256278'
+          old_qid = '3a1c2667429257c4fbe7e2d8d8012096'
+
+          canon = [json.loads(x) for x in Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          if retired in by_cid:
+              raise SystemExit('retired batch 0021 Canonical is still active')
+          row = by_cid.get(normalized_cid)
+          if not row or row.get('question_ids') != [normalized_qid]:
+              raise SystemExit(f'normalized Canonical ownership mismatch: {row}')
+          title = row.get('canonical_title', '')
+          if 'Difference Array' in title or 'Sweep Line' in title or '差分数组' in title or '扫描线' in title:
+              raise SystemExit('normalized Canonical title still prescribes an unsupported solution')
+
+          questions = [json.loads(x) for x in Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          if any(q.get('question_id') == old_qid for q in questions):
+              raise SystemExit('old enriched Question id still present')
+          q = next((q for q in questions if q.get('question_id') == normalized_qid), None)
+          if not q or q.get('canonical_id') != normalized_cid:
+              raise SystemExit('normalized Question projection is missing or misbound')
+          if 'Difference Array' in q.get('original_question', '') or 'Sweep Line' in q.get('original_question', '') or '差分数组' in q.get('original_question', '') or '扫描线' in q.get('original_question', ''):
+              raise SystemExit('normalized Question still prescribes an unsupported solution')
+
+          progress = json.loads(Path('review/progress.json').read_text(encoding='utf-8'))
+          if any(item.get('canonical_id') == retired for item in progress.get('items', [])):
+              raise SystemExit('retired Canonical still has ReviewProgress')
+          if Path(f'review/answers/{retired}.md').exists():
+              raise SystemExit('retired Canonical still has an active Answer')
+          if not Path(f'review/archive/answers/{retired}.md').exists():
+              raise SystemExit('retired Canonical Answer was not archived')
+          PY
+
+      - name: Verify repository integrity and full quality gates
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content head stayed stable during validation
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding this verified local mutation; a later trigger will retry against the newer source state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'No batch 0021 source-boundary remediation changes remain.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: apply batch 0021 source-boundary dispositions"
+          git push origin "HEAD:$CONTENT_BRANCH"
