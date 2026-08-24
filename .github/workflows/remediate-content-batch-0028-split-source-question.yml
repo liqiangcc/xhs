@@ -1,0 +1,201 @@
+name: Remediate Content Batch 0028 Split Source Question
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0028-split-source-question.yml
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-split-source-question
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  split:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Capture stable base and prerequisites
+        id: state
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md'
+          core='[x] Apply and verify the non-relational boundary slice'
+          split='[x] Split mixed `cq_q_5f1aa586172b1a82ebb8cdd65fb6927b` source ownership'
+          if ! grep -Fq "$core" "$task"; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Core batch 0028 source-boundary remediation has not landed; guarded no-op.'
+          elif grep -Fq "$split" "$task"; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Mixed-source split already complete.'
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.state.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.state.outputs.pending == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.state.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply frozen mixed-source split
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/content/remediate_batch_0028_split_source_question.py
+          python3 scripts/content/remediate_batch_0028_split_source_question.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify exact split state
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          root = pathlib.Path('.')
+          old_cid = 'cq_q_5f1aa586172b1a82ebb8cdd65fb6927b'
+          old_qid = '5f1aa586172b1a82ebb8cdd65fb6927b'
+          expected = {
+              'cq_q_37b2536da54c5df189dbb86c55a6bfa3': (
+                  '37b2536da54c5df189dbb86c55a6bfa3',
+                  '大数加法：给两个字符串，返回两个字符串的和，并以字符串形式返回，时间复杂度 O(n)；例如 "787"+"350"="1137"，"321"+""="321"',
+              ),
+              'cq_q_e9c5bb8468fd0b37bd3f0abf72df80aa': (
+                  'e9c5bb8468fd0b37bd3f0abf72df80aa',
+                  'SQL：从学生表和成绩表中，查询学生学号、姓名、平均成绩',
+              ),
+          }
+
+          canon = [json.loads(x) for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          if old_cid in by_cid:
+              raise SystemExit('legacy mixed batch 0028 Canonical remains active')
+          for cid, (qid, title) in expected.items():
+              row = by_cid.get(cid)
+              if not row or row.get('question_ids') != [qid] or row.get('canonical_title') != title or row.get('answer_status') != 'missing':
+                  raise SystemExit(f'{cid}: split Canonical state invalid: {row}')
+
+          questions = [json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_qid = {row.get('question_id'): row for row in questions}
+          if old_qid in by_qid:
+              raise SystemExit('legacy mixed projected Question remains active')
+          for cid, (qid, title) in expected.items():
+              row = by_qid.get(qid)
+              if not row or row.get('canonical_id') != cid or row.get('original_question') != title or row.get('is_valid_for_library') is not True:
+                  raise SystemExit(f'{cid}: split Question state invalid: {row}')
+
+          note = json.loads((root/'note_tagged/680859e1000000000f032ec6.json').read_text(encoding='utf-8'))
+          tagged = note.get('tagged_questions') or []
+          tail = tagged[6:8]
+          if [row.get('question_id') for row in tail] != [value[0] for value in expected.values()]:
+              raise SystemExit('source split order/ids drifted')
+          if len(tagged) != 8:
+              raise SystemExit(f'expected eight source Questions after split, got {len(tagged)}')
+
+          progress = json.loads((root/'review/progress.json').read_text(encoding='utf-8'))
+          items = progress.get('items', []) if isinstance(progress, dict) else progress
+          if any(row.get('canonical_id') == old_cid for row in items):
+              raise SystemExit('legacy mixed ReviewProgress remains active')
+
+          active = root/'review/answers'/f'{old_cid}.md'
+          archived = root/'review/archive/answers'/f'{old_cid}.md'
+          if active.exists() or not archived.exists():
+              raise SystemExit('legacy mixed Answer archive state invalid')
+          for cid in expected:
+              if (root/'review/answers'/f'{cid}.md').exists():
+                  raise SystemExit(f'{cid}: split descendant must remain answer-missing before relation review')
+
+          packet = json.loads((root/'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.json').read_text(encoding='utf-8'))
+          frozen = next((row for row in packet.get('canonicals', []) if row.get('canonical_id') == old_cid), None)
+          if not frozen or not frozen.get('source_hits'):
+              raise SystemExit('frozen source packet lost the original mixed member')
+
+          task = (root/'tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md').read_text(encoding='utf-8')
+          if '[x] Split mixed `cq_q_5f1aa586172b1a82ebb8cdd65fb6927b` source ownership' not in task:
+              raise SystemExit('batch 0028 task does not record verified source split')
+          print('PASS: batch 0028 mixed source split verified.')
+          PY
+
+      - name: Verify repository integrity and full quality gates
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.state.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during split validation: $base_head -> $remote_head"
+            echo 'Discarding local split; next PR event retries against fresh state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'No batch 0028 mixed-source split changes remain.'
+            exit 0
+          fi
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'content: split batch 0028 mixed source question'
+          git push origin "HEAD:$CONTENT_BRANCH"
