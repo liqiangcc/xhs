@@ -1,0 +1,143 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5",
+  "candidate_sha256": "c38bdd13263a92ed8704d40b3f6c58b312d81349ec0fef4ba0547a929d9ba124",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0028-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "context",
+      "title": "Current source-question context",
+      "locator": "review/content_build/answer_batch_0028/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5/source_context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "relation",
+      "title": "Frozen batch source-boundary/relation review",
+      "locator": "review/content_build/answer_batch_0028/relation_review.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Deterministic executable fixture",
+      "locator": "review/content_build/answer_batch_0028/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5/throttle_test.js",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "review",
+      "title": "Independent source-first review",
+      "locator": "review/content_build/answer_batch_0028/cq_q_5f9a6152ed410f9a6b42f5f0ab7aa0a5/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "Source-preserved requirements and implementation assumptions are explicitly separated.",
+      "source_ids": [
+        "context",
+        "relation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "validated-implementation",
+      "text": "The implementation satisfies its explicitly declared leading-plus-latest-trailing throttle contract with one pending timer and preserved receiver/arguments.",
+      "source_ids": [
+        "fixture",
+        "review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "5f9a6152ed410f9a6b42f5f0ab7aa0a5",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "node throttle_test.js",
+    "result": "pass",
+    "reported_stdout": "PASS leading=immediate trailing=latest one-timer-window=verified context=preserved cancel=drops-pending validation=verified",
+    "checks": [
+      "first call",
+      "multiple in-window calls",
+      "cancel",
+      "after cancel"
+    ],
+    "boundary_tests": [
+      {
+        "case": "first call",
+        "expected": "executes immediately",
+        "passed": true
+      },
+      {
+        "case": "multiple in-window calls",
+        "expected": "one trailing uses latest args/receiver",
+        "passed": true
+      },
+      {
+        "case": "cancel",
+        "expected": "drops pending trailing",
+        "passed": true
+      },
+      {
+        "case": "after cancel",
+        "expected": "next call executes immediately",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0028-20260825-v5",
+    "review_version": "batch-0028.throttle.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Source asks to implement throttle but does not fix leading/trailing behavior; candidate declares leading plus latest-trailing as an implementation contract.",
+      "Execution eligibility is anchored to last actual invocation while in-window calls replace only the latest pending receiver/arguments.",
+      "Deterministic fake-clock fixture verifies leading, latest trailing, receiver, cancel and restart behavior.",
+      "Three-minute section now contains an auditable prose explanation in addition to code; no fabricated production metrics are claimed."
+    ]
+  }
+}
