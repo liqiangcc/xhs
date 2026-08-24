@@ -2,6 +2,7 @@
 
 const { detectEntityQuestionClusters } = require('../../domain/dedup/entity-cluster-detection');
 const { detectHotspotQuestionClusters } = require('../../domain/dedup/hotspot-cluster-detection');
+const { detectExplicitQuestionPair } = require('../../domain/dedup/explicit-question-pair-detection');
 const { createRelationCandidate } = require('../../domain/dedup/relation-candidate');
 const { validateDomain, normalizeEntity } = require('../../domain/question/taxonomy-normalization');
 const {
@@ -13,6 +14,9 @@ const {
 const {
     assertDedupQuestionRetrievalRepository,
 } = require('../../ports/repositories/dedup-question-retrieval-repository');
+const {
+    assertDedupQuestionSelectionRepository,
+} = require('../../ports/repositories/dedup-question-selection-repository');
 const { assertRelationCandidatePublisher } = require('../../ports/relation-candidate-publisher');
 const { hotspotRefs } = require('./relation-source-retrieval');
 
@@ -61,6 +65,13 @@ function sourceRevision(snapshot) {
     };
 }
 
+function normalizeQuestionIds(questionIds) {
+    return [...new Set((questionIds || [])
+        .map((questionId) => String(questionId || '').trim())
+        .filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right));
+}
+
 function normalizeSuggestionInput(input, taxonomy) {
     const mode = input.mode || 'entity';
     if (mode === 'entity') {
@@ -82,6 +93,19 @@ function normalizeSuggestionInput(input, taxonomy) {
         return { mode, seed: 'hotspot', limit };
     }
 
+    if (mode === 'pair') {
+        const questionIds = normalizeQuestionIds(input.question_ids);
+        if (questionIds.length !== 2) {
+            throw new Error('pair suggestion requires exactly two distinct question_ids');
+        }
+        return {
+            mode,
+            seed: questionIds.join(','),
+            limit: 1,
+            question_ids: questionIds,
+        };
+    }
+
     throw new Error(`Unsupported dedup suggestion mode: ${mode}`);
 }
 
@@ -94,7 +118,9 @@ function planRelationSuggestions(input, dependencies = {}) {
     const taxonomy = dependencies.taxonomy;
     const entityDetector = dependencies.detectEntityQuestionClusters || detectEntityQuestionClusters;
     const hotspotDetector = dependencies.detectHotspotQuestionClusters || detectHotspotQuestionClusters;
-    const { mode, seed, limit } = normalizeSuggestionInput(input, taxonomy);
+    const pairDetector = dependencies.detectExplicitQuestionPair || detectExplicitQuestionPair;
+    const normalized = normalizeSuggestionInput(input, taxonomy);
+    const { mode, seed, limit } = normalized;
 
     if (!Array.isArray(input.questions)) {
         throw new Error('suggestion questions must be an array');
@@ -113,7 +139,7 @@ function planRelationSuggestions(input, dependencies = {}) {
                 ? {}
                 : { similarity_threshold: input.similarity_threshold }),
         });
-    } else {
+    } else if (mode === 'hotspot') {
         if (typeof hotspotDetector !== 'function') {
             throw new Error('detectHotspotQuestionClusters dependency is required');
         }
@@ -121,6 +147,13 @@ function planRelationSuggestions(input, dependencies = {}) {
             throw new Error('hotspot suggestion facts must be an array');
         }
         clusters = hotspotDetector(input.hotspots, detectionQuestions);
+    } else {
+        if (typeof pairDetector !== 'function') {
+            throw new Error('detectExplicitQuestionPair dependency is required');
+        }
+        clusters = pairDetector(detectionQuestions, {
+            question_ids: normalized.question_ids,
+        });
     }
 
     if (!Array.isArray(clusters)) {
@@ -158,9 +191,13 @@ function createSuggestCanonicalRelationsUseCase(dependencies = {}) {
         ? null
         : assertDedupHotspotRetrievalRepository(dependencies.hotspotRepository);
     const questionRepository = assertDedupQuestionRetrievalRepository(dependencies.questionRepository);
+    const questionSelectionRepository = dependencies.questionSelectionRepository == null
+        ? null
+        : assertDedupQuestionSelectionRepository(dependencies.questionSelectionRepository);
     const relationCandidatePublisher = assertRelationCandidatePublisher(dependencies.relationCandidatePublisher);
     const entityDetector = dependencies.detectEntityQuestionClusters || detectEntityQuestionClusters;
     const hotspotDetector = dependencies.detectHotspotQuestionClusters || detectHotspotQuestionClusters;
+    const pairDetector = dependencies.detectExplicitQuestionPair || detectExplicitQuestionPair;
 
     return async function suggestCanonicalRelationsUseCase(input = {}) {
         if (Object.hasOwn(input, 'questions') || Object.hasOwn(input, 'hotspots')) {
@@ -169,42 +206,57 @@ function createSuggestCanonicalRelationsUseCase(dependencies = {}) {
 
         const normalized = normalizeSuggestionInput(input, taxonomy);
         let retrievalSnapshot;
+        let questionSnapshot;
         let refs;
         let hotspots;
 
-        if (normalized.mode === 'entity') {
-            retrievalSnapshot = assertSnapshot(
-                await indexRepository.findEntityRefs(normalized.seed),
-                'dedup entity index',
-                'refs',
-            );
-            if (!Array.isArray(retrievalSnapshot.refs)) {
-                throw new Error('dedup entity index snapshot refs must be an array');
+        if (normalized.mode === 'pair') {
+            if (!questionSelectionRepository) {
+                throw new Error('DedupQuestionSelectionRepository is required for pair suggestions');
             }
-            refs = retrievalSnapshot.refs;
+            questionSnapshot = assertSnapshot(
+                await questionSelectionRepository.findByQuestionIds(normalized.question_ids),
+                'dedup selected questions',
+                'questions',
+            );
+            if (!Array.isArray(questionSnapshot.questions)) {
+                throw new Error('dedup selected question snapshot questions must be an array');
+            }
         } else {
-            if (!hotspotRepository) {
-                throw new Error('DedupHotspotRetrievalRepository is required for hotspot suggestions');
+            if (normalized.mode === 'entity') {
+                retrievalSnapshot = assertSnapshot(
+                    await indexRepository.findEntityRefs(normalized.seed),
+                    'dedup entity index',
+                    'refs',
+                );
+                if (!Array.isArray(retrievalSnapshot.refs)) {
+                    throw new Error('dedup entity index snapshot refs must be an array');
+                }
+                refs = retrievalSnapshot.refs;
+            } else {
+                if (!hotspotRepository) {
+                    throw new Error('DedupHotspotRetrievalRepository is required for hotspot suggestions');
+                }
+                retrievalSnapshot = assertSnapshot(
+                    await hotspotRepository.listHotspots(),
+                    'dedup hotspot index',
+                    'hotspots',
+                );
+                if (!Array.isArray(retrievalSnapshot.hotspots)) {
+                    throw new Error('dedup hotspot index snapshot hotspots must be an array');
+                }
+                hotspots = retrievalSnapshot.hotspots;
+                refs = hotspotRefs(hotspots);
             }
-            retrievalSnapshot = assertSnapshot(
-                await hotspotRepository.listHotspots(),
-                'dedup hotspot index',
-                'hotspots',
-            );
-            if (!Array.isArray(retrievalSnapshot.hotspots)) {
-                throw new Error('dedup hotspot index snapshot hotspots must be an array');
-            }
-            hotspots = retrievalSnapshot.hotspots;
-            refs = hotspotRefs(hotspots);
-        }
 
-        const questionSnapshot = assertSnapshot(
-            await questionRepository.findByRefs(refs),
-            'dedup questions',
-            'questions',
-        );
-        if (!Array.isArray(questionSnapshot.questions)) {
-            throw new Error('dedup question snapshot questions must be an array');
+            questionSnapshot = assertSnapshot(
+                await questionRepository.findByRefs(refs),
+                'dedup questions',
+                'questions',
+            );
+            if (!Array.isArray(questionSnapshot.questions)) {
+                throw new Error('dedup question snapshot questions must be an array');
+            }
         }
 
         const planned = planRelationSuggestions({
@@ -212,17 +264,18 @@ function createSuggestCanonicalRelationsUseCase(dependencies = {}) {
             mode: normalized.mode,
             seed: normalized.seed,
             limit: normalized.limit,
+            ...(normalized.question_ids ? { question_ids: normalized.question_ids } : {}),
             questions: questionSnapshot.questions,
             ...(normalized.mode === 'hotspot' ? { hotspots } : {}),
         }, {
             taxonomy,
             detectEntityQuestionClusters: entityDetector,
             detectHotspotQuestionClusters: hotspotDetector,
+            detectExplicitQuestionPair: pairDetector,
         });
-        const sourceRevisions = [
-            sourceRevision(retrievalSnapshot),
-            sourceRevision(questionSnapshot),
-        ];
+        const sourceRevisions = normalized.mode === 'pair'
+            ? [sourceRevision(questionSnapshot)]
+            : [sourceRevision(retrievalSnapshot), sourceRevision(questionSnapshot)];
         const queue = {
             schema_version: 'dedup_relation_candidate_queue.v1',
             mode: planned.mode,

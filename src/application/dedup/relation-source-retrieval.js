@@ -9,9 +9,12 @@ const {
 const {
     assertDedupQuestionRetrievalRepository,
 } = require('../../ports/repositories/dedup-question-retrieval-repository');
+const {
+    assertDedupQuestionSelectionRepository,
+} = require('../../ports/repositories/dedup-question-selection-repository');
 const { revisionOf } = require('./relation-source-freshness');
 
-const SUPPORTED_RELATION_SOURCE_SCOPES = Object.freeze(['entity', 'hotspot']);
+const SUPPORTED_RELATION_SOURCE_SCOPES = Object.freeze(['entity', 'hotspot', 'pair']);
 
 function assertSnapshot(snapshot, label, valueKey) {
     if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
@@ -39,11 +42,37 @@ function createRelationSourceLoader(dependencies = {}) {
     const hotspotRepository = dependencies.hotspotRepository == null
         ? null
         : assertDedupHotspotRetrievalRepository(dependencies.hotspotRepository);
+    const questionSelectionRepository = dependencies.questionSelectionRepository == null
+        ? null
+        : assertDedupQuestionSelectionRepository(dependencies.questionSelectionRepository);
 
     return async function loadRelationSource(candidate = {}) {
         const scope = String(candidate.scope || '').trim();
         if (!SUPPORTED_RELATION_SOURCE_SCOPES.includes(scope)) {
             throw new Error(`Unsupported relation source scope: ${scope || 'missing'}`);
+        }
+
+        if (scope === 'pair') {
+            if (!questionSelectionRepository) {
+                throw new Error('DedupQuestionSelectionRepository is required for pair scope');
+            }
+            if (!Array.isArray(candidate.question_ids) || candidate.question_ids.length !== 2) {
+                throw new Error('pair relation source requires exactly two question_ids');
+            }
+            const questionSnapshot = assertSnapshot(
+                await questionSelectionRepository.findByQuestionIds(candidate.question_ids),
+                'current dedup selected questions',
+                'questions',
+            );
+            if (!Array.isArray(questionSnapshot.questions)) {
+                throw new Error('current dedup selected question snapshot questions must be an array');
+            }
+            return {
+                scope,
+                retrieval_snapshot: null,
+                question_snapshot: questionSnapshot,
+                current_source_revisions: [revisionOf(questionSnapshot)],
+            };
         }
 
         let retrievalSnapshot;
