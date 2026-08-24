@@ -77,6 +77,69 @@ function uniqueSorted(values) {
     return [...new Set(values || [])].sort((a, b) => String(a).localeCompare(String(b)));
 }
 
+function normalizeExpectedQuestionIds(value, label) {
+    if (value === undefined) return null;
+    if (!Array.isArray(value)) {
+        throw new Error(`${label} must be an array when provided`);
+    }
+    const normalized = uniqueSorted(value.map((questionId) => String(questionId || '').trim()));
+    if (normalized.some((questionId) => !questionId) || normalized.length !== value.length) {
+        throw new Error(`${label} must contain unique non-empty Question ids`);
+    }
+    return normalized;
+}
+
+function normalizeExpectedRevisions(value, label) {
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) {
+        throw new Error(`${label} must be an array when provided`);
+    }
+    return value.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            throw new Error(`${label}[${index}] must be an object`);
+        }
+        if (!item.resource || typeof item.resource !== 'string') {
+            throw new Error(`${label}[${index}].resource is required`);
+        }
+        if (!item.revision || typeof item.revision !== 'string') {
+            throw new Error(`${label}[${index}].revision is required`);
+        }
+        return { resource: item.resource, revision: item.revision };
+    });
+}
+
+function assertReviewedMergeScope(input, targetRecord, sourceRecord) {
+    const expectedSourceQuestionIds = normalizeExpectedQuestionIds(
+        input.expected_source_question_ids,
+        'expected_source_question_ids',
+    );
+    const expectedTargetReviewedQuestionIds = normalizeExpectedQuestionIds(
+        input.expected_target_reviewed_question_ids,
+        'expected_target_reviewed_question_ids',
+    );
+
+    if (expectedSourceQuestionIds !== null) {
+        const currentSourceQuestionIds = uniqueSorted(sourceRecord.question_ids || []);
+        if (JSON.stringify(currentSourceQuestionIds) !== JSON.stringify(expectedSourceQuestionIds)) {
+            throw new Error(
+                `Reviewed Canonical merge source scope changed: expected ${expectedSourceQuestionIds.join(', ') || '(none)'}, current ${currentSourceQuestionIds.join(', ') || '(none)'}`,
+            );
+        }
+    }
+
+    if (expectedTargetReviewedQuestionIds !== null) {
+        const currentTargetQuestionIds = new Set(targetRecord.question_ids || []);
+        const missingReviewedQuestionIds = expectedTargetReviewedQuestionIds.filter(
+            (questionId) => !currentTargetQuestionIds.has(questionId),
+        );
+        if (missingReviewedQuestionIds.length) {
+            throw new Error(
+                `Reviewed Canonical merge target scope changed; reviewed Questions no longer belong to target: ${missingReviewedQuestionIds.join(', ')}`,
+            );
+        }
+    }
+}
+
 function reviewMigrationSummary(reviewMigration, reviewSnapshot) {
     return {
         source_progress_found: reviewMigration.progress.source_found,
@@ -175,6 +238,11 @@ function createMergeCanonicalUseCase(dependencies = {}) {
         assertSnapshot(sourceBindingSnapshot, 'source question bindings', 'bindings');
         assertReviewSnapshot(reviewSnapshot);
         assertAnswerSnapshot(answerSnapshot);
+        assertReviewedMergeScope(input, targetSnapshot.record, sourceSnapshot.record);
+        const reviewedOwnershipExpectedRevisions = normalizeExpectedRevisions(
+            input.expected_reviewed_ownership_revisions,
+            'expected_reviewed_ownership_revisions',
+        );
 
         const merged = mergeCanonical(targetSnapshot.record, sourceSnapshot.record);
         const mergedQuestionIds = uniqueSorted(merged.question_ids);
@@ -219,6 +287,7 @@ function createMergeCanonicalUseCase(dependencies = {}) {
                 expectedRevision(sourceBindingSnapshot),
                 expectedRevision(reviewSnapshot),
                 expectedRevision(answerSnapshot),
+                ...reviewedOwnershipExpectedRevisions,
                 ...questionSnapshots.map(expectedRevision),
             ],
             changes: {

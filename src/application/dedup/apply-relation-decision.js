@@ -10,6 +10,14 @@ function createApplyRelationDecisionUseCase(dependencies = {}) {
         dependencies.prepareRelationApply,
         'PrepareRelationApply',
     );
+    const resolveReviewedCanonicalConsolidation = assertUseCase(
+        dependencies.resolveReviewedCanonicalConsolidation,
+        'ResolveReviewedCanonicalConsolidation',
+    );
+    const mergeCanonical = assertUseCase(
+        dependencies.mergeCanonical,
+        'MergeCanonical',
+    );
     const resolveQuestionGroupCanonicalization = assertUseCase(
         dependencies.resolveQuestionGroupCanonicalization,
         'ResolveQuestionGroupCanonicalization',
@@ -28,6 +36,7 @@ function createApplyRelationDecisionUseCase(dependencies = {}) {
             'source_revisions',
             'expected_revisions',
             'intent',
+            'apply_strategy',
             'canonicalization_plan',
             'mutation_plan',
             'preflight',
@@ -74,12 +83,57 @@ function createApplyRelationDecisionUseCase(dependencies = {}) {
             );
         }
 
+        // A reviewed same/alias pair can involve Questions that already belong
+        // to two Canonicals. Resolve that ownership from current repositories;
+        // never let Interface input select or override a source Canonical.
+        const applyStrategy = await resolveReviewedCanonicalConsolidation({ intent });
+        if (!applyStrategy || typeof applyStrategy !== 'object') {
+            throw new Error('ResolveReviewedCanonicalConsolidation must return an apply strategy');
+        }
+
+        if (applyStrategy.strategy === 'merge_existing_canonical') {
+            const mergeResult = await mergeCanonical({
+                target: applyStrategy.target_canonical_id,
+                source: applyStrategy.source_canonical_id,
+                reason: `Explicit ${prepared.relation} RelationDecision ${relationCandidateKey}`,
+                expected_source_question_ids: applyStrategy.source_question_ids,
+                expected_target_reviewed_question_ids: applyStrategy.target_reviewed_question_ids,
+                expected_reviewed_ownership_revisions: applyStrategy.ownership_expected_revisions,
+            });
+            return {
+                ok: mergeResult.ok === true,
+                applied: true,
+                apply_strategy: applyStrategy.strategy,
+                relation_candidate_key: relationCandidateKey,
+                relation: prepared.relation,
+                canonical_id: applyStrategy.target_canonical_id,
+                source_canonical_id: applyStrategy.source_canonical_id,
+                canonical_resolution: 'existing',
+                question_ids: applyStrategy.reviewed_question_ids,
+                moved_question_ids: mergeResult.moved_question_ids,
+                assigned_question_rows: mergeResult.assigned_question_rows,
+                canonical_count: mergeResult.canonical_count,
+                review_migration: mergeResult.review_migration,
+                invalidated_target_answer: mergeResult.invalidated_target_answer,
+                archived_source_answer: mergeResult.archived_source_answer,
+                integrity: mergeResult.integrity,
+                decision_snapshot: prepared.decision_snapshot,
+                current_source_revisions: prepared.current_source_revisions,
+                commit: mergeResult.commit,
+            };
+        }
+
+        if (applyStrategy.strategy !== 'question_group') {
+            throw new Error(`Unsupported reviewed Canonical apply strategy: ${applyStrategy.strategy}`);
+        }
+
         const canonicalization = await resolveQuestionGroupCanonicalization({ intent });
         const execution = await executeQuestionGroupCanonicalization({ plan: canonicalization.plan });
 
         return {
             ok: true,
             applied: true,
+            apply_strategy: applyStrategy.strategy,
             relation_candidate_key: relationCandidateKey,
             relation: prepared.relation,
             canonical_id: execution.canonical_id,

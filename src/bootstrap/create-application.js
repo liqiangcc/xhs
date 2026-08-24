@@ -11,6 +11,9 @@ const {
     createResolveQuestionGroupCanonicalizationUseCase,
 } = require('../application/canonical/resolve-question-group-canonicalization');
 const {
+    createResolveReviewedCanonicalConsolidationUseCase,
+} = require('../application/canonical/resolve-reviewed-canonical-consolidation');
+const {
     createPlanQuestionGroupCanonicalizationMutationUseCase,
 } = require('../application/canonical/plan-question-group-canonicalization-mutation');
 const {
@@ -139,6 +142,11 @@ function createApplication(options = {}) {
     const resolveQuestionGroupCanonicalization = createResolveQuestionGroupCanonicalizationUseCase({
         canonicalIdentityRepository: canonicalRepository,
     });
+    const resolveReviewedCanonicalConsolidation =
+        createResolveReviewedCanonicalConsolidationUseCase({
+            canonicalRepository,
+            canonicalQuestionOwnershipRepository,
+        });
     const planQuestionGroupCanonicalizationMutation =
         createPlanQuestionGroupCanonicalizationMutationUseCase({
             canonicalIdentityRepository: canonicalRepository,
@@ -213,6 +221,8 @@ function createApplication(options = {}) {
     });
     const applyDecision = createApplyRelationDecisionUseCase({
         prepareRelationApply: prepareApply,
+        resolveReviewedCanonicalConsolidation,
+        mergeCanonical: merge,
         resolveQuestionGroupCanonicalization,
         executeQuestionGroupCanonicalization,
     });
