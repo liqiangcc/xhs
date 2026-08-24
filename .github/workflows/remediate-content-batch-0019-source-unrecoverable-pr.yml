@@ -1,14 +1,11 @@
 name: Remediate Content Batch 0019 Source-Unrecoverable Questions
 
-# Bounded one-off remediation runner. The mutation is intentionally committed
-# before the expensive repository-wide PR CI; the resulting head is then covered
-# by the normal pull_request CI. This keeps the source-boundary mutation atomic
-# and avoids using a full-suite pre-commit run as the mutation transport.
-# Retrigger 2026-08-24T01:41Z after synchronizing the content branch to master.
+# Default-branch registered one-shot transport for the bounded source retirement.
+# It runs only when this workflow file is changed on master, checks out the active
+# content branch, commits the atomic mutation there, and leaves full verification
+# to the content PR CI. Keeping this runner off pull_request events prevents it
+# from racing/cancelling the content-branch companion during PR synchronization.
 on:
-  pull_request:
-    branches:
-      - master
   push:
     branches:
       - master
@@ -19,12 +16,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: remediate-content-batch-0019-source-unrecoverable
-  cancel-in-progress: true
+  group: master-trigger-batch-0019-source-unrecoverable
+  cancel-in-progress: false
 
 jobs:
   remediate:
-    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
