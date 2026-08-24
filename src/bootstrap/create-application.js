@@ -235,7 +235,6 @@ function createApplication(options = {}) {
             merge,
             split,
             resolveQuestionGroupCanonicalization,
-            resolveReviewedCanonicalConsolidation,
             planQuestionGroupCanonicalizationMutation,
             executeQuestionGroupCanonicalization,
         }),
