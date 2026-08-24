@@ -4,7 +4,9 @@ name: Remediate Content Batch 0019 Source-Unrecoverable Questions
 # before the expensive repository-wide PR CI; the resulting head is then covered
 # by the normal pull_request CI. This keeps the source-boundary mutation atomic
 # and avoids using a full-suite pre-commit run as the mutation transport.
-# Retrigger 2026-08-24T00:00Z after confirming the content branch is still pending.
+# The content-branch push trigger is path-bounded to this workflow file so a
+# connector-authored retrigger can execute the one-off mutation directly without
+# relying on default-branch pull_request workflow registration.
 on:
   pull_request:
     branches:
@@ -12,6 +14,7 @@ on:
   push:
     branches:
       - master
+      - content/quality-completion
     paths:
       - .github/workflows/remediate-content-batch-0019-source-unrecoverable-pr.yml
 
