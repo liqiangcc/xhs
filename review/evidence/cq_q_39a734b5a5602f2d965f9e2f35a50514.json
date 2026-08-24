@@ -1,0 +1,139 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_39a734b5a5602f2d965f9e2f35a50514",
+  "candidate_sha256": "1b69a5658545139bb1fb2e4a9e458aa4793b92909e8bbdba3d874cb6e5c3112d",
+  "checked_at": "2026-08-24",
+  "writer": {
+    "writer_id": "automation-content-builder-sorted-pair-sum-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "xhs-raw-note-6668516a",
+      "title": "Xiaomi interview note containing the sorted-array sum-to-10 prompt",
+      "locator": "note_desc/6668516a000000000e033155.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "batch-0021-source-packet",
+      "title": "Answer Batch 0021 mechanically extracted repository-source packet",
+      "locator": "review/reports/ANSWER_BATCH_0021_SOURCE_PACKET.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "batch-0021-boundary-audit",
+      "title": "Answer Batch 0021 source-first boundary audit",
+      "locator": "review/content_build/answer_batch_0021/source_boundary_audit.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "sorted-pair-sum-validation",
+      "title": "Deterministic Java validation against quadratic unique-pair oracle",
+      "locator": "review/content_build/answer_batch_0021/cq_q_39a734b5a5602f2d965f9e2f35a50514/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-24"
+    },
+    {
+      "source_id": "sorted-pair-sum-isolated-review",
+      "title": "Source-first isolated review for the sorted-pair-sum candidate",
+      "locator": "review/content_build/answer_batch_0021/cq_q_39a734b5a5602f2d965f9e2f35a50514/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-24"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The retained repository source explicitly asks for element pairs in an increasing/sorted array whose sum is 10, and does not preserve output shape, duplicate semantics, index semantics, numeric bounds, or API signature.",
+      "source_ids": ["xhs-raw-note-6668516a", "batch-0021-source-packet", "batch-0021-boundary-audit"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "candidate-contract",
+      "text": "Non-decreasing int[] input and returning all unique value pairs are explicit candidate choices rather than recovered source requirements.",
+      "source_ids": ["batch-0021-boundary-audit", "sorted-pair-sum-isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "two-pointer-correctness",
+      "text": "For sorted input, a sum below target safely eliminates the current left value, while a sum above target safely eliminates the current right value; equality records a pair and duplicate values may be skipped for unique-value output.",
+      "source_ids": ["sorted-pair-sum-validation", "sorted-pair-sum-isolated-review"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "Each pointer moves monotonically across the array, giving O(n) time and O(1) algorithmic auxiliary space excluding O(k) returned pairs.",
+      "source_ids": ["sorted-pair-sum-validation", "sorted-pair-sum-isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "overflow-safety",
+      "text": "The implementation casts the left operand to long before addition, preventing int overflow from corrupting target comparison.",
+      "source_ids": ["sorted-pair-sum-validation", "sorted-pair-sum-isolated-review"],
+      "answer_locations": ["1 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The exact Java fixture passes 9 fixed cases and 5000 deterministic randomized sorted arrays against an independent quadratic oracle while confirming no input mutation.",
+      "source_ids": ["sorted-pair-sum-validation", "sorted-pair-sum-isolated-review"],
+      "answer_locations": ["关键细节", "原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "39a734b5a5602f2d965f9e2f35a50514",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "validation": {
+    "command": "javac SortedPairSum.java SortedPairSumTest.java && java SortedPairSumTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=9 randomized=5000 oracle=quadratic-unique-pairs target=10 mutation=none",
+    "checks": [
+      "null, empty and single-element inputs",
+      "one pair and multiple distinct pairs",
+      "duplicate values including repeated 5/5 and repeated complements",
+      "negative values",
+      "no-solution input",
+      "Integer.MIN_VALUE/Integer.MAX_VALUE overflow-sensitive input",
+      "5000 deterministic random sorted arrays compared against quadratic oracle",
+      "input equality before and after every invocation"
+    ],
+    "boundary_tests": [
+      {"case": "null, empty, one element", "expected": "no pairs", "passed": true},
+      {"case": "duplicates including multiple 5 values and repeated complements", "expected": "each value pair returned once", "passed": true},
+      {"case": "negative and overflow-sensitive int extremes", "expected": "correct target comparison with long addition", "passed": true},
+      {"case": "5000 deterministic random sorted arrays", "expected": "two-pointer result equals quadratic unique-pair oracle without mutation", "passed": true}
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-sorted-pair-sum-20260824",
+    "review_version": "sorted-pair-sum.two-pointer.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate stays inside the source-supported sorted-array sum-to-10 goal and labels output/API assumptions.",
+      "The two-pointer implementation and quadratic oracle agree on fixed and randomized cases.",
+      "Overflow handling, duplicate semantics, complexity and non-mutation claims match the executable artifact.",
+      "No production or personal experience is fabricated; formal promotion remains blocked by the required human-approval gate."
+    ]
+  }
+}
