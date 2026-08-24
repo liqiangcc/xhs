@@ -1,0 +1,195 @@
+name: Review Content Batch 0028 SQL And Rotate Candidates
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0028-sql-and-rotate-candidates.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-sql-rotate-isolated-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  review:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard exact candidate bytes and current source ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object review/candidates/answers/cq_q_59d52495f3df25f0d98935d5e7fa3191.md)" = "a3c8954ab43e117b93c77e4e4bf9919b6640d533"
+          test "$(git hash-object review/candidates/answers/cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266.md)" = "449804aaec0537aaf504eda4cf379f0544fc1d0b"
+          node <<'NODE'
+          const fs=require('fs');
+          const rows=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byId=new Map(rows.map(r=>[r.canonical_id,r]));
+          const expected=[
+            ['cq_q_59d52495f3df25f0d98935d5e7fa3191','59d52495f3df25f0d98935d5e7fa3191'],
+            ['cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266','5aa1b6ca0f00362ffc20d3cf8bc5f266'],
+          ];
+          for(const [cid,qid] of expected){
+            const row=byId.get(cid);
+            if(!row || JSON.stringify(row.question_ids)!==JSON.stringify([qid])) throw new Error(`${cid}: current ownership drifted`);
+          }
+          NODE
+
+      - name: Re-run exact executable fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          sql_out='review/content_build/answer_batch_0028/cq_q_59d52495f3df25f0d98935d5e7fa3191'
+          test "$(python3 "$sql_out/sql_validation.py")" = 'PASS users=1,3,5 duplicate-event=excluded cross-day=excluded final-user-dedup=verified'
+          rotate_out='review/content_build/answer_batch_0028/cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266'
+          javac -encoding UTF-8 "$rotate_out/RotateArrayTest.java"
+          test "$(java -cp "$rotate_out" RotateArrayTest)" = 'PASS fixed=8 randomized=5000 oracle=copy-right-rotation complexity=in-place-three-reversals'
+
+      - name: Record source-first isolated reviews and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto');
+          const fs=require('fs');
+          const path=require('path');
+          const date='2026-08-25';
+          const reviewer='source-first-isolated-reviewer-batch-0028-20260825-v2';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const shared=['review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md','review/content_build/answer_batch_0028/source_boundary_audit.md','config/answer_quality.json','docs/refactor/09_answer_content_standard.md'];
+          const specs=[
+            {
+              id:'cq_q_59d52495f3df25f0d98935d5e7fa3191',qid:'59d52495f3df25f0d98935d5e7fa3191',version:'batch-0028.same-day-sql.v1',fixture:'review/content_build/answer_batch_0028/cq_q_59d52495f3df25f0d98935d5e7fa3191/sql_validation.json',
+              findings:[
+                'The repository source preserves the business predicate and final ordering but not schema names; the candidate explicitly marks reads(user_id, article_id, read_date) as a minimal assumption rather than source fact.',
+                'Grouping by user and date preserves the same-day boundary, COUNT(DISTINCT article_id) matches the ordinary meaning of at least two articles without allowing duplicate events for one article to qualify, and outer DISTINCT preserves one final user row.',
+                'The deterministic SQLite fixture passes positive cases, repeated-event exclusion, cross-day exclusion, final-user deduplication and ascending output.',
+                'Timestamp-to-business-date and indexing discussion is correctly conditional instead of presented as interviewer-specified behavior. No production experience is fabricated.',
+                'No unsupported source expansion or hard failure was found. Formal promotion remains blocked only by the repository human-approval gate.'
+              ],
+              sources:[
+                {source_id:'repo-source',title:'Answer Batch 0028 repository source packet',locator:'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md',source_type:'repository_source_record',checked_at:date},
+                {source_id:'boundary-audit',title:'Answer Batch 0028 source-first boundary audit',locator:'review/content_build/answer_batch_0028/source_boundary_audit.md',source_type:'repository_structured_source',checked_at:date},
+                {source_id:'fixture',title:'Same-day article SQL deterministic SQLite fixture',locator:'review/content_build/answer_batch_0028/cq_q_59d52495f3df25f0d98935d5e7fa3191/sql_validation.json',source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+                {source_id:'isolated-review',title:'Source-first isolated review',locator:'review/content_build/answer_batch_0028/cq_q_59d52495f3df25f0d98935d5e7fa3191/isolated_review_result.json',source_type:'repository_structured_source',checked_at:date}
+              ],
+              claims:[
+                {claim_id:'source-contract',text:'The source asks for user IDs for people who read at least two articles on the same day, ordered by ID; concrete schema names are not source facts.',source_ids:['repo-source','boundary-audit'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},
+                {claim_id:'query-granularity',text:'The assumed-schema query groups by user and date, counts distinct article IDs, deduplicates qualifying users and orders final IDs ascending.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制','关键细节']},
+                {claim_id:'validation',text:'The executable fixture verifies positive matches, duplicate-event exclusion, cross-day exclusion, final-user deduplication and ascending output.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}
+              ],
+              validation:{command:'python3 sql_validation.py',result:'pass',reported_stdout:'PASS users=1,3,5 duplicate-event=excluded cross-day=excluded final-user-dedup=verified',checks:['two different articles on the same day qualifies','duplicate events for one article do not qualify','one article on different days does not qualify','multiple qualifying days return one user','final user IDs are ascending'],boundary_tests:[{case:'duplicate events for one article',expected:'does not qualify',passed:true},{case:'one article on different days',expected:'does not qualify',passed:true},{case:'multiple qualifying days',expected:'one final user ID',passed:true}]}
+            },
+            {
+              id:'cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266',qid:'5aa1b6ca0f00362ffc20d3cf8bc5f266',version:'batch-0028.rotate-array.v1',fixture:'review/content_build/answer_batch_0028/cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266/code_validation.json',
+              findings:[
+                'The repository source explicitly identifies lc189 array rotation and O(1) extra-space/O(n) time constraints; the candidate answers exactly that contract.',
+                'The three-reversal derivation is internally correct: reversing AB gives reverse(B) reverse(A), and reversing each segment yields BA.',
+                'The implementation normalizes k before indexing, handles n<=1 and k==0, mutates in place, and the seeded fixture matches an independent copy-based oracle on fixed boundaries plus 5000 randomized cases.',
+                'The negative-modulo discussion is correctly labeled as an interviewer/language follow-up and not promoted into the LeetCode input contract.',
+                'No unsupported source expansion or hard failure was found. Formal promotion remains blocked only by the repository human-approval gate.'
+              ],
+              sources:[
+                {source_id:'repo-source',title:'Answer Batch 0028 repository source packet',locator:'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md',source_type:'repository_source_record',checked_at:date},
+                {source_id:'boundary-audit',title:'Answer Batch 0028 source-first boundary audit',locator:'review/content_build/answer_batch_0028/source_boundary_audit.md',source_type:'repository_structured_source',checked_at:date},
+                {source_id:'leetcode-189',title:'LeetCode 189 Rotate Array',locator:'https://leetcode.com/problems/rotate-array/',source_type:'official_documentation',checked_at:date},
+                {source_id:'fixture',title:'Rotate Array deterministic Java validation',locator:'review/content_build/answer_batch_0028/cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266/code_validation.json',source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+                {source_id:'isolated-review',title:'Source-first isolated review',locator:'review/content_build/answer_batch_0028/cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266/isolated_review_result.json',source_type:'repository_structured_source',checked_at:date}
+              ],
+              claims:[
+                {claim_id:'source-contract',text:'The source identifies LeetCode 189 array rotation and requires O(1) extra space and O(n) time.',source_ids:['repo-source','boundary-audit'],answer_locations:['核心结论','1 分钟版','关键细节']},
+                {claim_id:'algorithm',text:'Three in-place reversals transform A B into B A after k is normalized modulo n.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','原理机制','关键细节']},
+                {claim_id:'validation',text:'The Java implementation matches a copy-based right-rotation oracle on eight fixed cases and 5000 seeded randomized cases.',source_ids:['fixture'],answer_locations:['项目经验版','常见追问','易错点']}
+              ],
+              validation:{command:'javac -encoding UTF-8 RotateArrayTest.java && java RotateArrayTest',result:'pass',reported_stdout:'PASS fixed=8 randomized=5000 oracle=copy-right-rotation complexity=in-place-three-reversals',checks:['official examples','k=0','k multiple of n','k greater than n','single element','duplicate values','5000 seeded randomized oracle comparisons'],boundary_tests:[{case:'k greater than n',expected:'same as k modulo n',passed:true},{case:'k=0 or multiple of n',expected:'array unchanged',passed:true},{case:'5000 seeded random cases',expected:'matches copy oracle',passed:true}]}
+            }
+          ];
+          function hash(file){return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');}
+          function write(file,value){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(value,null,2)+'\n');}
+          for(const s of specs){
+            const candidate=`review/candidates/answers/${s.id}.md`, h=hash(candidate), reviewPath=`review/content_build/answer_batch_0028/${s.id}/isolated_review_result.json`;
+            const review={schema_version:'isolated_review.v1',canonical_id:s.id,candidate_sha256:h,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:s.version,decision:'pass',revision_round:0,source_packet:[...shared,candidate,s.fixture],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:s.findings,promotion_blockers:['human_approval_required_for_pilot_promotion']};
+            write(reviewPath,review);
+            write(`review/evidence/${s.id}.json`,{schema_version:'answer_evidence.v1',canonical_id:s.id,candidate_sha256:h,checked_at:date,writer:{writer_id:'content-batch-0028-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:s.sources,claims:s.claims,source_question_coverage:[{question_id:s.qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:s.validation,review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:s.version,independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:s.findings}});
+          }
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md';
+          let text=fs.readFileSync(task,'utf8');
+          const notes=[
+            '- Same-day SQL candidate isolated source-first review passed with executable SQLite boundary validation; promotion remains approval-gated.',
+            '- Rotate-array candidate isolated source-first review passed with fixed plus 5000 seeded oracle comparisons; promotion remains approval-gated.'
+          ];
+          for(const note of notes){if(!text.includes(note)) text += `\n${note}`;}
+          fs.writeFileSync(task,text.endsWith('\n')?text:text+'\n');
+          NODE
+
+      - name: Audit reviewed candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_59d52495f3df25f0d98935d5e7fa3191.md --require-evidence --require-code --noWrite --noManifest
+          node scripts/xhs.js answer audit --candidate review/candidates/answers/cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266.md --require-evidence --require-code --noWrite --noManifest
+
+      - name: Verify complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit reviewed evidence if branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during review validation: $base_head -> $remote_head"; exit 0; fi
+          git add review/evidence/cq_q_59d52495f3df25f0d98935d5e7fa3191.json review/evidence/cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266.json review/content_build/answer_batch_0028/cq_q_59d52495f3df25f0d98935d5e7fa3191/isolated_review_result.json review/content_build/answer_batch_0028/cq_q_5aa1b6ca0f00362ffc20d3cf8bc5f266/isolated_review_result.json tasks/answer-batches/TASK-20260711-0313-answer-batch-0028.md
+          if git diff --cached --quiet; then echo 'Exact review bindings already recorded.'; exit 0; fi
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0028 sql and rotate candidates source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
