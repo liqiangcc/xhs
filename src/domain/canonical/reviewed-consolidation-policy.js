@@ -16,6 +16,9 @@ function assertReadyIntent(intent) {
     if (intent.intent_kind !== 'canonicalize_question_group' || intent.intent_state !== 'ready') {
         throw new Error('Reviewed consolidation requires ready canonicalization intent');
     }
+    if (intent.apply_required !== true) {
+        throw new Error('Reviewed consolidation requires apply_required=true');
+    }
     if (!REVIEWED_CONSOLIDATION_RELATIONS.includes(intent.relation)) {
         throw new Error(`Unsupported reviewed consolidation relation: ${intent.relation}`);
     }
@@ -96,7 +99,9 @@ function assertReviewedOwnershipMatchesRecords({
  * Consolidation is deliberately fail-closed: if the source Canonical contains
  * any Question that was not part of the reviewed RelationCandidate, the whole
  * Canonical may not be merged from this decision. A broader source-first review
- * is required first.
+ * is required first. Cross-Canonical consolidation also requires at least one
+ * reviewed Question to already belong to the chosen target, so a caller cannot
+ * attach a fully reviewed source Canonical to an unrelated existing target.
  */
 function decideReviewedCanonicalConsolidation(input = {}) {
     const intent = assertReadyIntent(input.intent);
@@ -158,6 +163,11 @@ function decideReviewedCanonicalConsolidation(input = {}) {
     const targetReviewedQuestionIds = reviewedQuestionIds.filter(
         (questionId) => (ownersByQuestion.get(questionId) || [])[0] === targetCanonicalId,
     );
+    if (targetReviewedQuestionIds.length === 0) {
+        throw new Error(
+            `Reviewed consolidation target ${targetCanonicalId} is not represented by any reviewed Question`,
+        );
+    }
 
     return Object.freeze({
         schema_version: 'reviewed_canonical_apply_strategy.v1',
