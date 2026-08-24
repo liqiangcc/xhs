@@ -45,6 +45,13 @@ function normalizeRefs(refs) {
     return [...byKey.values()].sort(compareRefs);
 }
 
+function normalizeQuestionIds(questionIds) {
+    return [...new Set((questionIds || [])
+        .map((questionId) => String(questionId || '').trim())
+        .filter(Boolean))]
+        .sort((left, right) => left.localeCompare(right));
+}
+
 function entityIndexResource(seed) {
     return `dedup-entity-index:${String(seed)}`;
 }
@@ -55,6 +62,10 @@ function hotspotIndexResource() {
 
 function questionSnapshotResource(refs) {
     return `dedup-questions-by-refs:${hashValue(normalizeRefs(refs)).slice(0, 20)}`;
+}
+
+function questionSelectionResource(questionIds) {
+    return `dedup-questions-by-ids:${hashValue(normalizeQuestionIds(questionIds)).slice(0, 20)}`;
 }
 
 function relationQueueKey(mode, seed) {
@@ -110,6 +121,15 @@ function resolveQuestionsByRefs(paths, refs) {
     const requested = new Set(normalizedRefs.map(refKey));
     return readQuestions(paths)
         .filter((question) => requested.has(refKey(question)))
+        .sort((left, right) => compareRefs(left, right))
+        .map(clone);
+}
+
+function resolveQuestionsByQuestionIds(paths, questionIds) {
+    const normalizedQuestionIds = normalizeQuestionIds(questionIds);
+    const requested = new Set(normalizedQuestionIds);
+    return readQuestions(paths)
+        .filter((question) => requested.has(String(question?.question_id || '')))
         .sort((left, right) => compareRefs(left, right))
         .map(clone);
 }
@@ -171,6 +191,19 @@ function createFsDedupSuggestionRepositories(options = {}) {
         },
     };
 
+    const questionSelectionRepository = {
+        async findByQuestionIds(questionIds) {
+            if (!Array.isArray(questionIds)) throw new Error('questionIds must be an array');
+            const normalizedQuestionIds = normalizeQuestionIds(questionIds);
+            const questions = resolveQuestionsByQuestionIds(paths, normalizedQuestionIds);
+            return {
+                questions,
+                resource: questionSelectionResource(normalizedQuestionIds),
+                revision: hashValue(questions),
+            };
+        },
+    };
+
     const relationCandidatePublisher = {
         async replaceQueue(queue) {
             if (!queue || typeof queue !== 'object' || Array.isArray(queue)) {
@@ -203,6 +236,7 @@ function createFsDedupSuggestionRepositories(options = {}) {
         indexRepository,
         hotspotRepository,
         questionRepository,
+        questionSelectionRepository,
         relationCandidatePublisher,
     };
 }
@@ -212,13 +246,16 @@ module.exports = {
     entityIndexResource,
     hotspotIndexResource,
     questionSnapshotResource,
+    questionSelectionResource,
     relationQueueKey,
     relationQueueResource,
     normalizeRefs,
+    normalizeQuestionIds,
     matchingEntityRefs,
     listHotspots,
     hotspotRefs,
     resolveQuestionsByRefs,
+    resolveQuestionsByQuestionIds,
     readQueueManifest,
     relationQueueSnapshot,
     createFsDedupSuggestionRepositories,
