@@ -1,0 +1,237 @@
+name: Build Content Batch 0028 Same-Day SQL Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0028-sql-same-day-candidate.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-same-day-sql-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_59d52495f3df25f0d98935d5e7fa3191
+  SOURCE_QID: 59d52495f3df25f0d98935d5e7fa3191
+
+jobs:
+  build-candidate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Verify current source-qualified boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0028/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('Canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          const expected='SQL：查询在同一天阅读至少两篇文章的用户 ID，并按 ID 升序排序';
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          NODE
+
+      - id: state
+        name: Guard writer idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/sql_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded candidate and SQL fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_59d52495f3df25f0d98935d5e7fa3191","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # SQL：同一天阅读至少两篇文章的用户 ID
+
+          ## 核心结论
+
+          来源只保留了“同一天阅读至少两篇文章的人，返回用户 ID 并按 ID 升序”这一业务条件，没有表名和列名。先声明最小假设：`reads(user_id, article_id, read_date)` 每行是一条阅读事件，`read_date` 已经是业务所需的“天”。先按 `user_id, read_date` 分组，用 `COUNT(DISTINCT article_id) >= 2` 找出同一天读过至少两篇**不同文章**的用户日，再在外层去重用户并按 `user_id` 升序。
+
+          ## 1 分钟版
+
+          - 题目要判断的是“同一个用户、同一天、至少两篇不同文章”，所以分组键是 `user_id + read_date`。
+          - 同一篇文章重复产生阅读事件不应被误算成“两篇文章”，因此计数用 `COUNT(DISTINCT article_id)`。
+          - 一个用户可能多个日期都满足条件，最终只返回用户 ID，所以外层再 `DISTINCT`。
+          - 最后 `ORDER BY user_id ASC` 对最终结果排序。
+          - 表名、列名和 `read_date` 是否已经按业务时区归一化都不是来源事实，面试时必须先说明假设。
+
+          ## 3 分钟版
+
+          假设表结构为 `reads(user_id, article_id, read_date)`，其中 `read_date` 是已经按题目业务口径计算好的日期。第一层查询把阅读事件按用户和日期分桶，每个桶统计不同 `article_id` 的数量；只有数量至少为 2 的桶才代表“某用户在某一天读了至少两篇文章”。第二层只投影 `user_id` 并去重，因为同一个用户可能在多个日期都命中。最后按用户 ID 升序输出。
+
+          ```sql
+          SELECT DISTINCT user_id
+          FROM (
+              SELECT user_id, read_date
+              FROM reads
+              GROUP BY user_id, read_date
+              HAVING COUNT(DISTINCT article_id) >= 2
+          ) AS qualified_user_days
+          ORDER BY user_id ASC;
+          ```
+
+          如果原表存的是时间戳而不是已经归一化的日期，就必须先确认数据库和业务时区，再把时间戳转换成业务日期后分组；不能在题目没有给时区规则时擅自把 UTC、服务器本地时区或某个数据库函数当成唯一答案。
+
+          ## 关键细节
+
+          - **必须按用户和日期一起分组**：只按用户分组会把不同日期的文章错误累计到一起。
+          - **按不同文章计数**：同一用户同一天重复读取同一篇文章多次，仍只算一篇文章。
+          - **最终用户去重**：用户在两天都满足条件时，结果仍只出现一个用户 ID。
+          - **排序发生在最终结果上**：`ORDER BY user_id ASC` 明确满足来源要求。
+          - **日期口径是边界**：若输入是时间戳，日期截断和时区必须由题目或业务契约决定。
+          - 物理执行成本由数据库、数据量、统计信息和索引决定；逻辑上核心代价是按用户/日期分组并对文章 ID 去重。可评估 `(user_id, read_date, article_id)` 一类索引，但不能保证所有数据库都会选择同一执行计划。
+
+          ## 原理机制
+
+          这道题本质是两层集合收缩。第一层把原始阅读事件映射成 `(user_id, read_date)` 桶，并把桶内 `article_id` 收缩成集合；集合大小大于等于 2 的桶被保留。第二层把这些合格的“用户日”映射成用户集合，消除一个用户跨多天命中的重复项。这样分别对应“同一天至少两篇”和“最终只返回用户 ID”两个约束，避免把两个不同粒度的去重混在一起。
+
+          ## 项目经验版
+
+          来源没有提供真实线上项目经历，不能编造数据量、索引命中率或延迟。在真实系统里我会先核对事件是否可能重复、`article_id` 是否稳定、日期按哪个时区切分，再用 `EXPLAIN` 和实际数据分布检查分组与去重成本；这些是落地验证步骤，不是题目已给出的事实。
+
+          ## 常见追问
+
+          - 问：为什么不是 `COUNT(*) >= 2`？答：两条事件可能来自同一篇文章；题目说“至少两篇文章”，用不同 `article_id` 计数更贴合这个语义。
+          - 问：为什么外层还要 `DISTINCT user_id`？答：内层粒度是“用户 + 日期”，一个用户可以多个日期都合格；最终要求的是用户 ID 集合。
+          - 问：如果表里是 `read_time` 时间戳怎么办？答：先按明确的业务时区转成日期再分组；没有时区契约时不能假定某个转换规则。
+          - 问：怎样避免不同日期各读一篇却被判为合格？答：分组键必须包含日期；两个日期属于两个独立桶，各自都只有一篇时都不会通过 `HAVING`。
+          - 问：可以怎样考虑索引？答：可从分组/去重列出发评估 `(user_id, read_date, article_id)`，但是否收益以及是否被优化器采用要用目标数据库的 `EXPLAIN` 和真实分布验证。
+
+          ## 易错点
+
+          - 只按 `user_id` 分组，把跨天阅读合并。
+          - 用 `COUNT(*)` 把同一文章的重复事件当成多篇文章。
+          - 忘记外层去重，导致同一用户因多个合格日期重复返回。
+          - 在最终结果之外排序，不能保证输出用户 ID 的顺序。
+          - 题目没给表结构、时间戳或时区，却把自定义字段名和日期转换函数说成来源要求。
+          EOF
+
+          cat > "$out/sql_validation.py" <<'PY'
+          import sqlite3
+          con=sqlite3.connect(':memory:')
+          con.execute('create table reads(user_id integer not null, article_id integer not null, read_date text not null)')
+          con.executemany('insert into reads values(?,?,?)',[
+            (1,101,'2026-01-01'),(1,102,'2026-01-01'),(1,103,'2026-01-02'),
+            (2,201,'2026-01-01'),(2,201,'2026-01-01'),
+            (3,301,'2026-01-03'),(3,302,'2026-01-03'),(3,302,'2026-01-03'),
+            (4,401,'2026-01-01'),(4,402,'2026-01-02'),
+            (5,501,'2026-01-01'),(5,502,'2026-01-01'),(5,503,'2026-01-02'),(5,504,'2026-01-02')])
+          sql='''SELECT DISTINCT user_id FROM (SELECT user_id, read_date FROM reads GROUP BY user_id, read_date HAVING COUNT(DISTINCT article_id) >= 2) AS qualified_user_days ORDER BY user_id ASC'''
+          rows=[r[0] for r in con.execute(sql)]
+          assert rows==[1,3,5], rows
+          assert 2 not in rows, 'duplicate reads of one article must not qualify'
+          assert 4 not in rows, 'different days must not be merged'
+          assert rows.count(5)==1, 'multiple qualifying days must not duplicate the user'
+          print('PASS users=1,3,5 duplicate-event=excluded cross-day=excluded final-user-dedup=verified')
+          PY
+
+      - name: Execute fixture and freeze writer research
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0028/$CANONICAL_ID"
+          stdout="$(python3 "$out/sql_validation.py")"
+          echo "$stdout"
+          test "$stdout" = 'PASS users=1,3,5 duplicate-event=excluded cross-day=excluded final-user-dedup=verified'
+          STDOUT="$stdout" python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          cid='cq_q_59d52495f3df25f0d98935d5e7fa3191'; qid=cid.removeprefix('cq_q_')
+          out=Path('review/content_build/answer_batch_0028')/cid
+          (out/'sql_validation.json').write_text(json.dumps({
+            'schema_version':'answer_code_validation.v1','canonical_id':cid,'result':'pass','validated_at':'2026-08-25',
+            'command':'python3 sql_validation.py','stdout':os.environ['STDOUT'],
+            'checks':['two different articles on the same day qualifies','duplicate events for one article do not qualify','one article on different days does not qualify','multiple qualifying days return one user','final user IDs are ascending']},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          (out/'writer_research.json').write_text(json.dumps({
+            'schema_version':'answer_writer_research.v1','canonical_id':cid,'checked_at':'2026-08-25','review_state':'writer_complete_isolated_review_pending',
+            'sources':[{'source_id':'repository-source','title':'Answer Batch 0028 Repository Source Packet','locator':'review/reports/ANSWER_BATCH_0028_SOURCE_PACKET.md','source_type':'repository_source_record','checked_at':'2026-08-25'},{'source_id':'fixture','title':'Same-day article SQL deterministic SQLite fixture','locator':f'{out}/sql_validation.json','source_type':'executable_test_or_reproducible_experiment','checked_at':'2026-08-25'}],
+            'claims':[{'claim_id':'source-boundary','text':'Repository source requires user IDs for people who read at least two articles on the same day, sorted by ID; concrete schema names are not preserved.','source_ids':['repository-source'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'query-behavior','text':'The executable fixture verifies distinct-article counting, same-day grouping, final user deduplication and ascending ordering for the explicitly assumed schema.','source_ids':['fixture'],'answer_locations':['3 分钟版','关键细节','常见追问','易错点']}],
+            'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            'promotion_blocker':'isolated_independent_review_not_yet_performed'},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+
+      - name: Verify repository gates
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit candidate only if branch stayed stable
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced: $base_head -> $remote_head; discard and retry on PR event."; exit 0; fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0028/$CANONICAL_ID/context.json" "review/content_build/answer_batch_0028/$CANONICAL_ID/sql_validation.py" "review/content_build/answer_batch_0028/$CANONICAL_ID/sql_validation.json" "review/content_build/answer_batch_0028/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft batch 0028 same-day SQL candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
