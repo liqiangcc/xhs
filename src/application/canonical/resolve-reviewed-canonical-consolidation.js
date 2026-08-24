@@ -70,7 +70,7 @@ function createResolveReviewedCanonicalConsolidationUseCase(dependencies = {}) {
             ]),
         );
 
-        return decideReviewedCanonicalConsolidation({
+        const strategy = decideReviewedCanonicalConsolidation({
             intent,
             target_record: targetSnapshot?.record || null,
             question_owners: ownershipSnapshots.map(({ question_id, snapshot }) => ({
@@ -78,6 +78,18 @@ function createResolveReviewedCanonicalConsolidationUseCase(dependencies = {}) {
                 canonical_ids: snapshot.canonical_ids,
             })),
             source_records: sourceRecords,
+        });
+
+        // Keep the opaque ownership revisions in Application. They close the
+        // gap between source-first ownership resolution and the later Canonical
+        // mutation preflight, including a concurrent third Canonical claiming a
+        // reviewed Question without changing target/source membership.
+        return Object.freeze({
+            ...strategy,
+            ownership_expected_revisions: ownershipSnapshots.map(({ snapshot }) => ({
+                resource: snapshot.resource,
+                revision: snapshot.revision,
+            })),
         });
     };
 }
