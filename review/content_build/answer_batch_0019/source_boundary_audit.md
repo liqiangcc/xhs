@@ -22,9 +22,9 @@ Repository source records `给一个shell脚本(遍历目录)，用java实现相
 
 The strongest repository source says only `一道sql`; no schema, rows, requested result, dialect, constraints, or query text is preserved. `SQL 实操题。` cannot support a strict-valid answer. This row needs an explicit source-incomplete/noise-or-unrecoverable disposition rather than an invented SQL exercise.
 
-### `cq_q_2e26508950e5da505c44621129f41a26` — split/normalization required
+### `cq_q_2e26508950e5da505c44621129f41a26` — retired and split source-first
 
-Repository source lists two separate hand-written tasks: `二叉树路径和` and `最长连续序列长度`. The current Canonical combines them into one question and adds `LeetCode 437`, `O(N)`, and `HashSet` details that are not present in the repository source. Split or otherwise remediate the ownership boundary before authoring either answer; do not preserve the unsupported embellishments as source facts.
+Repository source lists two separate hand-written tasks: `二叉树路径和` and `最长连续序列长度`. The merged Canonical is retired and replaced by `cq_q_84bd83ff8f06510515f6b71534cd2ac5` and `cq_q_2a5006d66e022875a36106ef0c25c2c2`, using those source-exact titles only. The repository does not support silently adding `LeetCode 437`, target-value/path-count semantics, `HashSet`, `O(N)`, or a concrete API contract.
 
 ### `cq_q_2f07ba5f8d6e6ad366d2cd13c6d1d1ab` — candidate-qualified
 
