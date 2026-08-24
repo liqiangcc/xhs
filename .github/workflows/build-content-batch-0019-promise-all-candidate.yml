@@ -32,6 +32,15 @@ jobs:
           echo "$stdout"
           test "$stdout" = "PASS fixed=12 randomized=2000 oracle=native-Promise.all iterable=supported order=input reject=first-observed thenable=adopted empty=fulfilled"
 
+      - name: Run formal candidate audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_2fcd783bcefb0f3ab525b18afe3a7591.md \
+            --require-evidence \
+            --noWrite
+
       - name: Verify candidate, evidence and isolated review binding
         shell: bash
         run: |
