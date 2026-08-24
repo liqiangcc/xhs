@@ -1,0 +1,27 @@
+{
+  "schema_version": "code_validation.v1",
+  "canonical_id": "cq_q_2f278e6b489feb680f8b173047815566",
+  "validated_at": "2026-08-24",
+  "runtime": "OpenJDK 21.0.11 independent local execution",
+  "command": "javac EqualSumPartition.java EqualSumPartitionTest.java && java EqualSumPartitionTest",
+  "result": "pass",
+  "stdout": "PASS fixed=10 randomized=5000 oracle=exhaustive-subset-partition mutation=none",
+  "implementation_contract": {
+    "input": "Java int[]; null returns false; non-null elements are non-negative and total sum <= Integer.MAX_VALUE",
+    "partition": "every input position belongs to exactly one of two groups; either group may be empty",
+    "result": "boolean indicating whether the two group sums can be equal",
+    "primary_implementation": "one-dimensional 0/1 subset-sum dynamic programming targeting total/2",
+    "oracle": "exhaustive subset enumeration on bounded random inputs",
+    "mutation": "input array is not modified"
+  },
+  "checks": [
+    "null input",
+    "empty input and single zero under the explicit empty-group candidate contract",
+    "odd total rejection",
+    "even total with unreachable half-sum",
+    "duplicate values and zero values",
+    "negative input rejection under the explicit non-negative candidate contract",
+    "5000 deterministic random non-negative arrays checked against exhaustive subset enumeration",
+    "input equality checked before and after every non-null evaluation to detect mutation"
+  ]
+}
