@@ -1,0 +1,171 @@
+name: Audit Content Batch 0021 Sorted Pair Sum
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/audit-content-batch-0021-sorted-pair-sum.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0021-sorted-pair-sum-audit
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CID: cq_q_39a734b5a5602f2d965f9e2f35a50514
+  CANDIDATE_SHA256: 1b69a5658545139bb1fb2e4a9e458aa4793b92909e8bbdba3d874cb6e5c3112d
+  EXPECTED_STDOUT: PASS fixed=9 randomized=5000 oracle=quadratic-unique-pairs target=10 mutation=none
+
+jobs:
+  audit:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout stable content head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Capture source head
+        id: source
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Execute deterministic candidate regression
+        working-directory: review/content_build/answer_batch_0021/cq_q_39a734b5a5602f2d965f9e2f35a50514
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac SortedPairSum.java SortedPairSumTest.java
+          stdout="$(java SortedPairSumTest)"
+          echo "$stdout"
+          test "$stdout" = "$EXPECTED_STDOUT"
+
+      - name: Run formal candidate audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit \
+            --candidate "review/candidates/answers/$CID.md" \
+            --require-evidence \
+            --require-code \
+            --noWrite
+
+      - name: Verify source/evidence/review binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          cid = os.environ['CID']
+          expected_sha = os.environ['CANDIDATE_SHA256']
+          expected_stdout = os.environ['EXPECTED_STDOUT']
+          candidate = Path(f'review/candidates/answers/{cid}.md').read_bytes()
+          actual_sha = hashlib.sha256(candidate).hexdigest()
+          assert actual_sha == expected_sha, (actual_sha, expected_sha)
+
+          evidence = json.loads(Path(f'review/evidence/{cid}.json').read_text(encoding='utf-8'))
+          review = json.loads(Path(f'review/content_build/answer_batch_0021/{cid}/isolated_review_result.json').read_text(encoding='utf-8'))
+          validation = json.loads(Path(f'review/content_build/answer_batch_0021/{cid}/code_validation.json').read_text(encoding='utf-8'))
+
+          assert validation['result'] == 'pass'
+          assert validation['stdout'] == expected_stdout
+          assert evidence['schema_version'] == 'answer_evidence.v1'
+          assert evidence['candidate_sha256'] == expected_sha
+          assert evidence['review_state'] == 'independent_source_first_review_passed'
+          assert evidence['source_question_coverage'] == [{
+              'question_id': '39a734b5a5602f2d965f9e2f35a50514',
+              'covered': True,
+              'answer_locations': ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '常见追问'],
+          }]
+          assert review['schema_version'] == 'isolated_review.v1'
+          assert review['candidate_sha256'] == expected_sha
+          assert review['review_mode'] == 'source_first_isolated'
+          assert review['decision'] == 'pass'
+          assert review['hard_failures'] == []
+          assert review['unsupported_claims'] == []
+          assert review['promotion_blockers'] == ['human_approval_required_for_pilot_promotion']
+          PY
+
+      - name: Verify source-first boundary artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f review/content_build/answer_batch_0021/source_boundary_audit.md
+          grep -Fq "$CID" review/content_build/answer_batch_0021/source_boundary_audit.md
+          grep -Fq 'candidate-qualified' review/content_build/answer_batch_0021/source_boundary_audit.md
+
+      - name: Write formal audit receipt
+        shell: bash
+        env:
+          SOURCE_HEAD: ${{ steps.source.outputs.head }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          cid = os.environ['CID']
+          path = Path(f'review/content_build/answer_batch_0021/{cid}/formal_audit_receipt.json')
+          value = {
+              'schema_version': 'candidate_formal_audit_receipt.v1',
+              'canonical_id': cid,
+              'candidate_sha256': os.environ['CANDIDATE_SHA256'],
+              'source_content_sha': os.environ['SOURCE_HEAD'],
+              'audited_at': '2026-08-24',
+              'formal_audit_command': f'node scripts/xhs.js answer audit --candidate review/candidates/answers/{cid}.md --require-evidence --require-code --noWrite',
+              'code_validation_stdout': os.environ['EXPECTED_STDOUT'],
+              'result': 'pass',
+              'promotion_blockers': ['human_approval_required_for_pilot_promotion'],
+          }
+          path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Commit receipt only if audited head stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_head='${{ steps.source.outputs.head }}'
+          git fetch origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          if [ "$remote_head" != "$source_head" ]; then
+            echo "Content branch advanced during audit: $source_head -> $remote_head"
+            echo 'Discarding receipt so a later run can audit one stable snapshot.'
+            exit 0
+          fi
+          receipt="review/content_build/answer_batch_0021/$CID/formal_audit_receipt.json"
+          if git diff --quiet -- "$receipt"; then
+            echo 'Formal audit receipt already matches this audited snapshot.'
+            exit 0
+          fi
+          git config user.name "xhs-candidate-audit-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add "$receipt"
+          git diff --cached --check
+          git commit -m "review: formally audit batch 0021 sorted-pair-sum candidate"
+          git push origin "HEAD:$CONTENT_BRANCH"
