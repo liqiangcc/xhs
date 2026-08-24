@@ -1,0 +1,182 @@
+name: Audit Content Batch 0021 Source Packet
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/audit-content-batch-0021-source-packet.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0021-source-packet
+  cancel-in-progress: true
+
+jobs:
+  extract:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+
+      - name: Extract repository-source packet for batch 0021
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import re
+
+          batch = '0021'
+          task_path = pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md')
+          task = task_path.read_text(encoding='utf-8')
+          canonical_ids = list(dict.fromkeys(re.findall(r'`(cq_q_[0-9a-f]{32})`', task)))
+          if len(canonical_ids) != 10:
+              raise SystemExit(f'expected 10 unique batch canonicals, got {len(canonical_ids)}')
+
+          canon_rows = {}
+          for line in pathlib.Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines():
+              if not line.strip():
+                  continue
+              row = json.loads(line)
+              cid = row.get('canonical_id')
+              if cid in canonical_ids:
+                  canon_rows[cid] = row
+          missing_canonicals = [cid for cid in canonical_ids if cid not in canon_rows]
+          if missing_canonicals:
+              raise SystemExit(f'missing canonical records: {missing_canonicals}')
+
+          tagged_hits = {cid: [] for cid in canonical_ids}
+          question_to_canonical = {}
+          for cid in canonical_ids:
+              row = canon_rows[cid]
+              for qid in row.get('question_ids') or []:
+                  question_to_canonical[qid] = cid
+              question_to_canonical.setdefault(cid.removeprefix('cq_q_'), cid)
+
+          for path in sorted(pathlib.Path('note_tagged').glob('*.json')):
+              try:
+                  doc = json.loads(path.read_text(encoding='utf-8'))
+              except Exception:
+                  continue
+              note_id = doc.get('note_id') or path.stem
+              for q in doc.get('tagged_questions') or []:
+                  qid = q.get('question_id')
+                  cid = question_to_canonical.get(qid)
+                  if not cid:
+                      continue
+                  desc_path = pathlib.Path('note_desc') / f'{note_id}.txt'
+                  image_path = pathlib.Path('note_img_txt') / f'{note_id}.txt'
+                  desc = desc_path.read_text(encoding='utf-8') if desc_path.exists() else None
+                  image_text = image_path.read_text(encoding='utf-8') if image_path.exists() else None
+                  tagged_hits[cid].append({
+                      'note_id': note_id,
+                      'note_tagged_path': str(path),
+                      'note_desc_path': str(desc_path) if desc_path.exists() else None,
+                      'note_img_txt_path': str(image_path) if image_path.exists() else None,
+                      'tagged_question': q,
+                      'note_desc': desc,
+                      'note_img_txt': image_text,
+                  })
+
+          packet = {
+              'schema_version': 'answer_batch_source_packet.v2',
+              'batch': batch,
+              'source_policy': 'repository_source_only_no_external_inference',
+              'canonicals': [
+                  {
+                      'canonical_id': cid,
+                      'canonical_record': canon_rows[cid],
+                      'source_hits': tagged_hits[cid],
+                  }
+                  for cid in canonical_ids
+              ],
+          }
+
+          out_json = pathlib.Path(f'review/reports/ANSWER_BATCH_{batch}_SOURCE_PACKET.json')
+          out_json.parent.mkdir(parents=True, exist_ok=True)
+          out_json.write_text(json.dumps(packet, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          lines = [
+              f'# Answer Batch {batch} — Repository Source Packet',
+              '',
+              'This file is mechanically extracted from repository source only. It makes no answer-content inference and must be reviewed source-first before any candidate is authored.',
+              'Both caption text (`note_desc`) and image transcripts (`note_img_txt`) are included when present so structured/tagged questions can be checked against the strongest repository-local source.',
+              '',
+          ]
+          for entry in packet['canonicals']:
+              cid = entry['canonical_id']
+              lines += [f'## `{cid}`', '', '### Canonical record', '', '```json', json.dumps(entry['canonical_record'], ensure_ascii=False, indent=2), '```', '']
+              hits = entry['source_hits']
+              lines += [f'### Source hits ({len(hits)})', '']
+              for i, hit in enumerate(hits, 1):
+                  lines += [f'#### Source {i}: `{hit["note_id"]}`', '', f'- tagged: `{hit["note_tagged_path"]}`']
+                  if hit['note_desc_path']:
+                      lines += [f'- caption: `{hit["note_desc_path"]}`']
+                  if hit['note_img_txt_path']:
+                      lines += [f'- image transcript: `{hit["note_img_txt_path"]}`']
+                  lines += ['', 'Tagged question:', '', '```json', json.dumps(hit['tagged_question'], ensure_ascii=False, indent=2), '```', '']
+                  if hit['note_desc'] is not None:
+                      lines += ['Caption text:', '', '```text', hit['note_desc'].rstrip(), '```', '']
+                  if hit['note_img_txt'] is not None:
+                      lines += ['Image transcript:', '', '```text', hit['note_img_txt'].rstrip(), '```', '']
+              if not hits:
+                  lines += ['No matching repository source hit was found by question-id ownership.', '']
+          rendered = '\n'.join(line.rstrip() for line in '\n'.join(lines).splitlines()).rstrip() + '\n'
+          pathlib.Path(f'review/reports/ANSWER_BATCH_{batch}_SOURCE_PACKET.md').write_text(rendered, encoding='utf-8')
+          PY
+
+      - name: Verify packet coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import pathlib
+          batch = '0021'
+          packet = json.loads(pathlib.Path(f'review/reports/ANSWER_BATCH_{batch}_SOURCE_PACKET.json').read_text(encoding='utf-8'))
+          if packet.get('schema_version') != 'answer_batch_source_packet.v2':
+              raise SystemExit('unexpected source packet schema')
+          if packet.get('batch') != batch:
+              raise SystemExit('unexpected packet batch')
+          if len(packet.get('canonicals') or []) != 10:
+              raise SystemExit('packet canonical count != 10')
+          missing = [e['canonical_id'] for e in packet['canonicals'] if not e.get('source_hits')]
+          print('source-hit-missing:', missing)
+          image_backed = [e['canonical_id'] for e in packet['canonicals'] if any(h.get('note_img_txt') for h in e.get('source_hits') or [])]
+          print('image-transcript-backed:', image_backed)
+          PY
+
+      - name: Commit source packet to content branch only if source head stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          files='review/reports/ANSWER_BATCH_0021_SOURCE_PACKET.json review/reports/ANSWER_BATCH_0021_SOURCE_PACKET.md'
+          if [ -z "$(git status --porcelain -- $files)" ]; then
+            echo 'No source-packet changes to commit.'
+            exit 0
+          fi
+          base_head="$(git rev-parse HEAD)"
+          git fetch origin content/quality-completion
+          remote_head="$(git rev-parse origin/content/quality-completion)"
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during extraction: $base_head -> $remote_head"
+            echo 'Discarding this packet so a later trigger can regenerate it from one stable source snapshot.'
+            exit 0
+          fi
+          git config user.name "xhs-source-audit-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add $files
+          git diff --cached --check
+          git commit -m "review: extract batch 0021 repository source packet"
+          git push origin HEAD:content/quality-completion
