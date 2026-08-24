@@ -18,6 +18,11 @@ jobs:
         with:
           ref: content/quality-completion
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
@@ -33,6 +38,16 @@ jobs:
           stdout="$(java GraphCloneTest)"
           echo "$stdout"
           test "$stdout" = "PASS fixed=7 randomized=3000 oracle=paired-bijection sharedNodes=0 mutation=none"
+
+      - name: Run formal candidate audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit \
+            --candidate review/candidates/answers/cq_q_2f07ba5f8d6e6ad366d2cd13c6d1d1ab.md \
+            --require-evidence \
+            --require-code \
+            --noWrite
 
       - name: Verify candidate, evidence and isolated review binding
         shell: bash
