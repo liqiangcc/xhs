@@ -54,6 +54,33 @@ function createHarness(overrides = {}) {
         calls.push(['prepare', structuredClone(input)]);
         return prepared();
     });
+    const resolveReviewedCanonicalConsolidation = overrides.resolveReviewedCanonicalConsolidation || (async (input) => {
+        calls.push(['strategy', structuredClone(input)]);
+        return {
+            schema_version: 'reviewed_canonical_apply_strategy.v1',
+            strategy: 'question_group',
+            relation_candidate_key: input.intent.relation_candidate_key,
+            relation: input.intent.relation,
+            target_canonical_id: input.intent.canonical_target.canonical_id,
+            reviewed_question_ids: [...input.intent.question_ids],
+        };
+    });
+    const mergeCanonical = overrides.mergeCanonical || (async (input) => {
+        calls.push(['merge', structuredClone(input)]);
+        return {
+            ok: true,
+            target: input.target,
+            source: input.source,
+            moved_question_ids: ['q_b'],
+            assigned_question_rows: 2,
+            canonical_count: 1,
+            review_migration: { source_progress_found: true },
+            invalidated_target_answer: { canonical_id: input.target, status: 'needs_update' },
+            archived_source_answer: { canonical_id: input.source, target_canonical_id: input.target },
+            integrity: { schema_version: 'canonical_quality_report.v1', ok: true },
+            commit: { committed: true, operation: 'merge' },
+        };
+    });
     const resolveQuestionGroupCanonicalization = overrides.resolveQuestionGroupCanonicalization || (async (input) => {
         calls.push(['resolve', structuredClone(input)]);
         return {
@@ -84,13 +111,15 @@ function createHarness(overrides = {}) {
         calls,
         apply: createApplyRelationDecisionUseCase({
             prepareRelationApply,
+            resolveReviewedCanonicalConsolidation,
+            mergeCanonical,
             resolveQuestionGroupCanonicalization,
             executeQuestionGroupCanonicalization,
         }),
     };
 }
 
-test('orchestrator revalidates Decision first, then resolves and executes Canonicalization without exposing intermediates', async () => {
+test('orchestrator revalidates Decision, resolves reviewed ownership, then canonicalizes without exposing intermediates', async () => {
     const harness = createHarness();
 
     const result = await harness.apply({
@@ -99,32 +128,85 @@ test('orchestrator revalidates Decision first, then resolves and executes Canoni
         canonical_title: 'Redis 为什么快？',
     });
 
-    assert.deepEqual(harness.calls.map(([name]) => name), ['prepare', 'resolve', 'execute']);
+    assert.deepEqual(harness.calls.map(([name]) => name), ['prepare', 'strategy', 'resolve', 'execute']);
     assert.deepEqual(harness.calls[0][1], {
         relation_candidate_key: 'entity|Redis|q_a,q_b',
         canonical_id: 'cq_redis_performance',
         canonical_title: 'Redis 为什么快？',
     });
     assert.equal(harness.calls[1][1].intent.intent_state, 'ready');
-    assert.equal(harness.calls[2][1].plan.schema_version, 'canonicalization_plan.v1');
+    assert.equal(harness.calls[2][1].intent.intent_state, 'ready');
+    assert.equal(harness.calls[3][1].plan.schema_version, 'canonicalization_plan.v1');
 
     assert.equal(result.ok, true);
     assert.equal(result.applied, true);
+    assert.equal(result.apply_strategy, 'question_group');
     assert.equal(result.canonical_id, 'cq_redis_performance');
     assert.equal(result.canonical_resolution, 'absent');
     assert.deepEqual(result.question_ids, ['q_a', 'q_b']);
     assert.equal(result.commit.operation, 'canonicalize');
-    for (const hidden of ['intent', 'canonicalization_plan', 'mutation_plan', 'plan']) {
+    for (const hidden of ['intent', 'apply_strategy_details', 'canonicalization_plan', 'mutation_plan', 'plan']) {
         assert.equal(Object.hasOwn(result, hidden), false);
     }
 });
 
-test('stale Dedup source rejection stops before any Canonical resolution or mutation', async () => {
+test('reviewed same relation across two Canonicals routes through merge and never question-group execution', async () => {
+    let resolved = false;
+    let executed = false;
+    const harness = createHarness({
+        resolveReviewedCanonicalConsolidation: async (input) => {
+            harness.calls.push(['strategy', structuredClone(input)]);
+            return {
+                schema_version: 'reviewed_canonical_apply_strategy.v1',
+                strategy: 'merge_existing_canonical',
+                relation_candidate_key: input.intent.relation_candidate_key,
+                relation: input.intent.relation,
+                target_canonical_id: 'cq_redis_performance',
+                source_canonical_id: 'cq_redis_old',
+                reviewed_question_ids: ['q_a', 'q_b'],
+                source_question_ids: ['q_b'],
+            };
+        },
+        resolveQuestionGroupCanonicalization: async () => {
+            resolved = true;
+        },
+        executeQuestionGroupCanonicalization: async () => {
+            executed = true;
+        },
+    });
+
+    const result = await harness.apply({
+        relation_candidate_key: 'entity|Redis|q_a,q_b',
+        canonical_id: 'cq_redis_performance',
+        canonical_title: 'Redis 为什么快？',
+    });
+
+    assert.deepEqual(harness.calls.map(([name]) => name), ['prepare', 'strategy', 'merge']);
+    assert.equal(resolved, false);
+    assert.equal(executed, false);
+    assert.equal(harness.calls[2][1].target, 'cq_redis_performance');
+    assert.equal(harness.calls[2][1].source, 'cq_redis_old');
+    assert.match(harness.calls[2][1].reason, /Explicit same RelationDecision/);
+    assert.equal(result.ok, true);
+    assert.equal(result.applied, true);
+    assert.equal(result.apply_strategy, 'merge_existing_canonical');
+    assert.equal(result.canonical_id, 'cq_redis_performance');
+    assert.equal(result.source_canonical_id, 'cq_redis_old');
+    assert.equal(result.canonical_resolution, 'existing');
+    assert.deepEqual(result.moved_question_ids, ['q_b']);
+    assert.equal(result.commit.operation, 'merge');
+});
+
+test('stale Dedup source rejection stops before ownership resolution or Canonical mutation', async () => {
+    let strategyResolved = false;
     let resolved = false;
     let executed = false;
     const harness = createHarness({
         prepareRelationApply: async () => {
             throw new Error('Dedup relation source changed: expected source-rev, got newer-rev');
+        },
+        resolveReviewedCanonicalConsolidation: async () => {
+            strategyResolved = true;
         },
         resolveQuestionGroupCanonicalization: async () => {
             resolved = true;
@@ -142,6 +224,7 @@ test('stale Dedup source rejection stops before any Canonical resolution or muta
         }),
         /Dedup relation source changed/,
     );
+    assert.equal(strategyResolved, false);
     assert.equal(resolved, false);
     assert.equal(executed, false);
 });
@@ -153,6 +236,7 @@ test('relation-record-only and unrelated Decisions return explicit no-op without
         ['related', 'relation_record_only', 'relation_graph_apply_not_supported'],
         ['unrelated', 'no_apply', 'explicitly_unrelated'],
     ]) {
+        let strategyResolved = false;
         let resolved = false;
         let executed = false;
         const harness = createHarness({
@@ -168,6 +252,9 @@ test('relation-record-only and unrelated Decisions return explicit no-op without
                     canonical_target: undefined,
                 }),
             }),
+            resolveReviewedCanonicalConsolidation: async () => {
+                strategyResolved = true;
+            },
             resolveQuestionGroupCanonicalization: async () => {
                 resolved = true;
             },
@@ -182,12 +269,14 @@ test('relation-record-only and unrelated Decisions return explicit no-op without
         assert.equal(result.applied, false);
         assert.equal(result.relation, relation);
         assert.equal(result.reason_code, reasonCode);
+        assert.equal(strategyResolved, false);
         assert.equal(resolved, false);
         assert.equal(executed, false);
     }
 });
 
 test('same or alias Decision without required Canonical target refuses execution', async () => {
+    let strategyResolved = false;
     let executed = false;
     const harness = createHarness({
         prepareRelationApply: async () => prepared({
@@ -196,6 +285,9 @@ test('same or alias Decision without required Canonical target refuses execution
                 canonical_target: undefined,
             }),
         }),
+        resolveReviewedCanonicalConsolidation: async () => {
+            strategyResolved = true;
+        },
         executeQuestionGroupCanonicalization: async () => {
             executed = true;
         },
@@ -205,16 +297,18 @@ test('same or alias Decision without required Canonical target refuses execution
         harness.apply({ relation_candidate_key: 'entity|Redis|q_a,q_b' }),
         /Relation apply intent is not ready: requires_input/,
     );
+    assert.equal(strategyResolved, false);
     assert.equal(executed, false);
 });
 
-test('caller cannot inject Decision, freshness, planning, mutation, or commit evidence', async () => {
+test('caller cannot inject Decision, freshness, routing, planning, mutation, or commit evidence', async () => {
     const harness = createHarness();
     for (const forged of [
         { decision: {} },
         { source_revisions: [] },
         { expected_revisions: [] },
         { intent: {} },
+        { apply_strategy: {} },
         { canonicalization_plan: {} },
         { mutation_plan: {} },
         { preflight: {} },
