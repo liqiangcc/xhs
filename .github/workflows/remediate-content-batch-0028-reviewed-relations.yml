@@ -1,0 +1,292 @@
+name: Remediate Content Batch 0028 Reviewed Relations
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0028-reviewed-relations.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-reviewed-relations
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Capture stable content head
+        id: state
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether reviewed relation slice is already applied
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          canon = [json.loads(line) for line in Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          questions = [json.loads(line) for line in Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          by_qid = {row['question_id']: row for row in questions}
+          done = (
+              by_qid.get('5d39b5ae05a488c7436cbfa9b21e746c', {}).get('canonical_id') == 'cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc'
+              and 'cq_q_5d39b5ae05a488c7436cbfa9b21e746c' not in by_cid
+              and by_qid.get('37b2536da54c5df189dbb86c55a6bfa3', {}).get('canonical_id') == 'cq_topic_cc39dcdb'
+              and 'cq_q_37b2536da54c5df189dbb86c55a6bfa3' not in by_cid
+              and Path('review/content_build/answer_batch_0028/relation_apply.md').exists()
+          )
+          with open('/tmp/pending', 'w', encoding='utf-8') as f:
+              f.write('false' if done else 'true')
+          PY
+          echo "pending=$(cat /tmp/pending)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js 22
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Preflight exact reviewed source and target ownership
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          inv = json.loads(Path('review/content_build/answer_batch_0028/current_relation_inventory.json').read_text(encoding='utf-8'))
+          expected = {
+              'linked_list_reversal': ('5d39b5ae05a488c7436cbfa9b21e746c', '55c3a35aaf4f76ce9aab78ea39d9fddc', 'same'),
+              'deep_copy_implementation_vs_concept': ('5e21e188af5c4a9ffdb5eaf97cc39c97', 'a156953489b7a1383bb2383470b3ad9f', 'related'),
+              'big_number_addition_split_child': ('37b2536da54c5df189dbb86c55a6bfa3', '9ec87353b1ab16d78a9ddee336ca797c', 'same'),
+          }
+          rows = {row['name']: row for row in inv['relations']}
+          if set(rows) != set(expected):
+              raise SystemExit(f'unexpected reviewed relation inventory names: {sorted(rows)}')
+          for name, (source_qid, target_qid, relation) in expected.items():
+              row = rows[name]
+              target_qids = [q['question_id'] for q in row['target_questions']]
+              if row['source_question_id'] != source_qid or target_qids != [target_qid] or row['reviewed_relation'] != relation:
+                  raise SystemExit(f'{name}: relation inventory changed: {row}')
+
+          review = Path('review/content_build/answer_batch_0028/relation_review.md').read_text(encoding='utf-8')
+          for needle in [
+              'record an explicit `same` decision with `actor.type=ai`',
+              'Boundary conclusion: `related`, not automatically `same`',
+              'record explicit `same`, apply it to `cq_topic_cc39dcdb`',
+          ]:
+              if needle not in review:
+                  raise SystemExit(f'required source-first review conclusion missing: {needle}')
+          print('PASS: current repository ownership matches frozen reviewed relation slice.')
+          PY
+
+      - name: Select, decide, and apply reviewed relations through Application CLI
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/batch0028-relations
+
+          candidate_key() {
+            node - "$1" "$2" "$3" <<'NODE'
+          const fs = require('fs');
+          const file = process.argv[2];
+          const a = process.argv[3];
+          const b = process.argv[4];
+          const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+          if (!Array.isArray(result.relation_candidates) || result.relation_candidates.length !== 1) {
+            throw new Error(`expected exactly one RelationCandidate, got ${result.relation_candidates?.length}`);
+          }
+          const candidate = result.relation_candidates[0];
+          const actual = [...candidate.question_ids].sort();
+          const expected = [a, b].sort();
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            throw new Error(`candidate Question set drifted: ${JSON.stringify(actual)} != ${JSON.stringify(expected)}`);
+          }
+          process.stdout.write(candidate.relation_candidate_key);
+          NODE
+          }
+
+          apply_relation() {
+            name="$1"
+            source_qid="$2"
+            target_qid="$3"
+            relation="$4"
+            target_cid="$5"
+            target_title="$6"
+            rationale="$7"
+            suggest="/tmp/batch0028-relations/${name}.suggest.json"
+            decide="/tmp/batch0028-relations/${name}.decide.json"
+            apply="/tmp/batch0028-relations/${name}.apply.json"
+
+            node scripts/xhs.js canonical suggest --question-ids "${source_qid},${target_qid}" --noManifest > "$suggest"
+            key="$(candidate_key "$suggest" "$source_qid" "$target_qid")"
+            node scripts/xhs.js dedup decide \
+              --relation-candidate-key "$key" \
+              --relation "$relation" \
+              --actor-type ai \
+              --actor-id batch-0028-source-first-relation-review \
+              --actor-display-name 'Batch 0028 source-first relation reviewer' \
+              --rationale "$rationale" > "$decide"
+            if [ "$relation" = same ]; then
+              node scripts/xhs.js dedup apply \
+                --relation-candidate-key "$key" \
+                --canonical-id "$target_cid" \
+                --canonical-title "$target_title" > "$apply"
+            else
+              node scripts/xhs.js dedup apply --relation-candidate-key "$key" > "$apply"
+            fi
+          }
+
+          apply_relation \
+            linked_list_reversal \
+            5d39b5ae05a488c7436cbfa9b21e746c \
+            55c3a35aaf4f76ce9aab78ea39d9fddc \
+            same \
+            cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc \
+            '算法：链表翻转。' \
+            'Source-first batch 0028 review found the two source Questions ask the same linked-list reversal answer boundary with no distinct source constraint; preserve the already source-qualified batch 0027 Canonical.'
+
+          apply_relation \
+            deep_copy_implementation_vs_concept \
+            5e21e188af5c4a9ffdb5eaf97cc39c97 \
+            a156953489b7a1383bb2383470b3ad9f \
+            related \
+            '' \
+            '' \
+            'Source-first batch 0028 review found implementation of a deep-copy function and the existing shallow-versus-deep-copy concept asset related but response-contract distinct; keep the Coding Canonical separate.'
+
+          apply_relation \
+            big_number_addition_split_child \
+            37b2536da54c5df189dbb86c55a6bfa3 \
+            9ec87353b1ab16d78a9ddee336ca797c \
+            same \
+            cq_topic_cc39dcdb \
+            '算法：字符串大数加法' \
+            'Source-first batch 0028 review found the split decimal-string-addition Question shares one Coding answer boundary with the existing string-addition Canonical; preserve the source empty-string-as-zero variant and invalidate stale answer review artifacts for rebuild.'
+
+      - name: Verify exact relation effects and write execution record
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          canon = [json.loads(line) for line in Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          questions = [json.loads(line) for line in Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          by_qid = {row['question_id']: row for row in questions}
+
+          checks = [
+              ('5d39b5ae05a488c7436cbfa9b21e746c', 'cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc', 'cq_q_5d39b5ae05a488c7436cbfa9b21e746c'),
+              ('37b2536da54c5df189dbb86c55a6bfa3', 'cq_topic_cc39dcdb', 'cq_q_37b2536da54c5df189dbb86c55a6bfa3'),
+          ]
+          for qid, target, retired in checks:
+              if by_qid.get(qid, {}).get('canonical_id') != target:
+                  raise SystemExit(f'{qid}: expected ownership {target}, got {by_qid.get(qid)}')
+              if retired in by_cid:
+                  raise SystemExit(f'{retired}: source Canonical survived reviewed same consolidation')
+
+          deep_qid = '5e21e188af5c4a9ffdb5eaf97cc39c97'
+          deep_cid = 'cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97'
+          if by_qid.get(deep_qid, {}).get('canonical_id') != deep_cid or deep_cid not in by_cid:
+              raise SystemExit('related deep-copy Coding Canonical was mutated unexpectedly')
+
+          results = {}
+          for name in ['linked_list_reversal', 'deep_copy_implementation_vs_concept', 'big_number_addition_split_child']:
+              for stage in ['suggest', 'decide', 'apply']:
+                  results[f'{name}_{stage}'] = json.loads(Path(f'/tmp/batch0028-relations/{name}.{stage}.json').read_text(encoding='utf-8'))
+
+          out = Path('review/content_build/answer_batch_0028/relation_apply.md')
+          out.write_text(
+              '# Answer Batch 0028 — Reviewed Relation Application\n\n'
+              'This execution materializes only the three relationships already concluded by the source-first `relation_review.md`. Selection was regenerated from current repository facts immediately before each Decision; all Decisions use `actor.type=ai`; Canonical ownership changed only through Application `dedup apply`.\n\n'
+              '## Results\n\n'
+              '- Linked-list reversal: `same`; source Question is now owned by `cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc`; duplicate source Canonical retired.\n'
+              '- Deep-copy implementation vs concept: `related`; relation recorded only; Coding Canonical remains separate.\n'
+              '- Big-number string addition split child: `same`; source Question is now owned by `cq_topic_cc39dcdb`; duplicate source Canonical retired. The survivor must be rebuilt/re-reviewed because its source set now includes the empty-string-as-zero boundary.\n\n'
+              '## Deferred\n\n'
+              '- Student/grade average SQL split child still requires fresh repository relation discovery before answer candidate authoring.\n',
+              encoding='utf-8',
+          )
+          Path('review/content_build/answer_batch_0028/relation_apply_results.json').write_text(json.dumps(results, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print('PASS: reviewed relation effects match source-first conclusions.')
+          PY
+
+      - name: Verify repository integrity and quality gates
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content head stayed stable
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.state.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding verified local mutation; a later run can retry against the newer state.'
+            exit 0
+          fi
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No reviewed relation changes remain.'
+            exit 0
+          fi
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git diff --cached --check
+          git commit -m 'content: apply batch 0028 reviewed relations'
+          git push origin "HEAD:$CONTENT_BRANCH"
