@@ -30,6 +30,13 @@ jobs:
           ref: content/quality-completion
           fetch-depth: 0
 
+      - name: Synchronize to latest content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin content/quality-completion
+          git reset --hard origin/content/quality-completion
+
       - name: Check whether this bounded slice is already complete
         id: status
         shell: bash
@@ -83,6 +90,7 @@ jobs:
           git add .ci/batch-0019-source-remediation.log
           if ! git diff --cached --quiet; then
             git commit -m "ci: record batch 0019 source remediation failure"
+            git pull --rebase origin content/quality-completion
             git push origin HEAD:content/quality-completion
           fi
 
@@ -128,4 +136,5 @@ jobs:
           git add -A
           git diff --cached --check
           git commit -m "content: retire source-unrecoverable batch 0019 questions"
+          git pull --rebase origin content/quality-completion
           git push origin HEAD:content/quality-completion
