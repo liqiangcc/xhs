@@ -69,6 +69,16 @@ jobs:
               c: new Map(readJsonl('data/questions/canonical_questions.jsonl').map((row) => [row.canonical_id, row])),
             };
           }
+          function hasOwnership(snapshot, qid, cid) {
+            return snapshot.q.get(qid)?.canonical_id === cid && snapshot.c.has(cid);
+          }
+          function alreadyApplied(snapshot) {
+            return snapshot.q.get('5d39b5ae05a488c7436cbfa9b21e746c')?.canonical_id === 'cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc'
+              && !snapshot.c.has('cq_q_5d39b5ae05a488c7436cbfa9b21e746c')
+              && snapshot.q.get('37b2536da54c5df189dbb86c55a6bfa3')?.canonical_id === 'cq_topic_cc39dcdb'
+              && !snapshot.c.has('cq_q_37b2536da54c5df189dbb86c55a6bfa3')
+              && snapshot.q.get('5e21e188af5c4a9ffdb5eaf97cc39c97')?.canonical_id === 'cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97';
+          }
 
           (async () => {
             const before = state();
@@ -77,10 +87,17 @@ jobs:
               ['5e21e188af5c4a9ffdb5eaf97cc39c97', 'cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97'],
               ['37b2536da54c5df189dbb86c55a6bfa3', 'cq_q_37b2536da54c5df189dbb86c55a6bfa3'],
             ];
-            for (const [qid, cid] of expectedBefore) {
-              if (before.q.get(qid)?.canonical_id !== cid || !before.c.has(cid)) {
-                throw new Error(`preflight ownership drift: ${qid} expected ${cid}`);
+            const initialState = expectedBefore.every(([qid, cid]) => hasOwnership(before, qid, cid));
+            if (!initialState) {
+              if (alreadyApplied(before)) {
+                console.log('Batch 0028 reviewed relations are already applied; guarded idempotent no-op.');
+                return;
               }
+              const drift = expectedBefore
+                .filter(([qid, cid]) => !hasOwnership(before, qid, cid))
+                .map(([qid, cid]) => `${qid} expected ${cid}, found ${before.q.get(qid)?.canonical_id || '<missing>'}`)
+                .join('; ');
+              throw new Error(`preflight ownership drift: ${drift}`);
             }
 
             const record = { schema_version: 'answer_batch_0028_relation_apply_results.v1', results: {} };
@@ -163,6 +180,10 @@ jobs:
             exit 0
           fi
           git add -A
+          if git diff --cached --quiet; then
+            echo 'Batch 0028 reviewed relations already materialized; nothing to commit.'
+            exit 0
+          fi
           git config user.name 'xhs-remediation-bot'
           git config user.email '43640935+liqiangcc@users.noreply.github.com'
           git diff --cached --check
