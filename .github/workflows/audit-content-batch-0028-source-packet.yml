@@ -54,7 +54,11 @@ jobs:
           for path in (task_path, packet_path, boundary_path):
               if not path.exists():
                   raise SystemExit(f'missing frozen source-first artifact: {path}')
-          ids = list(dict.fromkeys(re.findall(r'`(cq_q_[0-9a-f]{32})`', task_path.read_text(encoding='utf-8'))))
+          task_text = task_path.read_text(encoding='utf-8')
+          if '## Canonicals' not in task_text:
+              raise SystemExit('batch task is missing the Canonicals section')
+          canonical_section = task_text.split('## Canonicals', 1)[1].split('\n## ', 1)[0]
+          ids = list(dict.fromkeys(re.findall(r'^- `(cq_q_[0-9a-f]{32})`', canonical_section, flags=re.MULTILINE)))
           packet = json.loads(packet_path.read_text(encoding='utf-8'))
           packet_ids = [row.get('canonical_id') for row in packet.get('canonicals') or []]
           disposition_ids = re.findall(r'^\| `(cq_q_[0-9a-f]{32})` \|', boundary_path.read_text(encoding='utf-8'), flags=re.MULTILINE)
@@ -74,9 +78,12 @@ jobs:
           import json, os, pathlib, re
           batch = os.environ['BATCH']
           task = pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md').read_text(encoding='utf-8')
-          ids = list(dict.fromkeys(re.findall(r'`(cq_q_[0-9a-f]{32})`', task)))
+          if '## Canonicals' not in task:
+              raise SystemExit('batch task is missing the Canonicals section')
+          canonical_section = task.split('## Canonicals', 1)[1].split('\n## ', 1)[0]
+          ids = list(dict.fromkeys(re.findall(r'^- `(cq_q_[0-9a-f]{32})`', canonical_section, flags=re.MULTILINE)))
           if len(ids) != 10:
-              raise SystemExit(f'expected 10 unique Canonicals, got {len(ids)}')
+              raise SystemExit(f'expected 10 unique Canonicals in the Canonicals section, got {len(ids)}')
 
           def norm(value):
               return re.sub(r'[^\w\u4e00-\u9fa5]', '', str(value or '').lower())
