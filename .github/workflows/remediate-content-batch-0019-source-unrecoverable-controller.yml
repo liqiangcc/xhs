@@ -5,6 +5,11 @@ on:
     branches:
       - master
     types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0019-source-unrecoverable-controller.yml
 
 permissions:
   contents: write
@@ -19,7 +24,7 @@ env:
 
 jobs:
   remediate:
-    if: startsWith(github.event.pull_request.head.ref, 'automation/batch0019-controller')
+    if: github.event_name == 'push' || startsWith(github.event.pull_request.head.ref, 'automation/batch0019-controller')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -68,21 +73,20 @@ jobs:
         with:
           go-version: '1.23.x'
 
-      - name: Apply bounded source retirement
+      - name: Apply and verify bounded source retirement
+        id: mutate
         if: steps.status.outputs.pending == 'true'
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
-          python3 scripts/content/remediate_batch_0019_unrecoverable.py
-          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
-          node scripts/xhs.js index build --noManifest
-
-      - name: Record bounded remediation progress
-        if: steps.status.outputs.pending == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
+          set -o pipefail
+          mkdir -p .ci
+          : > .ci/batch-0019-source-remediation.log
+          {
+            python3 scripts/content/remediate_batch_0019_unrecoverable.py
+            node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+            node scripts/xhs.js index build --noManifest
+            python3 - <<'PY'
           from pathlib import Path
 
           path = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0019.md')
@@ -99,28 +103,44 @@ jobs:
               text = text.rstrip() + '\n\n' + section
           path.write_text(text, encoding='utf-8')
           PY
+            node scripts/content/check_question_coverage.js --check
+            node scripts/xhs.js canonical check --noWrite
+            node scripts/xhs.js answer validate --strict --noWrite
+            node scripts/xhs.js validate all --noWrite
+            npm test
+            npm run ci:check
+            npm run ci:answer:semantic
+            npm run ci:answer:evidence
+            npm run ci:answer:code
+            npm run ci:answer:coverage
+          } 2>&1 | tee -a .ci/batch-0019-source-remediation.log
 
-      - name: Verify repository gates
-        if: steps.status.outputs.pending == 'true'
+      - name: Export failure diagnostic
+        if: steps.status.outputs.pending == 'true' && steps.mutate.outcome == 'failure'
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/content/check_question_coverage.js --check
-          node scripts/xhs.js canonical check --noWrite
-          node scripts/xhs.js answer validate --strict --noWrite
-          node scripts/xhs.js validate all --noWrite
-          npm test
-          npm run ci:check
-          npm run ci:answer:semantic
-          npm run ci:answer:evidence
-          npm run ci:answer:code
-          npm run ci:answer:coverage
+          cp .ci/batch-0019-source-remediation.log /tmp/batch-0019-source-remediation.log
+          git fetch origin "$CONTENT_BRANCH"
+          git reset --hard "origin/$CONTENT_BRANCH"
+          mkdir -p .ci
+          cp /tmp/batch-0019-source-remediation.log .ci/batch-0019-source-remediation.log
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add .ci/batch-0019-source-remediation.log
+          git commit -m 'ci: record batch 0019 source remediation failure'
+          git push --force origin "HEAD:refs/heads/$STAGING_BRANCH"
+
+      - name: Fail after exporting diagnostics
+        if: steps.status.outputs.pending == 'true' && steps.mutate.outcome == 'failure'
+        run: exit 1
 
       - name: Export verified remediation to staging branch
-        if: steps.status.outputs.pending == 'true'
+        if: steps.status.outputs.pending == 'true' && steps.mutate.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
+          rm -f .ci/batch-0019-source-remediation.log
           git config user.name 'xhs-remediation-bot'
           git config user.email '43640935+liqiangcc@users.noreply.github.com'
           git add -A
