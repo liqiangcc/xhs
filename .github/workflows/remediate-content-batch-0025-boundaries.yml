@@ -1,0 +1,222 @@
+name: Remediate Content Batch 0025 Source Boundaries
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/remediate-content-batch-0025-boundaries.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0025-source-boundaries
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Synchronize and capture base head
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          git reset --hard "origin/$CONTENT_BRANCH"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether bounded remediation is already complete
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0025.md'
+          boundary='review/content_build/answer_batch_0025/source_boundary_audit.md'
+          if [ -f "$boundary" ] \
+             && grep -Fq 'Active after source-boundary audit: `8`' "$task" \
+             && grep -Fq 'normalized to source-backed topological-sort wording' "$task" \
+             && grep -Fq 'corrected from erroneous Coding metadata' "$task" \
+             && grep -Fq 'source preserves only “一道简单题”' "$task" \
+             && grep -Fq 'source lacks the string grammar and tie rules' "$task"; then
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js 22
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 21
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        if: steps.status.outputs.pending == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Apply source-first boundary dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/content/remediate_batch_0025_boundaries.py
+          python3 scripts/content/remediate_batch_0025_boundaries.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify exact batch 0025 dispositions
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          retired = {
+              'cq_q_4b55831a928b320f47710e2de666045e',
+              'cq_q_4f04a54536a8856b265b4cfb49f1325a',
+          }
+          qualified = {
+              'cq_q_497537f6fc79fb11fe854f142aa59d1e',
+              'cq_q_4b3ef4f6983ba06fff2fe65aeb96f0a7',
+              'cq_q_4ba0bfbd9b87d9415d9724ee0db55ff6',
+              'cq_q_4d49a2c53d787ce1d520075e3493152e',
+              'cq_q_4d502e2e2c294d9f9dd468cff39c0162',
+              'cq_q_4e2e32002bd212ba6a2a232d0761421e',
+              'cq_q_4ef5329ef53731815f32df4a2942c8d2',
+              'cq_q_4f3244bca47814cd02291ecda86cad4c',
+          }
+          topo_cid = 'cq_q_497537f6fc79fb11fe854f142aa59d1e'
+          topo_old_qid = '497537f6fc79fb11fe854f142aa59d1e'
+          topo_new_qid = 'f458a6a9baa833f5bcd4c2465098be0d'
+          topo_text = '算法题：图的拓扑排序'
+          coin_cid = 'cq_q_4ba0bfbd9b87d9415d9724ee0db55ff6'
+
+          canon = [json.loads(x) for x in Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_cid = {row['canonical_id']: row for row in canon}
+          leaked = sorted(retired & by_cid.keys())
+          if leaked:
+              raise SystemExit(f'retired batch 0025 Canonicals still active: {leaked}')
+          missing = sorted(qualified - by_cid.keys())
+          if missing:
+              raise SystemExit(f'qualified batch 0025 Canonicals disappeared: {missing}')
+          topo = by_cid[topo_cid]
+          if topo.get('canonical_title') != topo_text or topo.get('question_ids') != [topo_new_qid]:
+              raise SystemExit(f'topological-sort normalization drifted: {topo}')
+          if topo.get('primary_domain') != {'l1': '算法与数据结构', 'l2': '图'}:
+              raise SystemExit(f'topological-sort domain correction drifted: {topo.get("primary_domain")}')
+
+          questions = [json.loads(x) for x in Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          if any(q.get('question_id') == topo_old_qid for q in questions):
+              raise SystemExit('old inflated topological-sort Question id survived rebuild')
+          topo_q = next((q for q in questions if q.get('question_id') == topo_new_qid), None)
+          if not topo_q or topo_q.get('canonical_id') != topo_cid or topo_q.get('original_question') != topo_text:
+              raise SystemExit('normalized topological-sort Question projection missing/misbound')
+          coin_q = next((q for q in questions if q.get('canonical_id') == coin_cid), None)
+          if not coin_q or coin_q.get('question_type') != '八股文_Concept':
+              raise SystemExit(f'coin reasoning Question still has wrong type: {coin_q}')
+          leaked_questions = sorted({q.get('canonical_id') for q in questions} & retired)
+          if leaked_questions:
+              raise SystemExit(f'retired Question bindings survived rebuild: {leaked_questions}')
+
+          type_rows = [json.loads(x) for x in Path('data/manifests/quality/answer_type_audit.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          coin_type = next((row for row in type_rows if row.get('canonical_id') == coin_cid), None)
+          if not coin_type or coin_type.get('answer_type') != 'concept':
+              raise SystemExit(f'coin answer type audit did not resolve to concept: {coin_type}')
+
+          progress = json.loads(Path('review/progress.json').read_text(encoding='utf-8'))
+          progress_ids = {item.get('canonical_id') for item in progress.get('items', [])}
+          if retired & progress_ids:
+              raise SystemExit('retired batch 0025 Canonicals still have ReviewProgress')
+          if not qualified <= progress_ids:
+              raise SystemExit('qualified batch 0025 Canonical lost ReviewProgress')
+
+          for cid in retired:
+              if Path(f'review/answers/{cid}.md').exists():
+                  raise SystemExit(f'{cid}: retired Canonical still has active Answer')
+              if not Path(f'review/archive/answers/{cid}.md').exists():
+                  raise SystemExit(f'{cid}: retired Canonical Answer not archived')
+
+          audit = json.loads(Path('config/question_validity_audit.json').read_text(encoding='utf-8'))
+          excluded_qids = {
+              d.get('question_id') for d in audit.get('decisions', [])
+              if d.get('decision') == 'exclude' and d.get('exclusion_reason') == 'incomplete_or_unreadable'
+          }
+          if not {cid.removeprefix('cq_q_') for cid in retired} <= excluded_qids:
+              raise SystemExit('validity audit missing batch 0025 fail-closed exclusions')
+
+          task = Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0025.md').read_text(encoding='utf-8')
+          if 'Active after source-boundary audit: `8`' not in task:
+              raise SystemExit('batch 0025 task active count not updated')
+          boundary = Path('review/content_build/answer_batch_0025/source_boundary_audit.md')
+          if not boundary.exists():
+              raise SystemExit('batch 0025 source-boundary audit missing')
+          PY
+
+      - name: Verify repository integrity and full quality gates
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content head stayed stable during validation
+        if: steps.status.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding this verified local mutation; a later trigger will retry against the newer source state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'No batch 0025 source-boundary remediation changes remain.'
+            exit 0
+          fi
+          git config user.name "xhs-remediation-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "content: apply batch 0025 source-boundary dispositions"
+          git push origin "HEAD:$CONTENT_BRANCH"
