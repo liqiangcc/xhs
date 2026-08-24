@@ -1,6 +1,7 @@
 # Answer Batch 0023 — Repository Source Packet
 
 This file is mechanically extracted from repository source only. It makes no answer-content inference and must be reviewed source-first before any candidate is authored.
+Source ownership first uses the current Question id. To tolerate historical/stale extraction ids, it may fall back only to a unique exact normalized wording match against the current Canonical title, aliases, or projected Question wording; fuzzy semantic matching is not used.
 Both caption text (`note_desc`) and image transcripts (`note_img_txt`) are included when present so structured/tagged questions can be checked against the strongest repository-local source.
 
 ## `cq_q_3e7bd1708ff77403d01141eed87a0d38`
@@ -38,6 +39,7 @@ Both caption text (`note_desc`) and image transcripts (`note_img_txt`) are inclu
 
 #### Source 1: `6828186e000000000f03a16f`
 
+- matched by: `question_id`
 - tagged: `note_tagged/6828186e000000000f03a16f.json`
 - caption: `note_desc/6828186e000000000f03a16f.txt`
 
@@ -119,9 +121,173 @@ Caption text:
 }
 ```
 
-### Source hits (0)
+### Source hits (1)
 
-No matching repository source hit was found by question-id ownership.
+#### Source 1: `67d81c93000000001e003502`
+
+- matched by: `normalized_original_question_exact`
+- tagged: `note_tagged/67d81c93000000001e003502.json`
+- caption: `note_desc/67d81c93000000001e003502.txt`
+- image transcript: `note_img_txt/67d81c93000000001e003502.txt`
+
+Tagged question:
+
+```json
+{
+  "question_id": "58e11a3746c18f1fa68b75fbc70529d3",
+  "original_question": "算法：编辑距离 leetcode 72",
+  "domain": {
+    "l1": "算法与数据结构",
+    "l2": "动态规划"
+  },
+  "question_type": "算法手撕_Coding",
+  "cognitive_depth": "L3_Diagnostic",
+  "tech_entities": [
+    "编辑距离",
+    "动态规划"
+  ],
+  "business_context": [],
+  "is_valid_for_library": true
+}
+```
+
+Caption text:
+
+```text
+1：编辑距离  leetcode 72
+2：买卖股票  leetcode  121
+3：合并两个有序数组  leetcode 88
+4：和最大的子数组  leetcode53
+5：最长回文子串     leetcode5
+#算法[话题]# #leetcode刷题[话题]# #leetcode打卡[话题]# #编辑距离[话题]# #买卖股票的最佳时机[话题]# #最长回文数[话题]# #和最大子数组[话题]# #美团算法[话题]# #美团代码[话题]# #美团面试[话题]#
+```
+
+Image transcript:
+
+```text
+--- 图片 1 ---
+
+美团算法面试
+常考代码
+面试前必看
+美团
+
+--- 图片 2 ---
+
+常考代码
+1：编辑距离 leetcode 72
+提示：二维动态规划
+2：买卖股票 leetcode
+提示：动态规划
+3：合并两个有序数组 leetcode 88
+合并策略，注意临界条件
+4：和最大的子数组 leetcode 53
+动态规划
+5：最长回文子串 leetcode 5
+中间扩展法或者动态规划
+
+--- 图片 3 ---
+
+编辑距离 leetcode 72
+给定两个单词 word1 和 word2，计算出将
+word1 转换成 word2 所使用的最少操作数。
+你可以对一个单词进行如下三种操作：
+插入一个字符
+删除一个字符
+替换一个字符
+示例 1： 输入：word1 = "horse", word2 = "ros"
+输出：3 解释：
+horse -> rorse (将 'h' 替换为 'r')
+rorse -> rose (删除 'r')
+rose -> ros (删除 'e')
+示例 2： 输入：word1 = "intention", word2 =
+"execution"
+输出：5 解释：
+intention -> inention (删除 't')
+inention -> enention (将 'i' 替换为 'e')
+enention -> exention (将 'n' 替换为 'x')
+exention -> exection (将 'n' 替换为 'c')
+exection -> execution (插入 'u')
+
+--- 图片 4 ---
+
+买卖股票最佳时机
+给定一个数组 prices ，它的第 i 个元素 prices[i]
+表示一支给定股票第 i 天的价格。
+你只能选择 某一天 买入这只股票，并选择在 未来
+的某一个不同的日子 卖出该股票。设计一个算法
+来计算你所能获取的最大利润。
+返回你可以从这笔交易中获取的最大利润。如果你
+不能获取任何利润，返回 0。
+示例 1： 输入： [7,1,5,3,6,4]
+输出：5
+解释：在第 2 天（股票价格 = 1）的时候买入，
+在第 5 天（股票价格 = 6）的时候卖出，最大利
+润 = 6-1 = 5。
+注意利润不能是 7-1 = 6，因为卖出价格需要
+大于买入价格；同时，你不能在买入前卖出股票。
+示例 2： 输入： prices = [7,6,4,3,1]
+输出： 0
+解释：在这种情况下，没有交易完成，所以最大利
+润为 0。
+
+--- 图片 5 ---
+
+合并两个有序数组
+给你两个按 非递减顺序 排列的整数数组 nums1
+和 nums2，另有两个整数 m 和 n ，分别表示
+nums1 和 nums2 中的元素数目。
+请你 合并 nums2 到 nums1 中，使合并后的数
+组同样按 非递减顺序 排列。
+
+示例 1： 输入：nums1 = [1,2,3,0,0,0], m = 3,
+nums2 = [2,5,6], n = 3
+输出：[1,2,2,3,5,6]
+解释：需要合并 [1,2,3] 和 [2,5,6] 。
+合并结果是 [1,2,2,3,5,6] ，其中斜体加粗标注的
+为 nums1 中的元素。
+示例 2： 输入：nums1 = [1], m = 1, nums2 =
+[], n = 0
+输出：[1]
+解释：需要合并 [1] 和 [] 。
+合并结果是 [1] 。
+
+--- 图片 6 ---
+
+和最大的子数组
+一、题目
+给你一个整数数组 nums ，请你找出一个具有最
+大和的连续子数组（子数组最少包含一个元素），
+返回其最大和。子数组 是数组中的一个连续部
+分。
+二、示例
+2.1> 示例 1：
+【输入】 nums = [-2,1,-3,4,-1,2,1,-5,4]
+【输出】 6
+【解释】 连续子数组 [4,-1,2,1] 的和最大，为 6
+2.2> 示例 2：
+【输入】 nums = [1]
+【输出】 1
+2.3> 示例 3：
+【输入】 nums = [5,4,-1,7,8]
+【输出】 23
+
+--- 图片 7 ---
+
+最长回文子串
+一、题目
+给定一个字符串 s，找到 s 中最长的回文子串。你
+可以假设 s 的最大长度为 1000。
+二、示例
+示例 1：
+输入："babad"
+输出："bab"
+注意："aba" 也是一个有效答案。
+
+示例 2：
+输入："cbbd"
+输出："bb"
+```
 
 ## `cq_q_3f45aeaf42ea66632927d3dfc96608bf`
 
@@ -159,6 +325,7 @@ No matching repository source hit was found by question-id ownership.
 
 #### Source 1: `6760e511000000001300dc50`
 
+- matched by: `question_id`
 - tagged: `note_tagged/6760e511000000001300dc50.json`
 - caption: `note_desc/6760e511000000001300dc50.txt`
 
@@ -246,6 +413,7 @@ Java1.8有用过哪些新特性，nabuda表达式底层是怎么实现的有了�
 
 #### Source 1: `68ca59e000000000110141e1`
 
+- matched by: `question_id`
 - tagged: `note_tagged/68ca59e000000000110141e1.json`
 - caption: `note_desc/68ca59e000000000110141e1.txt`
 
@@ -331,6 +499,7 @@ row_number和rank，dense_rank区别
 
 #### Source 1: `684a4b3c000000002102db12`
 
+- matched by: `question_id`
 - tagged: `note_tagged/684a4b3c000000002102db12.json`
 - caption: `note_desc/684a4b3c000000002102db12.txt`
 - image transcript: `note_img_txt/684a4b3c000000002102db12.txt`
@@ -438,6 +607,7 @@ Image transcript:
 
 #### Source 1: `68b154a8000000001c032fa1`
 
+- matched by: `question_id`
 - tagged: `note_tagged/68b154a8000000001c032fa1.json`
 - caption: `note_desc/68b154a8000000001c032fa1.txt`
 
@@ -533,6 +703,7 @@ python八股没关注，后续有精力的话争取扩展一下这块
 
 #### Source 1: `67eaad5d000000000b014631`
 
+- matched by: `question_id`
 - tagged: `note_tagged/67eaad5d000000000b014631.json`
 - caption: `note_desc/67eaad5d000000000b014631.txt`
 - image transcript: `note_img_txt/67eaad5d000000000b014631.txt`
@@ -628,6 +799,7 @@ t.zi
 
 #### Source 1: `683810dc000000000f03223b`
 
+- matched by: `question_id`
 - tagged: `note_tagged/683810dc000000000f03223b.json`
 - caption: `note_desc/683810dc000000000f03223b.txt`
 - image transcript: `note_img_txt/683810dc000000000f03223b.txt`
@@ -717,6 +889,7 @@ Image transcript:
 
 #### Source 1: `669e5d8400000000270108b1`
 
+- matched by: `question_id`
 - tagged: `note_tagged/669e5d8400000000270108b1.json`
 - caption: `note_desc/669e5d8400000000270108b1.txt`
 
@@ -807,6 +980,7 @@ SpringMVC内部配置原理，有哪些Bean类设计数据库考虑哪些方面 
 
 #### Source 1: `66138d03000000001a00e8ca`
 
+- matched by: `question_id`
 - tagged: `note_tagged/66138d03000000001a00e8ca.json`
 - caption: `note_desc/66138d03000000001a00e8ca.txt`
 - image transcript: `note_img_txt/66138d03000000001a00e8ca.txt`
