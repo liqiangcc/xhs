@@ -90,3 +90,11 @@ A `candidate-qualified` disposition means the repository source preserves enough
 - Normalization required before promotion: `2` (`3209…` removes inferred “Morris遍历” from source wording; `3395…` removes unsupported “力扣 135” unless independently justified after normalization).
 - Source-unrecoverable coding contract: `1` (`33d0…` fire-match/triangle summary).
 - No candidate should be authored for a normalization/source-unrecoverable record until its disposition is applied to Canonical/Question validity state and the normal repository integrity gates pass.
+
+## Applied remediation
+
+- `cq_q_32099ab899a15a5d7ab610c1477860e1`: normalized to the repository-preserved wording “非递归且不用额外空间(不用栈)，如何遍历二叉树”; the Canonical remains stable while Question ownership moves to the normalized Question hash. “Morris遍历” is now treated only as a researched solution technique.
+- `cq_q_3395e0de3268979e86446a8ad2eebb4b`: after fail-closed recheck, retired as source-unrecoverable. “分发糖果” alone does not uniquely justify importing LeetCode 135 semantics.
+- `cq_q_33d091345ac48812c61f235d00515560`: retired as source-unrecoverable for the ambiguity already documented above.
+
+Post-remediation answerable set: `8` active source-supported Canonicals. No source-boundary blocker remains for those eight; candidate work must still preserve each record's explicit assumptions and evidence gates.
