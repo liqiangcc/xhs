@@ -1,0 +1,208 @@
+name: Inventory Content Batch 0028 Current Relations
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/inventory-content-batch-0028-relations.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-relation-inventory
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout latest content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Capture stable content head
+        id: state
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Freeze current relation inventory from repository facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('.')
+          canon_rows = [json.loads(line) for line in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          question_rows = [json.loads(line) for line in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          by_cid = {row['canonical_id']: row for row in canon_rows}
+          by_qid = {row['question_id']: row for row in question_rows}
+
+          specs = [
+              {
+                  'name': 'linked_list_reversal',
+                  'source_canonical_id': 'cq_q_5d39b5ae05a488c7436cbfa9b21e746c',
+                  'source_question_id': '5d39b5ae05a488c7436cbfa9b21e746c',
+                  'target_canonical_id': 'cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc',
+                  'reviewed_relation': 'same',
+              },
+              {
+                  'name': 'deep_copy_implementation_vs_concept',
+                  'source_canonical_id': 'cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97',
+                  'source_question_id': '5e21e188af5c4a9ffdb5eaf97cc39c97',
+                  'target_canonical_id': 'cq_deep_copy_5cfb8eb4',
+                  'reviewed_relation': 'related',
+              },
+              {
+                  'name': 'big_number_addition_split_child',
+                  'source_canonical_id': 'cq_q_37b2536da54c5df189dbb86c55a6bfa3',
+                  'source_question_id': '37b2536da54c5df189dbb86c55a6bfa3',
+                  'target_canonical_id': 'cq_topic_cc39dcdb',
+                  'reviewed_relation': 'same',
+              },
+          ]
+
+          inventory = {
+              'schema_version': 'answer_batch_0028_relation_inventory.v1',
+              'batch': '0028',
+              'source': 'current repository Question/Canonical facts only',
+              'relations': [],
+          }
+
+          for spec in specs:
+              source = by_cid.get(spec['source_canonical_id'])
+              target = by_cid.get(spec['target_canonical_id'])
+              if source is None:
+                  raise SystemExit(f"missing source Canonical: {spec['source_canonical_id']}")
+              if target is None:
+                  raise SystemExit(f"missing target Canonical: {spec['target_canonical_id']}")
+              source_qids = source.get('question_ids') or []
+              if source_qids != [spec['source_question_id']]:
+                  raise SystemExit(f"{spec['name']}: source must remain an exact singleton before bounded review, got {source_qids}")
+              source_q = by_qid.get(spec['source_question_id'])
+              if source_q is None or source_q.get('canonical_id') != spec['source_canonical_id']:
+                  raise SystemExit(f"{spec['name']}: source Question ownership mismatch")
+
+              target_members = []
+              for qid in sorted(target.get('question_ids') or []):
+                  q = by_qid.get(qid)
+                  if q is None:
+                      raise SystemExit(f"{spec['name']}: missing target Question {qid}")
+                  if q.get('canonical_id') != spec['target_canonical_id']:
+                      raise SystemExit(f"{spec['name']}: target Question ownership mismatch for {qid}")
+                  target_members.append({
+                      'question_id': qid,
+                      'original_question': q.get('original_question'),
+                      'normalized_question': q.get('normalized_question'),
+                  })
+              if not target_members:
+                  raise SystemExit(f"{spec['name']}: target Canonical has no Question members")
+
+              inventory['relations'].append({
+                  **spec,
+                  'source_canonical_title': source.get('canonical_title'),
+                  'source_question': {
+                      'question_id': spec['source_question_id'],
+                      'original_question': source_q.get('original_question'),
+                      'normalized_question': source_q.get('normalized_question'),
+                  },
+                  'target_canonical_title': target.get('canonical_title'),
+                  'target_question_count': len(target_members),
+                  'target_questions': target_members,
+              })
+
+          sql_cid = 'cq_q_e9c5bb8468fd0b37bd3f0abf72df80aa'
+          sql_qid = 'e9c5bb8468fd0b37bd3f0abf72df80aa'
+          sql_c = by_cid.get(sql_cid)
+          sql_q = by_qid.get(sql_qid)
+          if sql_c is None or sql_q is None or sql_c.get('question_ids') != [sql_qid] or sql_q.get('canonical_id') != sql_cid:
+              raise SystemExit('student/grade SQL split child is not an exact active singleton')
+          inventory['unresolved_fresh_search'] = {
+              'canonical_id': sql_cid,
+              'question_id': sql_qid,
+              'canonical_title': sql_c.get('canonical_title'),
+              'original_question': sql_q.get('original_question'),
+              'reason': 'source-first review found no exact reusable Canonical; fresh repository relation discovery remains required before candidate authoring',
+          }
+
+          out_dir = root/'review/content_build/answer_batch_0028'
+          out_dir.mkdir(parents=True, exist_ok=True)
+          json_path = out_dir/'current_relation_inventory.json'
+          json_path.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          lines = [
+              '# Answer Batch 0028 — Current Relation Inventory',
+              '',
+              'This file is generated only from the current repository Question/Canonical state after the source split. It does not authorize a relation by itself; the reviewed relation remains the explicit conclusion in `relation_review.md` and must still pass Select → Decide → Apply.',
+              '',
+          ]
+          for row in inventory['relations']:
+              lines += [
+                  f"## {row['name']}",
+                  '',
+                  f"- reviewed relation: `{row['reviewed_relation']}`",
+                  f"- source: `{row['source_canonical_id']}` / `{row['source_question_id']}` — {row['source_question']['original_question']}",
+                  f"- target: `{row['target_canonical_id']}` — {row['target_canonical_title']}",
+                  f"- target member count: `{row['target_question_count']}`",
+                  '- current target Question members:',
+              ]
+              for q in row['target_questions']:
+                  lines.append(f"  - `{q['question_id']}` — {q['original_question']}")
+              lines.append('')
+          u = inventory['unresolved_fresh_search']
+          lines += [
+              '## student_grade_average_sql',
+              '',
+              f"- source singleton: `{u['canonical_id']}` / `{u['question_id']}` — {u['original_question']}",
+              f"- disposition: {u['reason']}",
+              '',
+          ]
+          (out_dir/'current_relation_inventory.md').write_text('\n'.join(lines), encoding='utf-8')
+          print(json.dumps(inventory, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Verify current repository integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+
+      - name: Commit inventory only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.state.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during inventory: $base_head -> $remote_head"
+            echo 'Discarding generated inventory; a later run can regenerate from fresh state.'
+            exit 0
+          fi
+          if git diff --quiet; then
+            echo 'Relation inventory is already current.'
+            exit 0
+          fi
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add review/content_build/answer_batch_0028/current_relation_inventory.json review/content_build/answer_batch_0028/current_relation_inventory.md
+          git diff --cached --check
+          git commit -m 'content: inventory batch 0028 current relation facts'
+          git push origin "HEAD:$CONTENT_BRANCH"
