@@ -1,0 +1,170 @@
+name: Remediate Content Batch 0028 Reviewed Relations PR
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0028-reviewed-relations-pr
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    if: github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply frozen reviewed relations through Application
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const { createApplication } = require('./src/bootstrap/create-application');
+
+          const root = process.cwd();
+          const app = createApplication({ root });
+          const specs = [
+            ['linked_list_reversal', '5d39b5ae05a488c7436cbfa9b21e746c', '55c3a35aaf4f76ce9aab78ea39d9fddc', 'same', 'cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc', '算法：链表翻转。', 'Source-first batch 0028 review found one linked-list reversal answer boundary with no distinct source constraint; preserve the already source-qualified batch 0027 Canonical.'],
+            ['deep_copy_implementation_vs_concept', '5e21e188af5c4a9ffdb5eaf97cc39c97', 'a156953489b7a1383bb2383470b3ad9f', 'related', null, null, 'Source-first batch 0028 review found deep-copy implementation and shallow-versus-deep-copy concept related but response-contract distinct; keep the Coding Canonical separate.'],
+            ['big_number_addition_split_child', '37b2536da54c5df189dbb86c55a6bfa3', '9ec87353b1ab16d78a9ddee336ca797c', 'same', 'cq_topic_cc39dcdb', '算法：字符串大数加法', 'Source-first batch 0028 review found one decimal-string-addition Coding boundary; preserve the recovered empty-string-as-zero source variant and invalidate stale survivor answer/review state for rebuild.'],
+          ];
+
+          function readJsonl(file) {
+            return fs.readFileSync(path.join(root, file), 'utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          }
+          function state() {
+            return {
+              q: new Map(readJsonl('data/questions/questions.jsonl').map((row) => [row.question_id, row])),
+              c: new Map(readJsonl('data/questions/canonical_questions.jsonl').map((row) => [row.canonical_id, row])),
+            };
+          }
+
+          (async () => {
+            const before = state();
+            const expectedBefore = [
+              ['5d39b5ae05a488c7436cbfa9b21e746c', 'cq_q_5d39b5ae05a488c7436cbfa9b21e746c'],
+              ['5e21e188af5c4a9ffdb5eaf97cc39c97', 'cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97'],
+              ['37b2536da54c5df189dbb86c55a6bfa3', 'cq_q_37b2536da54c5df189dbb86c55a6bfa3'],
+            ];
+            for (const [qid, cid] of expectedBefore) {
+              if (before.q.get(qid)?.canonical_id !== cid || !before.c.has(cid)) {
+                throw new Error(`preflight ownership drift: ${qid} expected ${cid}`);
+              }
+            }
+
+            const record = { schema_version: 'answer_batch_0028_relation_apply_results.v1', results: {} };
+            for (const [name, sourceQid, targetQid, relation, canonicalId, canonicalTitle, rationale] of specs) {
+              const suggested = await app.dedup.suggest({ mode: 'pair', question_ids: [sourceQid, targetQid] });
+              if (suggested.relation_candidates?.length !== 1) throw new Error(`${name}: expected exactly one fresh RelationCandidate`);
+              const candidate = suggested.relation_candidates[0];
+              if (JSON.stringify([...candidate.question_ids].sort()) !== JSON.stringify([sourceQid, targetQid].sort())) {
+                throw new Error(`${name}: fresh pair candidate drifted`);
+              }
+              const decision = await app.dedup.recordDecision({
+                relation_candidate_key: candidate.relation_candidate_key,
+                relation,
+                actor: { type: 'ai', id: 'batch-0028-source-first-relation-review', display_name: 'Batch 0028 source-first relation reviewer' },
+                rationale,
+              });
+              const applied = await app.dedup.applyDecision({
+                relation_candidate_key: candidate.relation_candidate_key,
+                ...(relation === 'same' ? { canonical_id: canonicalId, canonical_title: canonicalTitle } : {}),
+              });
+              record.results[name] = { suggested, decision, applied };
+            }
+
+            const after = state();
+            for (const [qid, survivor, retired] of [
+              ['5d39b5ae05a488c7436cbfa9b21e746c', 'cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc', 'cq_q_5d39b5ae05a488c7436cbfa9b21e746c'],
+              ['37b2536da54c5df189bb86c55a6bfa3', 'cq_topic_cc39dcdb', 'cq_q_37b2536da54c5df189bb86c55a6bfa3'],
+            ]) {
+              if (after.q.get(qid)?.canonical_id !== survivor) throw new Error(`${qid}: expected survivor ${survivor}`);
+              if (after.c.has(retired)) throw new Error(`${retired}: duplicate Canonical survived`);
+            }
+            if (after.q.get('5e21e188af5c4a9ffdb5eaf97cc39c97')?.canonical_id !== 'cq_q_5e21e188af5c4a9ffdb5eaf97cc39c97') {
+              throw new Error('related deep-copy Coding Canonical mutated unexpectedly');
+            }
+
+            const dir = path.join(root, 'review/content_build/answer_batch_0028');
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, 'relation_apply_results.json'), JSON.stringify(record, null, 2) + '\n');
+            fs.writeFileSync(path.join(dir, 'relation_apply.md'), [
+              '# Answer Batch 0028 — Reviewed Relation Application',
+              '',
+              'Only source-first reviewed relationships were materialized. Each RelationCandidate was regenerated from current Question facts immediately before the explicit AI Decision and Application apply step.',
+              '',
+              '- Linked-list reversal: `same`; duplicate source Canonical consolidated into `cq_q_55c3a35aaf4f76ce9aab78ea39d9fddc`.',
+              '- Deep-copy implementation vs concept: `related`; relation-only apply; Coding Canonical remains separate.',
+              '- Big-number string addition split child: `same`; duplicate source Canonical consolidated into `cq_topic_cc39dcdb`; survivor answer/review state is stale until rebuilt for the empty-string-as-zero source variant.',
+              '- Student/grade average SQL split child is retained as a distinct source-exact Canonical by the separately frozen fresh discovery/review.',
+              '',
+            ].join('\n'));
+          })().catch((error) => { console.error(error.stack || error.message); process.exitCode = 1; });
+          NODE
+
+      - name: Verify complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit stable verified mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding verified local mutation; retry against the newer source state.'
+            exit 0
+          fi
+          git add -A
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git diff --cached --check
+          git commit -m 'content: apply batch 0028 reviewed relations'
+          git push origin "HEAD:$CONTENT_BRANCH"
