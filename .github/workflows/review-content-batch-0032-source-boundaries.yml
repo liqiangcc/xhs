@@ -1,0 +1,132 @@
+name: Review Content Batch 0032 Source Boundaries
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0032-source-boundaries.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-source-boundaries
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+
+jobs:
+  source-first-boundary-review:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Freeze exact source-first dispositions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          batch=os.environ['BATCH']
+          task_path=pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md')
+          packet_path=pathlib.Path(f'review/reports/ANSWER_BATCH_{batch}_SOURCE_PACKET.json')
+          out=pathlib.Path(f'review/content_build/answer_batch_{batch}/source_boundary_audit.md')
+          if not task_path.exists() or not packet_path.exists():
+              raise SystemExit('required batch task/source packet missing')
+          task=task_path.read_text(encoding='utf-8')
+          section=task.split('## Canonicals',1)[1].split('\n## ',1)[0]
+          ids=list(dict.fromkeys(re.findall(r'^- `(cq_q_[0-9a-f]{32})`',section,flags=re.MULTILINE)))
+          packet=json.loads(packet_path.read_text(encoding='utf-8'))
+          if packet.get('schema_version')!='answer_batch_source_packet.v2' or packet.get('batch')!=batch:
+              raise SystemExit('source packet identity mismatch')
+          rows={x.get('canonical_id'):x for x in packet.get('canonicals') or []}
+          if len(ids)!=10 or set(rows)!=set(ids):
+              raise SystemExit('batch membership drifted')
+          dispositions=[]
+          for cid in ids:
+              entry=rows[cid]
+              canon=entry.get('canonical_record') or {}
+              hits=entry.get('source_hits') or []
+              qids=canon.get('question_ids') or []
+              if len(qids)!=1:
+                  raise SystemExit(f'{cid}: expected exactly one owned source Question before candidate authoring, got {qids}')
+              if len(hits)!=1:
+                  raise SystemExit(f'{cid}: expected exactly one exact repository source hit, got {len(hits)}')
+              hit=hits[0]
+              q=hit.get('tagged_question') or {}
+              if q.get('question_id')!=qids[0]:
+                  raise SystemExit(f'{cid}: source hit does not match owned Question id')
+              if hit.get('match_basis')!='question_id':
+                  raise SystemExit(f'{cid}: source match is not exact question_id')
+              wording=(q.get('original_question') or '').strip()
+              if not wording:
+                  raise SystemExit(f'{cid}: exact source wording is empty')
+              dispositions.append((cid,qids[0],wording,hit.get('note_tagged_path') or '', 'retain_source_exact_singleton', 'one owned Question + one exact question_id source hit; no fuzzy merge or extra constraint inferred'))
+
+          lines=[
+              f'# Answer Batch {batch} — Source-first Boundary Audit',
+              '',
+              'This audit is performed only from the frozen repository source packet and current Canonical ownership.',
+              'No answer body, historical remediation conclusion, fuzzy semantic merge, or external reconstruction is used.',
+              '',
+              '## Result',
+              '',
+              '- All 10 batch members own exactly one current Question.',
+              '- Every member has exactly one repository source hit matched by exact `question_id`.',
+              '- Therefore each member is retained as a source-exact singleton for candidate authoring; no cross-Canonical merge is inferred in this boundary pass.',
+              '- Candidate writers must preserve the exact source wording as the hard task boundary and label any API/schema/tie/empty-input/concurrency assumptions as answer-side contracts unless the source states them.',
+              '',
+              '## Dispositions',
+              '',
+              '| Canonical | Question | Exact source wording | Source | Disposition | Reason |',
+              '|---|---|---|---|---|---|',
+          ]
+          def esc(s): return str(s).replace('|','\\|').replace('\n',' ')
+          for cid,qid,wording,source,disp,reason in dispositions:
+              lines.append(f'| `{cid}` | `{qid}` | {esc(wording)} | `{esc(source)}` | `{disp}` | {esc(reason)} |')
+          lines += [
+              '',
+              '## Authoring gate',
+              '',
+              'A candidate may proceed only if it is generated against this frozen membership and exact source wording, includes executable validation for coding behavior, and receives an independent source-first review before any promotion attempt.',
+              '',
+          ]
+          out.parent.mkdir(parents=True,exist_ok=True)
+          rendered='\n'.join(lines)
+          rendered=re.sub(r'[ \t]+$','',rendered,flags=re.MULTILINE)
+          if out.exists() and out.read_text(encoding='utf-8')!=rendered:
+              raise SystemExit('boundary audit already exists with different frozen content')
+          out.write_text(rendered,encoding='utf-8')
+          print('PASS: froze 10 exact source-first singleton dispositions for batch 0032')
+          PY
+
+      - name: Commit immutable boundary audit from stable snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="review/content_build/answer_batch_${BATCH}/source_boundary_audit.md"
+          if [ -z "$(git status --porcelain -- "$file")" ]; then
+            echo 'Boundary audit already frozen.'
+            exit 0
+          fi
+          base_head="$(git rev-parse HEAD)"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced: $base_head -> $remote_head; do not mix snapshots."
+            exit 0
+          fi
+          git config user.name 'xhs-source-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$file"
+          git diff --cached --check
+          git commit -m "review: freeze batch ${BATCH} source-first boundaries"
+          git push origin "HEAD:$CONTENT_BRANCH"
