@@ -36,3 +36,13 @@
 - Candidate executable policy only: lists are finite acyclic singly linked lists; intersection means the same node object/shared suffix rather than equal values; return the first shared node or null; do not mutate either list.
 - A cyclic-list variant is deliberately outside the candidate contract because the switch-head termination proof assumes finite acyclic traversals.
 - Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
+
+## cq_q_7cf94a421237d5445dc8e6a277be9489
+
+- Exact repository source: `note_tagged/685696fe0000000012033bb6.json`, question `7cf94a421237d5445dc8e6a277be9489`.
+- Preserved wording: `编程题：如何将数组拆分成和小于等于 k 的最少数量子数组？`
+- Preserved intent: minimize the number of subarrays whose sums are at most k.
+- Not preserved: whether values are non-negative, explicit bounds, empty-input behavior, impossible-case return value, or whether “子数组” was intended in the standard contiguous sense versus arbitrary grouping.
+- Candidate executable policy: interpret a split into subarrays as a partition of the whole input, in original order, into non-empty contiguous segments; allow signed int values; each segment sum must be <= k; empty input returns 0; return -1 when no valid partition exists.
+- Because non-negativity is not preserved, the main solution uses prefix sums + DP rather than assuming the one-pass greedy optimization; the greedy variant is described only conditionally for non-negative inputs.
+- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
