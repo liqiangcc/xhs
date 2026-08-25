@@ -3,13 +3,46 @@
   "canonical_id": "cq_q_70a2325b23352069bfb96a47884bfeed",
   "result": "pass",
   "validated_at": "2026-08-25",
-  "command": "g++ -std=c++17 -O2 -Wall -Wextra -pedantic middle_node_test.cpp && ./middle_node_test",
-  "stdout": "PASS lengths=0..20,999,1000,1001 second-middle-even topology-unchanged",
+  "command": "g++ writer fixture; independent Python step-count oracle",
+  "stdout": "PASS writer lengths=0..20,999,1000,1001; PASS independent-index-oracle n=0..10000 floor(n/2)",
   "checks": [
-    "empty list returns nullptr",
-    "odd lengths return unique middle",
-    "even lengths return second middle under explicit candidate contract",
-    "large odd/even lengths",
-    "input next pointers remain unchanged"
+    "empty list",
+    "odd unique middle",
+    "explicit even second-middle contract",
+    "large lengths",
+    "input topology unchanged",
+    "independent index oracle"
+  ],
+  "boundary_tests": [
+    {
+      "case": "empty list",
+      "expected": "nullptr",
+      "actual": "writer fixture pass",
+      "passed": true
+    },
+    {
+      "case": "odd lengths including 1,3,5,999,1001",
+      "expected": "unique middle at floor(n/2)",
+      "actual": "writer fixture pass",
+      "passed": true
+    },
+    {
+      "case": "even lengths including 2,4,20,1000",
+      "expected": "explicit answer-side contract returns second middle at index n/2",
+      "actual": "writer fixture pass",
+      "passed": true
+    },
+    {
+      "case": "topology preservation",
+      "expected": "no next pointer is modified",
+      "actual": "writer fixture snapshots all next pointers and passes",
+      "passed": true
+    },
+    {
+      "case": "independent step-count model n=0..10000",
+      "expected": "slow step count equals floor(n/2)",
+      "actual": "all passed",
+      "passed": true
+    }
   ]
 }

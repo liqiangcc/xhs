@@ -1,0 +1,172 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_70a2325b23352069bfb96a47884bfeed",
+  "candidate_sha256": "fee55ad619cf8deee669ed8cd6b8e95fef9d94a919f0934327a35ee9b06cab16",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0032-linked-list-middle-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0032 exact source-first singleton boundary",
+      "locator": "review/content_build/answer_batch_0032/source_boundary_audit.md",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Linked-list middle C++ fixture plus independent index oracle",
+      "locator": "review/content_build/answer_batch_0032/cq_q_70a2325b23352069bfb96a47884bfeed/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Linked-list middle independent source-first review",
+      "locator": "review/content_build/answer_batch_0032/cq_q_70a2325b23352069bfb96a47884bfeed/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks only how to locate a linked-list middle element using fast/slow pointers; API, empty/even/cycle semantics are not preserved source constraints.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "fast-slow-invariant",
+      "text": "Under the declared finite acyclic contract, each loop advances slow by one edge and fast by two, so termination leaves slow at index floor(n/2).",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "boundary-behavior",
+      "text": "The executable fixture verifies nullptr for empty input, unique odd middle, second middle for even input under the explicit answer-side contract, large lengths and topology preservation.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The implementation advances pointers only forward a constant number of times per traversed node and stores only two local pointers, giving O(n) time and O(1) auxiliary space for finite acyclic input.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "70a2325b23352069bfb96a47884bfeed",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "g++ writer fixture; independent Python step-count oracle",
+    "result": "pass",
+    "reported_stdout": "PASS writer + independent-index-oracle",
+    "checks": [
+      "fixed boundaries",
+      "large lengths",
+      "topology preservation",
+      "independent floor(n/2) oracle"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty list",
+        "expected": "nullptr",
+        "actual": "writer fixture pass",
+        "passed": true
+      },
+      {
+        "case": "odd lengths including 1,3,5,999,1001",
+        "expected": "unique middle at floor(n/2)",
+        "actual": "writer fixture pass",
+        "passed": true
+      },
+      {
+        "case": "even lengths including 2,4,20,1000",
+        "expected": "explicit answer-side contract returns second middle at index n/2",
+        "actual": "writer fixture pass",
+        "passed": true
+      },
+      {
+        "case": "topology preservation",
+        "expected": "no next pointer is modified",
+        "actual": "writer fixture snapshots all next pointers and passes",
+        "passed": true
+      },
+      {
+        "case": "independent step-count model n=0..10000",
+        "expected": "slow step count equals floor(n/2)",
+        "actual": "all passed",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0032-linked-list-middle-20260825",
+    "review_version": "batch-0032.linked-list-middle.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The repository source preserves exactly one question asking how to locate the middle element of a linked list with fast/slow pointers; it does not specify API, empty-input behavior, even-length tie semantics or cyclic-input behavior.",
+      "The candidate explicitly labels finite acyclic singly-linked input, nullptr for empty input and second-middle behavior for even lengths as answer-side contracts instead of source facts.",
+      "The loop guard ensures fast->next exists before the two-step advance, so empty, single-node and short-list boundaries avoid invalid dereference.",
+      "The invariant is stated at the right level: fast advances twice as many edges as slow, and on termination slow has advanced floor(n/2) edges.",
+      "The standalone C++ fixture covers lengths 0..20 plus 999/1000/1001 and verifies every next pointer remains unchanged.",
+      "A separately authored step-count oracle checks every length from 0 through 10000 and independently confirms floor(n/2) slow steps.",
+      "The candidate does not fabricate project experience and explicitly warns that cyclic input breaks the tail-null termination premise."
+    ]
+  }
+}

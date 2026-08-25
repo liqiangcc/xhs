@@ -1,0 +1,43 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_70a2325b23352069bfb96a47884bfeed",
+  "candidate_sha256": "fee55ad619cf8deee669ed8cd6b8e95fef9d94a919f0934327a35ee9b06cab16",
+  "reviewed_at": "2026-08-25",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0032-linked-list-middle-20260825",
+  "review_version": "batch-0032.linked-list-middle.v1",
+  "decision": "pass",
+  "revision_round": 0,
+  "source_packet": [
+    "review/reports/ANSWER_BATCH_0032_SOURCE_PACKET.json",
+    "review/content_build/answer_batch_0032/source_boundary_audit.md",
+    "review/candidates/answers/cq_q_70a2325b23352069bfb96a47884bfeed.md",
+    "review/content_build/answer_batch_0032/cq_q_70a2325b23352069bfb96a47884bfeed/code_validation.json",
+    "config/answer_quality.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The repository source preserves exactly one question asking how to locate the middle element of a linked list with fast/slow pointers; it does not specify API, empty-input behavior, even-length tie semantics or cyclic-input behavior.",
+    "The candidate explicitly labels finite acyclic singly-linked input, nullptr for empty input and second-middle behavior for even lengths as answer-side contracts instead of source facts.",
+    "The loop guard ensures fast->next exists before the two-step advance, so empty, single-node and short-list boundaries avoid invalid dereference.",
+    "The invariant is stated at the right level: fast advances twice as many edges as slow, and on termination slow has advanced floor(n/2) edges.",
+    "The standalone C++ fixture covers lengths 0..20 plus 999/1000/1001 and verifies every next pointer remains unchanged.",
+    "A separately authored step-count oracle checks every length from 0 through 10000 and independently confirms floor(n/2) slow steps.",
+    "The candidate does not fabricate project experience and explicitly warns that cyclic input breaks the tail-null termination premise."
+  ],
+  "promotion_blockers": [
+    "repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
