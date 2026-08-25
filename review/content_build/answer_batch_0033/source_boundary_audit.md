@@ -72,3 +72,21 @@
 - Not preserved by either source: table/column names, whether each student has one score or many course-grade rows, the exact ranking metric, whether "top ten" means exactly ten rows or top-ten rank levels including ties, tie-break policy, NULL/no-score behavior, output columns, MySQL version, and index/schema constraints.
 - Candidate policy for this slice: use `students(student_id,name)` plus exactly one non-NULL final row `scores(student_id,score)` per scored student; interpret top ten as at most ten rows, sort by score descending and student_id ascending for deterministic tie breaking, and exclude students without a score via INNER JOIN. The primary query uses portable MySQL LIMIT syntax; window-function and multi-course aggregation variants remain explicit follow-ups rather than recovered requirements.
 - Promotion remains blocked until isolated independent review verifies source boundaries, deterministic tie behavior, exact SQL execution against fixtures, alternatives for ties/multiple grades, evidence, and repository gates.
+
+## cq_q_7a75022f873e722084923cc7db60e1bb
+
+- Exact repository source: `note_tagged/689455070000000023019aa8.json`.
+- Preserved wording: `编程：单线程调用一个函数，实现一个限流器，当函数调用频率超过阈值时返回false，否则True。`
+- Source-preserved facts: this is a single-thread coding task; repeated calls are admitted or rejected by returning true/false according to a rate threshold.
+- Not preserved by the source: fixed vs sliding window, whether rejected attempts count, the threshold/window units, clock API, exact boundary semantics, language/API, invalid-clock behavior, and concurrency semantics beyond the explicit single-thread condition.
+- Candidate policy: implement an admission sliding-window limiter in Java with an injected non-negative non-decreasing millisecond clock; permit at most maxCalls accepted calls in the half-open interval (now-windowMillis, now]; rejected attempts do not consume capacity; exact-boundary accepted timestamps expire.
+- Promotion remains blocked until isolated independent review verifies source boundaries, exact fenced-code behavior, evidence, and repository gates.
+
+## cq_q_7b1c9751da7c787b856440f7bc4088c8
+
+- Exact repository source: `note_tagged/67e12cfa000000001d02777a.json`.
+- Preserved wording: `算法：删除链表所有重复数字（不允许用map或者set）`
+- Source-preserved facts: this is a linked-list coding task asking to delete duplicate numbers and explicitly forbidding Map/Set in the solution.
+- Not preserved by the source: whether the list is sorted, whether duplicate means keep one copy or remove every occurrence of any repeated value, node/API shape, mutation policy, value range, language, and cycle behavior.
+- Candidate policy: do not assume sorting; interpret “删除所有重复数字” as removing every node whose value occurs more than once anywhere in the original acyclic list; use no Map/Set in the solution, relink in place, preserve the relative order of values that occur exactly once, and return the new head.
+- Promotion remains blocked until isolated independent review verifies source boundaries, exact fenced-code behavior, evidence, and repository gates.
