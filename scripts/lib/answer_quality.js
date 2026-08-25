@@ -314,7 +314,7 @@ function validateAnswerEvidence(evidence, candidate, context, config) {
 
 function extractCodeBlocks(content) {
     const blocks = [];
-    const regex = /(?:```|~~~)(java|sql|javascript|js|go)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
+    const regex = /(?:```|~~~)(java|sql|javascript|js|go|c)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
     let match;
     while ((match = regex.exec(content))) blocks.push({ language: match[1].toLowerCase(), code: match[2].trim() });
     return blocks;
@@ -329,6 +329,31 @@ function compileJava(code) {
         fs.writeFileSync(filePath, code, 'utf8');
         const result = childProcess.spawnSync('javac', ['-encoding', 'UTF-8', '-d', tempDir, filePath], { encoding: 'utf8', timeout: 15000 });
         return { ok: result.status === 0, error: result.status === 0 ? null : (result.stderr || result.stdout || 'javac_failed').slice(0, 2000) };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+function compileC(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-gcc-'));
+    try {
+        const filePath = path.join(tempDir, 'candidate.c');
+        const objectPath = path.join(tempDir, 'candidate.o');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('gcc', ['-std=c17', '-Wall', '-Wextra', '-Werror', '-pedantic', '-c', filePath, '-o', objectPath], {
+            encoding: 'utf8',
+            timeout: 15000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'gcc_not_available' };
+        if (result.error) return { ok: false, error: 'c_compile_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'c_compile_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 2000),
+            };
+        }
+        return { ok: true };
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -437,7 +462,9 @@ function validateSpecializedCandidate(candidate, evidence, context) {
                     ? parseSql(block.code)
                     : block.language === 'go'
                         ? compileGo(block.code)
-                        : parseJavaScript(block.code);
+                        : block.language === 'c'
+                            ? compileC(block.code)
+                            : parseJavaScript(block.code);
             if (!validation.ok) {
                 addHardFailure(hardFailures, /placeholder|required/.test(validation.error || '') ? 'placeholder_implementation' : 'unrunnable_implementation');
                 errors.push({ error: `${block.language}_validation_failed`, detail: validation.error });
@@ -599,7 +626,7 @@ function runAnswerAudit(options = {}) {
         const title = (answer.content.match(/^#\s+(.+)$/m) || [])[1] || answer.metadata.canonical_id;
         if (types.size && !types.has(answer.metadata.answer_type || inferAnswerType([], { canonical_title: title }))) return false;
         if (setIds && !setIds.has(answer.metadata.canonical_id)) return false;
-        if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js|go)\b/i.test(answer.content)) return false;
+        if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js|go|c)\b/i.test(answer.content)) return false;
         return true;
     });
     const rows = selectedPaths.map((filePath) => auditOneCandidate(filePath, { ...options, allowFormal: options.tier === 'curated' })).filter((row) => {
@@ -811,6 +838,7 @@ module.exports = {
     renderCandidate,
     extractCodeBlocks,
     compileJava,
+    compileC,
     parseSql,
     validateAnswerEvidence,
     validateSpecializedCandidate,

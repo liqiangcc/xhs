@@ -2,12 +2,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { compileJava, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
+const { compileJava, compileC, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
 
 test('Java validation compiles complete classes and rejects broken implementations', () => {
     assert.equal(compileJava('public class Solution { public static int add(int a, int b) { return a + b; } }').ok, true);
     assert.equal(compileJava('public class Solution { public static int add(int a, int b) { return a + ; } }').ok, false);
     assert.equal(compileJava('static int add(int a, int b) { return a + b; }').error, 'java_class_required');
+});
+
+
+test('C validation compiles complete source and rejects broken implementations', () => {
+    assert.equal(compileC('int add(int a, int b) { return a + b; }').ok, true);
+    assert.equal(compileC('int add(int a, int b) { return a + ; }').ok, false);
 });
 
 test('SQL validation checks statement structure balance and placeholders', () => {
