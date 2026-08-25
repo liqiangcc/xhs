@@ -71,7 +71,7 @@ jobs:
           if(!(q?.business_context||[]).includes('LeetCode 304')) throw new Error('LeetCode 304 tagged context missing');
           const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
           if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary missing');
-          const text=fs.readFileSync(candidate,'utf8');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
           const required=['二维前缀和','O(1)','long','不可变契约','prefix[row2 + 1][col2 + 1]','matrix must be rectangular'];
           for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
           if(/ProblemSpec|按本题约束填写|长尾复习底稿/.test(text)) throw new Error('placeholder/template residue detected');
