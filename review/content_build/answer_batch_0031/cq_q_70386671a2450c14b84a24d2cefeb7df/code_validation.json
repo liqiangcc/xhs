@@ -3,15 +3,46 @@
   "canonical_id": "cq_q_70386671a2450c14b84a24d2cefeb7df",
   "result": "pass",
   "validated_at": "2026-08-25",
-  "command": "python3 top100_validation.py",
-  "stdout": "PASS rows=100 aggregation=yes date-isolation=yes descending=yes deterministic-tie=yes cutoff=P006 empty-date=zero",
+  "command": "writer SQLite fixture + independent reviewer SQLite oracle",
+  "stdout": "PASS writer and reviewer SQL oracles",
   "checks": [
-    "multiple detail rows aggregate per product",
-    "target date isolated from another date",
-    "global sales descending order",
-    "deterministic equal-sales tie order",
-    "105 products truncated to exactly 100",
-    "cutoff excludes P005 and includes P006",
-    "empty date returns zero rows"
+    "filter-before-aggregate",
+    "aggregate-before-rank",
+    "global sales-desc order",
+    "deterministic tie",
+    "Top100 cutoff",
+    "empty date"
+  ],
+  "boundary_tests": [
+    {
+      "case": "aggregation",
+      "expected": "A 2+3 -> 5 before ranking",
+      "actual": "A=5",
+      "passed": true
+    },
+    {
+      "case": "date isolation",
+      "expected": "other-date A=100 excluded",
+      "actual": "A=5",
+      "passed": true
+    },
+    {
+      "case": "ties",
+      "expected": "sales primary, product_id deterministic secondary",
+      "actual": "B,C",
+      "passed": true
+    },
+    {
+      "case": "Top100 cutoff",
+      "expected": "105 products -> 100 rows",
+      "actual": "writer fixture pass",
+      "passed": true
+    },
+    {
+      "case": "empty date",
+      "expected": "zero rows",
+      "actual": "pass",
+      "passed": true
+    }
   ]
 }

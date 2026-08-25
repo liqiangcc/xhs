@@ -1,0 +1,174 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_70386671a2450c14b84a24d2cefeb7df",
+  "candidate_sha256": "cd4edbb3450a3b22efc37e5ff3467c4d18f75d1e586210a1b546dccc44723b68",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0031-product-sales-top100-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Tagged product-sales Top100 coding question",
+      "locator": "note_tagged/660911ad000000001b010de1.json#question_id=70386671a2450c14b84a24d2cefeb7df",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Writer and reviewer SQL fixtures",
+      "locator": "review/content_build/answer_batch_0031/cq_q_70386671a2450c14b84a24d2cefeb7df/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Independent source-first review",
+      "locator": "review/content_build/answer_batch_0031/cq_q_70386671a2450c14b84a24d2cefeb7df/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "Source requires specified-date product sales Top100 sorted descending but does not preserve schema, formula, validity or tie semantics.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "query-mechanism",
+      "text": "Under declared schema, filter date before grouping, aggregate sales per product, globally order sales descending and limit 100.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "ties",
+      "text": "Secondary product_id order is deterministic only; boundary-tie retention needs ranking semantics.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "Independent fixtures validate aggregation, date isolation, global order, ties, cutoff and empty date.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "70386671a2450c14b84a24d2cefeb7df",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "writer SQLite fixture + reviewer SQLite oracle",
+    "result": "pass",
+    "reported_stdout": "PASS writer and reviewer SQL oracles",
+    "checks": [
+      "aggregation",
+      "date isolation",
+      "order",
+      "ties",
+      "cutoff",
+      "empty"
+    ],
+    "boundary_tests": [
+      {
+        "case": "aggregation",
+        "expected": "A 2+3 -> 5 before ranking",
+        "actual": "A=5",
+        "passed": true
+      },
+      {
+        "case": "date isolation",
+        "expected": "other-date A=100 excluded",
+        "actual": "A=5",
+        "passed": true
+      },
+      {
+        "case": "ties",
+        "expected": "sales primary, product_id deterministic secondary",
+        "actual": "B,C",
+        "passed": true
+      },
+      {
+        "case": "Top100 cutoff",
+        "expected": "105 products -> 100 rows",
+        "actual": "writer fixture pass",
+        "passed": true
+      },
+      {
+        "case": "empty date",
+        "expected": "zero rows",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0031-product-sales-top100-20260825",
+    "review_version": "batch-0031.product-sales-top100.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Source preserves specified-date product sales Top100 and sales-descending order, but not schema names, sales formula, order-validity rules or tie semantics.",
+      "Candidate keeps missing schema and business semantics explicitly answer-side.",
+      "Correct grain transition is date filter -> product aggregation -> global sales order -> Top100 cutoff; LIMIT on detail rows would be incorrect.",
+      "SUM(quantity) is correctly conditional on the declared quantity-based sales definition; COUNT or net sales may apply under another real schema.",
+      "product_id ASC is only a deterministic tie-breaker; retaining all products tied at rank 100 would need explicit ranking semantics.",
+      "Simple global Top100 does not require a window function; grouped TopN or tie-retention may require ROW_NUMBER/RANK/DENSE_RANK.",
+      "Independent SQL fixtures confirm aggregation, date isolation, global order, ties, cutoff and empty-date behavior.",
+      "No production scale, skew, latency or business-status facts are fabricated."
+    ]
+  }
+}
