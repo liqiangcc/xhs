@@ -1,0 +1,220 @@
+name: Build Content Batch 0034 Deadlock Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0034-deadlock-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-deadlock-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7db820e34ee11cbf1d7d3f980d6f2de3
+  SOURCE_QID: 7db820e34ee11cbf1d7d3f980d6f2de3
+  SOURCE_NOTE: note_tagged/685696fe0000000012033bb6.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source boundary and ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,note=process.env.SOURCE_NOTE;
+          const expected='如何避免死锁？请写一个死锁案例。';
+          const tagged=JSON.parse(fs.readFileSync(note,'utf8')); const src=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected||src.question_type!=='手写代码_Coding') throw new Error('source wording/type drifted');
+          if(src.domain?.l1!=='Java基础'||src.domain?.l2!=='并发编程(JUC)') throw new Error('source domain drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding') throw new Error('canonical context/type drifted');
+          const library=(ctx.source_questions||[]).find(x=>x.original_question===expected); if(!library||!ctx.canonical.question_ids.includes(library.question_id)) throw new Error('Question -> Canonical mapping drifted');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse overwrite');
+          fs.writeFileSync(path.join(out,'source_mapping.json'),JSON.stringify({schema_version:'answer_source_mapping.v1',canonical_id:cid,library_question_id:library.question_id,note_question_id:qid,note_path:note,original_question:expected,question_type:src.question_type,domain:src.domain,verified_at:'2026-08-26'},null,2)+'\n');
+          const boundary='review/content_build/answer_batch_0034/source_boundary_audit.md'; let text=fs.existsSync(boundary)?fs.readFileSync(boundary,'utf8'):'# Answer Batch 0034 Source Boundary Audit\n'; const heading=`## ${cid}`;
+          if(!text.includes(heading)) text+=`\n${heading}\n\n- Exact repository source: \`${note}\`, question \`${qid}\`.\n- Preserved wording: \`${expected}\`\n- Preserved intent: explain how deadlocks are avoided and provide a concrete deadlocking Java example.\n- Not preserved: a required lock primitive, JDK version, business scenario, timeout policy, database semantics, or whether the example must use intrinsic monitors versus explicit locks.\n- Candidate executable policy: use JDK 21 `ReentrantLock` plus a two-party latch to deterministically create a circular wait; use daemon worker threads and `ThreadMXBean.findDeadlockedThreads()` with a bounded detection deadline so the demonstration is reproducible without hanging CI.\n- Avoidance guidance is stated as general mechanisms and explicitly separates prevention (global lock order / avoiding hold-and-wait), bounded acquisition (`tryLock` + rollback/retry), and diagnosis/detection. No production incident is invented.\n- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.\n`;
+          fs.writeFileSync(boundary,text);
+          NODE
+
+      - name: Write source-bounded deadlock candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7db820e34ee11cbf1d7d3f980d6f2de3","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 如何避免死锁？请写一个死锁案例
+
+          ## 核心结论
+
+          死锁不是“线程慢”或“锁竞争严重”，而是一组线程形成了无法自行打破的循环等待。工程上最直接的预防手段是破坏死锁成立条件，尤其是：**所有代码遵守同一个全局加锁顺序**，避免 A→B 与 B→A；尽量避免持有一个锁时再等待另一个资源；确实需要多锁时，可用 `tryLock(timeout)` 获取失败后释放已持有资源并在上层重试。下面的 JDK 21 示例故意让两个线程分别持有 A/B 后再等对方的锁，用 `ThreadMXBean` 在有限时间内证明它真的形成了死锁。
+
+          ## 1 分钟版
+
+          - 经典死锁需要同时具备：互斥、持有并等待、不可剥夺、循环等待；破坏其中任意一个就不会形成该类死锁。
+          - 最常用的代码级预防是统一锁顺序，例如所有路径都先锁账户 ID 小的对象，再锁 ID 大的对象，禁止一条路径 A→B、另一条 B→A。
+          - 如果无法建立静态全局顺序，可考虑 `tryLock` + 超时：第二把锁拿不到就释放第一把锁，再由上层按退避/幂等策略重试，而不是无限持有第一把锁等待。
+          - 缩短临界区、不要在持锁期间做网络 I/O/外部回调，也能减少“持有并等待”的窗口，但它不是统一锁顺序的替代品。
+          - 线上诊断要看线程 dump / `ThreadMXBean` 的等待关系；发现死锁是诊断，不能替代设计阶段的预防。
+
+          ## 3 分钟版
+
+          ```java
+          import java.lang.management.ManagementFactory;
+          import java.lang.management.ThreadMXBean;
+          import java.util.concurrent.CountDownLatch;
+          import java.util.concurrent.TimeUnit;
+          import java.util.concurrent.locks.ReentrantLock;
+
+          public final class DeadlockCase {
+              private static final ReentrantLock LOCK_A = new ReentrantLock();
+              private static final ReentrantLock LOCK_B = new ReentrantLock();
+              private static final CountDownLatch BOTH_HOLD_ONE = new CountDownLatch(2);
+
+              private static void await(CountDownLatch latch) {
+                  try {
+                      latch.await();
+                  } catch (InterruptedException e) {
+                      Thread.currentThread().interrupt();
+                      throw new IllegalStateException(e);
+                  }
+              }
+
+              private static Thread worker(
+                      String name, ReentrantLock first, ReentrantLock second) {
+                  Thread t = new Thread(() -> {
+                      first.lock();
+                      try {
+                          BOTH_HOLD_ONE.countDown();
+                          await(BOTH_HOLD_ONE);
+                          second.lock();
+                          try {
+                              // 永远到不了这里：另一个线程正持有 second 并等待 first。
+                          } finally {
+                              second.unlock();
+                          }
+                      } finally {
+                          first.unlock();
+                      }
+                  }, name);
+                  // 演示线程设为 daemon，检测到死锁后 JVM 仍能退出，不让示例/CI 永久挂住。
+                  t.setDaemon(true);
+                  return t;
+              }
+
+              public static void main(String[] args) throws Exception {
+                  Thread t1 = worker("A-then-B", LOCK_A, LOCK_B);
+                  Thread t2 = worker("B-then-A", LOCK_B, LOCK_A);
+                  t1.start();
+                  t2.start();
+
+                  ThreadMXBean bean = ManagementFactory.getThreadMXBean();
+                  long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                  while (System.nanoTime() < deadline) {
+                      long[] ids = bean.findDeadlockedThreads();
+                      if (ids != null && ids.length >= 2) {
+                          System.out.println("DEADLOCK_DETECTED threads=" + ids.length);
+                          return;
+                      }
+                      Thread.sleep(10);
+                  }
+                  throw new AssertionError("deadlock was not detected within deadline");
+              }
+          }
+          ```
+
+          这里的关键不是 `sleep` 碰运气：`CountDownLatch` 保证两个线程都已经拿到自己的第一把锁，之后才同时尝试第二把锁，所以等待图稳定为 `t1 持有 A → 等 B`、`t2 持有 B → 等 A`。`findDeadlockedThreads()` 能检测显式 ownable synchronizer 的死锁；线程设为 daemon 只是为了让演示进程在检测成功后退出，不会解除死锁本身。
+
+          ## 关键细节
+
+          - **统一顺序为什么有效**：若所有线程都只能按同一严格顺序获取多把锁，就无法形成“最后一把锁又等待链路前面的锁”的有向环，从而破坏循环等待条件。
+          - **`tryLock` 的边界**：超时只是让“无限等待”变成可失败操作；失败后必须释放已经拿到的锁，并定义重试、退避和业务幂等，否则可能从死锁变成活锁或重试风暴。
+          - **释放锁**：显式锁应放在 `try/finally` 中释放。故意死锁的示例里 finally 永远不会正常执行，是因为两个 daemon 线程被设计成永久互等。
+          - **不要用线程优先级解决**：调度优先级不改变锁依赖图，不是死锁预防机制。
+          - **数据库死锁**：数据库可以检测事务等待环并主动回滚一个事务，这是“检测 + 牺牲/恢复”；应用仍要正确识别可重试错误并保证重试安全。它和 Java 线程锁的具体检测实现不是一回事。
+          - **四条件是分析模型**：工程回答不能只背四个名词，要具体指出当前设计破坏的是哪一个条件，以及失败路径如何收敛。
+
+          ## 原理机制
+
+          可以把等待关系画成有向图：节点是线程/事务，边表示“我正在等待对方持有的资源”。在示例中有两条边 `t1 → t2` 和 `t2 → t1`，因此形成环；又因为锁不会被外部强制剥夺，两个线程都没有能继续运行到 `unlock()` 的路径。统一锁顺序相当于给资源建立一个严格偏序，所有获取边只能朝一个方向推进，等待图就不可能沿资源顺序绕回起点。`tryLock` + 回滚则是允许等待失败并主动释放已持有资源，从“持有并等待”路径上打断环。
+
+          ## 项目经验版
+
+          来源没有提供真实线上事故、线程 dump 或数据库死锁日志，不能虚构“我曾经处理过某次生产死锁”。真实排障时我会先冻结证据：线程侧抓 thread dump / `ThreadMXBean`，数据库侧看引擎提供的 deadlock report；还原“谁持有什么、在等什么”的等待图，再回到代码检查锁顺序、事务访问顺序和持锁期间的外部调用。修复后用并发回归测试或故障注入复现原路径，验证等待环不再出现。
+
+          ## 常见追问
+
+          - 问：只要加锁顺序一致就一定没有任何死锁吗？答：它能消除由这些按序资源锁形成的循环等待；系统如果还有不受该顺序约束的其他资源、条件等待或外部阻塞，仍要单独分析，不能把局部规则扩张成全系统保证。
+          - 问：为什么不用 `sleep` 构造死锁？答：`sleep` 只改变概率和时序；用 latch/barrier 先确认双方都持有第一把锁，再申请第二把锁，才能得到可重复的等待环。
+          - 问：`findMonitorDeadlockedThreads()` 和 `findDeadlockedThreads()` 有什么区别？答：后者还覆盖 ownable synchronizers（例如 `ReentrantLock`）；本示例使用 `ReentrantLock`，因此调用后者。
+          - 问：`tryLock(timeout)` 一定比阻塞 `lock()` 好吗？答：不是。它引入超时、回滚和重试策略；如果可以建立简单稳定的全局锁顺序，优先让正确性依赖更少的时序参数。
+          - 问：如何验证修复？答：保留原始并发触发条件，重复执行并检查线程是否能在截止时间内完成，同时确认没有等待环；若采用超时重试，还要检查错误率、重试次数和业务幂等。
+
+          ## 易错点
+
+          - 两条代码路径分别 A→B、B→A，却认为每个 `synchronized`/`lock()` 单独看都正确就不会死锁。
+          - 用随机 `sleep` 作为“死锁测试”，测试有时过有时不过，无法作为稳定证据。
+          - `tryLock` 失败后忘记释放第一把锁，实际上仍保留持有并等待问题。
+          - 持锁期间调用未知外部代码、RPC 或回调，让锁依赖跨出本模块并难以形成统一顺序。
+          - 只处理线程被卡住的表象，不还原等待图，最终把长 GC、慢 I/O 或普通锁竞争误判成死锁。
+          EOF
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const fence=md.match(/```java\n([\s\S]*?)\n```/); if(!fence) throw new Error('Java fence missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0034/${cid}/DeadlockCase.java`,fence[1].trim()+'\n');
+          NODE
+
+      - name: Run exact deadlock demonstration with bounded detection
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; mkdir -p "$out/classes"
+          javac -d "$out/classes" "$out/DeadlockCase.java"
+          stdout="$(timeout 8s java -cp "$out/classes" DeadlockCase)"
+          case "$stdout" in DEADLOCK_DETECTED\ threads=*) ;; *) echo "unexpected stdout: $stdout" >&2; exit 1;; esac
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`; const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'javac exact candidate fence && timeout 8s java DeadlockCase',stdout:process.env.STDOUT,checks:['both workers acquire opposite first locks before requesting second lock','ThreadMXBean reports at least two deadlocked threads','bounded three-second detector deadline','daemon deadlock workers allow demonstration JVM to exit after evidence is printed']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Exact repository deadlock question and source boundary audit',locator:`${mapping.note_path} + ${out}/source_mapping.json + review/content_build/answer_batch_0034/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Deterministic JDK 21 deadlock reproduction and ThreadMXBean detection',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'The source asks how to avoid deadlock and to write a deadlock example, but does not preserve a required primitive, JDK version, business incident or database scenario.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'deadlock-reproduction',text:'The exact candidate Java deterministically forms opposite ReentrantLock acquisition order after both threads hold one lock, and JDK ThreadMXBean detects the resulting deadlock within a bounded deadline.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制']},{claim_id:'avoidance',text:'The answer distinguishes prevention through a global lock order / avoiding hold-and-wait from bounded acquisition and from detection/diagnosis, without presenting detection as prevention.',source_ids:['repository-source','fixture'],answer_locations:['核心结论','1 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:mapping.library_question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_human_approval_and_real_review_policy_not_yet_satisfied'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'; let t=fs.readFileSync(task,'utf8'); const p='- Deadlock canonical `'+cid+'` has a source-bounded JDK 21 candidate with deterministic opposite-lock-order reproduction, bounded ThreadMXBean detection, exact-code validation, and writer evidence; isolated review and promotion gates remain pending.'; if(!t.includes(p))t=t.trimEnd()+'\n'+p+'\n'; fs.writeFileSync(task,t);
+          NODE
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"; remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced: $base_head -> $remote_head; discard verified local mutation."; exit 0; fi
+          git add review/candidates/answers/"$CANONICAL_ID".md review/content_build/answer_batch_0034 tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          git diff --cached --check
+          git config user.name xhs-content-builder; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: build batch 0034 deadlock candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
