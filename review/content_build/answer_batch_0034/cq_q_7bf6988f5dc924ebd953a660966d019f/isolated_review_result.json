@@ -1,0 +1,49 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_7bf6988f5dc924ebd953a660966d019f",
+  "candidate_sha256": "db8ebcbc2cc3c65bada3cee91c0fecdfc521a647388e368ba561b53fe4b0308b",
+  "reviewed_at": "2026-08-26",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0034-axis0-stats-20260826-v1",
+  "review_version": "batch-0034.axis0-stats.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "note_tagged/68234a600000000023013b38.json",
+    "review/content_build/answer_batch_0034/cq_q_7bf6988f5dc924ebd953a660966d019f/source_mapping.json",
+    "review/content_build/answer_batch_0034/source_boundary_audit.md",
+    "review/candidates/answers/cq_q_7bf6988f5dc924ebd953a660966d019f.md",
+    "review/content_build/answer_batch_0034/cq_q_7bf6988f5dc924ebd953a660966d019f/Axis0Stats.java",
+    "review/content_build/answer_batch_0034/cq_q_7bf6988f5dc924ebd953a660966d019f/Axis0StatsTest.java",
+    "review/content_build/answer_batch_0034/cq_q_7bf6988f5dc924ebd953a660966d019f/code_validation.json",
+    "config/answer_quality.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The preserved source asks only for mean and variance on the first dimension; it does not fix Data shape/type, axis convention, population-vs-sample denominator, missing-value behavior, output shape or language/API.",
+    "The candidate explicitly labels rectangular finite double[][], row/axis-0 aggregation, per-column output, population variance and rejection of ragged/non-finite input as answer-side contracts.",
+    "The exact fenced Java equals the saved fixture and independently re-passes ordinary, single-row, large-offset, shape, finite-value and input-immutability checks under JDK 21.",
+    "The Welford invariant and numerical-stability motivation are relevant and bounded: the answer does not claim floating-point error disappears and it distinguishes the sample-variance and NaN-handling variants."
+  ],
+  "validation": {
+    "command": "javac Axis0Stats.java Axis0StatsTest.java && java Axis0StatsTest",
+    "result": "pass",
+    "stdout": "PASS axis0 mean population-variance welford single-row large-offset shape finite immutable-input"
+  },
+  "promotion_blockers": [
+    "required_human_approval_not_yet_satisfied",
+    "repository_real_review_policy_not_yet_satisfied"
+  ]
+}
