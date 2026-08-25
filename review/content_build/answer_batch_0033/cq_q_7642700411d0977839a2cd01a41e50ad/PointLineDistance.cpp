@@ -13,6 +13,7 @@ long double pointToLineDistance(const Point& p, const Point& a, const Point& b) 
     if (length == 0.0L) {
         throw std::invalid_argument("line requires two distinct points");
     }
+
     const long double wx = p.x - a.x;
     const long double wy = p.y - a.y;
     const long double twiceArea = dx * wy - dy * wx;
