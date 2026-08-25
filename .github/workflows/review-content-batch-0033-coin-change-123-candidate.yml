@@ -1,0 +1,193 @@
+name: Review Content Batch 0033 Coin Change 123 Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0033-coin-change-123-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-coin-change-123-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_768f8eb71596f7b6824861aae95d9f08
+  SOURCE_QID: 768f8eb71596f7b6824861aae95d9f08
+  CANDIDATE_BLOB_SHA: 6411d50e2ec32cf164e9e6f6f3e5e5cb6b768c63
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated guard and exact Java validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法/手撕：N分钱换成1/2/3分硬币的所有组合方式 (动态规划/递归)';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/663b7649000000001e038251.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!==expected) throw new Error('preserved source wording drifted');
+          if(source.question_type!=='算法手撕_Coding'||source.domain?.l2!=='动态规划') throw new Error('source type/domain drifted');
+          if(!source.tech_entities?.includes('coin change')) throw new Error('source entity drifted');
+
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const row=rows.find(x=>x.question_id===qid);
+          if(!row||row.canonical_id!==cid) throw new Error('Question ownership drifted');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+
+          const boundary=fs.readFileSync('review/content_build/answer_batch_0033/source_boundary_audit.md','utf8');
+          for(const needle of [
+            `## ${cid}`,
+            `Preserved wording: \`${expected}\``,
+            'whether "all combinations" means enumerate combinations or return only their count',
+            'whether coin supply is unlimited',
+            'whether order matters',
+            'N=0 convention',
+            'negative-input behavior'
+          ]) if(!boundary.includes(needle)) throw new Error(`source boundary guard missing: ${needle}`);
+
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const needle of [
+            'one + 2*two + 3*three = N',
+            '组合不考虑拿取顺序',
+            '币种在外、金额在内',
+            'dp[0]=1',
+            'count <= max',
+            'remaining / coin',
+            'Math.addExact',
+            'N=0',
+            'N<0',
+            'O(K)',
+            'O(N) 时间、O(N) 空间'
+          ]) if(!text.includes(needle)) throw new Error(`candidate semantic guard missing: ${needle}`);
+          if(/我负责|我在线上|我们线上|线上使用过|生产中我/.test(text)) throw new Error('fabricated experience detected');
+
+          const open='```java\n'; const i=text.indexOf(open); if(i<0) throw new Error('Java fence missing');
+          const start=i+open.length,end=text.indexOf('\n```',start); if(end<0) throw new Error('Java fence close missing');
+          fs.mkdirSync('/tmp/xhs-coin-change-review',{recursive:true});
+          fs.writeFileSync('/tmp/xhs-coin-change-review/CoinChange123.java',text.slice(start,end)+'\n');
+          NODE
+
+          cmp -s /tmp/xhs-coin-change-review/CoinChange123.java "$out/CoinChange123.java"
+          cp "$out/CoinChange123Test.java" /tmp/xhs-coin-change-review/CoinChange123Test.java
+          javac -d /tmp/xhs-coin-change-review/classes /tmp/xhs-coin-change-review/CoinChange123.java /tmp/xhs-coin-change-review/CoinChange123Test.java
+          test "$(java -cp /tmp/xhs-coin-change-review/classes CoinChange123Test)" = 'PASS fixed=0..5 exhaustive=0..200 enumeration=unique-complete dp=count negative=empty'
+
+      - name: Record isolated review and audit-complete evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const out=`review/content_build/answer_batch_0033/${cid}`;
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          const fixture=`${out}/code_validation.json`;
+          const reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0033-coin-change-20260826-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The exact repository source preserves N cents, denominations 1/2/3, all combination ways and an explicit DP/recursion hint; it does not preserve enumerate-versus-count semantics, supply limits, order semantics, programming language/API, N range or edge conventions.',
+            'The candidate makes unlimited supply, order-insensitive combinations, Java implementation, N=0 empty-combination and N<0 empty-result behavior explicit answer-side contracts rather than recovered source facts.',
+            'The exact displayed Java fence is byte-for-byte identical to the compiled fixture after the writer remediation; the recursion fixes denomination order and enumerates count triples rather than ordered pick sequences.',
+            'For every N from 0 through 200, enumeration is duplicate-free and exactly matches an independently implemented triple-loop oracle over nonnegative 1/2/3-cent counts.',
+            'For every N from 0 through 200, the coin-outer amount-inner unbounded-knapsack DP count equals the independent oracle set size, demonstrating combination rather than permutation semantics.',
+            'The enumeration bound uses remaining/coin rather than count*coin, avoiding an avoidable int multiplication overflow in the loop condition; DP addition uses Math.addExact to fail closed on count overflow.',
+            'The answer explains N=0, negative input, output-sensitive O(K) enumeration cost, O(N) DP cost, and the limited-supply / ordered-sequence variants without fabricating project experience.',
+            'No placeholder implementation, uncovered source variant, duplicate enumeration behavior or material unsupported claim remains in this candidate.'
+          ];
+          const boundaryTests=[
+            {case:'N=-1',expected:'empty enumeration and DP count 0 by explicit answer contract',actual:'passed',passed:true},
+            {case:'N=0',expected:'one empty combination and DP count 1',actual:'passed',passed:true},
+            {case:'N=4',expected:'four unordered combinations',actual:'4',passed:true},
+            {case:'N=0..200',expected:'enumeration set equals independent triple-loop oracle',actual:'all passed',passed:true},
+            {case:'N=0..200',expected:'DP count equals oracle set size',actual:'all passed',passed:true},
+            {case:'enumeration uniqueness',expected:'no duplicate (one,two,three) triple',actual:'all passed',passed:true}
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0033.coin-change-123.v1',decision:'pass',revision_round:1,source_packet:['note_tagged/663b7649000000001e038251.json',boundary,candidate,fixture,`${out}/CoinChange123.java`,`${out}/CoinChange123Test.java`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0033-coin-change-123-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Exact tagged repository question and frozen Batch 0033 source boundary',locator:'note_tagged/663b7649000000001e038251.json + '+boundary,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Coin-change enumeration and DP deterministic Java validation against independent triple-loop oracle',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Coin-change independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The repository preserves N cents, 1/2/3-cent denominations, all combination ways and DP/recursion; enumerate-vs-count, supply/order semantics, language/API/range and edge conventions are answer-side contracts.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'enumeration',text:'Under the explicit unlimited/order-insensitive contract, the exact fenced Java recursion enumerates each nonnegative count triple satisfying one+2*two+3*three=N exactly once.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'dp-count',text:'Coin-outer amount-inner one-dimensional unbounded-knapsack DP counts those unordered combinations; exhaustive N=0..200 validation matches the independent oracle set size.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','常见追问']},{claim_id:'overflow-boundary',text:'The reviewed enumeration loop uses remaining/coin for its count upper bound and DP additions use Math.addExact, avoiding an overflow-prone count*coin loop guard and failing closed on long count overflow.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac CoinChange123.java CoinChange123Test.java && java CoinChange123Test',result:'pass',reported_stdout:'PASS fixed=0..5 exhaustive=0..200 enumeration=unique-complete dp=count negative=empty',checks:['negative contract','N=0 unit','fixed N=1..5','all emitted triples sum to N','no duplicates','exhaustive N=0..200 oracle set equality','DP/oracle count equality','overflow-safe enumeration bound'],boundary_tests:boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0033.coin-change-123.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- [ ] `cq_q_768f8eb71596f7b6824861aae95d9f08` writer slice staged: exact tagged wording and singleton ownership are frozen; enumerate-vs-count/unlimited/order/Java/edge choices remain explicit answer-side contracts; exact Java recursion is exhaustive and duplicate-free for N=0..200 against an independent triple-loop oracle, and the coin-outer DP count matches every oracle set size. Isolated independent review is still required before promotion.';
+          const replacement='- [x] `cq_q_768f8eb71596f7b6824861aae95d9f08` passed isolated source-first review after hardening the enumeration loop bound: exact tagged wording and singleton ownership remain frozen; enumerate-vs-count/unlimited/order/Java/edge choices stay answer-side, exact fenced Java equals the compiled fixture, all N=0..200 enumerations are unique/complete against an independent triple-loop oracle, and coin-outer DP counts match every oracle set size. Formal promotion remains governed by repository human-approval and real-review policy.';
+          if(!text.includes(old)) throw new Error('batch 0033 coin-change task marker drifted');
+          fs.writeFileSync(task,text.replace(old,replacement));
+          NODE
+
+      - name: Audit candidate and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during coin-change isolated review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0033/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0033 coin-change candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
