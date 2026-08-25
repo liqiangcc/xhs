@@ -63,3 +63,12 @@
 - Not preserved by the repository source and therefore answer-side contracts only: whether "all combinations" means enumerate combinations or return only their count, whether coin supply is unlimited, whether order matters, the programming language/API, N's range, the N=0 convention, negative-input behavior, and output ordering.
 - Candidate policy for this slice: treat coin supply as unlimited and order-insensitive; enumerate each combination as counts of 1/2/3-cent coins, return one empty combination for N=0 and none for N<0; additionally give a combination-count DP because the source explicitly mentions DP. Java 17 syntax is an answer-side implementation choice and the exact displayed code is compiled on JDK 21.
 - Promotion remains blocked until an isolated independent reviewer verifies exact source boundaries, enumeration uniqueness/completeness, DP combination semantics versus permutation overcounting, exact fenced-code execution, evidence, and repository gates.
+
+## cq_q_779e5c61c5f999e26fabf2ab777035b1
+
+- Stronger raw OCR source: `note_img_txt/67ee3c15000000001c0327c9.txt` preserves `sql题找出成绩前十的学生`.
+- Tagged projection: `note_tagged/67ee3c15000000001c0327c9.json` preserves `SQL：找出成绩排名前十的学生？`.
+- Source-preserved facts: this is an SQL task asking for the students whose grades/scores are in the top ten; the tagged projection classifies it as MySQL practice and carries SQL/LIMIT entities.
+- Not preserved by either source: table/column names, whether each student has one score or many course-grade rows, the exact ranking metric, whether "top ten" means exactly ten rows or top-ten rank levels including ties, tie-break policy, NULL/no-score behavior, output columns, MySQL version, and index/schema constraints.
+- Candidate policy for this slice: use `students(student_id,name)` plus exactly one non-NULL final row `scores(student_id,score)` per scored student; interpret top ten as at most ten rows, sort by score descending and student_id ascending for deterministic tie breaking, and exclude students without a score via INNER JOIN. The primary query uses portable MySQL LIMIT syntax; window-function and multi-course aggregation variants remain explicit follow-ups rather than recovered requirements.
+- Promotion remains blocked until isolated independent review verifies source boundaries, deterministic tie behavior, exact SQL execution against fixtures, alternatives for ties/multiple grades, evidence, and repository gates.
