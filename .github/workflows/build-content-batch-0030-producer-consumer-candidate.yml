@@ -103,7 +103,7 @@ jobs:
           public final class ProducerConsumerDemo {
               private record Message(int value, boolean stop) {
                   static Message item(int value) { return new Message(value, false); }
-                  static Message stop() { return new Message(0, true); }
+                  static Message stopMessage() { return new Message(0, true); }
               }
 
               public record Result(List<Integer> consumed, int stopMessages) {}
@@ -134,7 +134,7 @@ jobs:
                               queue.put(Message.item(value));
                           }
                           for (int c = 0; c < consumerCount; c++) {
-                              queue.put(Message.stop());
+                              queue.put(Message.stopMessage());
                           }
                           return null;
                       });
@@ -209,7 +209,7 @@ jobs:
           public final class ProducerConsumerDemo {
               private record Message(int value, boolean stop) {
                   static Message item(int value) { return new Message(value, false); }
-                  static Message stop() { return new Message(0, true); }
+                  static Message stopMessage() { return new Message(0, true); }
               }
               public record Result(List<Integer> consumed, int stopMessages) {}
 
@@ -231,7 +231,7 @@ jobs:
                       }
                       Future<Void> producer = pool.submit(() -> {
                           for (int value = 1; value <= itemCount; value++) queue.put(Message.item(value));
-                          for (int c = 0; c < consumerCount; c++) queue.put(Message.stop());
+                          for (int c = 0; c < consumerCount; c++) queue.put(Message.stopMessage());
                           return null;
                       });
                       producer.get(5, TimeUnit.SECONDS);
