@@ -1,0 +1,48 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_7064238087ed7b61ccadf6683e6d2915",
+  "result": "pass",
+  "validated_at": "2026-08-25",
+  "command": "javac MaxAverageSubtree.java MaxAverageSubtreeTest.java && java MaxAverageSubtreeTest; independent MaxAverageSubtreeReviewer",
+  "stdout": "PASS single-negative=yes all-negative=yes mixed=yes null-contract=yes exact-fraction=yes random-oracle=3000; PASS reviewer-negative-chain=yes random-oracle=5000 exact-fractions=yes rooted-subtrees=enumerated",
+  "checks": [
+    "postorder subtree sum/count",
+    "negative values",
+    "explicit null contract",
+    "exact fraction comparator",
+    "3000 writer oracle trees",
+    "5000 independent reviewer oracle trees"
+  ],
+  "boundary_tests": [
+    {
+      "case": "single negative node",
+      "expected": "its value is the maximum average",
+      "actual": "passed",
+      "passed": true
+    },
+    {
+      "case": "all-negative tree",
+      "expected": "best existing subtree, never synthetic zero",
+      "actual": "passed",
+      "passed": true
+    },
+    {
+      "case": "rooted-subtree enumeration",
+      "expected": "optimized postorder matches repeated-subtree oracle",
+      "actual": "3000 writer + 5000 reviewer generated trees passed",
+      "passed": true
+    },
+    {
+      "case": "exact fraction comparison",
+      "expected": "negative/equal and large cross-products ordered without long multiplication overflow",
+      "actual": "BigInteger comparator checks passed",
+      "passed": true
+    },
+    {
+      "case": "null input",
+      "expected": "explicitly rejected by answer-side contract",
+      "actual": "IllegalArgumentException verified",
+      "passed": true
+    }
+  ]
+}
