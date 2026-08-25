@@ -1,0 +1,183 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_768f8eb71596f7b6824861aae95d9f08",
+  "candidate_sha256": "a5c1596f6b91e942ea2f721b8bf45293d9271956980a51c57411afc0ec9d52c7",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "content-batch-0033-coin-change-123-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Exact tagged repository question and frozen Batch 0033 source boundary",
+      "locator": "note_tagged/663b7649000000001e038251.json + review/content_build/answer_batch_0033/source_boundary_audit.md",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Coin-change enumeration and DP deterministic Java validation against independent triple-loop oracle",
+      "locator": "review/content_build/answer_batch_0033/cq_q_768f8eb71596f7b6824861aae95d9f08/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Coin-change independent source-first review",
+      "locator": "review/content_build/answer_batch_0033/cq_q_768f8eb71596f7b6824861aae95d9f08/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository preserves N cents, 1/2/3-cent denominations, all combination ways and DP/recursion; enumerate-vs-count, supply/order semantics, language/API/range and edge conventions are answer-side contracts.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "enumeration",
+      "text": "Under the explicit unlimited/order-insensitive contract, the exact fenced Java recursion enumerates each nonnegative count triple satisfying one+2*two+3*three=N exactly once.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "dp-count",
+      "text": "Coin-outer amount-inner one-dimensional unbounded-knapsack DP counts those unordered combinations; exhaustive N=0..200 validation matches the independent oracle set size.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "overflow-boundary",
+      "text": "The reviewed enumeration loop uses remaining/coin for its count upper bound and DP additions use Math.addExact, avoiding an overflow-prone count*coin loop guard and failing closed on long count overflow.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "768f8eb71596f7b6824861aae95d9f08",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac CoinChange123.java CoinChange123Test.java && java CoinChange123Test",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=0..5 exhaustive=0..200 enumeration=unique-complete dp=count negative=empty",
+    "checks": [
+      "negative contract",
+      "N=0 unit",
+      "fixed N=1..5",
+      "all emitted triples sum to N",
+      "no duplicates",
+      "exhaustive N=0..200 oracle set equality",
+      "DP/oracle count equality",
+      "overflow-safe enumeration bound"
+    ],
+    "boundary_tests": [
+      {
+        "case": "N=-1",
+        "expected": "empty enumeration and DP count 0 by explicit answer contract",
+        "actual": "passed",
+        "passed": true
+      },
+      {
+        "case": "N=0",
+        "expected": "one empty combination and DP count 1",
+        "actual": "passed",
+        "passed": true
+      },
+      {
+        "case": "N=4",
+        "expected": "four unordered combinations",
+        "actual": "4",
+        "passed": true
+      },
+      {
+        "case": "N=0..200",
+        "expected": "enumeration set equals independent triple-loop oracle",
+        "actual": "all passed",
+        "passed": true
+      },
+      {
+        "case": "N=0..200",
+        "expected": "DP count equals oracle set size",
+        "actual": "all passed",
+        "passed": true
+      },
+      {
+        "case": "enumeration uniqueness",
+        "expected": "no duplicate (one,two,three) triple",
+        "actual": "all passed",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0033-coin-change-20260826-v1",
+    "review_version": "batch-0033.coin-change-123.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The exact repository source preserves N cents, denominations 1/2/3, all combination ways and an explicit DP/recursion hint; it does not preserve enumerate-versus-count semantics, supply limits, order semantics, programming language/API, N range or edge conventions.",
+      "The candidate makes unlimited supply, order-insensitive combinations, Java implementation, N=0 empty-combination and N<0 empty-result behavior explicit answer-side contracts rather than recovered source facts.",
+      "The exact displayed Java fence is byte-for-byte identical to the compiled fixture after the writer remediation; the recursion fixes denomination order and enumerates count triples rather than ordered pick sequences.",
+      "For every N from 0 through 200, enumeration is duplicate-free and exactly matches an independently implemented triple-loop oracle over nonnegative 1/2/3-cent counts.",
+      "For every N from 0 through 200, the coin-outer amount-inner unbounded-knapsack DP count equals the independent oracle set size, demonstrating combination rather than permutation semantics.",
+      "The enumeration bound uses remaining/coin rather than count*coin, avoiding an avoidable int multiplication overflow in the loop condition; DP addition uses Math.addExact to fail closed on count overflow.",
+      "The answer explains N=0, negative input, output-sensitive O(K) enumeration cost, O(N) DP cost, and the limited-supply / ordered-sequence variants without fabricating project experience.",
+      "No placeholder implementation, uncovered source variant, duplicate enumeration behavior or material unsupported claim remains in this candidate."
+    ]
+  }
+}
