@@ -1,0 +1,292 @@
+name: Build Content Batch 0031 Longest Common Substring Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0031-longest-common-substring-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-longest-common-substring-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6f2552a802a396a84447c14cfd6e326f
+  SOURCE_QID: 6f2552a802a396a84447c14cfd6e326f
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify singleton source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/68109f31000000002202d190.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!=='算法：最长公共子串 (DP)'||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('tagged source drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0031/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!=='算法：最长公共子串 (DP)') throw new Error('source context missing');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and deterministic oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6f2552a802a396a84447c14cfd6e326f","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 算法：最长公共子串（DP）
+
+          ## 核心结论
+
+          最长公共**子串**要求连续。最直接的 DP 定义是：`dp[i][j]` 表示 `a[i-1]` 与 `b[j-1]` 作为结尾时，最长公共子串的长度。若两个字符相等，当前连续段只能从左上角续上来，所以 `dp[i][j] = dp[i-1][j-1] + 1`；若不相等，连续性被打断，必须置 `0`。答案不是某一个固定终点，而是所有 `dp[i][j]` 的最大值。
+
+          这和“最长公共子序列”最容易混淆：子序列允许跳过字符，失配时会比较上方/左方；公共子串不允许跳过，失配就归零。
+
+          ## 1 分钟版
+
+          - 状态要定义成“**以这两个位置结尾**的公共连续段长度”，这样连续性自然落在左上角依赖上。
+          - `a[i-1] == b[j-1]` 时，`dp = 左上角 + 1`；否则 `dp = 0`。
+          - 每个位置都可能是最长公共子串的结尾，所以遍历过程中维护全局最大值和在 `a` 中的结束位置。
+          - 二维表只依赖上一行左上角，可以压成一维；一维时 `j` 必须从右往左更新，否则 `dp[j-1]` 会被本轮覆盖。
+          - 时间复杂度 `O(mn)`；二维空间 `O(mn)`，压缩后空间 `O(n)`，通常让较短字符串作为第二维可进一步降低空间。
+
+          ## 3 分钟版
+
+          设字符串长度分别为 `m`、`n`。定义：
+
+          `dp[i][j] = a[0..i-1] 与 b[0..j-1] 中，以 a[i-1]、b[j-1] 结尾的最长公共子串长度`。
+
+          转移只有两种：
+
+          - 若 `a[i-1] == b[j-1]`：`dp[i][j] = dp[i-1][j-1] + 1`；
+          - 否则：`dp[i][j] = 0`。
+
+          边界是第 0 行、第 0 列全为 0。遍历所有状态时维护 `best` 和 `endExclusive`，最终一个最长公共子串就是 `a.substring(endExclusive-best, endExclusive)`。如果存在多个同长度最优解，本实现返回扫描过程中首次达到该最大长度的一个；题源没有规定 tie-break，因此不额外编造“字典序最小”等规则。
+
+          ```java
+          public final class LongestCommonSubstring {
+              private LongestCommonSubstring() {}
+
+              public record Result(int length, String substring) {}
+
+              public static Result solve(String a, String b) {
+                  if (a == null || b == null) {
+                      throw new IllegalArgumentException("inputs must be non-null");
+                  }
+                  if (b.length() > a.length()) {
+                      Result swapped = solve(b, a);
+                      return new Result(swapped.length(), swapped.substring());
+                  }
+
+                  int[] dp = new int[b.length() + 1];
+                  int best = 0;
+                  int endExclusive = 0;
+                  for (int i = 1; i <= a.length(); i++) {
+                      for (int j = b.length(); j >= 1; j--) {
+                          if (a.charAt(i - 1) == b.charAt(j - 1)) {
+                              dp[j] = dp[j - 1] + 1;
+                              if (dp[j] > best) {
+                                  best = dp[j];
+                                  endExclusive = i;
+                              }
+                          } else {
+                              dp[j] = 0;
+                          }
+                      }
+                  }
+                  return new Result(best, a.substring(endExclusive - best, endExclusive));
+              }
+          }
+          ```
+
+          上面把较短字符串放在 DP 数组维度上，所以额外空间是 `O(min(m,n))`。交换两个输入不会改变最长长度；若题目要求返回“原始第一个字符串中的某个特定最优子串”，就不能在未定义 tie-break 时随意交换，需要固定扫描顺序并明确规则。
+
+          ## 关键细节
+
+          - **为什么失配归零**：状态表示“以当前字符结尾的连续段”，当前字符一旦不同，就不存在长度大于 0 的公共连续后缀。
+          - **为什么不能取 `max(dp[i-1][j], dp[i][j-1])`**：那会允许跳过字符，求成最长公共子序列。
+          - **一维压缩方向**：`dp[j]` 新值需要上一行的 `dp[j-1]`；因此从右往左更新，保证左侧还是上一行旧值。
+          - **空串**：任一输入为空时循环不执行，返回长度 0 和空串。
+          - **重复字符**：例如 `aaaa` 与 `baaa`，连续状态会自然得到 3，不需要去重。
+          - **多个最优解**：题源没给返回规则；工程 API 若必须稳定返回某一个，应明确“第一个出现”“第二个字符串最早位置”或字典序等 tie-break。
+          - **字符语义**：示例使用 Java `char`，即 UTF-16 code unit。若题目把 Unicode code point 或用户感知字符当作一个字符，应先转换表示后再做同样的 DP，不能把 `char` 语义冒充成所有文本语义。
+
+          ## 原理机制
+
+          这个 DP 的本质是枚举所有可能的“共同结尾”。任何公共子串都有一个在 `a` 中的结束位置和一个在 `b` 中的结束位置；若末尾字符相同，它去掉最后一个字符后一定对应左上角状态，因此转移没有遗漏。反过来，左上角已匹配的连续段加上当前相等字符仍然连续，所以转移也不会产生非法答案。对所有结尾取最大值，就覆盖了所有公共子串。
+
+          一维压缩只改变存储，不改变状态依赖。若从左往右更新，`dp[j-1]` 已经变成本行状态，相当于把同一行结果错误地接到当前字符上；从右往左可以保持“读取旧行、写入新行”的不变量。
+
+          ## 项目经验版
+
+          仓库来源只保留算法题，没有真实业务输入规模、文本编码或线上性能数据，因此不虚构项目经历。实际使用时先确认字符串最大长度和字符语义：长度较小时 `O(mn)` DP 简单可靠；若文本非常长、需要大量重复查询或只求长度/匹配位置，才有理由评估 suffix automaton、suffix array 等更复杂方案，并用真实数据验证收益。
+
+          ## 常见追问
+
+          - 问：最长公共子串和最长公共子序列差在哪？答：子串必须连续，所以失配时当前状态归零；子序列允许跳过字符，通常会从上方或左方状态取最大值。
+          - 问：为什么答案要取所有状态最大值？答：最长公共子串可能在任意两个位置结束，`dp[m][n]` 只代表恰好以两个字符串最后字符结尾的情况。
+          - 问：一维数组为什么倒序？答：当前 `dp[j]` 依赖上一行的 `dp[j-1]`；倒序能保证 `dp[j-1]` 在读取时还没被本轮覆盖。
+          - 问：能不能做到低于 `O(mn)`？答：可以针对更大规模考虑后缀自动机等结构，但复杂度、实现成本和字符集处理都会增加；题源只要求 DP，不应把另一套算法当作必需答案。
+          - 问：如果有多个同长度答案返回哪个？答：先看接口契约；题源没定义时只承诺返回任意一个最长公共子串，不额外假设 tie-break。
+          - 问：为什么不用滑动窗口？答：这里没有一个已知窗口长度，也没有单调条件能让普通双指针只向前移动就排除其它对齐；DP 正是在同时覆盖不同结束位置的匹配长度。
+
+          ## 易错点
+
+          - 把“子串”写成“子序列”，失配时仍取上/左最大值。
+          - 只返回 `dp[m][n]`，漏掉在中间位置结束的最优解。
+          - 一维压缩时从左向右更新，读到本轮已覆盖的 `dp[j-1]`。
+          - 只记录最大长度，不保存结束位置，却又声称能返回具体子串。
+          - 没定义空串、null、多个最优解和字符编码边界。
+          EOF
+
+          cat > "$out/LongestCommonSubstring.java" <<'JAVA'
+          public final class LongestCommonSubstring {
+              private LongestCommonSubstring() {}
+
+              public record Result(int length, String substring) {}
+
+              public static Result solve(String a, String b) {
+                  if (a == null || b == null) throw new IllegalArgumentException("inputs must be non-null");
+                  if (b.length() > a.length()) {
+                      Result swapped = solve(b, a);
+                      return new Result(swapped.length(), swapped.substring());
+                  }
+                  int[] dp = new int[b.length() + 1];
+                  int best = 0;
+                  int endExclusive = 0;
+                  for (int i = 1; i <= a.length(); i++) {
+                      for (int j = b.length(); j >= 1; j--) {
+                          if (a.charAt(i - 1) == b.charAt(j - 1)) {
+                              dp[j] = dp[j - 1] + 1;
+                              if (dp[j] > best) {
+                                  best = dp[j];
+                                  endExclusive = i;
+                              }
+                          } else {
+                              dp[j] = 0;
+                          }
+                      }
+                  }
+                  return new Result(best, a.substring(endExclusive - best, endExclusive));
+              }
+          }
+          JAVA
+
+          cat > "$out/LongestCommonSubstringTest.java" <<'JAVA'
+          import java.util.Random;
+
+          public final class LongestCommonSubstringTest {
+              private static void expect(String a, String b, int length) {
+                  var result = LongestCommonSubstring.solve(a, b);
+                  if (result.length() != length) throw new AssertionError(a + " / " + b + " => " + result);
+                  if (result.substring().length() != length) throw new AssertionError("substring length drift: " + result);
+                  if (!a.contains(result.substring()) || !b.contains(result.substring())) throw new AssertionError("not a common substring: " + result);
+              }
+
+              private static int bruteLength(String a, String b) {
+                  int best = 0;
+                  for (int i = 0; i < a.length(); i++) {
+                      for (int j = 0; j < b.length(); j++) {
+                          int k = 0;
+                          while (i + k < a.length() && j + k < b.length() && a.charAt(i + k) == b.charAt(j + k)) k++;
+                          if (k > best) best = k;
+                      }
+                  }
+                  return best;
+              }
+
+              private static String randomString(Random random, int length) {
+                  String alphabet = "abc";
+                  StringBuilder sb = new StringBuilder(length);
+                  for (int i = 0; i < length; i++) sb.append(alphabet.charAt(random.nextInt(alphabet.length())));
+                  return sb.toString();
+              }
+
+              public static void main(String[] args) {
+                  expect("", "abc", 0);
+                  expect("abc", "xyz", 0);
+                  expect("abcdef", "zabcf", 3);
+                  expect("aaaa", "baaa", 3);
+                  expect("same", "same", 4);
+                  expect("abXYcd", "zzabqqcd", 2);
+                  try {
+                      LongestCommonSubstring.solve(null, "x");
+                      throw new AssertionError("null must be rejected");
+                  } catch (IllegalArgumentException expected) {}
+
+                  Random random = new Random(0x6f2552a8L);
+                  int cases = 3000;
+                  for (int t = 0; t < cases; t++) {
+                      String a = randomString(random, random.nextInt(8));
+                      String b = randomString(random, random.nextInt(8));
+                      int expected = bruteLength(a, b);
+                      var actual = LongestCommonSubstring.solve(a, b);
+                      if (actual.length() != expected) throw new AssertionError("oracle mismatch: " + a + " / " + b + " expected=" + expected + " actual=" + actual);
+                      if (!a.contains(actual.substring()) || !b.contains(actual.substring())) throw new AssertionError("oracle substring invalid");
+                  }
+                  System.out.println("PASS fixed=6 random-oracle=3000 empty=yes no-match=yes repeated=yes tie=yes null=rejected compression=reverse-j");
+              }
+          }
+          JAVA
+
+          javac "$out/LongestCommonSubstring.java" "$out/LongestCommonSubstringTest.java"
+          stdout="$(java -cp "$out" LongestCommonSubstringTest)"
+          test "$stdout" = 'PASS fixed=6 random-oracle=3000 empty=yes no-match=yes repeated=yes tie=yes null=rejected compression=reverse-j'
+
+          STDOUT="$stdout" node - <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const out=`review/content_build/answer_batch_0031/${cid}`;
+          fs.writeFileSync(path.join(out,'source_boundary.json'),JSON.stringify({schema_version:'answer_source_boundary.v1',canonical_id:cid,checked_at:'2026-08-25',source_question_id:qid,source_wording:'算法：最长公共子串 (DP)',preserved:['longest common substring','dynamic programming'],not_preserved:['input API','null policy','tie-break rule','Unicode character model','maximum input length','required return of substring versus length'],answer_side_contract:{input:'two non-null Java strings',output:'length plus one longest common substring',tie_break:'any maximum is acceptable; implementation keeps first strictly improving maximum in its scan order',character_model:'Java UTF-16 char/code-unit semantics',algorithm:'O(m*n) DP compressed to O(min(m,n)) storage'}},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac LongestCommonSubstring.java LongestCommonSubstringTest.java && java LongestCommonSubstringTest',stdout:process.env.STDOUT,checks:['empty input','no common substring','known length-3 match','repeated characters','identical strings','multiple equal maxima','null rejection','3000 deterministic brute-force oracle comparisons'],boundary_tests:[{case:'empty vs abc',expected:'0 and empty substring',actual:'pass',passed:true},{case:'abcdef vs zabcf',expected:'length 3',actual:'3',passed:true},{case:'3000 deterministic strings length 0..7 over abc',expected:'DP length equals brute-force oracle and returned text occurs in both inputs',actual:'all passed',passed:true}]},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Tagged longest-common-substring DP question',locator:`note_tagged/68109f31000000002202d190.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'Longest-common-substring deterministic brute-force oracle',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The preserved source requires longest common substring using DP but does not define API, tie-break, character encoding semantics or input limits.',source_ids:['repository-source'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'dp-recurrence',text:'For the declared Java contract, the compressed DP returns a valid common substring whose length matches a direct brute-force oracle across fixed boundaries and 3000 deterministic random cases.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Guard repository consistency and commit from stable head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during longest-common-substring build; discard local candidate and retry later."; exit 0; fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0031/$CANONICAL_ID"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0031 longest-common-substring candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
