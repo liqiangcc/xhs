@@ -1,0 +1,131 @@
+name: Revise Content Batch 0030 Round Robin Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/revise-content-batch-0030-round-robin-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-round-robin-revision
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6acb0854fc797afd83feb310c59176e9
+  CANDIDATE_BLOB_SHA: 231b3e209ac724b0ff9aeb5717c062a1579ebf2e
+
+jobs:
+  revise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Guard reviewed candidate and source fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          test -f "$out/RoundRobinPrinter.java"
+          test -f "$out/RoundRobinPrinterTest.java"
+          grep -Fq 'next > max 时也要 `notifyAll()` 后退出，避免其他线程还留在 wait set 里无法结束' "$candidate"
+          grep -Fq '结束分支再次 `notifyAll()`，所有线程醒来后看到 `next > maxValue` 并退出' "$candidate"
+          grep -Fq '最后一个线程退出时没有唤醒其他等待线程，导致程序无法完整结束' "$candidate"
+
+      - name: Correct termination reasoning and implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          let text=fs.readFileSync(candidate,'utf8');
+          const replacements=[
+            [
+              '- `next > max` 时也要 `notifyAll()` 后退出，避免其他线程还留在 wait set 里无法结束。',
+              '- `next > max` 时可以直接退出：最后一次成功输出已经在推进 `next` 后执行 `notifyAll()`；尚未进入等待的线程随后也会直接观察到结束条件。不要把“结束分支再唤醒一次”误说成这个协议的必要条件。'
+            ],
+            [
+              '                if (next > maxValue) {\n                    monitor.notifyAll();\n                    return;\n                }',
+              '                if (next > maxValue) {\n                    return;\n                }'
+            ],
+            [
+              '- **终止路径**：最后一个数字输出后，其他线程可能仍在 `wait()`。结束分支再次 `notifyAll()`，所有线程醒来后看到 `next > maxValue` 并退出。',
+              '- **终止路径**：最后一个数字输出后，该成功输出路径已经执行 `notifyAll()`；等待线程醒来并重新获得 monitor 后会看到 `next > maxValue` 并退出。尚未进入等待的线程之后获取 monitor 时也会直接退出，因此这个具体协议不需要在结束分支额外 `notifyAll()`。'
+            ],
+            [
+              '- 最后一个线程退出时没有唤醒其他等待线程，导致程序无法完整结束。',
+              '- 忘记在每次成功推进 `next` 后唤醒等待线程，可能让仍在 wait set 中的线程无法继续；不要把“状态推进后的唤醒”和“结束分支额外唤醒”混为一谈。'
+            ]
+          ];
+          for(const [from,to] of replacements){
+            if(!text.includes(from)) throw new Error(`candidate replacement anchor missing: ${from}`);
+            text=text.replace(from,to);
+          }
+          fs.writeFileSync(candidate,text);
+
+          const source=`review/content_build/answer_batch_0030/${cid}/RoundRobinPrinter.java`;
+          let java=fs.readFileSync(source,'utf8');
+          const oldBlock='                if (next > maxValue) {\n                    monitor.notifyAll();\n                    return;\n                }';
+          const newBlock='                if (next > maxValue) {\n                    return;\n                }';
+          if(!java.includes(oldBlock)) throw new Error('RoundRobinPrinter termination block drifted');
+          fs.writeFileSync(source,java.replace(oldBlock,newBlock));
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let taskText=fs.readFileSync(task,'utf8');
+          const note='- `cq_q_6acb0854fc797afd83feb310c59176e9` revision 1 corrects the termination explanation: the final successful state transition already notifies waiters, so an extra `notifyAll()` in the terminal branch is not required by this protocol; the Java fixture is rerun before independent re-review.';
+          if(!taskText.includes(note)) fs.writeFileSync(task,(taskText.endsWith('\n')?taskText:taskText+'\n')+note+'\n');
+          NODE
+
+      - name: Rerun concurrency fixture and repository regression gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          javac "$out/RoundRobinPrinter.java" "$out/RoundRobinPrinterTest.java"
+          test "$(java -cp "$out" RoundRobinPrinterTest)" = 'PASS rounds=202 exact-sequence=yes round-robin-ownership=yes no-duplicates=yes termination=yes invalid-args=yes'
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Commit revision only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during round-robin revision: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0030/$CANONICAL_ID/RoundRobinPrinter.java" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: correct batch 0030 round-robin termination reasoning'
+          git push origin "HEAD:$CONTENT_BRANCH"
