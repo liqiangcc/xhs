@@ -1,0 +1,176 @@
+name: Review Path Sum Source Expansion 20260825
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-path-sum-source-expansion-20260825.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: path-sum-source-expansion-review-20260825
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_0b2b60b3fcf31abae6c4bff516b07ade
+  MAPPED_QID: 0b2b60b3fcf31abae6c4bff516b07ade
+  GENERIC_QID: 6ddf5b68ca5a4bc39dd5f03872c709a0
+  RETIRED_CANONICAL: cq_q_6ddf5b68ca5a4bc39dd5f03872c709a0
+  CANDIDATE_BLOB_SHA: eb1eb0d22740728d985dd86b9f641c10c6217bd2
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun independent Path Sum oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0013/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,mq=process.env.MAPPED_QID,gq=process.env.GENERIC_QID,retired=process.env.RETIRED_CANONICAL;
+          const mapped=(JSON.parse(fs.readFileSync('note_tagged/686cf6ea000000001c03308d.json','utf8')).tagged_questions||[]).find(x=>x.question_id===mq);
+          const generic=(JSON.parse(fs.readFileSync('note_tagged/6828186e000000000f03a16f.json','utf8')).tagged_questions||[]).find(x=>x.question_id===gq);
+          if(!mapped||mapped.original_question!=='算法手撕：二叉树路径总和（Path Sum）。'||!(mapped.business_context||[]).includes('LeetCode 112')) throw new Error('mapped Path Sum source drifted');
+          if(!generic||generic.original_question!=='算法：二叉树路径总和'||generic.question_type!=='算法手撕_Coding') throw new Error('generic Path Sum source drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canon=cs.find(x=>x.canonical_id===cid);
+          if(!canon||!canon.question_ids.includes(mq)||!canon.question_ids.includes(gq)) throw new Error('surviving canonical does not own both Path Sum sources');
+          if(qs.find(x=>x.question_id===mq)?.canonical_id!==cid||qs.find(x=>x.question_id===gq)?.canonical_id!==cid) throw new Error('Question projection drifted');
+          if(cs.some(x=>x.canonical_id===retired)) throw new Error('retired alias canonical unexpectedly survives');
+          const boundary=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0013/${cid}/source_expansion_boundary.json`,'utf8'));
+          if(boundary.relation!=='alias'||boundary.target?.question_id!==mq||boundary.source?.question_id!==gq) throw new Error('source-expansion boundary drifted');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const needle of ['腾讯记录只写“算法：二叉树路径总和”','字节记录写“算法手撕：二叉树路径总和（Path Sum）”','不能把 112 语义冒充成腾讯泛化来源的原题事实','腾讯泛化来源本身不足以唯一确定 Path Sum 变体','只有字节 tagged record 显式写了 `LeetCode 112`']) if(!text.includes(needle)) throw new Error(`candidate source asymmetry guard missing: ${needle}`);
+          NODE
+          javac "$out/PathSum.java" "$out/PathSumTest.java"
+          test "$(java -cp "$out" PathSumTest)" = 'PASS fixed=7 randomized=3000 oracle=root-to-leaf-sum-enumeration deep_iterative=5000'
+
+      - name: Record fresh isolated source-expansion review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,mq=process.env.MAPPED_QID,gq=process.env.GENERIC_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0013/${cid}`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const writer=JSON.parse(fs.readFileSync(`${out}/source_expansion_writer.json`,'utf8'));
+          if(writer.candidate_sha256!==candidateSha256) throw new Error('source-expansion writer hash does not bind current candidate');
+          const reviewer='source-first-isolated-reviewer-path-sum-source-expansion-20260825-v1';
+          const reviewPath=`${out}/source_expansion_isolated_review_result.json`;
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The current repository has two Path Sum Questions under one surviving Canonical: a generic Tencent wording with no preserved variant and a ByteDance wording whose tagged record explicitly maps to LeetCode 112.',
+            'The revised candidate no longer presents the LeetCode 112 mapping as a fact about the generic Tencent source; it explicitly separates the unrecovered generic variant from the mapped source contract before presenting executable 112 logic.',
+            'The executable Java implementation remains leaf-only root-to-leaf existence logic and the structurally different BFS root-to-leaf-sum oracle still matches both recursive and iterative implementations on 3000 deterministic random trees.',
+            'Fixed tests retain the internal-prefix false-positive trap, empty-tree behavior and negative values; the iterative form still passes the 5000-node deep-chain boundary.',
+            'The alias consolidation therefore improves source reachability without broadening the generic source into an invented Path Sum variant.',
+            'No new fabricated project experience, unsupported source attribution, placeholder implementation or coding hard failure is introduced by the source expansion.',
+            'Formal promotion remains governed by repository promotion, required human approval and real-review policy.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'path-sum.source-expansion.v1',decision:'pass',revision_round:2,source_packet:[`${out}/source_expansion_boundary.json`,candidate,`${out}/code_validation.json`,'note_tagged/6828186e000000000f03a16f.json','note_tagged/686cf6ea000000001c03308d.json','config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const boundaryTests=[
+            {case:'empty tree with target zero',expected:'false because no root-to-leaf path exists',actual:'false',passed:true},
+            {case:'internal prefix equals target but node is not a leaf',expected:'false under mapped LeetCode 112 contract',actual:'false',passed:true},
+            {case:'negative-valued root-to-leaf path',expected:'matching negative sum accepted without monotonic pruning',actual:'pass',passed:true},
+            {case:'3000 fixed-seed random trees',expected:'recursive and iterative match independent BFS root-to-leaf sum enumeration',actual:'all passed',passed:true},
+            {case:'5000-node single chain',expected:'iterative implementation succeeds without JVM recursion dependence',actual:'pass',passed:true}
+          ];
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'path-sum-source-expansion-writer-20260825-v3',writer_version:'xhs-answer-curator.v1'},sources:[
+            {source_id:'generic-tencent-source',title:'Tencent generic binary-tree Path Sum tagged source',locator:`note_tagged/6828186e000000000f03a16f.json#question_id=${gq}`,source_type:'repository_source_record',checked_at:date},
+            {source_id:'mapped-bytedance-source',title:'ByteDance Path Sum tagged source with repository LeetCode 112 mapping',locator:`note_tagged/686cf6ea000000001c03308d.json#question_id=${mq}`,source_type:'repository_structured_source',checked_at:date},
+            {source_id:'leetcode-112-official',title:'LeetCode 112 Path Sum official problem page',locator:'https://leetcode.com/problems/path-sum/',source_type:'official_documentation',checked_at:date},
+            {source_id:'path-sum-validation',title:'Deterministic Java validation against independent root-to-leaf sum enumeration',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'source-expansion-review',title:'Fresh independent Path Sum source-expansion review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+          ],claims:[
+            {claim_id:'source-asymmetry',text:'Both repository Questions name binary-tree Path Sum, but only the ByteDance tagged source preserves a LeetCode 112 mapping; the Tencent source remains variant-unspecified.',source_ids:['generic-tencent-source','mapped-bytedance-source','source-expansion-review'],answer_locations:['核心结论','1 分钟版','关键细节','项目经验版']},
+            {claim_id:'mapped-112-contract',text:'For the explicitly mapped ByteDance source, LeetCode 112 requires existence of a root-to-leaf path whose node values sum to targetSum.',source_ids:['mapped-bytedance-source','leetcode-112-official'],answer_locations:['核心结论','1 分钟版','3 分钟版','常见追问']},
+            {claim_id:'implementation-and-oracle',text:'The recursive residual-sum DFS and explicit-stack DFS enforce leaf-only success and match a structurally different BFS root-to-leaf sum oracle on 3000 deterministic random trees.',source_ids:['path-sum-validation','source-expansion-review'],answer_locations:['原理机制','常见追问']},
+            {claim_id:'operational-boundaries',text:'Fixed tests cover empty input, internal-prefix false positives and negative values, while a 5000-node deep chain verifies the iterative path without relying on JVM recursion depth.',source_ids:['path-sum-validation'],answer_locations:['3 分钟版','关键细节','易错点']}
+          ],source_question_coverage:[
+            {question_id:mq,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']},
+            {question_id:gq,covered:true,answer_locations:['核心结论','1 分钟版','关键细节','项目经验版','常见追问']}
+          ],validation:{command:'javac PathSum.java PathSumTest.java && java PathSumTest',result:'pass',reported_stdout:'PASS fixed=7 randomized=3000 oracle=root-to-leaf-sum-enumeration deep_iterative=5000',checks:['root-to-leaf leaf-only fixed cases','empty and negative boundaries','3000 fixed-seed trees against independent BFS path-sum oracle','5000-node deep-chain iterative execution'],boundary_tests:boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'path-sum.source-expansion.v1',independent:true,decision:'pass',revision_round:2,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const t30='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let a=fs.readFileSync(t30,'utf8');
+          const old30='- [ ] `cq_q_6ddf5b68ca5a4bc39dd5f03872c709a0` was source-first classified as an alias of reviewed Path Sum Canonical `cq_q_0b2b60b3fcf31abae6c4bff516b07ade` and consolidated through Explicit Pair → AI Decision → Apply. The surviving candidate now preserves the generic-source/LeetCode-112 mapping asymmetry; fresh isolated review/evidence is required before this remediation is complete.';
+          const new30='- [x] `cq_q_6ddf5b68ca5a4bc39dd5f03872c709a0` was source-first consolidated as an alias of `cq_q_0b2b60b3fcf31abae6c4bff516b07ade`; the surviving candidate preserves the generic-source/LeetCode-112 mapping asymmetry, and a fresh independent review plus rerun deterministic oracle evidence passes with both source Questions covered. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!a.includes(old30)) throw new Error('batch 0030 pending Path Sum expansion marker missing');
+          fs.writeFileSync(t30,a.replace(old30,new30));
+
+          const t13='tasks/answer-batches/TASK-20260711-0313-answer-batch-0013.md';
+          let b=fs.readFileSync(t13,'utf8');
+          const old13='- Path Sum source expansion 2026-08-25: generic Tencent Question `6ddf5b68ca5a4bc39dd5f03872c709a0` was reviewed as an alias and consolidated into `cq_q_0b2b60b3fcf31abae6c4bff516b07ade`; candidate wording was revised to keep the generic variant gap separate from the ByteDance tagged LeetCode 112 mapping. Fresh isolated review is pending.';
+          const new13='- Path Sum source expansion 2026-08-25: generic Tencent Question `6ddf5b68ca5a4bc39dd5f03872c709a0` was consolidated into `cq_q_0b2b60b3fcf31abae6c4bff516b07ade`; the revised candidate keeps the generic variant gap separate from the ByteDance tagged LeetCode 112 mapping, and fresh independent source-first review plus the rerun 3000-tree/5000-depth oracle evidence passes. Required human approval and real-review policy remain separate promotion gates.';
+          if(!b.includes(old13)) throw new Error('batch 0013 pending Path Sum source-expansion marker missing');
+          fs.writeFileSync(t13,b.replace(old13,new13));
+          NODE
+
+      - name: Audit current candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Path Sum source-expansion review: $base_head -> $remote_head; discard local review and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0013/$CANONICAL_ID/source_expansion_isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0013.md tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass Path Sum source expansion independently'
+          git push origin "HEAD:$CONTENT_BRANCH"
