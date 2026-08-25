@@ -1,0 +1,159 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_6ae96feaa0e3c49daad3242f62e1cc8e",
+  "candidate_sha256": "82b1fa6c34a70e10ec6fdb7b50f007ea48aa623bd8335763abc3e28d875c7137",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0030-stock-dp-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "source-boundary",
+      "title": "Batch 0030 stock-DP frozen repository source boundary",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6ae96feaa0e3c49daad3242f62e1cc8e/source_boundary.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Stock-DP exhaustive deterministic Java oracle fixture",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6ae96feaa0e3c49daad3242f62e1cc8e/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Stock-DP independent source-first review",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6ae96feaa0e3c49daad3242f62e1cc8e/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The preserved source names a dynamic-programming stock best-time family with basic, unlimited and N-limited variants but does not preserve exact APIs or detailed trade constraints.",
+      "source_ids": [
+        "source-boundary"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "state-machine-recurrence",
+      "text": "Under the explicit candidate contract, the one/unlimited/at-most-k implementations are exhaustively equivalent to legal buy/sell/skip state search on the bounded oracle domain.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "boundary-validation",
+      "text": "The fixture verifies rising/falling/empty/singleton/large-k and invalid-input boundaries plus exhaustive arrays length 0..6 over prices 0..3 for k=0..4.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6ae96feaa0e3c49daad3242f62e1cc8e",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac StockProfitDp.java StockProfitDpTest.java && java StockProfitDpTest",
+    "result": "pass",
+    "reported_stdout": "PASS examples=yes invalid=yes exhaustive-arrays=5461 one=yes unlimited=yes k=yes",
+    "checks": [
+      "standard examples",
+      "edge cases",
+      "large-k degeneration",
+      "invalid inputs",
+      "exhaustive brute-force cross-check of 5461 arrays"
+    ],
+    "boundary_tests": [
+      {
+        "case": "standard [7,1,5,3,6,4]",
+        "expected": "one=5 unlimited=7 atMostK(2)=7",
+        "actual": "one=5 unlimited=7 atMostK(2)=7",
+        "passed": true
+      },
+      {
+        "case": "strictly falling [7,6,4,3,1]",
+        "expected": "one=0",
+        "actual": "one=0",
+        "passed": true
+      },
+      {
+        "case": "large k on [1,2,3,4,5]",
+        "expected": "atMostK(99)=4",
+        "actual": "4",
+        "passed": true
+      },
+      {
+        "case": "exhaustive oracle cross-check",
+        "expected": "all arrays length 0..6 over prices 0..3 match brute force for one/unlimited/k=0..4",
+        "actual": "5461 arrays passed",
+        "passed": true
+      },
+      {
+        "case": "invalid example API inputs",
+        "expected": "null, negative price and negative k rejected",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0030-stock-dp-20260825-v1",
+    "review_version": "batch-0030.stock-dp.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source asks for the stock best-time family solved with dynamic programming and names basic, unlimited and N-limited variants, but does not preserve exact APIs or detailed trading rules.",
+      "The candidate explicitly labels non-negative prices, one-share holding, no fee/cooldown/shorting, basic=at-most-one and N-limited=at-most-k as answer-side assumptions instead of recovered source facts.",
+      "The one-transaction recurrence prevents a post-sale second purchase; the unlimited recurrence uses prior-day cash/hold; the at-most-k recurrence uses oldSell[t-1] -> buy[t] and oldBuy[t] -> sell[t], matching the declared completed-transaction layering.",
+      "The k>=floor(n/2) shortcut is valid under the declared no-fee/no-cooldown/one-share contract and is not generalized to unpreserved variants.",
+      "The displayed Java class compiles and the deterministic fixture checks 5461 arrays of length 0..6 over prices 0..3 against an independent exhaustive buy/sell/skip oracle for one, unlimited and k=0..4, plus named and invalid-input boundaries.",
+      "Complexity, initialization, no-trade behavior and missing-source boundaries are explained; no fabricated project experience, source attribution, placeholder code or coding hard failure remains.",
+      "Formal promotion remains subject to repository promotion and real-review policy."
+    ]
+  }
+}
