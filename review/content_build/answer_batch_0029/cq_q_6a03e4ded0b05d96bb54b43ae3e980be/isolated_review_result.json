@@ -1,0 +1,43 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_6a03e4ded0b05d96bb54b43ae3e980be",
+  "candidate_sha256": "9281b5491258bcaca6a4144b13dad0cfb1b26cc032356022edf3a582229fb7c1",
+  "reviewed_at": "2026-08-25",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0029-avoid-flood-20260825-v1",
+  "review_version": "batch-0029.avoid-flood.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0029/source_boundary_audit.json",
+    "https://leetcode.com/problems/avoid-flood-in-the-city/",
+    "review/candidates/answers/cq_q_6a03e4ded0b05d96bb54b43ae3e980be.md",
+    "review/content_build/answer_batch_0029/cq_q_6a03e4ded0b05d96bb54b43ae3e980be/code_validation.json",
+    "config/answer_quality.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The repository source explicitly identifies LeetCode 1488. The official problem statement defines rain days, mandatory dry-day choices, -1 on rainy output positions, arbitrary valid dry-lake choices and empty output when avoiding flood is impossible; the candidate follows that contract without adding hidden source requirements.",
+    "The candidate state is appropriate: lastRain stores the previous fill time for each lake, while an ordered set stores past dry days that have not yet been assigned. A repeated rain creates a deadline whose required dry day must be strictly after that lake previous rain.",
+    "Using dryDays.higher(prev) selects the earliest feasible unused dry day. Since the set contains only already-observed days, the selected day is automatically before the current rain; choosing the earliest feasible day preserves later dry days for future windows with later left boundaries.",
+    "If higher(prev) does not exist at the repeated-rain deadline, no unused past dry day lies inside the required interval, so that flood is unavoidable and returning an empty array is correct.",
+    "The displayed Java is complete and matches the separately executed implementation. The deterministic simulator validates all-rain/no-repeat, a two-repeat schedule, an impossible crossing-deadline case, unused dry days, an exact one-day window, immediate repeat impossibility and defensive null/negative boundaries.",
+    "The answer explains the one-use resource/window invariant, strict higher-versus-ceiling boundary, O(n log n) TreeSet cost and alternative data-structure tradeoffs. It also keeps production experience explicitly out of scope.",
+    "No uncovered source variant, unsupported factual attribution, coding hard failure or semantic blocker remains at candidate review stage. Formal promotion remains governed by repository promotion and real-review policy."
+  ],
+  "promotion_blockers": [
+    "repository_promotion_and_real_review_policy_not_yet_satisfied"
+  ]
+}
