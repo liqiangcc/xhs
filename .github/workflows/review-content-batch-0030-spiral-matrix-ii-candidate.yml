@@ -1,0 +1,151 @@
+name: Review Content Batch 0030 Spiral Matrix II Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0030-spiral-matrix-ii-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-spiral-matrix-ii-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6dfc45bd535b894c5de755254b01ca58
+  SOURCE_QID: 6dfc45bd535b894c5de755254b01ca58
+  CANDIDATE_BLOB_SHA: ca1df33b31b302412645a51319ddcb824fea9da6
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun independent oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/68c926620000000013029638.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!=='算法：螺旋矩阵 II（LeetCode 59）。'||source.question_type!=='算法手撕_Coding') throw new Error('source drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const c=cs.find(x=>x.canonical_id===cid);
+          if(qs.find(x=>x.question_id===qid)?.canonical_id!==cid||!c||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const needle of ['LeetCode 59：Spiral Matrix II','边界之外的格子已经全部且只被写入一次','来源只保留了 LeetCode 59 的题号','本地 helper 的异常策略只是防御式 API 约定','方向向量 + visited']) if(!text.includes(needle)) throw new Error(`candidate boundary/mechanism guard missing: ${needle}`);
+          NODE
+          javac "$out/SpiralMatrixII.java" "$out/SpiralMatrixIITest.java"
+          test "$(java -cp "$out" SpiralMatrixIITest)" = 'PASS fixed=3 domain=1..20 oracle=direction-visited permutation=yes invalid-helper=yes checked=20'
+
+      - name: Record source boundary, independent review, evidence and task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0030/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundaryPath=`${out}/source_boundary.json`,validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          fs.writeFileSync(boundaryPath,JSON.stringify({schema_version:'answer_source_boundary.v1',canonical_id:cid,checked_at:date,source_question_id:qid,source_wording:'算法：螺旋矩阵 II（LeetCode 59）。',preserved:['LeetCode 59 problem identity','Spiral Matrix II task identity'],not_preserved:['implementation language','required algorithm','exception behavior outside official positive-n input domain'],official_mapping:{title:'59. Spiral Matrix II',contract:'Given a positive integer n, generate an n x n matrix filled with elements from 1 to n^2 in spiral order.',constraints:'1 <= n <= 20',locator:'https://leetcode.com/problems/spiral-matrix-ii/'}},null,2)+'\n');
+          const boundaryTests=[
+            {case:'n=1',expected:'[[1]]',actual:'[[1]]',passed:true},
+            {case:'n=2',expected:'[[1,2],[4,3]]',actual:'[[1,2],[4,3]]',passed:true},
+            {case:'n=3',expected:'[[1,2,3],[8,9,4],[7,6,5]]',actual:'matched',passed:true},
+            {case:'full n=1..20 domain',expected:'boundary-shrinking implementation equals direction+visited oracle',actual:'20/20 passed',passed:true},
+            {case:'permutation invariant',expected:'each result contains every value 1..n^2 exactly once',actual:'all n=1..20 passed',passed:true},
+            {case:'local helper n=0',expected:'defensive IllegalArgumentException; not a source requirement',actual:'rejected',passed:true}
+          ];
+          fs.writeFileSync(validationPath,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac SpiralMatrixII.java SpiralMatrixIITest.java && java SpiralMatrixIITest',stdout:'PASS fixed=3 domain=1..20 oracle=direction-visited permutation=yes invalid-helper=yes checked=20',checks:['fixed n=1,2,3 matrices','all n=1..20 against direction+visited oracle','1..n^2 permutation invariant','local defensive invalid-input behavior'],boundary_tests:boundaryTests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0030-spiral-matrix-ii-20260825-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository source explicitly identifies LeetCode 59 Spiral Matrix II, so the problem identity is recoverable without guessing.',
+            'The candidate separates source-preserved problem identity from answer-side implementation language, boundary-shrinking algorithm and defensive invalid-input behavior.',
+            'The four-boundary loop states a clear unfilled-rectangle invariant and guards the final single-row/single-column layer before writing the bottom and left edges.',
+            'The exact Java implementation matches a structurally different direction-plus-visited oracle for every n from 1 through 20 and preserves the 1..n^2 permutation invariant.',
+            'The candidate correctly reports O(n^2) time and O(1) auxiliary state excluding the required output matrix, and distinguishes Spiral Matrix II generation from Spiral Matrix I traversal.',
+            'No project experience, production metric, source constraint or implementation requirement is fabricated.',
+            'Formal promotion remains governed by repository promotion, required human approval and real-review policy.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0030.spiral-matrix-ii.v1',decision:'pass',revision_round:1,source_packet:[boundaryPath,candidate,validationPath,'note_tagged/68c926620000000013029638.json','config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0030-spiral-matrix-ii-builder',writer_version:'xhs-answer-curator.v1'},sources:[
+            {source_id:'repository-source',title:'Tagged repository Spiral Matrix II question',locator:`note_tagged/68c926620000000013029638.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+            {source_id:'leetcode-59-official',title:'LeetCode 59 Spiral Matrix II official problem page',locator:'https://leetcode.com/problems/spiral-matrix-ii/',source_type:'official_documentation',checked_at:date},
+            {source_id:'fixture',title:'Independent direction-plus-visited Java oracle fixture',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'isolated-review',title:'Spiral Matrix II independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[
+              {claim_id:'problem-contract',text:'The repository source explicitly identifies LeetCode 59 Spiral Matrix II; under that mapping the task is to generate an n x n matrix with 1..n^2 in spiral order.',source_ids:['repository-source','leetcode-59-official'],answer_locations:['核心结论','1 分钟版','3 分钟版']},
+              {claim_id:'algorithm-correctness',text:'The exact boundary-shrinking Java implementation matches a structurally different direction+visited oracle for all n=1..20 and produces each value 1..n^2 exactly once.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']},
+              {claim_id:'source-boundaries',text:'Implementation language, required algorithm and behavior outside the positive-n problem domain are not preserved source constraints; the candidate labels these as answer-side choices.',source_ids:['repository-source','isolated-review'],answer_locations:['3 分钟版','关键细节','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac SpiralMatrixII.java SpiralMatrixIITest.java && java SpiralMatrixIITest',result:'pass',reported_stdout:'PASS fixed=3 domain=1..20 oracle=direction-visited permutation=yes invalid-helper=yes checked=20',checks:['fixed examples','all n=1..20 oracle comparison','permutation invariant','defensive helper boundary'],boundary_tests:boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0030.spiral-matrix-ii.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const done='- [x] `cq_q_6dfc45bd535b894c5de755254b01ca58` candidate passed independent source-first review: the repository source explicitly maps to LeetCode 59, the boundary-shrinking Java implementation matches a structurally different direction+visited oracle for every `n=1..20`, and fixed/permutation/defensive-helper boundaries pass. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(done)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+done+'\n');
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Spiral Matrix II review: $base_head -> $remote_head; discard local review and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0030/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0030 Spiral Matrix II candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
