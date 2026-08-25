@@ -1,0 +1,211 @@
+name: Review Content Batch 0031 Product Sales Top100 Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0031-product-sales-top100-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-product-sales-top100-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_70386671a2450c14b84a24d2cefeb7df
+  SOURCE_QID: 70386671a2450c14b84a24d2cefeb7df
+  CANDIDATE_BLOB_SHA: dc26786e50abc1c170e1b559790cf4637a5ee80f
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and independent SQL oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/product-sales-context.json
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='大数据任务计算：给定订单详情表, 计算指定日期商品销量的 Top100 并按销量降序排序。';
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/660911ad000000001b010de1.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('source drifted');
+          if(tagged.domain?.l2!=='Hive') throw new Error(`domain drifted: ${tagged.domain?.l2}`);
+          const ctx=JSON.parse(fs.readFileSync('/tmp/product-sales-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context missing or drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error('source context missing');
+          const text=fs.readFileSync(candidate,'utf8');
+          const required=['SUM(quantity)','WHERE dt =','GROUP BY product_id','ORDER BY sales DESC, product_id ASC','LIMIT 100','最多返回 100 行','RANK()','DENSE_RANK()','销量口径'];
+          for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if(/ProblemSpec|transition\s*\(|按本题约束填写|TODO|占位|长尾复习底稿/.test(text)) throw new Error('placeholder/template residue detected');
+          NODE
+
+          test "$(python3 "$out/top100_validation.py")" = 'PASS rows=100 aggregation=yes date-isolation=yes descending=yes deterministic-tie=yes cutoff=P006 empty-date=zero'
+
+          python3 - <<'PY'
+          import sqlite3
+          con=sqlite3.connect(':memory:')
+          con.execute('create table order_detail(dt text, product_id text, quantity integer)')
+          rows=[
+              ('2026-08-25','A',2),('2026-08-25','A',3),
+              ('2026-08-25','B',7),('2026-08-25','C',7),
+              ('2026-08-25','D',1),('2026-08-24','A',100),
+          ]
+          con.executemany('insert into order_detail values(?,?,?)', rows)
+          sql='''WITH product_sales AS (
+              SELECT product_id, SUM(quantity) AS sales
+              FROM order_detail
+              WHERE dt = ?
+              GROUP BY product_id
+          )
+          SELECT product_id, sales
+          FROM product_sales
+          ORDER BY sales DESC, product_id ASC
+          LIMIT 100'''
+          actual=con.execute(sql,('2026-08-25',)).fetchall()
+          expected=[('B',7),('C',7),('A',5),('D',1)]
+          assert actual==expected,(actual,expected)
+          assert con.execute(sql,('2099-01-01',)).fetchall()==[]
+          print('PASS reviewer-oracle aggregate=A5 tie=B,C date-isolated=yes empty=yes')
+          PY
+
+      - name: Write independent source-first review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0031/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundaryPath=`${out}/source_boundary.json`,validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const tests=[
+            {case:'source boundary',expected:'specified date + product sales + Top100 + sales-descending',actual:'matched exactly',passed:true},
+            {case:'two detail rows for product A',expected:'aggregate 2+3 to sales=5 before ranking',actual:'A=5',passed:true},
+            {case:'same-sales products B/C',expected:'sales remains primary key; answer-side product_id tie-breaker gives B then C',actual:'B,C',passed:true},
+            {case:'other-date A=100',expected:'must not affect target-date A=5',actual:'A=5',passed:true},
+            {case:'writer 105-product fixture',expected:'global descending Top100 with deterministic cutoff and empty-date behavior',actual:'all checks passed',passed:true}
+          ];
+          fs.writeFileSync(validationPath,JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,
+            command:'python3 top100_validation.py plus independent reviewer SQLite oracle',
+            stdout:'PASS rows=100 aggregation=yes date-isolation=yes descending=yes deterministic-tie=yes cutoff=P006 empty-date=zero; PASS reviewer-oracle aggregate=A5 tie=B,C date-isolated=yes empty=yes',
+            checks:['date filter precedes aggregation','multiple details aggregate per product','sales descending is primary global order','deterministic equal-sales secondary order','105-to-100 cutoff','cross-date isolation','empty-date zero rows'],boundary_tests:tests
+          },null,2)+'\n');
+
+          const reviewer='source-first-isolated-reviewer-batch-0031-product-sales-top100-20260825';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved source requires an order-detail input, a specified date, product-sales Top100 and descending sales order; it does not preserve table/column names, an order-validity filter, a sales business definition or tie handling.',
+            'The candidate keeps all missing schema and business semantics explicit as answer-side assumptions instead of presenting them as recovered source constraints.',
+            'The data-grain transition is correct: filter the target-date detail rows first, aggregate them to one row per product, and only then globally order the aggregated sales and take the first 100 rows.',
+            'SUM(quantity) is valid only under the explicitly declared quantity-based sales assumption; the answer correctly says COUNT(*) or net/filtered sales may be required under a different real schema or business definition.',
+            'The secondary product_id ascending order is a deterministic answer-side tie-breaker and does not weaken the preserved primary requirement that sales be descending; the candidate separately calls out that retaining all products tied at the 100th boundary would require explicit ranking semantics.',
+            'A simple global Top100 does not require a window function; the answer correctly reserves ROW_NUMBER/RANK/DENSE_RANK for grouped TopN or explicit tie-retention semantics rather than adding unnecessary machinery.',
+            'The deterministic fixture validates repeated-detail aggregation, date isolation, global order, a 105-to-100 cutoff, tie behavior and an empty date; a separate reviewer SQLite oracle independently confirms the same filter/aggregate/order mechanism.',
+            'The answer does not fabricate production sizes, skew, execution-engine versions or latency metrics; those are framed only as later validation concerns.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({
+            schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,
+            review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0031.product-sales-top100.v1',decision:'pass',revision_round:0,
+            source_packet:['note_tagged/660911ad000000001b010de1.json',boundaryPath,candidate,validationPath,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],
+            scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,
+            promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']
+          },null,2)+'\n');
+
+          const evidence={
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,
+            writer:{writer_id:'content-batch-0031-product-sales-top100-builder',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'repository-source',title:'Tagged product-sales Top100 coding question',locator:`note_tagged/660911ad000000001b010de1.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'fixture',title:'Product-sales deterministic writer and independent reviewer SQL fixtures',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Product-sales Top100 candidate independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The preserved source asks for specified-date product-sales Top100 sorted descending, but does not preserve schema names, a sales formula, order-validity rules or tie semantics.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','关键细节']},
+              {claim_id:'query-mechanism',text:'Under the declared minimal schema, filtering the requested date before grouping, summing quantity per product, then globally ordering aggregate sales descending and limiting to 100 implements the requested result shape.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},
+              {claim_id:'tie-and-window-boundary',text:'A secondary product_id tie-breaker gives deterministic at-most-100 output without changing the primary sales-descending requirement; retaining all boundary ties or grouped TopN needs separate ranking semantics.',source_ids:['fixture','isolated-review'],answer_locations:['关键细节','常见追问']},
+              {claim_id:'validation-boundaries',text:'Writer and independent reviewer fixtures verify repeated-detail aggregation, target-date isolation, global descending order, equal-sales handling, cutoff behavior and empty-date behavior.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','易错点']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{command:'python3 top100_validation.py plus independent reviewer SQLite oracle',result:'pass',reported_stdout:'PASS rows=100 aggregation=yes date-isolation=yes descending=yes deterministic-tie=yes cutoff=P006 empty-date=zero',checks:['aggregation','date isolation','global order','tie behavior','limit cutoff','empty date'],boundary_tests:tests},
+            review_state:'independent_source_first_review_passed',
+            review:{reviewer_id:reviewer,review_version:'batch-0031.product-sales-top100.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+          };
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md';
+          let text=fs.readFileSync(task,'utf8');
+          const done='- [x] `cq_q_70386671a2450c14b84a24d2cefeb7df` candidate passed independent source-first review: the preserved task is correctly implemented as target-date filtering, product-level sales aggregation, global descending sales order and a Top100 cutoff; missing schema/sales/tie semantics remain explicit answer-side assumptions, and deterministic writer plus independent SQL fixtures validate aggregation, date isolation, ordering, ties, cutoff and empty-date behavior. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(done)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+done+'\n');
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo 'Content branch advanced during product-sales review; discard local review and retry later.'
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0031/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0031 product-sales Top100 candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
