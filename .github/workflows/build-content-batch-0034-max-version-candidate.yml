@@ -1,0 +1,307 @@
+name: Build Content Batch 0034 Max Version Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0034-max-version-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-max-version-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7ca6615c45d3aeb785c27dc7796d1afb
+  SOURCE_QID: 7ca6615c45d3aeb785c27dc7796d1afb
+  SOURCE_NOTE: note_tagged/6888685a0000000005008900.json
+  SOURCE_IMAGE_TEXT: note_img_txt/6888685a0000000005008900.txt
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze repository and official problem boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0034/$CANONICAL_ID"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法：最大版本号 (165. 比较版本号)';
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_NOTE,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!q||q.original_question!==expected||q.question_type!=='算法手撕_Coding') throw new Error('tagged source drifted');
+          const raw=fs.readFileSync(process.env.SOURCE_IMAGE_TEXT,'utf8');
+          for(const token of ['手撕：最大版本号','165. 比较版本号','输入多个版本号进行比较']) if(!raw.includes(token)) throw new Error(`strong source detail missing: ${token}`);
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context/type drifted');
+          const library=(ctx.source_questions||[]).find(x=>x.original_question===expected);
+          if(!library||!ctx.canonical?.question_ids?.includes(library.question_id)) throw new Error('Question -> Canonical reachability drifted');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse overwrite');
+          fs.writeFileSync(path.join(`review/content_build/answer_batch_0034/${cid}`,'source_mapping.json'),JSON.stringify({schema_version:'answer_source_mapping.v1',canonical_id:cid,library_question_id:library.question_id,note_question_id:qid,note_path:process.env.SOURCE_NOTE,image_text_path:process.env.SOURCE_IMAGE_TEXT,original_question:expected,strong_source_detail:'面试的时候是输入多个版本号进行比较',official_problem:{id:165,title:'Compare Version Numbers',locator:'https://leetcode.com/problems/compare-version-numbers/'},verified_at:'2026-08-26'},null,2)+'\n');
+          const boundary='review/content_build/answer_batch_0034/source_boundary_audit.md'; let text=fs.existsSync(boundary)?fs.readFileSync(boundary,'utf8'):'# Answer Batch 0034 Source Boundary Audit\n'; const h=`## ${cid}`;
+          if(!text.includes(h)) text += `\n${h}\n\n- Exact tagged source: \`${process.env.SOURCE_NOTE}\`, question \`${qid}\`: \`${expected}\`.\n- Stronger repository image text: \`${process.env.SOURCE_IMAGE_TEXT}\` explicitly says the interview variant supplied multiple version numbers to compare.\n- The source identifies LeetCode 165, so the pairwise revision semantics are recoverable from the official problem: dot-separated numeric revisions, leading zeros ignored, missing revisions treated as zero.\n- Answer-side adapter for the interview variant: scan the multiple input version strings and keep the first version that is strictly greater under the LeetCode-165 comparator; semantically equal versions do not replace the earlier representative.\n- The repository source does not preserve ACM input-line formatting, number of versions, output formatting, or whether ties should return the first/last normalized representation; those remain explicit adapter choices.\n- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.\n`;
+          fs.writeFileSync(boundary,text);
+          NODE
+
+      - name: Write max-version candidate and fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7ca6615c45d3aeb785c27dc7796d1afb","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 最大版本号：基于 LeetCode 165 比较多个版本字符串
+
+          ## 核心结论
+
+          仓库强来源明确写了“最大版本号（165. 比较版本号）”，并补充“面试的时候是输入多个版本号进行比较”。因此可以把问题拆成两层：先实现 LeetCode 165 的**两版本比较器**——按 `.` 分隔的 revision 从左到右比较、忽略前导零、缺失 revision 当 0；再对多个版本做一次线性扫描，保留当前最大版本。来源没有保存 ACM 的具体输入行格式和相等版本的代表选择，下面显式约定：输入是非空 `List<String>`，语义相等时保留首次出现的原字符串。
+
+          ## 1 分钟版
+
+          - 核心不是把整个版本号转成浮点数；`1.10` 与 `1.2` 要按 revision 比较，所以 `10 > 2`。
+          - 两个版本同步按 `.` 取下一段；每段先跳过前导零，再比较有效数字长度，长度相同再逐字符比较，这等价于比较非负整数且不依赖字符串转整型 API。
+          - 一个版本 revision 用完时按 0 处理，所以 `1.0` 与 `1.0.0` 相等。
+          - `maxVersion` 从第一个版本开始，后续只有在 `compareVersion(v,max)>0` 时才替换，因此语义相等时保留第一个表示。
+          - 若总字符数为 L，两两比较在扫描过程中最多看相应字符，找最大值整体 O(L)，除了少量下标外额外空间 O(1)（不计输入/返回引用）。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.List;
+
+          public final class MaxVersion {
+              public static String maxVersion(List<String> versions) {
+                  if (versions == null || versions.isEmpty()) {
+                      throw new IllegalArgumentException("versions must not be empty");
+                  }
+                  String best = requireValid(versions.get(0));
+                  for (int i = 1; i < versions.size(); i++) {
+                      String current = requireValid(versions.get(i));
+                      if (compareVersion(current, best) > 0) {
+                          best = current;
+                      }
+                  }
+                  return best;
+              }
+
+              public static int compareVersion(String a, String b) {
+                  requireValid(a);
+                  requireValid(b);
+                  int i = 0, j = 0;
+                  while (i < a.length() || j < b.length()) {
+                      int aEnd = nextDot(a, i);
+                      int bEnd = nextDot(b, j);
+                      int cmp = compareRevision(a, i, aEnd, b, j, bEnd);
+                      if (cmp != 0) return cmp;
+                      i = aEnd < a.length() ? aEnd + 1 : a.length();
+                      j = bEnd < b.length() ? bEnd + 1 : b.length();
+                  }
+                  return 0;
+              }
+
+              private static int nextDot(String s, int start) {
+                  if (start >= s.length()) return s.length();
+                  int p = start;
+                  while (p < s.length() && s.charAt(p) != '.') p++;
+                  return p;
+              }
+
+              private static int compareRevision(
+                      String a, int aStart, int aEnd,
+                      String b, int bStart, int bEnd) {
+                  while (aStart < aEnd && a.charAt(aStart) == '0') aStart++;
+                  while (bStart < bEnd && b.charAt(bStart) == '0') bStart++;
+                  int aLen = aEnd - aStart;
+                  int bLen = bEnd - bStart;
+                  if (aLen != bLen) return Integer.compare(aLen, bLen);
+                  for (int k = 0; k < aLen; k++) {
+                      char x = a.charAt(aStart + k), y = b.charAt(bStart + k);
+                      if (x != y) return Character.compare(x, y);
+                  }
+                  return 0;
+              }
+
+              private static String requireValid(String s) {
+                  if (s == null || s.isEmpty() || s.charAt(0) == '.' || s.charAt(s.length()-1) == '.') {
+                      throw new IllegalArgumentException("invalid version");
+                  }
+                  boolean needDigit = true;
+                  for (int i = 0; i < s.length(); i++) {
+                      char ch = s.charAt(i);
+                      if (ch == '.') {
+                          if (needDigit) throw new IllegalArgumentException("invalid version");
+                          needDigit = true;
+                      } else if (ch >= '0' && ch <= '9') {
+                          needDigit = false;
+                      } else {
+                          throw new IllegalArgumentException("invalid version");
+                      }
+                  }
+                  if (needDigit) throw new IllegalArgumentException("invalid version");
+                  return s;
+              }
+          }
+          ```
+
+          例如输入 `['1.0.9','1.01.0','1.0.10','1.0.10.0']`：前两个按 revision 比较可知 `1.01.0 = 1.1.0`，最终 `1.0.10` 与 `1.0.10.0` 语义相等，因此按本答案“相等保留首次出现”的适配约定返回 `1.0.10`。
+
+          ## 关键细节
+
+          - **前导零**：`1.01` 与 `1.001` 的第二段都代表 1，应相等。
+          - **缺失段为 0**：`1.0`、`1.0.0`、`1.0.0.0` 语义相等，不能简单按字符串长度判大小。
+          - **不能用浮点数**：版本号不是十进制小数；`1.10` 的第二个 revision 是 10，而不是“小数 1.1”。
+          - **避免整数解析依赖**：LeetCode 165 当前约束允许 revision 放进 32 位整数，但按去零后的长度+字典序比较同样符合其非负整数语义，并自然避免解析溢出；这也是对面试“忘记字符串转整型 API”场景更稳的写法。
+          - **多版本适配**：官方 165 是比较两个版本；“输入多个版本号”来自仓库更强原始截图，因此用同一个 comparator 做线性归约即可。
+          - **相等代表**：来源没说 `1.0` 和 `1.0.0` 都出现时返回哪个原字符串；本答案保留首次出现者，必须把它当适配约定而不是原题事实。
+          - **ACM 输入格式**：截图只说 ACM 不熟，但没有保存具体 stdin/stdout 格式，所以不虚构 `n`、空格/换行布局。
+
+          ## 原理机制
+
+          版本比较是词典序式的 revision 序列比较，但单个 revision 的比较按非负整数值而不是原始字符串。对一个十进制数字段，去掉前导零后，位数更多的整数一定更大；位数相同时，十进制字典序与数值顺序一致。因此无需构造整数就能得到与官方语义一致的比较结果。多版本求最大值只是在一个全序/等价比较器上做 fold：维护当前 `best`，新值严格更大才替换，扫描结束后 `best` 不小于所有已处理版本。
+
+          ## 项目经验版
+
+          来源没有真实版本治理系统或线上事故数据，不能虚构项目经历。工程里还要区分这种纯数字点分版本与 SemVer：SemVer 还有 prerelease、build metadata 等规则，不能直接复用 LeetCode 165 comparator；应根据实际版本规范选择解析器并用规范样例做一致性测试。
+
+          ## 常见追问
+
+          - 问：为什么 `1.10 > 1.2`？答：按 revision 比较，第二段是整数 10 和 2，不是把整个字符串当浮点数。
+          - 问：`1.01` 与 `1.001` 呢？答：revision 忽略前导零，两者都是 1，所以相等。
+          - 问：`1.0` 与 `1.0.0` 呢？答：缺失 revision 视为 0，因此相等。
+          - 问：为什么不用 `Integer.parseInt`？答：官方约束下可以用；这里用去零后长度+字典序直接比较非负整数段，少一个解析步骤，也不会受扩展输入的整数溢出影响。
+          - 问：输入多个版本怎么找最大？答：把两版本 comparator 当比较器，线性扫描；每次只在新版本严格更大时更新当前最大。
+
+          ## 易错点
+
+          - 把版本号当 `double` 比较。
+          - 直接按字符串字典序，得到 `'10' < '2'` 之类错误结果。
+          - 忽略前导零或尾部缺失 revision 视为 0 的规则。
+          - 为了“多个输入”虚构未保存的 ACM stdin 格式。
+          - 把 LeetCode 165 规则误当成 SemVer 完整规则。
+          EOF
+
+          cat > "$out/MaxVersion.java" <<'JAVA'
+          import java.util.List;
+
+          public final class MaxVersion {
+              public static String maxVersion(List<String> versions) {
+                  if (versions == null || versions.isEmpty()) {
+                      throw new IllegalArgumentException("versions must not be empty");
+                  }
+                  String best = requireValid(versions.get(0));
+                  for (int i = 1; i < versions.size(); i++) {
+                      String current = requireValid(versions.get(i));
+                      if (compareVersion(current, best) > 0) best = current;
+                  }
+                  return best;
+              }
+              public static int compareVersion(String a, String b) {
+                  requireValid(a); requireValid(b);
+                  int i=0,j=0;
+                  while (i<a.length() || j<b.length()) {
+                      int ae=nextDot(a,i), be=nextDot(b,j);
+                      int cmp=compareRevision(a,i,ae,b,j,be);
+                      if(cmp!=0) return cmp;
+                      i=ae<a.length()?ae+1:a.length();
+                      j=be<b.length()?be+1:b.length();
+                  }
+                  return 0;
+              }
+              private static int nextDot(String s,int start){
+                  if(start>=s.length()) return s.length();
+                  int p=start; while(p<s.length()&&s.charAt(p)!='.') p++; return p;
+              }
+              private static int compareRevision(String a,int as,int ae,String b,int bs,int be){
+                  while(as<ae&&a.charAt(as)=='0') as++;
+                  while(bs<be&&b.charAt(bs)=='0') bs++;
+                  int al=ae-as, bl=be-bs;
+                  if(al!=bl) return Integer.compare(al,bl);
+                  for(int k=0;k<al;k++){ char x=a.charAt(as+k),y=b.charAt(bs+k); if(x!=y) return Character.compare(x,y); }
+                  return 0;
+              }
+              private static String requireValid(String s){
+                  if(s==null||s.isEmpty()||s.charAt(0)=='.'||s.charAt(s.length()-1)=='.') throw new IllegalArgumentException("invalid version");
+                  boolean needDigit=true;
+                  for(int i=0;i<s.length();i++){
+                      char ch=s.charAt(i);
+                      if(ch=='.'){ if(needDigit) throw new IllegalArgumentException("invalid version"); needDigit=true; }
+                      else if(ch>='0'&&ch<='9') needDigit=false;
+                      else throw new IllegalArgumentException("invalid version");
+                  }
+                  if(needDigit) throw new IllegalArgumentException("invalid version");
+                  return s;
+              }
+          }
+          JAVA
+
+          cat > "$out/MaxVersionTest.java" <<'JAVA'
+          import java.util.List;
+          public final class MaxVersionTest {
+              static void eq(Object a,Object b,String n){if(!a.equals(b))throw new AssertionError(n+" expected="+b+" actual="+a);}
+              static void cmp(String a,String b,int sign){int x=Integer.signum(MaxVersion.compareVersion(a,b));if(x!=sign)throw new AssertionError(a+" vs "+b+" got "+x);}
+              static void bad(String s){try{MaxVersion.compareVersion(s,"1");throw new AssertionError("expected invalid "+s);}catch(IllegalArgumentException ok){}}
+              public static void main(String[] args){
+                  cmp("1.2","1.10",-1); cmp("1.01","1.001",0); cmp("1.0","1.0.0.0",0); cmp("0.1","1.1",-1); cmp("1.0.1","1",1);
+                  cmp("2147483647.0000000000000000000000000001","2147483647.1",0);
+                  eq(MaxVersion.maxVersion(List.of("1.0.9","1.01.0","1.0.10","1.0.10.0")),"1.01.0","multiple max");
+                  eq(MaxVersion.maxVersion(List.of("2.0","2.0.0","1.999")),"2.0","equal-first");
+                  bad("1..0"); bad(".1"); bad("1."); bad("1.a");
+                  System.out.println("PASS lc165 examples leading-zero missing-zero long-revision multiple-input first-equal invalid-input");
+              }
+          }
+          JAVA
+
+      - name: Execute deterministic validation and freeze evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"
+          pushd "$out" >/dev/null
+          javac MaxVersion.java MaxVersionTest.java
+          stdout="$(java MaxVersionTest)"
+          popd >/dev/null
+          test "$stdout" = 'PASS lc165 examples leading-zero missing-zero long-revision multiple-input first-equal invalid-input'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'javac MaxVersion.java MaxVersionTest.java && java MaxVersionTest',stdout:process.env.STDOUT,checks:['LeetCode 165 examples','leading-zero semantics','missing revisions as zero','long revision digit comparison','multiple-version reduction','first representative on semantic equality','malformed input rejection']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-tagged',title:'Tagged repository source naming LeetCode 165',locator:mapping.note_path,source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'repository-image-text',title:'Stronger repository image text preserving multiple-version interview variant',locator:mapping.image_text_path,source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'leetcode-165',title:'LeetCode 165 Compare Version Numbers',locator:'https://leetcode.com/problems/compare-version-numbers/',source_type:'official_documentation',checked_at:'2026-08-26'},{source_id:'fixture',title:'Deterministic JDK 21 max-version validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'repository-boundary',text:'Repository source explicitly identifies LeetCode 165 and stronger image text says the interview variant compared multiple input version numbers.',source_ids:['repository-tagged','repository-image-text'],answer_locations:['核心结论','多版本适配','ACM 输入格式']},{claim_id:'official-contract',text:'LeetCode 165 compares dot-separated numeric revisions left-to-right, ignores leading zeros, treats missing revisions as zero, and returns ordering for two versions.',source_ids:['leetcode-165'],answer_locations:['核心结论','1 分钟版','关键细节','常见追问']},{claim_id:'adapter-validation',text:'The exact Java fixture validates pairwise 165 semantics and the explicit multiple-version first-equal-representative adapter.',source_ids:['fixture'],answer_locations:['3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:mapping.library_question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_human_approval_and_real_review_policy_not_yet_satisfied'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'; let t=fs.readFileSync(task,'utf8').replace('- Status: `pending`','- Status: `in_progress`'); const p='- Max-version/LeetCode-165 canonical `'+cid+'` has a source-bounded multiple-input adapter, official-contract evidence, deterministic JDK 21 validation, and writer evidence; isolated review and promotion gates remain pending.'; if(!t.includes(p)) t += (t.includes('## Progress')?'\n':'\n## Progress\n\n')+p+'\n'; fs.writeFileSync(task,t);
+          NODE
+
+      - name: Verify exact code fence
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8'); const m=md.match(/```java\n([\s\S]*?)\n```/); if(!m)throw new Error('Java fence missing'); const f=fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/MaxVersion.java`,'utf8').trim(); if(m[1].trim()!==f)throw new Error('code fence differs from fixture');
+          NODE
+
+      - name: Commit writer artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-content-builder; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0034/source_boundary_audit.md" "review/content_build/answer_batch_0034/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          git commit -m 'content: stage batch 0034 max-version candidate'
+          for attempt in 1 2 3 4 5; do if git pull --rebase origin "$CONTENT_BRANCH" && git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi; git rebase --abort 2>/dev/null||true; sleep $((attempt*3)); done
+          exit 1
