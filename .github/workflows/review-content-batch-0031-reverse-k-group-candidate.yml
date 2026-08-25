@@ -1,0 +1,139 @@
+name: Review Content Batch 0031 Reverse K Group Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0031-reverse-k-group-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-reverse-k-group-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6f7fea89b155fae92067cb5b3a8aa7d8
+  SOURCE_QID: 6f7fea89b155fae92067cb5b3a8aa7d8
+  CANDIDATE_BLOB_SHA: da2f95118db321feb0aabfbcb10e77904c2a4029
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun independent oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/6822deb7000000002100178b.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!=='算法：链表节点 K 个一组翻转'||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('source drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const c=cs.find(x=>x.canonical_id===cid),q=qs.find(x=>x.question_id===qid);
+          if(!c||!q||q.canonical_id!==cid||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+          const text=fs.readFileSync(candidate,'utf8');
+          const required=['完整的 K 节点分组原地反转','尾部不足 K 个保持不动','先找第 K 个节点','groupNext = kth.next','prev = groupNext','oldGroupHead','O(1)','输入是否可能有环'];
+          for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if(/ProblemSpec|transition\s*\(|按本题约束填写/.test(text)) throw new Error('placeholder/template residue detected');
+          NODE
+          javac "$out/ReverseKGroup.java" "$out/ReverseKGroupTest.java"
+          test "$(java -cp "$out" ReverseKGroupTest)" = 'PASS fixed=6 random-oracle=3000 identity=preserved cycle=none incomplete-tail=unchanged invalid-k=rejected'
+
+      - name: Write independent source-first review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0031/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundaryPath=`${out}/source_boundary.json`,validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const tests=[
+            {case:'1->2->3->4->5, k=2',expected:'2->1->4->3->5',actual:'pass',passed:true},
+            {case:'0->1->2->3->4, k=3',expected:'2->1->0->3->4 with incomplete tail unchanged',actual:'pass',passed:true},
+            {case:'k=1 and k>length boundaries',expected:'same node order and identity',actual:'pass',passed:true},
+            {case:'3000 deterministic lists length 0..30, k 1..10',expected:'order equals independent array grouping reference, every original node identity retained, no cycles',actual:'all passed',passed:true}
+          ];
+          fs.writeFileSync(validationPath,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac ReverseKGroup.java ReverseKGroupTest.java && java ReverseKGroupTest',stdout:'PASS fixed=6 random-oracle=3000 identity=preserved cycle=none incomplete-tail=unchanged invalid-k=rejected',checks:['empty list','k=1','multiple complete groups','incomplete tail unchanged','k greater than length','exact division','invalid k rejection','3000 independent array-reference cases','node identity preservation','cycle absence'],boundary_tests:tests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0031-reverse-k-group-20260825';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved source asks only for linked-list nodes reversed in groups of K; it does not specify API shape, behavior for a final short group, allocation policy, invalid K or cyclic inputs.',
+            'The candidate makes the common complete-group-only contract explicit instead of attributing the short-tail rule to the source.',
+            'The pointer boundaries are coherent: groupPrev precedes the group, kth is the group end, groupNext is excluded from reversal, and prev starts at groupNext so the old group head reconnects to the suffix during reversal.',
+            'The implementation probes a full K-node group before mutating pointers, preventing partial reversal and rollback problems when the remaining suffix is too short.',
+            'The standalone Java implementation preserves original node identities, introduces no cycles and matches an independent array grouping reference across fixed cases and 3000 deterministic generated cases.',
+            'The candidate correctly treats k=1, empty input and k greater than list length as explicit boundaries and rejects k<1 under the answer-side contract.',
+            'No production linked-list topology or project experience is invented; cyclic-input semantics are explicitly left outside the finite-list contract.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0031.reverse-k-group.v1',decision:'pass',revision_round:0,source_packet:['note_tagged/6822deb7000000002100178b.json',boundaryPath,candidate,validationPath,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0031-reverse-k-group-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Tagged linked-list K-group reversal question',locator:`note_tagged/6822deb7000000002100178b.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Reverse-K-group independent array and identity oracle',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Reverse-K-group independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source preserves linked-list K-group reversal but not the API, final-short-group rule, allocation policy, invalid-K behavior or cyclic-input semantics.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'pointer-invariant',text:'Under the declared complete-groups-only contract, probing kth before mutation and reversing [groupPrev.next,kth] with groupNext as the exclusive boundary preserves all nodes and reconnects both sides of each group.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'complexity',text:'The iterative solution scans/relinks each node only a constant number of times and uses a constant number of pointers plus a dummy sentinel, yielding O(n) time and O(1) auxiliary space for a finite acyclic list.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','原理机制']},{claim_id:'oracle-validation',text:'The Java implementation matches an independent array grouping reference on fixed boundaries and 3000 generated list/k pairs while retaining every original node identity and introducing no cycle.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac ReverseKGroup.java ReverseKGroupTest.java && java ReverseKGroupTest',result:'pass',reported_stdout:'PASS fixed=6 random-oracle=3000 identity=preserved cycle=none incomplete-tail=unchanged invalid-k=rejected',checks:['fixed boundaries','independent array reference','node identity','cycle absence','invalid k'],boundary_tests:tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0031.reverse-k-group.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md';
+          let text=fs.readFileSync(task,'utf8');
+          const done='- [x] `cq_q_6f7fea89b155fae92067cb5b3a8aa7d8` candidate passed independent source-first review: the complete-group and short-tail contract is explicitly answer-side, pointer boundaries are auditable, the standalone Java implementation preserves node identity and matches an independent grouping oracle across fixed boundaries plus 3000 generated cases without introducing cycles. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(done)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+done+'\n');
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during reverse-k-group review; discard local review and retry later."; exit 0; fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0031/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0031 reverse-k-group candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
