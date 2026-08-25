@@ -1,0 +1,257 @@
+name: Build Content Batch 0032 Majority Vote Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0032-majority-vote-candidate.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-majority-vote-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+  CANONICAL_ID: cq_q_71339c0e3b37b924564ea456caa5fb97
+  SOURCE_QID: 71339c0e3b37b924564ea456caa5fb97
+
+jobs:
+  build-candidate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard exact source and frozen boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "review/reports/ANSWER_BATCH_${BATCH}_SOURCE_PACKET.json"
+          test -f "review/content_build/answer_batch_${BATCH}/source_boundary_audit.md"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH,expected='算法：超过半数的数字（摩尔投票法）？';
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
+          if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary missing');
+          NODE
+
+      - id: state
+        shell: bash
+        run: |
+          candidate="review/candidates/answers/$CANONICAL_ID.md"; out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then test -e "$out/code_validation.json"; test -e "$out/writer_research.json"; echo 'pending=false' >> "$GITHUB_OUTPUT"; else echo 'pending=true' >> "$GITHUB_OUTPUT"; fi
+
+      - name: Write source-bounded candidate and randomized oracle fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"; out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"; mkdir -p "$out"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_71339c0e3b37b924564ea456caa5fb97","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 超过半数的数字：Boyer-Moore（摩尔）投票法
+
+          ## 核心结论
+
+          如果一个数组里确实存在出现次数 **严格大于 `n/2`** 的元素，Boyer-Moore Majority Vote 可以用 `O(n)` 时间、`O(1)` 额外空间找出它的候选值：维护 `candidate` 和 `count`，相同元素给候选“加一票”，不同元素“抵消一票”，当 `count == 0` 时用当前元素重建候选。
+
+          原题只说“超过半数的数字（摩尔投票法）”，没有明确说输入是否保证一定存在多数元素。为了不把保证条件凭空补进题目，下面给一个更稳健的接口：第一遍找候选，第二遍验证候选出现次数确实 `> n/2`；不存在时返回 `OptionalInt.empty()`。如果面试官明确保证多数元素一定存在，则第二遍验证可以省掉。
+
+          ## 1 分钟版
+
+          - `count == 0` 时把当前值设成候选，并把计数置 1。
+          - 后续值等于候选就 `count++`，不同就 `count--`。
+          - 可以把 `count--` 理解成“一个候选值和一个非候选值成对删除”。
+          - 真正超过半数的元素不可能被这种一对一删除全部消掉，所以若多数元素存在，第一遍最后的候选一定是它。
+          - 若题目没有保证多数元素存在，第一遍只能得到“候选”，必须第二遍计数验证 `occurrences > n / 2`。
+          - 两遍都是线性扫描，总时间仍为 `O(n)`，只用常数个变量，额外空间 `O(1)`。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.OptionalInt;
+
+          public final class MajorityVote {
+              public static OptionalInt majorityElement(int[] nums) {
+                  if (nums == null || nums.length == 0) {
+                      return OptionalInt.empty();
+                  }
+
+                  int candidate = 0;
+                  int count = 0;
+                  for (int value : nums) {
+                      if (count == 0) {
+                          candidate = value;
+                          count = 1;
+                      } else if (value == candidate) {
+                          count++;
+                      } else {
+                          count--;
+                      }
+                  }
+
+                  int occurrences = 0;
+                  for (int value : nums) {
+                      if (value == candidate) occurrences++;
+                  }
+                  return occurrences > nums.length / 2
+                          ? OptionalInt.of(candidate)
+                          : OptionalInt.empty();
+              }
+          }
+          ```
+
+          若输入 `[2,2,1,1,1,2,2]`，不同值不断与当前候选抵消，最后留下候选 `2`；第二遍确认它出现 4 次，而 `4 > 7/2`，因此返回 2。若输入 `[1,2,3]`，第一遍同样会留下某个候选，但第二遍发现它没有超过半数，就返回 empty。
+
+          ## 关键细节
+
+          - **“超过半数”是严格大于**：长度 4 的数组中出现 2 次只是恰好一半，不是多数元素。
+          - **第一遍不是通用存在性证明**：Boyer-Moore 在没有多数元素时仍会产生候选；只有题目保证多数存在，才能直接返回第一遍候选。
+          - **抵消不要求相邻**：算法只是用计数器等价表示成对删除，不需要真的修改数组。
+          - **负数和任意 int 都可以**：候选值不需要特殊哨兵，关键由 `count == 0` 决定候选是否有效。
+          - **空输入契约**：原题没有给 API；本答案选择空数组/`null` 返回 `OptionalInt.empty()`，这是答案侧接口定义。
+          - **复杂度**：找候选一遍 `O(n)`，验证一遍 `O(n)`，合起来仍为 `O(n)`；只保存候选、计数和验证计数，额外空间 `O(1)`。
+
+          ## 原理机制
+
+          假设真正的多数元素是 `M`。每当算法遇到与当前候选不同的值并执行一次减计数，都可以等价看成从尚未抵消的元素中删除一对不同值。任何一次这样的删除最多删除一个 `M`，同时也必须删除一个非 `M`。因为 `M` 最初数量严格大于所有非 `M` 的总数，所以无论怎样成对删除不同值，都不可能把所有 `M` 删除干净。于是当确实存在多数元素时，最终剩下的候选只能是 `M`。
+
+          这个证明同时解释了为什么“没有多数元素时要二次验证”：如果没有哪个值占超过一半，成对抵消结束后仍可能留下某个值，但它只是抵消过程的剩余者，并不自动满足多数条件。
+
+          ## 项目经验版
+
+          来源是纯算法题，没有真实项目背景，因此不虚构生产经历。实际写库函数时，我会先明确接口是否承诺“多数必存在”：若承诺存在，可以返回 `int` 并只跑一遍；若不承诺，就像这里一样返回可空结果并做第二遍验证。这个差异是 API 契约问题，不是算法本身的隐藏条件。
+
+          ## 常见追问
+
+          - 问：为什么不同元素可以直接抵消？答：目标元素超过总数一半，每删除一个多数元素都必须搭配删除一个非多数元素，而非多数总数更少，所以真正多数不可能全部被抵消。
+          - 问：为什么 `count == 0` 可以换候选？答：此前维护的未抵消候选票已经被不同值一一抵完，对最终多数判断不再提供净优势，可以从当前位置重新开始计票。
+          - 问：如果题目保证一定有多数元素，第二遍还需要吗？答：不需要；保证条件本身就补足了存在性证明，第一遍候选可直接返回。
+          - 问：如果不保证存在，为什么第二遍足够？答：第一遍只会给一个候选；第二遍直接数它的真实出现次数并检查 `> n/2`，就能决定是否存在满足条件的结果。
+          - 问：能找超过 `n/3` 的元素吗？答：单候选 Boyer-Moore 不够；可推广为最多维护两个候选，再二次验证，因为超过 `n/3` 的元素最多有两个。
+          - 问：复杂度为什么还是 O(n)？答：常数次完整扫描是 `O(n)`，不是 `O(2n)` 这种新的渐进复杂度。
+
+          ## 易错点
+
+          - 把“第一遍最后候选”无条件当作多数元素，即使题目没有保证多数一定存在。
+          - 用 `>= n/2` 验证，把恰好一半误判成“超过半数”。
+          - `count == 0` 时只换候选却忘记把当前元素计为 1 票。
+          - 为了实现“抵消”真的删除数组元素，把 `O(1)` 空间和线性扫描优势破坏掉。
+          - 把 `candidate` 的初始值当成特殊值；候选是否合法由计数状态决定，与数值本身无关。
+          EOF
+
+          cat > "$out/MajorityVoteFixture.java" <<'JAVA'
+          import java.util.HashMap;
+          import java.util.Map;
+          import java.util.OptionalInt;
+          import java.util.Random;
+
+          public final class MajorityVoteFixture {
+              static OptionalInt actual(int[] nums) {
+                  if (nums == null || nums.length == 0) return OptionalInt.empty();
+                  int candidate = 0, count = 0;
+                  for (int value : nums) {
+                      if (count == 0) { candidate = value; count = 1; }
+                      else if (value == candidate) count++;
+                      else count--;
+                  }
+                  int occurrences = 0;
+                  for (int value : nums) if (value == candidate) occurrences++;
+                  return occurrences > nums.length / 2 ? OptionalInt.of(candidate) : OptionalInt.empty();
+              }
+
+              static OptionalInt oracle(int[] nums) {
+                  if (nums == null || nums.length == 0) return OptionalInt.empty();
+                  Map<Integer,Integer> counts = new HashMap<>();
+                  for (int v : nums) counts.merge(v, 1, Integer::sum);
+                  for (Map.Entry<Integer,Integer> e : counts.entrySet()) if (e.getValue() > nums.length / 2) return OptionalInt.of(e.getKey());
+                  return OptionalInt.empty();
+              }
+
+              static void check(int[] a) {
+                  OptionalInt x=actual(a), y=oracle(a);
+                  if (!x.equals(y)) throw new AssertionError("actual="+x+" oracle="+y);
+              }
+
+              public static void main(String[] args) {
+                  check(null); check(new int[]{}); check(new int[]{7}); check(new int[]{2,2,1,1,1,2,2});
+                  check(new int[]{1,1,2,2}); check(new int[]{1,2,3}); check(new int[]{-1,-1,-1,2,3});
+                  Random r=new Random(71339L);
+                  for(int t=0;t<20000;t++){
+                      int n=r.nextInt(80); int[] a=new int[n];
+                      for(int i=0;i<n;i++) a[i]=r.nextInt(9)-4;
+                      check(a);
+                  }
+                  System.out.println("PASS fixed-boundaries randomized=20000 oracle=HashMap strict-majority-only");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer evidence
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          javac "$out/MajorityVoteFixture.java"
+          stdout="$(java -cp "$out" MajorityVoteFixture)"
+          test "$stdout" = 'PASS fixed-boundaries randomized=20000 oracle=HashMap strict-majority-only'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const batch=process.env.BATCH,cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_${batch}/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac MajorityVoteFixture.java && java MajorityVoteFixture',stdout:process.env.STDOUT,checks:['null/empty','single element','known strict majority','exact-half rejected','no-majority rejected','negative values','20,000 deterministic randomized arrays vs HashMap oracle']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Batch 0032 exact source-first singleton boundary',locator:`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'Majority-vote deterministic randomized oracle fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The preserved source asks for a number occurring more than half the time using Boyer-Moore voting; it does not state an API or explicitly guarantee that a strict majority exists.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},{claim_id:'algorithm-behavior',text:'The fixture validates Boyer-Moore candidate selection plus second-pass strict-majority verification against an independent HashMap oracle over fixed boundaries and 20,000 deterministic random arrays.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'strict-threshold',text:'The executable checks reject exact-half and no-majority inputs and accept only occurrences strictly greater than n/2.',source_ids:['fixture'],answer_locations:['核心结论','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record bounded progress
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,pathlib
+          batch=os.environ['BATCH']; cid=os.environ['CANONICAL_ID']; path=pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md'); text=path.read_text(encoding='utf-8')
+          note=f"- [ ] `{cid}` candidate staged source-first: exact Boyer-Moore singleton boundary preserved; existence guarantee remains explicit rather than assumed; robust Java candidate verifies strict majority in a second pass and passes fixed plus 20,000 randomized HashMap-oracle cases. Independent review still required.\n"
+          if note not in text: path.write_text(text.rstrip()+"\n"+note,encoding='utf-8')
+          PY
+
+      - name: Commit candidate from stable content snapshot
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_head='${{ steps.base.outputs.head }}'; git fetch --depth=1 origin "$CONTENT_BRANCH"; remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced: $base_head -> $remote_head; discard mixed snapshot."; exit 0; fi
+          candidate="review/candidates/answers/$CANONICAL_ID.md"; out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"; task="tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$candidate" "$out" "$task"; git diff --cached --check; git commit -m "content: stage batch ${BATCH} majority-vote candidate"; git push origin "HEAD:$CONTENT_BRANCH"
