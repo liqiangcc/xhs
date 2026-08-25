@@ -1,0 +1,344 @@
+name: Build Content Batch 0032 Delete Sorted Duplicates II Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0032-delete-sorted-duplicates-ii-candidate.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-delete-sorted-duplicates-ii-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+  CANONICAL_ID: cq_q_73de3e043d9f163144c400e4e1e7dff3
+  SOURCE_QID: 73de3e043d9f163144c400e4e1e7dff3
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify exact source-first boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH;
+          const expected='算法：删除排序链表中的重复元素 II (LeetCode 82)';
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||ctx.canonical?.canonical_id!==cid) throw new Error('canonical context missing');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(src?.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          const packet=JSON.parse(fs.readFileSync(`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,'utf8'));
+          const entry=(packet.canonicals||[]).find(x=>x.canonical_id===cid);
+          if(!entry) throw new Error('source packet member missing');
+          const exact=(entry.source_hits||[]).find(h=>h?.match_basis==='question_id'&&h?.tagged_question?.question_id===qid);
+          if(exact?.tagged_question?.original_question!==expected||exact?.tagged_question?.is_valid_for_library!==true) throw new Error('exact packet hit missing');
+          let tagged=null,taggedPath=null;
+          for(const name of fs.readdirSync('note_tagged')){
+            if(!name.endsWith('.json')) continue;
+            const p=path.join('note_tagged',name);let doc;
+            try{doc=JSON.parse(fs.readFileSync(p,'utf8'));}catch{continue;}
+            const q=(doc.tagged_questions||[]).find(x=>x.question_id===qid);
+            if(q){tagged=q;taggedPath=p;break;}
+          }
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error(`tagged SSOT mismatch: ${taggedPath}`);
+          const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
+          if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary missing');
+          NODE
+
+      - id: state
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/code_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded candidate
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          mkdir -p "$out"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_73de3e043d9f163144c400e4e1e7dff3","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 删除排序链表中的重复元素 II：按连续段删除所有重复值
+
+          ## 核心结论
+
+          来源只明确了“删除排序链表中的重复元素 II (LeetCode 82)”。这里采用与题名对应的最小契约：输入链表按值非递减排序；凡某个值出现两次或更多次，该值对应的整段节点全部删除，只保留在输入中恰好出现一次的值。来源没有保留 Java 节点定义、空链表约定或是否必须复用节点，因此本答案显式采用常见 Java 单链表接口，空链表返回 `null`，并原地重连已有节点，额外空间 `O(1)`。
+
+          ## 1 分钟版
+
+          - 排序链表的相同值一定连续，所以一次扫描就能判断某个值是否形成重复段。
+          - 在真实头节点前放一个 dummy，`prev` 始终指向“结果链表最后一个已经确认保留的节点”，`cur` 指向当前待判断段的首节点。
+          - 如果 `cur` 与 `cur.next` 值相同，记住这个值并把 `cur` 整段跳过，然后执行 `prev.next = cur`，这样重复段无论出现在头部、中间还是尾部都统一处理。
+          - 如果当前值只出现一次，就把 `prev` 前进到 `cur`，再继续扫描。
+          - 每个节点最多被访问常数次：时间 `O(n)`；只使用若干指针：额外空间 `O(1)`。
+
+          ## 3 分钟版
+
+          ```java
+          public final class Solution {
+              static final class ListNode {
+                  int val;
+                  ListNode next;
+                  ListNode(int val) { this.val = val; }
+                  ListNode(int val, ListNode next) {
+                      this.val = val;
+                      this.next = next;
+                  }
+              }
+
+              public ListNode deleteDuplicates(ListNode head) {
+                  ListNode dummy = new ListNode(0, head);
+                  ListNode prev = dummy;
+                  ListNode cur = head;
+
+                  while (cur != null) {
+                      if (cur.next != null && cur.val == cur.next.val) {
+                          int duplicated = cur.val;
+                          while (cur != null && cur.val == duplicated) {
+                              cur = cur.next;
+                          }
+                          prev.next = cur;
+                      } else {
+                          prev = cur;
+                          cur = cur.next;
+                      }
+                  }
+                  return dummy.next;
+              }
+          }
+          ```
+
+          dummy 的作用不是增加算法复杂度，而是消除“重复段恰好从原头节点开始”这一特殊分支。真正的不变量是：进入每轮循环时，`prev.next == cur`，并且 `dummy.next` 到 `prev` 之间只包含已经确认在原输入中出现一次的值。
+
+          ## 关键细节
+
+          - **为什么排序很重要**：只有因为相同值连续，才能在看到相邻相等时一次跳完整段；若输入无序，必须换成计数等方案，问题契约已经不同。
+          - **为什么不能只删一个重复节点**：本题的“II”语义是重复值全部移除，而不是把重复段压缩成一个节点；例如一个值连续出现三次，三者都不能保留。
+          - **头部重复段**：dummy 让 `prev` 在删除原头部若干节点后仍有稳定前驱。
+          - **尾部重复段**：跳完整段后 `cur == null`，`prev.next = null` 自然截断尾巴。
+          - **重复段长度**：内层循环按值跳过，因此两次、三次或更长重复段用同一逻辑。
+          - **节点复用**：实现只改 `next`，不为保留值创建新节点；dummy 是临时哨兵且不会出现在返回链表中。
+          - **数值范围**：dummy 的 `val=0` 只是占位，因为算法从不比较 dummy 的值，所以即使输入也包含 0 不会冲突。
+
+          ## 原理机制
+
+          可以把排序链表看成若干“等值连续段”。每个段只有两种状态：长度为 1 时进入结果；长度大于 1 时整段跳过。算法并不需要预先知道整条链表的频次，只要维护当前段和结果链表的最后一个已确认节点。
+
+          对重复段，`prev` 不移动，只把 `prev.next` 改到下一段首节点；因此该重复段从结果链上完全脱离。对单元素段，`prev` 前进一格，表示该节点已经确认保留。扫描结束时，每个输入等值段都恰好被分类一次，所以返回链表恰好由所有长度为 1 的段按原顺序组成。
+
+          ## 项目经验版
+
+          来源只有算法题，没有真实项目经历，因此不虚构生产使用场景。工程代码如果确实需要“从已排序流中丢弃所有重复键”，可以复用“按连续段分类”的思路；但链表节点结构、内存所有权、是否允许原地修改等都应按真实接口重新确认。
+
+          ## 常见追问
+
+          - 问：和“删除排序链表中的重复元素 I”有什么核心区别？答：I 通常保留重复值中的一个；这里重复值对应的所有节点都要删除，所以必须先识别整段是否重复，再决定保留还是跳过。
+          - 问：为什么需要 dummy？答：没有 dummy 时，如果第一个值就是重复段，需要单独修改 `head`；dummy 提供统一前驱，使头部、中间和尾部删除都变成 `prev.next = cur`。
+          - 问：为什么 `prev` 在重复段后不能前进？答：重复段没有任何节点进入结果，所以结果链最后一个已确认节点仍然是原来的 `prev`。
+          - 问：全是重复值会怎样？答：每个重复段都会被跳过，最后 `dummy.next` 被连到 `null`，返回空链表。
+          - 问：能不能用 HashMap 先计数？答：可以，但会增加 `O(n)` 额外空间，并且没有利用输入已经排序、重复值连续这一结构；当前契约下双指针扫描更直接。
+          - 问：如果输入不是排序链表呢？答：当前来源明确“排序链表”；无序输入不满足本答案契约，应重新定义算法而不是假装该扫描仍然正确。
+
+          ## 易错点
+
+          - 只删除重复段中的后续节点，错误地保留一个重复值。
+          - 发现相邻相等后只跳两个节点，没有跳完整个同值段。
+          - 删除头部重复段时没有 dummy，导致 `head`/前驱处理分支混乱。
+          - 跳过重复段后错误地推进 `prev`，从而把已删除节点重新接回结果。
+          - 忽略尾部重复段，留下指向已删除段的 `next`。
+          - 把“输入已排序”这一前提忘掉，错误声称同一实现适用于任意链表。
+          EOF
+
+      - name: Compile actual candidate and run exhaustive/random oracle
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const m=text.match(/```java\s*\n([\s\S]*?)\n```/);
+          if(!m) throw new Error('Java candidate block missing');
+          fs.writeFileSync('/tmp/Solution.java',m[1]);
+          NODE
+          cat >/tmp/SolutionTest.java <<'JAVA'
+          import java.util.*;
+
+          public final class SolutionTest {
+              private static Solution.ListNode build(int[] a, List<Solution.ListNode> nodes) {
+                  Solution.ListNode dummy = new Solution.ListNode(0), tail = dummy;
+                  for (int v : a) {
+                      Solution.ListNode n = new Solution.ListNode(v);
+                      nodes.add(n);
+                      tail.next = n;
+                      tail = n;
+                  }
+                  return dummy.next;
+              }
+
+              private static int[] expected(int[] a) {
+                  int[] tmp = new int[a.length];
+                  int k = 0;
+                  for (int i = 0; i < a.length;) {
+                      int j = i + 1;
+                      while (j < a.length && a[j] == a[i]) j++;
+                      if (j - i == 1) tmp[k++] = a[i];
+                      i = j;
+                  }
+                  return Arrays.copyOf(tmp, k);
+              }
+
+              private static void check(int[] a) {
+                  List<Solution.ListNode> nodes = new ArrayList<>();
+                  Solution.ListNode head = build(a, nodes);
+                  Set<Solution.ListNode> identity = Collections.newSetFromMap(new IdentityHashMap<>());
+                  identity.addAll(nodes);
+                  Solution.ListNode out = new Solution().deleteDuplicates(head);
+                  int[] exp = expected(a);
+                  int[] got = new int[exp.length];
+                  int k = 0;
+                  Set<Solution.ListNode> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+                  for (Solution.ListNode p = out; p != null; p = p.next) {
+                      if (!identity.contains(p)) throw new AssertionError("returned a newly allocated data node");
+                      if (!seen.add(p)) throw new AssertionError("cycle in result");
+                      if (k >= got.length) throw new AssertionError("result too long");
+                      got[k++] = p.val;
+                  }
+                  if (k != got.length || !Arrays.equals(got, exp)) {
+                      throw new AssertionError("input=" + Arrays.toString(a) + " got=" + Arrays.toString(Arrays.copyOf(got,k)) + " expected=" + Arrays.toString(exp));
+                  }
+              }
+
+              private static long exhaustive(int[] values, int maxLen) {
+                  long[] count = {0};
+                  int[] buf = new int[maxLen];
+                  for (int len = 0; len <= maxLen; len++) enumerate(values, buf, 0, len, 0, count);
+                  return count[0];
+              }
+
+              private static void enumerate(int[] values, int[] buf, int pos, int len, int minIndex, long[] count) {
+                  if (pos == len) {
+                      check(Arrays.copyOf(buf, len));
+                      count[0]++;
+                      return;
+                  }
+                  for (int i = minIndex; i < values.length; i++) {
+                      buf[pos] = values[i];
+                      enumerate(values, buf, pos + 1, len, i, count);
+                  }
+              }
+
+              public static void main(String[] args) {
+                  check(new int[]{});
+                  check(new int[]{1});
+                  check(new int[]{1,1});
+                  check(new int[]{1,1,2,3,3});
+                  check(new int[]{1,2,2,3});
+                  check(new int[]{1,1,1,2,3});
+                  check(new int[]{1,2,3,3,3});
+                  check(new int[]{-2,-2,-1,0,0,1});
+                  long exhaustive = exhaustive(new int[]{-2,-1,0,1,2}, 10);
+
+                  Random rnd = new Random(82L);
+                  int randomCases = 20000;
+                  for (int t = 0; t < randomCases; t++) {
+                      int n = rnd.nextInt(60);
+                      int[] a = new int[n];
+                      for (int i = 0; i < n; i++) a[i] = rnd.nextInt(21) - 10;
+                      Arrays.sort(a);
+                      check(a);
+                  }
+                  System.out.println("PASS actual-candidate exhaustive-sorted=" + exhaustive + " random-cases=20000 empty-single-head-middle-tail-long-runs node-reuse acyclic");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java /tmp/SolutionTest.java
+          stdout="$(java -cp /tmp SolutionTest)"
+          echo "$stdout" | grep -Eq '^PASS actual-candidate exhaustive-sorted=[0-9]+ random-cases=20000 empty-single-head-middle-tail-long-runs node-reuse acyclic$'
+          echo "$stdout"
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH;
+          const out=`review/content_build/answer_batch_${batch}/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'extract actual candidate Java; javac Solution.java SolutionTest.java; java SolutionTest',stdout:process.env.STDOUT,checks:['empty and single-node inputs','duplicate runs at head/middle/tail','runs longer than two','all-duplicate and mixed values','exhaustive nondecreasing arrays over {-2,-1,0,1,2} through length 10','20,000 deterministic randomized sorted arrays','returned data nodes are reused from input','result is acyclic']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Batch 0032 exact source packet and tagged Question SSOT',locator:`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'Delete-sorted-duplicates-II actual-candidate exhaustive/random oracle',locator:path.join(out,'code_validation.json'),source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The exact source identifies Delete Duplicates from Sorted List II / LeetCode 82 and preserves no Java node/API details beyond the sorted-list problem identity.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},{claim_id:'algorithm-behavior',text:'Under the explicit answer-side Java linked-list contract, the actual candidate removes every entire equal-value run of length greater than one and keeps only singleton runs.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'boundaries',text:'Executable validation covers empty/single input, duplicate runs at head/middle/tail, long runs, randomized sorted inputs, node reuse and acyclic output.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task=`tasks/answer-batches/TASK-20260711-0313-answer-batch-${batch}.md`;
+          let text=fs.readFileSync(task,'utf8');
+          const note=`- [ ] \`${cid}\` candidate staged source-first: exact sorted-list / LeetCode 82 source identity preserved; dummy-predecessor Java candidate removes entire duplicate runs and the actual code passes exhaustive nondecreasing arrays plus 20,000 deterministic randomized sorted cases with node-reuse/acyclic checks. Independent review still required.`;
+          if(!text.includes(note)) text+=(text.endsWith('\n')?'':'\n')+note+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Repository consistency gates
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Commit candidate only from stable content head
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during candidate build; discard local candidate and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_${BATCH}/$CANONICAL_ID" "tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m "content: stage batch ${BATCH} delete-duplicates-II candidate"
+          git push origin "HEAD:$CONTENT_BRANCH"
