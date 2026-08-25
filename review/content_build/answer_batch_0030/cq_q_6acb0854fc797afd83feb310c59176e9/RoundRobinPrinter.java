@@ -27,7 +27,6 @@ public final class RoundRobinPrinter {
                     monitor.wait();
                 }
                 if (next > maxValue) {
-                    monitor.notifyAll();
                     return;
                 }
                 int value = next++;
