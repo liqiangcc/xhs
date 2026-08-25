@@ -45,3 +45,12 @@
 - Disposition: fail closed as `incomplete_or_unreadable`. Without the actual code, neither its behavior nor its potential defects can be reviewed deterministically.
 - Required remediation: mark the tagged row invalid with an explicit reason, record the validity-audit exclusion, retire singleton Canonical `cq_q_7560e894f762ce0a02c9838d710a0b25`, remove its ReviewProgress, archive its placeholder baseline Answer, rebuild Question/index/type projections, and preserve the invalid row as an explained non-Canonical projection.
 - A generic code-review checklist must not be promoted as if it answered the missing code sample.
+
+## cq_q_7642700411d0977839a2cd01a41e50ad
+
+- Exact repository source: `note_tagged/663bb0e8000000001e027dad.json`.
+- Preserved wording: `编程题：计算二维空间中点到直线的距离（C++实现）。`
+- Source-preserved facts: this is a two-dimensional point-to-line distance coding task and the requested implementation language is C++.
+- Not preserved by the repository source and therefore answer-side contracts only: how the infinite line is represented, the function signature, coordinate type/range, finite-value policy, degenerate-line behavior, required C++ standard, output precision, and whether distance to a segment rather than an infinite line is intended.
+- Candidate policy for this slice: represent the infinite line by two distinct points A and B, use finite `long double` coordinates, reject A==B, return non-negative perpendicular distance to the infinite line, and compile the exact displayed implementation as C++20.
+- Promotion remains blocked until an isolated independent reviewer verifies source boundaries, exact fenced-code execution, numerical/degenerate cases, evidence, and repository gates.
