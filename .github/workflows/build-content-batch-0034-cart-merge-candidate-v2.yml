@@ -1,0 +1,318 @@
+name: Build Content Batch 0034 Cart Merge Candidate V2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0034-cart-merge-candidate-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-cart-merge-writer-v2
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7b295050485d85a9831398730c0ce1a5
+  SOURCE_NOTE_QID: 43f70cfb3ecc582e11bf3dc305a18f3c
+  SOURCE_NOTE: note_tagged/68bc0218000000001d02a145.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source boundary and repository ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0034/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,noteQid=process.env.SOURCE_NOTE_QID,note=process.env.SOURCE_NOTE;
+          const expected='算法：业务场景题（购物车合并）？';
+          const tagged=JSON.parse(fs.readFileSync(note,'utf8'));
+          const noteQuestion=(tagged.tagged_questions||[]).find(x=>x.question_id===noteQid);
+          if(!noteQuestion||noteQuestion.original_question!==expected) throw new Error(`note source wording drifted: ${noteQuestion?.original_question}`);
+          if(noteQuestion.question_type!=='算法手撕_Coding') throw new Error(`note source type drifted: ${noteQuestion.question_type}`);
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          const libraryQuestion=(ctx.source_questions||[]).find(x=>x.original_question===expected);
+          if(!libraryQuestion) throw new Error(`canonical context does not reach preserved wording: ${expected}`);
+          if(!ctx.canonical?.question_ids?.includes(libraryQuestion.question_id)) throw new Error(`canonical ownership missing for library question ${libraryQuestion.question_id}`);
+          fs.writeFileSync(path.join(`review/content_build/answer_batch_0034/${cid}`,'source_mapping.json'),JSON.stringify({schema_version:'answer_source_mapping.v1',canonical_id:cid,library_question_id:libraryQuestion.question_id,note_question_id:noteQid,note_path:note,original_question:expected,verified_at:'2026-08-26'},null,2)+'\n');
+          const candidate=`review/candidates/answers/${cid}.md`;
+          if(fs.existsSync(candidate)) throw new Error(`${candidate} already exists; refuse overwrite`);
+          const boundary='review/content_build/answer_batch_0034/source_boundary_audit.md';
+          let text=fs.existsSync(boundary)?fs.readFileSync(boundary,'utf8'):'# Answer Batch 0034 Source Boundary Audit\n';
+          const heading=`## ${cid}`;
+          if(!text.includes(heading)) text += `\n${heading}\n\n- Exact repository source: \`${note}\` note question \`${noteQid}\`; canonical context maps the preserved wording to library question \`${libraryQuestion.question_id}\`.\n- Preserved wording: \`${expected}\`\n- Source-preserved facts: this is a coding/business-scenario prompt about merging shopping carts.\n- Not preserved by the source: cart ownership model, item identity key, duplicate-line semantics, quantity conflict rule, quantity cap, inventory/price/promotion behavior, ordering, persistence, idempotency, concurrency, API shape, or failure handling.\n- Candidate executable policy only: merge two in-memory carts by SKU; aggregate positive quantities; saturate at an explicit per-SKU cap; preserve account-first first-seen order; do not mutate inputs; reject malformed lines. This is answer-side policy, not recovered source fact.\n- Promotion remains blocked until isolated source-first review, evidence gate, required human approval, and real-review policy are satisfied.\n`;
+          fs.writeFileSync(boundary,text);
+          NODE
+
+      - name: Write cart-merge candidate and executable fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7b295050485d85a9831398730c0ce1a5","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 业务场景题：购物车合并
+
+          ## 核心结论
+
+          原题只保留“购物车合并”，没有给冲突规则，因此不能直接把“数量相加”“登录车覆盖”或“按库存截断”说成题目事实。回答时应先确认商品唯一键、重复行、数量冲突、库存/价格/促销、登录迁移、并发与幂等。为了给出可执行代码，下面明确采用一个答案侧最小契约：输入是账户车和游客车的内存条目；用 `skuId` 标识同一商品；两边以及单边内部的重复 SKU 数量相加，并按显式 `maxPerSku` 封顶；返回新列表，不修改输入；顺序为账户车首次出现顺序优先，再追加游客车的新 SKU；非法条目直接拒绝。库存、价格、优惠、持久化和并发不属于这段纯合并函数。
+
+          ## 1 分钟版
+
+          - 先定“商品身份 + 冲突策略 + 业务校验 + 并发/幂等”，因为题干没有给这些规则。
+          - 本实现用 `LinkedHashMap` 保存归并状态：先扫账户车，再扫游客车；同 SKU 聚合数量并按 `maxPerSku` 截断。
+          - 同一输入内部的重复 SKU 也聚合；SKU 必须非空，数量必须是正整数。
+          - 返回新列表，不修改两个输入。平均时间 O(n+m)，额外空间 O(k)，k 是不同 SKU 数量。
+          - 线上合并后仍应重新校验库存、价格和促销，并在持久化边界解决登录迁移的并发与幂等；这些不能从当前题干虚构成已有事实。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.ArrayList;
+          import java.util.LinkedHashMap;
+          import java.util.List;
+          import java.util.Map;
+
+          public final class CartMerger {
+              public record CartLine(String skuId, int quantity) {}
+
+              public static List<CartLine> merge(
+                      List<CartLine> accountCart,
+                      List<CartLine> guestCart,
+                      int maxPerSku) {
+                  if (accountCart == null || guestCart == null) {
+                      throw new IllegalArgumentException("carts must not be null");
+                  }
+                  if (maxPerSku <= 0) {
+                      throw new IllegalArgumentException("maxPerSku must be > 0");
+                  }
+
+                  Map<String, Integer> merged = new LinkedHashMap<>();
+                  addAll(merged, accountCart, maxPerSku);
+                  addAll(merged, guestCart, maxPerSku);
+
+                  List<CartLine> result = new ArrayList<>(merged.size());
+                  for (Map.Entry<String, Integer> entry : merged.entrySet()) {
+                      result.add(new CartLine(entry.getKey(), entry.getValue()));
+                  }
+                  return result;
+              }
+
+              private static void addAll(
+                      Map<String, Integer> merged,
+                      List<CartLine> cart,
+                      int maxPerSku) {
+                  for (CartLine line : cart) {
+                      if (line == null || line.skuId() == null || line.skuId().isBlank()) {
+                          throw new IllegalArgumentException("skuId must not be blank");
+                      }
+                      if (line.quantity() <= 0) {
+                          throw new IllegalArgumentException("quantity must be > 0");
+                      }
+                      int current = merged.getOrDefault(line.skuId(), 0);
+                      long sum = (long) current + line.quantity();
+                      merged.put(line.skuId(), (int) Math.min(maxPerSku, sum));
+                  }
+              }
+          }
+          ```
+
+          例如账户车是 `A×2, B×1`，游客车是 `A×3, C×4`，`maxPerSku=5`，结果是 `A×5, B×1, C×4`。这里“相加并封顶”只是为了固定可执行契约；真实业务如果要求账户车优先、游客车覆盖、按库存上限、按店铺/规格组合键合并，应替换策略而不是把示例当成唯一答案。
+
+          ## 关键细节
+
+          - **商品身份**：示例用 `skuId`，实际唯一键可能还包含销售属性、店铺或配送模式，必须以业务模型为准。
+          - **重复行**：本契约把单边内部重复 SKU 也聚合，避免只处理“两车冲突”而遗漏输入自身重复。
+          - **数量上限**：`maxPerSku` 是显式参数；先转 `long` 求和再封顶，避免 `int` 先溢出。
+          - **顺序**：`LinkedHashMap` 只提供确定性输出顺序，不代表真实购物车排序规则。
+          - **库存/价格/优惠**：数量合并不等于最终可购买结果；线上应在合并后重新计算这些派生状态。
+          - **不修改输入**：函数返回新列表，减少快照副作用；这不等于持久化层天然线程安全。
+          - **并发与幂等**：登录时若加购和迁移同时发生，基于旧快照写回会有丢更新/重复迁移风险；应在存储边界定义版本校验、事务/锁/串行化以及迁移幂等键。
+
+          ## 原理机制
+
+          纯函数层面的购物车合并就是一次按商品键的归并。`LinkedHashMap<skuId, quantity>` 维护不变量：每个已处理 SKU 只占一个槽位，槽位数量等于已处理条目的聚合结果且不超过 `maxPerSku`。每条输入只更新所属 SKU，所以扫描完成后得到按键聚合结果。数值结果由“正数量求和并封顶”决定，展示顺序由“账户首次出现优先、游客新 SKU 后追加”这一显式契约决定。
+
+          业务系统还多一层状态一致性：游客车和账户车可能来自不同存储，合并动作可能与同时加购竞争。因此这段算法只能回答“给定两个确定快照如何合并”，不能替代登录迁移的事务、版本控制和幂等设计。
+
+          ## 项目经验版
+
+          来源没有真实购物车项目、流量、库存系统或事故数据，不能虚构亲历。落地时应先列业务矩阵：同 SKU 冲突、失效商品、库存不足、价格变化、优惠重算、选中状态、跨店铺、重复迁移和并发加购，再根据真实存储模型决定原子性方案并做并发回归测试。
+
+          ## 常见追问
+
+          - 问：为什么数量相加而不是账户车覆盖？答：原题没规定；相加只是当前可执行答案选择的冲突策略，真实业务要先确认规则。
+          - 问：为什么用 SKU？答：这里只把 `skuId` 作为最小身份假设；真实唯一键必须由商品模型决定。
+          - 问：库存只剩 3 件但合并得到 5 件怎么办？答：`maxPerSku` 不是实时库存替代品；合并后仍要做库存校验并定义截断、提示或保留期望数量的业务规则。
+          - 问：两个请求同时在登录时加购会怎样？答：若都基于旧快照写回可能丢更新；要在持久化边界用版本校验、事务/锁或事件串行化，并让迁移幂等。
+          - 问：复杂度是多少？答：两个输入各扫描一次，平均 O(n+m)，保存 k 个不同 SKU，空间 O(k)。
+
+          ## 易错点
+
+          - 未确认冲突规则就把某种业务策略说成题目唯一要求。
+          - 用商品名称等非稳定字段做合并键。
+          - 只处理两车之间重复，忽略单个购物车内部重复。
+          - `int + int` 后才封顶，极端输入先发生溢出。
+          - 把数量归并、库存、价格、促销和持久化揉成一个难验证的大函数。
+          - 只写内存算法却声称已经解决登录迁移并发和幂等。
+          EOF
+
+          cat > "$out/CartMerger.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.LinkedHashMap;
+          import java.util.List;
+          import java.util.Map;
+
+          public final class CartMerger {
+              public record CartLine(String skuId, int quantity) {}
+
+              public static List<CartLine> merge(
+                      List<CartLine> accountCart,
+                      List<CartLine> guestCart,
+                      int maxPerSku) {
+                  if (accountCart == null || guestCart == null) {
+                      throw new IllegalArgumentException("carts must not be null");
+                  }
+                  if (maxPerSku <= 0) {
+                      throw new IllegalArgumentException("maxPerSku must be > 0");
+                  }
+
+                  Map<String, Integer> merged = new LinkedHashMap<>();
+                  addAll(merged, accountCart, maxPerSku);
+                  addAll(merged, guestCart, maxPerSku);
+
+                  List<CartLine> result = new ArrayList<>(merged.size());
+                  for (Map.Entry<String, Integer> entry : merged.entrySet()) {
+                      result.add(new CartLine(entry.getKey(), entry.getValue()));
+                  }
+                  return result;
+              }
+
+              private static void addAll(
+                      Map<String, Integer> merged,
+                      List<CartLine> cart,
+                      int maxPerSku) {
+                  for (CartLine line : cart) {
+                      if (line == null || line.skuId() == null || line.skuId().isBlank()) {
+                          throw new IllegalArgumentException("skuId must not be blank");
+                      }
+                      if (line.quantity() <= 0) {
+                          throw new IllegalArgumentException("quantity must be > 0");
+                      }
+                      int current = merged.getOrDefault(line.skuId(), 0);
+                      long sum = (long) current + line.quantity();
+                      merged.put(line.skuId(), (int) Math.min(maxPerSku, sum));
+                  }
+              }
+          }
+          JAVA
+
+          cat > "$out/CartMergerTest.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public final class CartMergerTest {
+              private static CartMerger.CartLine line(String sku, int qty) { return new CartMerger.CartLine(sku, qty); }
+              private static void eq(Object actual, Object expected, String name) {
+                  if (!actual.equals(expected)) throw new AssertionError(name + " expected=" + expected + " actual=" + actual);
+              }
+              private static void throwsIAE(Runnable r, String name) {
+                  try { r.run(); throw new AssertionError(name + " expected IllegalArgumentException"); }
+                  catch (IllegalArgumentException expected) { }
+              }
+              public static void main(String[] args) {
+                  var account = new ArrayList<>(List.of(line("A",2), line("B",1)));
+                  var guest = new ArrayList<>(List.of(line("A",3), line("C",4)));
+                  eq(CartMerger.merge(account, guest, 5), List.of(line("A",5), line("B",1), line("C",4)), "cross-cart merge/order/cap");
+                  eq(account, List.of(line("A",2), line("B",1)), "account input unchanged");
+                  eq(guest, List.of(line("A",3), line("C",4)), "guest input unchanged");
+                  eq(CartMerger.merge(List.of(line("A",1),line("A",2)), List.of(), 10), List.of(line("A",3)), "duplicate within one cart");
+                  eq(CartMerger.merge(List.of(), List.of(line("X",Integer.MAX_VALUE)), 7), List.of(line("X",7)), "large quantity saturation");
+                  eq(CartMerger.merge(List.of(), List.of(), 3), List.of(), "empty carts");
+                  throwsIAE(() -> CartMerger.merge(null, List.of(), 3), "null cart");
+                  throwsIAE(() -> CartMerger.merge(List.of(), List.of(), 0), "invalid cap");
+                  throwsIAE(() -> CartMerger.merge(List.of(line("",1)), List.of(), 3), "blank sku");
+                  throwsIAE(() -> CartMerger.merge(List.of(line("A",0)), List.of(), 3), "non-positive quantity");
+                  System.out.println("PASS cart-merge aggregate duplicates cap ordering immutable-input validation overflow-safe");
+              }
+          }
+          JAVA
+
+      - name: Execute deterministic validation and freeze writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"
+          pushd "$out" >/dev/null
+          javac CartMerger.java CartMergerTest.java
+          stdout="$(java CartMergerTest)"
+          popd >/dev/null
+          test "$stdout" = 'PASS cart-merge aggregate duplicates cap ordering immutable-input validation overflow-safe'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${cid}`;
+          const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'javac CartMerger.java CartMergerTest.java && java CartMergerTest',stdout:process.env.STDOUT,checks:['cross-cart same-SKU aggregation','deterministic account-first ordering','per-SKU saturation','duplicate lines within one cart','input lists unchanged','empty carts','invalid inputs','overflow-safe intermediate sum']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Exact repository shopping-cart-merge source and verified canonical mapping',locator:`${mapping.note_path} + ${out}/source_mapping.json + review/content_build/answer_batch_0034/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Deterministic JDK 21 cart-merge fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'The preserved source only asks a coding/business-scenario question about shopping-cart merge; concrete identity, conflict, stock, pricing, ordering, persistence and concurrency rules are not preserved.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'candidate-contract',text:'The candidate labels SKU aggregation, positive quantities, saturation, deterministic account-first order, input immutability and malformed-line rejection as answer-side executable policy.',source_ids:['repository-source','fixture'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'validation',text:'The exact Java fixture validates cross-cart and intra-cart duplicates, capping, ordering, input immutability, invalid inputs, empty carts and overflow-safe summation.',source_ids:['fixture'],answer_locations:['3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:mapping.library_question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_human_approval_and_real_review_policy_not_yet_satisfied'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md';
+          let t=fs.readFileSync(task,'utf8').replace('- Status: `pending`','- Status: `in_progress`');
+          const progress='- Cart-merge canonical `'+cid+'` has a source-bounded candidate, verified source mapping, deterministic JDK 21 validation, and writer evidence; isolated review and promotion gates remain pending.';
+          if(!t.includes(progress)) t += (t.includes('## Progress')?'\n':'\n## Progress\n\n')+progress+'\n';
+          fs.writeFileSync(task,t);
+          NODE
+
+      - name: Verify exact code fence and repository writer gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const fence=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!fence) throw new Error('Java fence missing');
+          const fixture=fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/CartMerger.java`,'utf8').trim();
+          if(fence[1].trim()!==fixture) throw new Error('candidate Java fence differs from executable fixture');
+          NODE
+          test -s "review/content_build/answer_batch_0034/$CANONICAL_ID/code_validation.json"
+          test -s "review/content_build/answer_batch_0034/$CANONICAL_ID/writer_research.json"
+
+      - name: Commit writer artifacts atomically
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-content-builder
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0034/source_boundary_audit.md" "review/content_build/answer_batch_0034/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          if git diff --cached --quiet; then echo 'No writer changes.'; exit 0; fi
+          git commit -m 'content: stage batch 0034 cart-merge candidate'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin "$CONTENT_BRANCH" && git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          exit 1
