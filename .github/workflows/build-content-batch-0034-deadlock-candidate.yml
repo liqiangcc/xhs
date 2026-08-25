@@ -58,7 +58,18 @@ jobs:
           if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse overwrite');
           fs.writeFileSync(path.join(out,'source_mapping.json'),JSON.stringify({schema_version:'answer_source_mapping.v1',canonical_id:cid,library_question_id:library.question_id,note_question_id:qid,note_path:note,original_question:expected,question_type:src.question_type,domain:src.domain,verified_at:'2026-08-26'},null,2)+'\n');
           const boundary='review/content_build/answer_batch_0034/source_boundary_audit.md'; let text=fs.existsSync(boundary)?fs.readFileSync(boundary,'utf8'):'# Answer Batch 0034 Source Boundary Audit\n'; const heading=`## ${cid}`;
-          if(!text.includes(heading)) text+=`\n${heading}\n\n- Exact repository source: \`${note}\`, question \`${qid}\`.\n- Preserved wording: \`${expected}\`\n- Preserved intent: explain how deadlocks are avoided and provide a concrete deadlocking Java example.\n- Not preserved: a required lock primitive, JDK version, business scenario, timeout policy, database semantics, or whether the example must use intrinsic monitors versus explicit locks.\n- Candidate executable policy: use JDK 21 `ReentrantLock` plus a two-party latch to deterministically create a circular wait; use daemon worker threads and `ThreadMXBean.findDeadlockedThreads()` with a bounded detection deadline so the demonstration is reproducible without hanging CI.\n- Avoidance guidance is stated as general mechanisms and explicitly separates prevention (global lock order / avoiding hold-and-wait), bounded acquisition (`tryLock` + rollback/retry), and diagnosis/detection. No production incident is invented.\n- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.\n`;
+          if(!text.includes(heading)) {
+            const lines=[
+              `- Exact repository source: ${note}, question ${qid}.`,
+              `- Preserved wording: ${expected}`,
+              '- Preserved intent: explain how deadlocks are avoided and provide a concrete deadlocking Java example.',
+              '- Not preserved: a required lock primitive, JDK version, business scenario, timeout policy, database semantics, or whether the example must use intrinsic monitors versus explicit locks.',
+              '- Candidate executable policy: use JDK 21 ReentrantLock plus a two-party latch to deterministically create a circular wait; use daemon worker threads and ThreadMXBean.findDeadlockedThreads() with a bounded detection deadline so the demonstration is reproducible without hanging CI.',
+              '- Avoidance guidance is stated as general mechanisms and explicitly separates prevention (global lock order / avoiding hold-and-wait), bounded acquisition (tryLock + rollback/retry), and diagnosis/detection. No production incident is invented.',
+              '- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.'
+            ];
+            text += `\n${heading}\n\n${lines.join('\n')}\n`;
+          }
           fs.writeFileSync(boundary,text);
           NODE
 
