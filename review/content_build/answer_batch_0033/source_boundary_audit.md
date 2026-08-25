@@ -26,3 +26,12 @@
 - Disposition: fail closed as `incomplete_or_unreadable`. The phrase is an assessment-category summary, not a recoverable interview Question; the current Coding/quick-sort metadata is unsupported derived contamination.
 - Required remediation: mark the tagged row invalid with an explicit reason, record the validity-audit exclusion, retire singleton Canonical `cq_q_7531e07d0f1e21e2eb6dab2bae97c0e9`, remove its ReviewProgress, archive its placeholder baseline Answer, rebuild Question/index/type projections, and keep the invalid Question as an explained non-Canonical projection.
 - No Coding candidate may be authored from the unsupported `快排` entity.
+
+## cq_q_754f6f2262137c4a1450a526c68c6553
+
+- Exact repository projections: `note_structured/67e14815000000001b025250.json` and `note_tagged/67e14815000000001b025250.json`.
+- Stronger raw source: `note_json/67e14815000000001b025250.json` preserves only `一道动态规划（忘了，有点难，没做出来）`.
+- Current projected wording: `算法：关于动态规划 (DP) 的难题。`.
+- Disposition: fail closed as `incomplete_or_unreadable`. Neither the raw note nor the structured projection preserves the DP state, input/output, constraints, examples, recurrence, or problem identity, so no deterministic Coding contract can be recovered.
+- Required remediation: mark the tagged row invalid with an explicit reason, record the validity-audit exclusion, retire singleton Canonical `cq_q_754f6f2262137c4a1450a526c68c6553`, remove its ReviewProgress, archive its placeholder baseline Answer, rebuild Question/index/type projections, and keep the invalid Question as an explained non-Canonical projection.
+- No generic DP answer may be promoted as a substitute for the forgotten source question.
