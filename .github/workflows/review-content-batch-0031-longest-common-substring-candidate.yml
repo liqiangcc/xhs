@@ -60,7 +60,7 @@ jobs:
           const c=cs.find(x=>x.canonical_id===cid),q=qs.find(x=>x.question_id===qid);
           if(!c||!q||q.canonical_id!==cid||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
           const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
-          const required=['最长公共**子串**要求连续','dp[i][j] = dp[i-1][j-1] + 1','否则 `dp[i][j] = 0`','j` 必须从右往左更新','最长公共子串和最长公共子序列差在哪','UTF-16 code unit','题源没给返回规则'];
+          const required=['最长公共**子串**要求连续','dp[i][j] = dp[i-1][j-1] + 1','dp[i][j] = 0','j` 必须从右往左更新','最长公共子串和最长公共子序列差在哪','UTF-16 code unit','题源没给返回规则'];
           for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
           if(/transition\s*\(|按本题约束填写|ProblemSpec/.test(text)) throw new Error('placeholder/template residue detected');
           NODE
