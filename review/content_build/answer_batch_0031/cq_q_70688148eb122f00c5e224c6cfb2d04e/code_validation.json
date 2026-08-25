@@ -1,0 +1,48 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_70688148eb122f00c5e224c6cfb2d04e",
+  "result": "pass",
+  "validated_at": "2026-08-25",
+  "command": "python3 sql_validation.py; independent reviewer SQLite oracle",
+  "stdout": "PASS writer gold-orders=2 raw-items=3 revenue=3500; PASS reviewer a-orders=3 raw-items=4 revenue=550",
+  "checks": [
+    "fan-out order count",
+    "revenue once per order",
+    "status filter",
+    "half-open time range",
+    "no-item inner-join contract",
+    "independent expected computation"
+  ],
+  "boundary_tests": [
+    {
+      "case": "one-to-many fan-out",
+      "expected": "order count remains order-grain while item rows are larger",
+      "actual": "writer gold 2 orders vs 3 item rows; reviewer segment a 3 orders vs 4 item rows",
+      "passed": true
+    },
+    {
+      "case": "revenue aggregation",
+      "expected": "item values aggregate once per order then once per segment",
+      "actual": "writer 3500/900 and reviewer 550 match independent computations",
+      "passed": true
+    },
+    {
+      "case": "status filter",
+      "expected": "cancelled orders excluded before aggregation",
+      "actual": "passed in both datasets",
+      "passed": true
+    },
+    {
+      "case": "half-open time window",
+      "expected": "end boundary excluded",
+      "actual": "out-of-window/end-boundary rows excluded",
+      "passed": true
+    },
+    {
+      "case": "declared inner-join contract",
+      "expected": "paid order with no items excluded",
+      "actual": "writer bronze no-item order absent",
+      "passed": true
+    }
+  ]
+}
