@@ -1,0 +1,318 @@
+name: Build Content Batch 0029 Avoid Flood Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0029-avoid-flood-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0029-avoid-flood-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6a03e4ded0b05d96bb54b43ae3e980be
+  SOURCE_QID: 6a03e4ded0b05d96bb54b43ae3e980be
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard source identity and frozen batch boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0029/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('Canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法题: 避免洪水泛滥 (LeetCode 1488)';
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          const packet=fs.readFileSync('review/content_build/answer_batch_0029/source_boundary_audit.md','utf8');
+          if(!packet.includes(expected)||!packet.includes(cid)) throw new Error('frozen batch source packet missing current Canonical');
+          NODE
+
+      - id: state
+        name: Guard writer idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/code_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded candidate and deterministic Java fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6a03e4ded0b05d96bb54b43ae3e980be","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 避免洪水泛滥（LeetCode 1488）
+
+          ## 核心结论
+
+          这题的关键不是“看到晴天就随便抽干一个湖”，而是当某个湖再次下雨时，必须把它上一次下雨之后、这一次下雨之前的某个晴天分配给它。用 `lastRain` 记录每个湖上一次下雨日，用有序集合 `dryDays` 保存尚未分配的晴天；再次遇到同一个湖时，取 `dryDays.higher(lastRain[lake])`，也就是上次下雨之后最早可用的晴天。如果不存在这样的晴天，当前湖必然在再次下雨前仍是满的，直接返回空数组。
+
+          ## 1 分钟版
+
+          - 官方题意里，`rains[i] > 0` 表示第 i 天给对应湖下雨，`rains[i] == 0` 表示当天必须选择一个湖抽干；雨天答案固定为 `-1`，无法避免洪水时返回空数组。
+          - `lastRain[lake]` 表示这个湖上次被灌满的日期；如果湖第一次下雨，只记录日期即可。
+          - 每个晴天先加入 `TreeSet<Integer> dryDays`，表示“过去已经发生、但还没分配给任何湖”的抽干机会。
+          - 湖再次下雨时，必须从 `dryDays` 里找严格晚于上次下雨日的最早晴天；用 `higher(prev)` 得到它，给该晴天安排抽干这个湖并从集合移除。
+          - 扫描完后仍未使用的晴天可以任意抽干一个湖，例如填 `1`。整体时间 O(n log n)，空间 O(n)。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.HashMap;
+          import java.util.Map;
+          import java.util.TreeSet;
+
+          final class AvoidFlood {
+              static int[] avoidFlood(int[] rains) {
+                  if (rains == null) throw new IllegalArgumentException("rains must not be null");
+                  int n = rains.length;
+                  int[] ans = new int[n];
+                  Map<Integer, Integer> lastRain = new HashMap<>();
+                  TreeSet<Integer> dryDays = new TreeSet<>();
+
+                  for (int i = 0; i < n; i++) {
+                      int lake = rains[i];
+                      if (lake < 0) throw new IllegalArgumentException("rains[i] must be >= 0");
+                      if (lake == 0) {
+                          ans[i] = 1;
+                          dryDays.add(i);
+                          continue;
+                      }
+
+                      ans[i] = -1;
+                      Integer prev = lastRain.put(lake, i);
+                      if (prev == null) continue;
+
+                      Integer dry = dryDays.higher(prev);
+                      if (dry == null) return new int[0];
+                      ans[dry] = lake;
+                      dryDays.remove(dry);
+                  }
+                  return ans;
+              }
+          }
+          ```
+
+          为什么贪心地选“上次下雨之后最早的可用晴天”是安全的？对当前再次下雨的湖，这个晴天只要落在 `(prev, i)` 内就能消除当前洪水风险；选择最早的可用日，会把更晚的晴天留给那些上一次下雨更晚、可选窗口更窄的未来需求。反过来，如果连最早满足 `> prev` 的可用晴天都不存在，那么过去没有任何尚未使用的晴天能落在合法窗口内，当前洪水已经不可避免。
+
+          ## 关键细节
+
+          - **晴天为什么用日期而不是湖号存集合**：待决定的是“哪一天拿来抽干哪个湖”；湖号只有在第二次下雨暴露出具体需求时才确定。
+          - **为什么要严格 `higher(prev)`**：上一次下雨当天不能同时抽干；合法抽干日必须在两次下雨之间。
+          - **为什么不用未来晴天**：在线扫描到第 i 天时，只有 `< i` 的晴天已经发生；`dryDays` 天然只包含过去日期，所以找到的日子自动小于当前再次下雨日。
+          - **为什么未使用晴天填 1**：官方允许晴天抽干空湖，什么也不会发生；因此不承担关键任务的晴天可以填任意正湖号。
+          - **输入边界**：官方约束给出非负 `rains[i]`；实现额外对 `null` 和负值 fail closed，属于防御性契约，不是题目新增要求。
+          - **复杂度**：每个晴天至多加入和删除 `TreeSet` 一次，每次 O(log n)；哈希表平均 O(1)，总时间 O(n log n)，额外空间 O(n)。
+
+          ## 原理机制
+
+          每个湖的两次相邻降雨 `(prev, current)` 形成一个必须满足的“抽干窗口”：至少选择一个尚未被其他湖占用的晴天 `d`，满足 `prev < d < current`。晴天是一种一次性资源，一个日期只能服务一个湖。
+
+          扫描到 `current` 时，这个窗口的右端点已经到期。如果此时还没有分配抽干日，就必须立刻从过去的空闲晴天中补一个。选择 `higher(prev)` 给当前湖使用相当于 earliest feasible day：既满足当前截止条件，又尽量保留更晚的资源。`lastRain` 负责生成窗口左端点，`TreeSet` 负责对可用日期做后继查询和删除。
+
+          ## 项目经验版
+
+          题源是算法题，没有真实项目、生产流量或个人经历，不能虚构。工程上可以把它理解为“带时间窗口的一次性资源分配”：先明确资源能否复用、窗口是否开闭区间、失败时是否允许回滚，再选择有序集合或其他调度结构；这些是迁移思路，不是本题来源事实。
+
+          ## 常见追问
+
+          - 问：为什么不能每个晴天就抽干当前任意一个已满湖？答：你不知道哪个湖会最先再次下雨；过早随意消耗晴天可能把唯一可行窗口浪费掉。等到某湖再次下雨时再反向分配过去的空闲晴天，可以精确满足已到期需求。
+          - 问：为什么 `higher(prev)` 取最早可用晴天？答：当前湖只要求日期晚于 prev；取最早可用值能把更晚、更灵活的日期留给窗口起点更晚的需求。
+          - 问：如果 `higher(prev)` 返回 `null` 为什么一定无解？答：集合里已经包含当前日前所有尚未使用的晴天；没有任何一个晚于 prev，就不存在能夹在两次降雨之间的可用晴天。
+          - 问：晴天抽干一个本来就是空的湖可以吗？答：官方题意允许，效果是什么也不发生，所以未被关键约束使用的晴天可填任意正湖号。
+          - 问：能不能用排序数组代替 `TreeSet`？答：需要同时支持动态插入、找后继、删除已使用日期；普通数组删除代价高。可以用其他有序集合、Fenwick/并查集式“下一个未使用位置”等结构，但实现与复杂度权衡不同。
+
+          ## 易错点
+
+          - 再次下雨时只检查“有没有晴天”，却没检查晴天是否晚于这个湖上一次下雨。
+          - 找到晴天后不从集合删除，导致同一天被多个湖重复使用。
+          - 把当前或未来的晴天当作已经可用，破坏时间因果顺序。
+          - 用 `ceiling(prev)` 而不是严格 `higher(prev)`，错误允许上次下雨当天同时抽干。
+          - 无解时仍返回一个部分填好的数组，而不是按题意返回空数组。
+          EOF
+
+          cat > "$out/AvoidFlood.java" <<'JAVA'
+          import java.util.HashMap;
+          import java.util.Map;
+          import java.util.TreeSet;
+
+          final class AvoidFlood {
+              static int[] avoidFlood(int[] rains) {
+                  if (rains == null) throw new IllegalArgumentException("rains must not be null");
+                  int n = rains.length;
+                  int[] ans = new int[n];
+                  Map<Integer, Integer> lastRain = new HashMap<>();
+                  TreeSet<Integer> dryDays = new TreeSet<>();
+                  for (int i = 0; i < n; i++) {
+                      int lake = rains[i];
+                      if (lake < 0) throw new IllegalArgumentException("rains[i] must be >= 0");
+                      if (lake == 0) {
+                          ans[i] = 1;
+                          dryDays.add(i);
+                          continue;
+                      }
+                      ans[i] = -1;
+                      Integer prev = lastRain.put(lake, i);
+                      if (prev == null) continue;
+                      Integer dry = dryDays.higher(prev);
+                      if (dry == null) return new int[0];
+                      ans[dry] = lake;
+                      dryDays.remove(dry);
+                  }
+                  return ans;
+              }
+          }
+          JAVA
+
+          cat > "$out/AvoidFloodTest.java" <<'JAVA'
+          import java.util.HashSet;
+          import java.util.Set;
+
+          final class AvoidFloodTest {
+              private static void expectPossible(int[] rains) {
+                  int[] ans = AvoidFlood.avoidFlood(rains);
+                  if (ans.length != rains.length) throw new AssertionError("expected possible schedule");
+                  assertValid(rains, ans);
+              }
+
+              private static void expectImpossible(int[] rains) {
+                  int[] ans = AvoidFlood.avoidFlood(rains);
+                  if (ans.length != 0) throw new AssertionError("expected impossible schedule");
+              }
+
+              private static void assertValid(int[] rains, int[] ans) {
+                  Set<Integer> full = new HashSet<>();
+                  for (int i = 0; i < rains.length; i++) {
+                      if (rains[i] > 0) {
+                          if (ans[i] != -1) throw new AssertionError("rainy day must be -1 at " + i);
+                          if (!full.add(rains[i])) throw new AssertionError("flood at day " + i + " lake " + rains[i]);
+                      } else {
+                          if (ans[i] <= 0) throw new AssertionError("dry day must name positive lake");
+                          full.remove(ans[i]);
+                      }
+                  }
+              }
+
+              public static void main(String[] args) {
+                  expectPossible(new int[]{1,2,3,4});
+                  expectPossible(new int[]{1,2,0,0,2,1});
+                  expectImpossible(new int[]{1,2,0,1,2});
+                  expectPossible(new int[]{69,0,0,0,69});
+                  expectPossible(new int[]{1,0,1});
+                  expectImpossible(new int[]{1,1});
+                  expectPossible(new int[]{});
+                  boolean nullRejected=false;
+                  try { AvoidFlood.avoidFlood(null); } catch (IllegalArgumentException expected) { nullRejected=true; }
+                  if (!nullRejected) throw new AssertionError("null must be rejected");
+                  boolean negativeRejected=false;
+                  try { AvoidFlood.avoidFlood(new int[]{1,-1,0}); } catch (IllegalArgumentException expected) { negativeRejected=true; }
+                  if (!negativeRejected) throw new AssertionError("negative rain id must be rejected");
+                  System.out.println("PASS official-shapes=3 sparse-dry=yes exact-window=yes immediate-repeat=impossible empty=yes null=rejected negative=rejected");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer research
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          javac "$out/AvoidFlood.java" "$out/AvoidFloodTest.java"
+          stdout="$(java -cp "$out" AvoidFloodTest)"
+          test "$stdout" = 'PASS official-shapes=3 sparse-dry=yes exact-window=yes immediate-repeat=impossible empty=yes null=rejected negative=rejected'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const out=`review/content_build/answer_batch_0029/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac AvoidFlood.java AvoidFloodTest.java && java AvoidFloodTest',stdout:process.env.STDOUT,checks:['all-rain no-repeat schedule','two dry days resolving two repeated lakes','known impossible crossing deadlines','extra unused dry days','single exact dry window','immediate repeat impossible','empty defensive boundary','explicit null rejection','explicit negative-value rejection']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Answer Batch 0029 frozen repository source boundary',locator:'review/content_build/answer_batch_0029/source_boundary_audit.json',source_type:'repository_source_record',checked_at:date},{source_id:'leetcode-1488',title:'LeetCode 1488 - Avoid Flood in The City',locator:'https://leetcode.com/problems/avoid-flood-in-the-city/',source_type:'official_problem_statement',checked_at:date},{source_id:'fixture',title:'Avoid Flood deterministic Java simulation fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-identity',text:'The repository source explicitly identifies LeetCode 1488 Avoid Flood; the official problem statement defines rainy days, dry days, -1 on rain, arbitrary positive lake on dry days, and empty output when impossible.',source_ids:['repository-source','leetcode-1488'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'greedy-scheduling',text:'The candidate tracks each lake last-rain date and assigns the earliest still-unused dry day strictly after that date when the lake rains again.',source_ids:['fixture'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},{claim_id:'boundary-validation',text:'The executable simulator validates successful schedules and impossibility across repeated-lake windows, unused dry days and immediate repeats, plus defensive null/negative input handling.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- Avoid-Flood/LeetCode-1488 candidate staged source-first against the repository identity plus the official problem statement; TreeSet scheduling and impossible cases are covered by a deterministic Java simulator; isolated source-first review remains pending.';
+          if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          NODE
+
+      - name: Run repository gates for writer stage
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:coverage
+
+      - name: Commit candidate only from stable content head
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during avoid-flood writer: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0029/$CANONICAL_ID/context.json" "review/content_build/answer_batch_0029/$CANONICAL_ID/AvoidFlood.java" "review/content_build/answer_batch_0029/$CANONICAL_ID/AvoidFloodTest.java" "review/content_build/answer_batch_0029/$CANONICAL_ID/code_validation.json" "review/content_build/answer_batch_0029/$CANONICAL_ID/writer_research.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0029 avoid-flood candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
