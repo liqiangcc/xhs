@@ -17,3 +17,12 @@
 - Not preserved by the source: Data rank/shape/type, whether “first dimension” means axis 0, population vs sample variance, NaN/missing-value policy, output shape, language/API, mutation policy, or numerical-stability requirements.
 - Candidate executable policy only: treat Data as a non-empty rectangular finite `double[][]`; first dimension means rows/axis 0; return per-column mean and population variance (divide by N); reject empty/ragged/non-finite input; use one-pass Welford updates. These are answer-side contracts, not recovered facts.
 - Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
+
+## cq_q_7ca6615c45d3aeb785c27dc7796d1afb
+
+- Exact tagged source: `note_tagged/6888685a0000000005008900.json`, question `7ca6615c45d3aeb785c27dc7796d1afb`: `算法：最大版本号 (165. 比较版本号)`.
+- Stronger repository image text: `note_img_txt/6888685a0000000005008900.txt` explicitly says the interview variant supplied multiple version numbers to compare.
+- The source identifies LeetCode 165, so the pairwise revision semantics are recoverable from the official problem: dot-separated numeric revisions, leading zeros ignored, missing revisions treated as zero.
+- Answer-side adapter: linearly reduce multiple versions with the LeetCode-165 comparator; semantically equal versions retain the first original representation.
+- The repository does not preserve concrete ACM stdin/stdout layout or tie-representation rules; those remain explicit adapter choices.
+- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
