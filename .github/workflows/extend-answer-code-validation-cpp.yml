@@ -1,0 +1,93 @@
+name: Extend Answer Code Validation for C++
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/extend-answer-code-validation-cpp.yml
+      - scripts/content/extend_answer_code_validation_cpp.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extend-answer-code-validation-cpp
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  extend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply source-appropriate C++ validator extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v g++
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/extend_answer_code_validation_cpp.py > /tmp/extend_answer_code_validation_cpp.py
+          python3 -m py_compile /tmp/extend_answer_code_validation_cpp.py
+          python3 /tmp/extend_answer_code_validation_cpp.py
+
+      - name: Verify C++ regression and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test test/answer_code_validation.test.js
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during C++ validator change: $base_head -> $remote_head"
+            echo 'Discarding verified local mutation; retry later against current state.'
+            exit 0
+          fi
+          git add scripts/lib/answer_quality.js test/answer_code_validation.test.js
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'C++ validation support already present.'; exit 0; fi
+          git config user.name 'xhs-refactor-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'quality: validate source-appropriate C++ coding answers'
+          git push origin "HEAD:$CONTENT_BRANCH"
