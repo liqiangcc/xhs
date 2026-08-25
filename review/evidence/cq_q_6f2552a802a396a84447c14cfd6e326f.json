@@ -1,0 +1,169 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_6f2552a802a396a84447c14cfd6e326f",
+  "candidate_sha256": "e56f63ab23282c301a9786c85e4580c5c889c4ecc9c2b3dd07452a47758d77e6",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0031-longest-common-substring-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Tagged longest-common-substring DP question",
+      "locator": "note_tagged/68109f31000000002202d190.json#question_id=6f2552a802a396a84447c14cfd6e326f",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Longest-common-substring direct brute-force oracle",
+      "locator": "review/content_build/answer_batch_0031/cq_q_6f2552a802a396a84447c14cfd6e326f/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Longest-common-substring independent source-first review",
+      "locator": "review/content_build/answer_batch_0031/cq_q_6f2552a802a396a84447c14cfd6e326f/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source requires longest common substring with DP but does not specify an API, tie-break, Unicode character model, input bounds or project context.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "dp-invariant",
+      "text": "For longest common substring, an equal character pair extends the prior diagonal common suffix by one while a mismatch resets the ending-at-this-pair state to zero; the answer is the maximum over all ending pairs.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "compression",
+      "text": "The one-dimensional implementation updates j in descending order so dp[j-1] is still the prior-row diagonal state when read.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "oracle-validation",
+      "text": "The compiled Java implementation passes fixed boundary cases and matches a direct brute-force longest-common-substring oracle on 3000 deterministic generated input pairs.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6f2552a802a396a84447c14cfd6e326f",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac LongestCommonSubstring.java LongestCommonSubstringTest.java && java LongestCommonSubstringTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=6 random-oracle=3000 empty=yes no-match=yes repeated=yes tie=yes null=rejected compression=reverse-j",
+    "checks": [
+      "fixed boundaries",
+      "direct brute-force oracle",
+      "null boundary",
+      "returned substring validity"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty string vs abc",
+        "expected": "length 0 and empty substring",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "abcdef vs zabcf",
+        "expected": "length 3 common substring",
+        "actual": "abc / length 3",
+        "passed": true
+      },
+      {
+        "case": "aaaa vs baaa",
+        "expected": "length 3 with repeated characters preserved",
+        "actual": "aaa / length 3",
+        "passed": true
+      },
+      {
+        "case": "3000 deterministic pairs over abc, lengths 0..7",
+        "expected": "compressed DP length equals direct brute-force oracle and returned text occurs in both inputs",
+        "actual": "all passed",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0031-longest-common-substring-20260825",
+    "review_version": "batch-0031.longest-common-substring.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source asks specifically for longest common substring using DP and contains no API, tie-break, Unicode model, input-size or project-history constraints.",
+      "The candidate defines the DP as the common suffix ending at each pair of positions, so a match extends the diagonal state and a mismatch resets to zero; this is the required continuity invariant and is explicitly contrasted with longest common subsequence.",
+      "The one-dimensional compression updates j from right to left, preserving the prior-row diagonal dependency instead of reading a value overwritten in the current row.",
+      "The implementation is a complete compilable Java class, returns both a valid substring and its length, rejects null inputs explicitly and handles empty/no-match/repeated-character cases.",
+      "A deterministic direct brute-force oracle agrees with the compressed DP on 3000 generated input pairs, while fixed cases cover boundaries and multiple optimal matches.",
+      "The source does not define a tie-break or Unicode code-point model; the candidate states those boundaries rather than silently claiming one universal contract.",
+      "No production performance data or personal project experience is fabricated; alternatives such as suffix automata are framed only as possible choices for different scale constraints."
+    ]
+  }
+}
