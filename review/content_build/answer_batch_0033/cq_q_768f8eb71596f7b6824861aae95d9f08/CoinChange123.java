@@ -23,7 +23,7 @@ public final class CoinChange123 {
         }
 
         int coin = ENUM_COINS[index];
-        for (int count = 0; count * coin <= remaining; count++) {
+        for (int count = 0, max = remaining / coin; count <= max; count++) {
             counts[index] = count;
             collect(remaining - count * coin, index + 1, counts, out);
         }
