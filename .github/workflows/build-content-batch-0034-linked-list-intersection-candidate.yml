@@ -1,0 +1,255 @@
+name: Build Content Batch 0034 Linked List Intersection Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0034-linked-list-intersection-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-linked-list-intersection-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7d3154a0b8c8da4bf0d09accd6921e94
+  SOURCE_QID: 7d3154a0b8c8da4bf0d09accd6921e94
+  SOURCE_NOTE: note_tagged/670b6b1a000000001b03d867.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source boundary and ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0034/$cid"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,note=process.env.SOURCE_NOTE;
+          const expected='算法思路：如何判断并找到两个单链表的相交节点？请口述双指针思路';
+          const tagged=JSON.parse(fs.readFileSync(note,'utf8'));
+          const src=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          if(src.question_type!=='算法手撕_Coding') throw new Error(`source type drifted: ${src.question_type}`);
+          if(JSON.stringify(src.tech_entities)!==JSON.stringify(['链表相交','双指针'])) throw new Error(`source entities drifted: ${JSON.stringify(src.tech_entities)}`);
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context/type drifted');
+          const library=(ctx.source_questions||[]).find(x=>x.original_question===expected);
+          if(!library||!ctx.canonical?.question_ids?.includes(library.question_id)) throw new Error('Question -> Canonical reachability drifted');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse overwrite');
+          fs.writeFileSync(path.join(`review/content_build/answer_batch_0034/${cid}`,'source_mapping.json'),JSON.stringify({schema_version:'answer_source_mapping.v1',canonical_id:cid,library_question_id:library.question_id,note_question_id:qid,note_path:note,original_question:expected,verified_at:'2026-08-26'},null,2)+'\n');
+          const boundary='review/content_build/answer_batch_0034/source_boundary_audit.md';
+          let text=fs.existsSync(boundary)?fs.readFileSync(boundary,'utf8'):'# Answer Batch 0034 Source Boundary Audit\n';
+          const heading=`## ${cid}`;
+          if(!text.includes(heading)) text += `\n${heading}\n\n- Exact repository source: \`${note}\`, question \`${qid}\`.\n- Preserved wording: \`${expected}\`\n- Preserved response shape: explain the two-pointer idea for finding the intersection node of two singly linked lists.\n- Not preserved by the source: node class/value type, whether cycles are allowed, or any mutation allowance.\n- Candidate executable policy only: lists are finite acyclic singly linked lists; intersection means the same node object/shared suffix rather than equal values; return the first shared node or null; do not mutate either list.\n- A cyclic-list variant is deliberately outside the candidate contract because the switch-head termination proof assumes finite acyclic traversals.\n- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.\n`;
+          fs.writeFileSync(boundary,text);
+          NODE
+
+      - name: Write source-bounded linked-list intersection candidate and fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7d3154a0b8c8da4bf0d09accd6921e94","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 两个无环单链表的相交节点：双指针换头法
+
+          ## 核心结论
+
+          对两个有限、无环的单链表，如果“相交”指两个链表从某个位置开始共享同一个节点对象，而不是节点值恰好相等，可以让两个指针分别从 A、B 出发：走到 `null` 后切到另一条链表头继续走。两条路径分别变成 A→B 和 B→A，总路程相同，原本的长度差被换头抵消；有相交时两指针会在第一个共享节点相遇，不相交时会同时到 `null`。时间 O(m+n)，额外空间 O(1)，且不修改链表。
+
+          ## 1 分钟版
+
+          - 先明确“相交”比较的是**节点身份**：`p == q`，不是 `p.value == q.value`；无环单链表一旦共享某个节点，之后整个后缀都共享。
+          - `p` 从 A 走，走到 `null` 就跳到 B 头；`q` 从 B 走，走到 `null` 就跳到 A 头。
+          - 换头以后，一个指针补上另一条链表较长/较短的那部分前缀，最终两者走过相同的组合路径长度，长度差自然被抵消。
+          - 循环条件直接写 `while (p != q)`；退出时 `p` 要么是第一个共享节点，要么两个都是 `null`。
+          - 每个指针最多走过两条链表各一次，时间 O(m+n)、空间 O(1)，不用预先计算长度，也不改 `next`。
+
+          ## 3 分钟版
+
+          ```java
+          public final class LinkedListIntersection {
+              public static final class Node {
+                  public final int value;
+                  public Node next;
+
+                  public Node(int value) {
+                      this.value = value;
+                  }
+              }
+
+              public static Node firstIntersection(Node headA, Node headB) {
+                  Node p = headA;
+                  Node q = headB;
+                  while (p != q) {
+                      p = (p == null) ? headB : p.next;
+                      q = (q == null) ? headA : q.next;
+                  }
+                  return p;
+              }
+          }
+          ```
+
+          例如 A 的独有前缀长度是 2，B 的独有前缀长度是 3，之后共享同一段尾链。单独从两个头同步走时，较短前缀的一方会更早进入共享段，所以位置一直错开；让 A 指针走完 A 后再走 B，让 B 指针走完 B 后再走 A，相当于双方都补走了对方的长度，前缀差被消掉，随后会在共享段的入口处对齐。如果根本没有共享节点，两条组合路径最终都在 `null` 对齐。
+
+          ## 关键细节
+
+          - **身份而不是值**：两个不同节点即使 `value` 相同也不算链表相交；判断条件必须是同一对象引用。
+          - **为什么相交后是共享后缀**：单链表每个节点只有一个 `next`。在无环前提下，一旦 A、B 到达同一个节点，后续 `next` 路径就完全相同。
+          - **换的是另一条链表头**：`p` 走完 A 后跳 B，`q` 走完 B 后跳 A；若又跳回自己的头，就无法抵消长度差。
+          - **空链表自然覆盖**：一边或两边为空时，同一循环仍会收敛到 `null`，不需要额外分支。
+          - **同一个头结点**：如果 `headA == headB`，循环一次都不执行，直接返回该头节点，它就是第一个共享节点。
+          - **不修改输入**：只移动局部指针，不重写任何 `next`，因此不会破坏调用方的链表结构。
+          - **复杂度**：两个指针各自至多经过 A、B 两条有限链表各一次，所以总时间 O(m+n)，只使用两个指针，额外空间 O(1)。
+          - **环形边界**：原题没有保存“链表可能有环”的约束。本实现明确只处理有限无环链表；有环时必须先判断两条链的环结构和入环点，不能直接套用这里的终止证明。
+
+          ## 原理机制
+
+          设 A、B 长度分别为 m、n。直接同步移动时，长度差会让两个指针进入潜在共享后缀的时间不同。换头法让 `p` 的完整路线是“A 的节点序列，再接 B 的节点序列”，`q` 则是“B 的节点序列，再接 A 的节点序列”。两条路线的总长度都由 m+n 决定，因此无论哪条原链更长，前缀差都会在第二段被另一方补齐。如果存在共享后缀，两指针会在它的第一个节点以相同引用对齐；如果不存在，则最终都变成 `null`。这个证明依赖链表有限且无环，否则“走到 null 再换头”的路径模型不成立。
+
+          ## 项目经验版
+
+          来源没有提供真实项目中共享链表节点的案例，不能虚构生产经历。工程里若出现持久化不可变结构或结构共享，应该先确认“共享”是否真的按对象身份定义、数据结构是否可能成环，以及遍历期间是否会并发修改；只有满足当前无环且结构稳定的前提，才能直接复用这个 O(1) 空间解法。
+
+          ## 常见追问
+
+          - 问：为什么不能比较节点值？答：值相同只说明数据相等，不说明两个链表指向同一个节点对象；例如两条各自独立的 `1 -> 2 -> 3` 值完全相同，但没有任何共享节点。
+          - 问：换头为什么能消掉长度差？答：一个指针走 A→B，另一个走 B→A，双方最终覆盖相同的总长度；较长链多出来的前缀会由另一指针在切换链表后补走。
+          - 问：两个链表不相交会不会死循环？答：在有限无环前提下不会；两条组合路径都走完后，`p` 和 `q` 会同时为 `null`，循环结束并返回 `null`。
+          - 问：还有别的方法吗？答：可以先分别计算长度，让较长链先走长度差，再同步前进；复杂度同样是 O(m+n)/O(1)，但需要显式的长度统计步骤。
+          - 问：如果链表有环怎么办？答：不能直接沿用本实现。要先判断各自是否有环、环入口是否相同或环是否连通，再按不同结构讨论交点；这是另一个问题边界。
+
+          ## 易错点
+
+          - 用节点值相等代替节点引用相同，产生假交点。
+          - 指针走到末尾后跳回自己的头，而不是另一条链表头。
+          - 写成 `while (p.next != q.next)` 一类条件，导致空指针或漏掉头节点/尾节点交点。
+          - 为了做标记而修改 `next` 或节点内容，破坏输入结构。
+          - 没有声明无环前提，却声称这个循环对任意链表都一定终止。
+          EOF
+
+          cat > "$out/LinkedListIntersection.java" <<'JAVA'
+          public final class LinkedListIntersection {
+              public static final class Node {
+                  public final int value;
+                  public Node next;
+                  public Node(int value) { this.value = value; }
+              }
+
+              public static Node firstIntersection(Node headA, Node headB) {
+                  Node p = headA;
+                  Node q = headB;
+                  while (p != q) {
+                      p = (p == null) ? headB : p.next;
+                      q = (q == null) ? headA : q.next;
+                  }
+                  return p;
+              }
+          }
+          JAVA
+
+          cat > "$out/LinkedListIntersectionTest.java" <<'JAVA'
+          public final class LinkedListIntersectionTest {
+              private static void same(Object actual, Object expected, String name) {
+                  if (actual != expected) throw new AssertionError(name + " expected identity=" + expected + " actual=" + actual);
+              }
+              private static LinkedListIntersection.Node n(int v) { return new LinkedListIntersection.Node(v); }
+
+              public static void main(String[] args) {
+                  var c1=n(7); var c2=n(8); c1.next=c2;
+                  var a1=n(1); var a2=n(2); a1.next=a2; a2.next=c1;
+                  var b1=n(3); var b2=n(4); var b3=n(5); b1.next=b2; b2.next=b3; b3.next=c1;
+                  same(LinkedListIntersection.firstIntersection(a1,b1),c1,"ordinary shared suffix");
+                  if(a1.next!=a2||a2.next!=c1||b1.next!=b2||b2.next!=b3||b3.next!=c1||c1.next!=c2) throw new AssertionError("input mutated");
+
+                  var sameHead=n(11); sameHead.next=n(12);
+                  same(LinkedListIntersection.firstIntersection(sameHead,sameHead),sameHead,"same head");
+
+                  var tail=n(99); var x=n(1); x.next=tail; var y1=n(2); var y2=n(3); y1.next=y2; y2.next=tail;
+                  same(LinkedListIntersection.firstIntersection(x,y1),tail,"single shared tail node");
+
+                  var v1=n(1); v1.next=n(2); v1.next.next=n(3);
+                  var w1=n(1); w1.next=n(2); w1.next.next=n(3);
+                  same(LinkedListIntersection.firstIntersection(v1,w1),null,"equal values but distinct nodes");
+
+                  same(LinkedListIntersection.firstIntersection(null,v1),null,"one empty");
+                  same(LinkedListIntersection.firstIntersection(null,null),null,"both empty");
+                  System.out.println("PASS shared-suffix same-head shared-tail identity-not-value empty-cases no-mutation");
+              }
+          }
+          JAVA
+
+      - name: Run deterministic JDK 21 fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; classes="$out/classes"
+          mkdir -p "$classes"
+          javac -d "$classes" "$out/LinkedListIntersection.java" "$out/LinkedListIntersectionTest.java"
+          stdout="$(java -cp "$classes" LinkedListIntersectionTest)"
+          test "$stdout" = 'PASS shared-suffix same-head shared-tail identity-not-value empty-cases no-mutation'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'javac LinkedListIntersection.java LinkedListIntersectionTest.java && java LinkedListIntersectionTest',stdout:process.env.STDOUT,checks:['ordinary shared suffix returns first shared identity','same-head intersection','single shared tail node','equal values on distinct nodes are not intersection','one/both empty lists','input next links are not mutated']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Exact repository linked-list intersection question and verified mapping',locator:`${mapping.note_path} + ${out}/source_mapping.json + review/content_build/answer_batch_0034/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Deterministic JDK 21 two-pointer intersection fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'The source explicitly asks for the two-pointer idea to find an intersection node of two singly linked lists, but does not preserve cyclic-list semantics or a concrete node class.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'algorithm',text:'Under the explicit finite acyclic identity-based intersection contract, switching each pointer to the other head after null returns the first shared node or null without mutating either list, in O(m+n) time and O(1) auxiliary space.',source_ids:['fixture'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},{claim_id:'validation',text:'The deterministic fixture covers ordinary/same-head/tail intersections, identity-vs-value, empty cases, and non-mutation.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:mapping.library_question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_human_approval_and_real_review_policy_not_yet_satisfied'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'; let t=fs.readFileSync(task,'utf8').replace('- Status: `pending`','- Status: `in_progress`');
+          const p='- Linked-list intersection canonical `'+cid+'` has a source-bounded switch-head two-pointer candidate, verified mapping, deterministic JDK 21 validation, and writer evidence; isolated review and promotion gates remain pending.';
+          if(!t.includes(p)) t += (t.includes('## Progress')?'\n':'\n\n## Progress\n\n')+p+'\n';
+          fs.writeFileSync(task,t);
+          NODE
+
+      - name: Verify focused repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm test
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during linked-list candidate build: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; a later run can retry against current state.'
+            exit 0
+          fi
+          git add review/candidates/answers/"$CANONICAL_ID".md review/content_build/answer_batch_0034 tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          if git diff --cached --quiet; then echo 'No linked-list candidate changes.'; exit 0; fi
+          git diff --cached --check
+          git config user.name xhs-content-builder
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: build batch 0034 linked-list intersection candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
