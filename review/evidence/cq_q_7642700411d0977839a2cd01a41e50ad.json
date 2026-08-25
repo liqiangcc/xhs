@@ -1,0 +1,170 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_7642700411d0977839a2cd01a41e50ad",
+  "candidate_sha256": "62f7d858b25e7f9fd8ccd4138f69de1dd4ce34d984da331bc05dfaeeaa4963ff",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "content-batch-0033-point-line-distance-candidate-builder-v2",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Exact tagged repository question and frozen Batch 0033 source boundary",
+      "locator": "note_tagged/663bb0e8000000001e027dad.json + review/content_build/answer_batch_0033/source_boundary_audit.md",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Point-to-infinite-line deterministic C++20 validation against independent general-form oracle",
+      "locator": "review/content_build/answer_batch_0033/cq_q_7642700411d0977839a2cd01a41e50ad/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Point-to-line independent source-first review",
+      "locator": "review/content_build/answer_batch_0033/cq_q_7642700411d0977839a2cd01a41e50ad/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository preserves a 2D point-to-line C++ task; line representation, API, numeric/precision, degenerate and line-versus-segment details are answer-side contracts.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "geometry",
+      "text": "Under the explicit infinite-line/two-point contract, the exact fenced C++ computes abs(cross(B-A,P-A))/|B-A| and rejects a degenerate zero-length direction.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The C++20 fixture passes five named geometry cases, degenerate rejection, endpoint-order invariance, non-negativity and 5,000 deterministic random cases against an independent general-form oracle.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "7642700411d0977839a2cd01a41e50ad",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "g++ -std=c++20 -O2 -Wall -Wextra -pedantic PointLineDistanceTest.cpp && ./test",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=5 random=5000 degenerate=rejected order=invariant nonnegative=true",
+    "checks": [
+      "horizontal",
+      "vertical",
+      "45-degree diagonal",
+      "point on line",
+      "nontrivial slope",
+      "degenerate rejection",
+      "endpoint-order invariance",
+      "5000 random oracle cases",
+      "non-negativity"
+    ],
+    "boundary_tests": [
+      {
+        "case": "horizontal line (0,0)-(4,0), P=(1,3)",
+        "expected": "3",
+        "actual": "3",
+        "passed": true
+      },
+      {
+        "case": "vertical line x=2, P=(5,2)",
+        "expected": "3",
+        "actual": "3",
+        "passed": true
+      },
+      {
+        "case": "45-degree line, P=(0,1)",
+        "expected": "sqrt(1/2)",
+        "actual": "matched",
+        "passed": true
+      },
+      {
+        "case": "point on line",
+        "expected": "0",
+        "actual": "0",
+        "passed": true
+      },
+      {
+        "case": "A==B",
+        "expected": "invalid_argument",
+        "actual": "invalid_argument",
+        "passed": true
+      },
+      {
+        "case": "deterministic random oracle",
+        "expected": "5000 cases match independent general-form oracle",
+        "actual": "5000 passed",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0033-point-line-distance-20260826-v1",
+    "review_version": "batch-0033.point-line-distance.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The exact repository source preserves a two-dimensional point-to-line coding task and explicitly requests C++; it does not preserve the line representation, function signature, coordinate range, precision, degenerate-input behavior, language standard, or line-versus-segment contract.",
+      "The candidate keeps the two-distinct-points representation, infinite-line semantics, long double choice, C++20 validation and A==B rejection explicitly answer-side rather than presenting them as recovered source facts.",
+      "The displayed C++ fence is byte-for-byte identical to the compiled fixture and implements abs(cross(B-A,P-A))/|B-A| with a zero-length guard.",
+      "Five named geometry cases cover horizontal, vertical, diagonal, on-line and nontrivial sloped inputs; the fixture also verifies degenerate rejection, non-negativity and endpoint-order invariance.",
+      "A deterministic set of 5,000 random integer-coordinate cases matches an independently expressed general-form Ax+By+C distance oracle within a bounded floating-point tolerance.",
+      "The answer distinguishes infinite-line distance from segment distance, explains the cross-product area mechanism, gives O(1) time/space, and does not fabricate project experience.",
+      "No placeholder implementation, unrelated topic content, uncovered source variant, or material unsupported claim remains in this candidate."
+    ]
+  }
+}
