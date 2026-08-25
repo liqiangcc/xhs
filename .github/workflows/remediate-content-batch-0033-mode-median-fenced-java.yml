@@ -1,0 +1,129 @@
+name: Remediate Content Batch 0033 Mode Median Fenced Java
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0033-mode-median-fenced-java.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-mode-median-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_742b944807ccd957a6deaa5416e47617
+  SOURCE_QID: 742b944807ccd957a6deaa5416e47617
+  CANDIDATE_BLOB_SHA: b8e29d31a3d3f5787b76a95fcb8a82790c211810
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Fail closed on source/candidate drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node <<'NODE'
+          const fs=require('fs');
+          const expected='算法：给定数组找众数及其众数中的中位数';
+          const note=JSON.parse(fs.readFileSync('note_structured/663b7649000000001e038251.json','utf8'));
+          if(!(note.questions||[]).includes(expected)) throw new Error('source wording drifted');
+          const boundary=fs.readFileSync('review/content_build/answer_batch_0033/source_boundary_audit.md','utf8');
+          if(!boundary.includes(expected.replace(/^算法：/,''))) throw new Error('source boundary audit drifted');
+          const fixture=fs.readFileSync(`review/content_build/answer_batch_0033/${process.env.CANONICAL_ID}/ModeMedian.java`,'utf8');
+          if(!fixture.includes('public final class ModeMedian')) throw new Error('fixture class wrapper missing');
+          NODE
+          javac "$out/ModeMedian.java" "$out/ModeMedianTest.java"
+          test "$(java -cp "$out" ModeMedianTest)" = 'PASS fixed=5 exhaustive=9840 invalid-input=2 overflow-safe-even-median=true'
+
+      - name: Make displayed Java exactly match validated fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const fixture=`review/content_build/answer_batch_0033/${cid}/ModeMedian.java`;
+          let text=fs.readFileSync(candidate,'utf8');
+          const code=fs.readFileSync(fixture,'utf8').trimEnd();
+          const open='```java\n';
+          const start=text.indexOf(open);
+          if(start<0) throw new Error('candidate Java fence missing');
+          const bodyStart=start+open.length;
+          const end=text.indexOf('\n```',bodyStart);
+          if(end<0) throw new Error('candidate Java fence terminator missing');
+          const old=text.slice(bodyStart,end);
+          if(old.includes('public final class ModeMedian')) throw new Error('candidate already remediated; refuse duplicate rewrite');
+          text=text.slice(0,bodyStart)+code+text.slice(end);
+          fs.writeFileSync(candidate,text);
+          NODE
+
+          mkdir -p /tmp/xhs-mode-median-review
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const open='```java\n';
+          const start=text.indexOf(open)+open.length;
+          const end=text.indexOf('\n```',start);
+          fs.writeFileSync('/tmp/xhs-mode-median-review/ModeMedian.java',text.slice(start,end)+'\n');
+          NODE
+          cp "review/content_build/answer_batch_0033/$CANONICAL_ID/ModeMedianTest.java" /tmp/xhs-mode-median-review/ModeMedianTest.java
+          javac /tmp/xhs-mode-median-review/ModeMedian.java /tmp/xhs-mode-median-review/ModeMedianTest.java
+          test "$(java -cp /tmp/xhs-mode-median-review ModeMedianTest)" = 'PASS fixed=5 exhaustive=9840 invalid-input=2 overflow-safe-even-median=true'
+          cmp -s /tmp/xhs-mode-median-review/ModeMedian.java "review/content_build/answer_batch_0033/$CANONICAL_ID/ModeMedian.java"
+          git diff --check
+
+      - name: Run candidate-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit remediation only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during remediation: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: align batch 0033 mode-median fenced Java with fixture'
+          git push origin "HEAD:$CONTENT_BRANCH"
