@@ -1,0 +1,418 @@
+name: Build Content Batch 0030 Stock DP Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0030-stock-dp-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-stock-dp-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6ae96feaa0e3c49daad3242f62e1cc8e
+  SOURCE_QID: 6ae96feaa0e3c49daad3242f62e1cc8e
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard current source boundary and Canonical ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67614c15000000000b021d4b.json','utf8'));
+          const tq=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：买卖股票的最佳时机系列（使用动态规划解决：基础买卖、无限次交易、N 次交易限制）';
+          if(!tq||tq.original_question!==expected||tq.question_type!=='算法手撕_Coding') throw new Error('tagged stock-DP source boundary drifted');
+          const structured=JSON.parse(fs.readFileSync('note_structured/67614c15000000000b021d4b.json','utf8'));
+          if(!(structured.questions||[]).includes(expected)) throw new Error('structured stock-DP source wording drifted');
+          const q=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.question_id===qid);
+          if(!q||q.original_question!==expected||q.canonical_id!==cid) throw new Error(`Question projection drifted: ${JSON.stringify(q)}`);
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error(`Canonical ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/stock-context.json
+          node <<'NODE'
+          const fs=require('fs'),ctx=JSON.parse(fs.readFileSync('/tmp/stock-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==process.env.CANONICAL_ID||ctx.answer_type!=='coding') throw new Error('AnswerContext drifted');
+          NODE
+
+      - name: Write source-bounded stock DP candidate and exhaustive fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0030/$cid"
+          candidate="review/candidates/answers/$cid.md"
+          mkdir -p "$out" review/candidates/answers
+          test ! -e "$candidate"
+
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6ae96feaa0e3c49daad3242f62e1cc8e","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 买卖股票的最佳时机系列：统一状态机 DP
+
+          ## 核心结论
+
+          当前来源只保留“买卖股票的最佳时机系列，用动态规划解决：基础买卖、无限次交易、N 次交易限制”，没有保存具体函数签名、价格范围、手续费/冷冻期、是否允许同时持有多股，也没有说明“N 次”是恰好还是至多。为了给出可运行实现，我采用一个明确的候选契约：`prices[i]` 是非负整数；任意时刻最多持有 1 股；一次交易是先买后卖；没有手续费和冷冻期；“基础买卖”解释为**至多 1 次完整交易**，“无限次”解释为可重复买卖但同一时刻最多持有 1 股，“N 次限制”解释为**至多 k 次完整交易**。这些是本答案为恢复可执行语义而声明的假设，不冒充来源原文。
+
+          三类题本质上是同一个状态机：每天结束时只需要知道“是否持股”，有限交易版本再增加“最多已经使用多少次卖出/完成交易”的维度。单次交易是 `k=1`；无限次交易是去掉交易次数维度；有限 `k` 是完整二维状态的空间压缩版。
+
+          ## 1 分钟版
+
+          - **至多 1 次**：维护 `hold`（买入后持有 1 股的最大收益）和 `cash`（已卖出/不持股的最大收益）。因为不能二次买入，`hold = max(hold, -price)`；`cash = max(cash, oldHold + price)`。
+          - **无限次**：仍是 `hold/cash` 两状态，但允许在前一天 `cash` 基础上再次买入：`hold = max(oldHold, oldCash - price)`，`cash = max(oldCash, oldHold + price)`。
+          - **至多 k 次**：令 `buy[t]` 表示“最多完成 `t-1` 次交易后又买入、当前持股”的最好收益，`sell[t]` 表示“最多完成 `t` 次交易、当前空仓”的最好收益。每天从前一天快照转移：`buy[t] = max(oldBuy[t], oldSell[t-1] - price)`，`sell[t] = max(oldSell[t], oldBuy[t] + price)`。
+          - 当 `k >= n/2` 时，最多可能完成的交易数已经不受 k 约束，可退化成无限次版本。
+          - 核心不是背三套代码，而是先定义“状态代表什么”，再确认每个转移来自**前一天的合法状态**。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.Arrays;
+
+          public final class StockProfitDp {
+              private static final long NEG = Long.MIN_VALUE / 4;
+
+              public static long maxProfitOne(int[] prices) {
+                  requirePrices(prices);
+                  long hold = NEG;
+                  long cash = 0;
+                  for (int price : prices) {
+                      long oldHold = hold;
+                      hold = Math.max(oldHold, -(long) price);
+                      cash = Math.max(cash, oldHold + price);
+                  }
+                  return cash;
+              }
+
+              public static long maxProfitUnlimited(int[] prices) {
+                  requirePrices(prices);
+                  long hold = NEG;
+                  long cash = 0;
+                  for (int price : prices) {
+                      long oldHold = hold;
+                      long oldCash = cash;
+                      hold = Math.max(oldHold, oldCash - price);
+                      cash = Math.max(oldCash, oldHold + price);
+                  }
+                  return cash;
+              }
+
+              public static long maxProfitAtMostK(int[] prices, int k) {
+                  requirePrices(prices);
+                  if (k < 0) throw new IllegalArgumentException("k must be >= 0");
+                  if (k == 0 || prices.length < 2) return 0;
+                  if (k >= prices.length / 2) return maxProfitUnlimited(prices);
+
+                  long[] buy = new long[k + 1];
+                  long[] sell = new long[k + 1];
+                  Arrays.fill(buy, NEG);
+
+                  for (int price : prices) {
+                      long[] oldBuy = buy.clone();
+                      long[] oldSell = sell.clone();
+                      for (int t = 1; t <= k; t++) {
+                          buy[t] = Math.max(oldBuy[t], oldSell[t - 1] - price);
+                          sell[t] = Math.max(oldSell[t], oldBuy[t] + price);
+                      }
+                  }
+                  return sell[k];
+              }
+
+              private static void requirePrices(int[] prices) {
+                  if (prices == null) throw new IllegalArgumentException("prices must not be null");
+                  for (int price : prices) {
+                      if (price < 0) throw new IllegalArgumentException("price must be non-negative");
+                  }
+              }
+          }
+          ```
+
+          这里故意用“前一天快照”写有限 k 版本，避免在解释时混淆“本轮刚更新的状态”与“前一天状态”。如果只追求常数优化，可以证明更新顺序后原地滚动；面试中先写对、先把状态语义说清楚通常更重要。
+
+          ## 关键细节
+
+          - **交易次数怎么计**：本候选把一次完整交易定义为一次 `buy -> sell`，并在 `sell[t]` 里把第 t 次卖出视为完成第 t 次交易。来源没有保存这个细节，所以必须显式声明。
+          - **为什么 `k >= n/2` 等价无限次**：在 n 天里每次完整交易至少需要一个买入日和一个不早于买入的卖出日；在不允许同一时刻持多股且同日零收益买卖没有必要的前提下，最多有意义的正收益交易数不超过 `floor(n/2)`。
+          - **为什么用 long**：来源没给价格上限。本实现用 `long` 保存累计收益，避免把示例实现绑定到未保存的 int 利润上界；输入仍以 `int[]` 表示候选 API。
+          - **空数组和单元素**：在本候选契约下都没有可完成的正收益交易，返回 0。
+          - **下降序列**：所有版本都允许“不交易”，所以不会被迫产生负收益。
+          - **不能同时更新后再误用**：无限次版本先保存 `oldHold/oldCash`；有限 k 版本直接快照数组，转移含义因此清晰对应“从前一天到今天”。
+          - **复杂度**：单次/无限次都是 O(n) 时间、O(1) 额外空间；至多 k 次是 O(nk) 时间、O(k) 状态空间，当前教学实现每日 clone 也仍是 O(k) 峰值额外空间，但会增加常数分配开销。
+
+          ## 原理机制
+
+          把每天结束时的合法状态看成一个有限状态机。对于无限次版本，只有两类状态：
+
+          - `cash`：今天结束后不持股；要么昨天也不持股，要么昨天持股今天卖出。
+          - `hold`：今天结束后持 1 股；要么昨天已经持股，要么昨天空仓今天买入。
+
+          所以每一天都只是在两个合法前态之间做 `max`。有限交易次数只是在状态上再加一个交易预算维度：第 t 次买入只能来自“最多完成 t-1 次交易的空仓状态”，第 t 次卖出只能来自“第 t 层持股状态”。这就是 `oldSell[t-1] -> buy[t] -> sell[t]` 的因果链。
+
+          单次交易为什么不同？因为买入后不能在第一次卖出后再次买入，所以 `hold` 的“买入来源”固定是初始现金 0，即 `-price`，而不是任意历史 `cash - price`。这也是为什么把三类题统一成状态语义后，比背模板更不容易写错。
+
+          ## 项目经验版
+
+          来源没有真实项目、交易系统或生产数据，因此不能虚构“线上股票策略经验”。如果这是业务里的状态机计算，我会先冻结完整交易规则（手续费、冷冻期、持仓上限、是否允许做空、成交时点），再为每条规则增加状态维度或转移约束，并用小规模穷举 oracle 与随机/边界输入交叉验证 DP；规则一变，状态定义也必须跟着变。
+
+          ## 常见追问
+
+          - 问：为什么单次交易的 `hold` 不是 `cash - price`？答：因为本候选“基础买卖”只允许至多一次完整交易；如果从已经卖出后的 cash 再买，就隐含允许第二次交易了。
+          - 问：无限次为什么不是把所有上涨区间直接相加？答：在本候选无手续费、无冷冻期、最多持一股的规则下，两者可得到同一最优值；DP 的价值是状态定义更容易扩展到手续费、冷冻期或交易次数限制。
+          - 问：k 很大为什么优化成无限次？答：当 k 不小于天数能容纳的最大有效完整交易数时，次数约束不会再排除任何更优策略，继续做 O(nk) 没有必要。
+          - 问：如果题目说“恰好 k 次”怎么办？答：状态初始化和最终答案都要改变，不能把“至多 k 次”的 0 初值直接照搬；当前来源只说“N 次交易限制”，本候选明确选择“至多 k 次”。
+          - 问：手续费或冷冻期怎么加？答：手续费可以进入买/卖转移；冷冻期需要增加“刚卖出/冷冻”或读取更早天状态。先改状态机，再改公式，不能只在现有代码上随意加常数。
+          - 问：如何证明代码不是只过几个例子？答：对小数组枚举所有价格组合和所有合法买/卖/跳过路径，用穷举最优值逐一对比单次、无限次和有限 k DP；当前候选的可执行 fixture 就采用这种交叉验证。
+
+          ## 易错点
+
+          - 没说明“N 次”到底是“至多”还是“恰好”，却直接给初始化为 0 的 DP。
+          - 在单次交易题里从已卖出的 `cash` 再买，悄悄放宽成多次交易。
+          - 有限 k 的 `buy[t]` 错从 `sell[t]` 买入，导致交易次数层级定义含糊。
+          - 滚动数组时没有保存前一日状态，也没有证明原地更新顺序安全。
+          - 忘记允许“不交易”，使下降序列得到负利润。
+          - 来源没有手续费、冷冻期或持仓上限细节，却把某一个 LeetCode 变体的规则冒充成原题。
+          EOF
+
+          cat > "$out/StockProfitDp.java" <<'JAVA'
+          import java.util.Arrays;
+
+          public final class StockProfitDp {
+              private static final long NEG = Long.MIN_VALUE / 4;
+
+              public static long maxProfitOne(int[] prices) {
+                  requirePrices(prices);
+                  long hold = NEG;
+                  long cash = 0;
+                  for (int price : prices) {
+                      long oldHold = hold;
+                      hold = Math.max(oldHold, -(long) price);
+                      cash = Math.max(cash, oldHold + price);
+                  }
+                  return cash;
+              }
+
+              public static long maxProfitUnlimited(int[] prices) {
+                  requirePrices(prices);
+                  long hold = NEG;
+                  long cash = 0;
+                  for (int price : prices) {
+                      long oldHold = hold;
+                      long oldCash = cash;
+                      hold = Math.max(oldHold, oldCash - price);
+                      cash = Math.max(oldCash, oldHold + price);
+                  }
+                  return cash;
+              }
+
+              public static long maxProfitAtMostK(int[] prices, int k) {
+                  requirePrices(prices);
+                  if (k < 0) throw new IllegalArgumentException("k must be >= 0");
+                  if (k == 0 || prices.length < 2) return 0;
+                  if (k >= prices.length / 2) return maxProfitUnlimited(prices);
+                  long[] buy = new long[k + 1];
+                  long[] sell = new long[k + 1];
+                  Arrays.fill(buy, NEG);
+                  for (int price : prices) {
+                      long[] oldBuy = buy.clone();
+                      long[] oldSell = sell.clone();
+                      for (int t = 1; t <= k; t++) {
+                          buy[t] = Math.max(oldBuy[t], oldSell[t - 1] - price);
+                          sell[t] = Math.max(oldSell[t], oldBuy[t] + price);
+                      }
+                  }
+                  return sell[k];
+              }
+
+              private static void requirePrices(int[] prices) {
+                  if (prices == null) throw new IllegalArgumentException("prices must not be null");
+                  for (int price : prices) if (price < 0) throw new IllegalArgumentException("price must be non-negative");
+              }
+          }
+          JAVA
+
+          cat > "$out/StockProfitDpTest.java" <<'JAVA'
+          import java.util.Arrays;
+          import java.util.HashMap;
+          import java.util.Map;
+
+          public final class StockProfitDpTest {
+              public static void main(String[] args) {
+                  checkExamples();
+                  checkInvalid();
+                  long arrays = exhaustiveCrossCheck(6, 4);
+                  System.out.println("PASS examples=yes invalid=yes exhaustive-arrays=" + arrays + " one=yes unlimited=yes k=yes");
+              }
+
+              private static void checkExamples() {
+                  eq(5, StockProfitDp.maxProfitOne(new int[]{7,1,5,3,6,4}), "one standard");
+                  eq(7, StockProfitDp.maxProfitUnlimited(new int[]{7,1,5,3,6,4}), "unlimited standard");
+                  eq(7, StockProfitDp.maxProfitAtMostK(new int[]{7,1,5,3,6,4}, 2), "k standard");
+                  eq(0, StockProfitDp.maxProfitOne(new int[]{7,6,4,3,1}), "one falling");
+                  eq(0, StockProfitDp.maxProfitUnlimited(new int[]{}), "empty");
+                  eq(0, StockProfitDp.maxProfitAtMostK(new int[]{5}, 9), "singleton");
+                  eq(4, StockProfitDp.maxProfitAtMostK(new int[]{1,2,3,4,5}, 1), "k1 rising");
+                  eq(4, StockProfitDp.maxProfitAtMostK(new int[]{1,2,3,4,5}, 99), "large k rising");
+              }
+
+              private static void checkInvalid() {
+                  throwsIAE(() -> StockProfitDp.maxProfitOne(null));
+                  throwsIAE(() -> StockProfitDp.maxProfitUnlimited(new int[]{1,-1,2}));
+                  throwsIAE(() -> StockProfitDp.maxProfitAtMostK(new int[]{1,2}, -1));
+              }
+
+              private static long exhaustiveCrossCheck(int maxLength, int valueKinds) {
+                  long count = 0;
+                  for (int n = 0; n <= maxLength; n++) {
+                      long total = 1;
+                      for (int i = 0; i < n; i++) total *= valueKinds;
+                      for (long mask = 0; mask < total; mask++) {
+                          int[] prices = decode(mask, n, valueKinds);
+                          long one = brute(prices, 1);
+                          long unlimited = brute(prices, n / 2 + 1);
+                          eq(one, StockProfitDp.maxProfitOne(prices), "one " + Arrays.toString(prices));
+                          eq(unlimited, StockProfitDp.maxProfitUnlimited(prices), "unlimited " + Arrays.toString(prices));
+                          for (int k = 0; k <= 4; k++) {
+                              eq(brute(prices, k), StockProfitDp.maxProfitAtMostK(prices, k), "k=" + k + " " + Arrays.toString(prices));
+                          }
+                          count++;
+                      }
+                  }
+                  return count;
+              }
+
+              private static int[] decode(long code, int n, int base) {
+                  int[] a = new int[n];
+                  for (int i = 0; i < n; i++) {
+                      a[i] = (int) (code % base);
+                      code /= base;
+                  }
+                  return a;
+              }
+
+              private static long brute(int[] prices, int k) {
+                  return Math.max(0, dfs(prices, 0, false, 0, k, new HashMap<>()));
+              }
+
+              private static long dfs(int[] prices, int day, boolean holding, int completed, int k, Map<String, Long> memo) {
+                  if (day == prices.length) return holding ? Long.MIN_VALUE / 8 : 0;
+                  String key = day + ":" + holding + ":" + completed + ":" + k;
+                  Long cached = memo.get(key);
+                  if (cached != null) return cached;
+                  long best = dfs(prices, day + 1, holding, completed, k, memo);
+                  if (!holding && completed < k) {
+                      long tail = dfs(prices, day + 1, true, completed, k, memo);
+                      if (tail > Long.MIN_VALUE / 16) best = Math.max(best, tail - prices[day]);
+                  } else if (holding && completed < k) {
+                      long tail = dfs(prices, day + 1, false, completed + 1, k, memo);
+                      if (tail > Long.MIN_VALUE / 16) best = Math.max(best, tail + prices[day]);
+                  }
+                  memo.put(key, best);
+                  return best;
+              }
+
+              private static void eq(long expected, long actual, String label) {
+                  if (expected != actual) throw new AssertionError(label + " expected=" + expected + " actual=" + actual);
+              }
+
+              private static void throwsIAE(Runnable r) {
+                  try { r.run(); throw new AssertionError("expected IllegalArgumentException"); }
+                  catch (IllegalArgumentException expected) { }
+              }
+          }
+          JAVA
+
+          cat > "$out/source_boundary.json" <<'JSON'
+          {
+            "schema_version": "answer_source_boundary.v1",
+            "canonical_id": "cq_q_6ae96feaa0e3c49daad3242f62e1cc8e",
+            "checked_at": "2026-08-25",
+            "repository_sources": [
+              {"path":"note_structured/67614c15000000000b021d4b.json","preserved_text":"算法：买卖股票的最佳时机系列（使用动态规划解决：基础买卖、无限次交易、N 次交易限制）"},
+              {"path":"note_tagged/67614c15000000000b021d4b.json","question_id":"6ae96feaa0e3c49daad3242f62e1cc8e","preserved_text":"算法：买卖股票的最佳时机系列（使用动态规划解决：基础买卖、无限次交易、N 次交易限制）"}
+            ],
+            "preserved_constraints": ["stock best-time family","dynamic programming is the requested solution family","basic transaction variant","unlimited-transactions variant","N-transaction-limited variant"],
+            "not_preserved": ["method signature","price bounds","whether N means exactly N or at most N completed transactions","fees","cooldown","short selling","simultaneous position limit","same-day transaction semantics"],
+            "candidate_contract_assumptions": ["prices are non-negative integers","at most one share is held at a time","no fees or cooldown and no short selling","basic means at most one completed buy-sell transaction","N-limited means at most k completed buy-sell transactions","not trading is allowed"]
+          }
+          JSON
+
+          javac "$out/StockProfitDp.java" "$out/StockProfitDpTest.java"
+          stdout="$(java -cp "$out" StockProfitDpTest)"
+          case "$stdout" in
+            'PASS examples=yes invalid=yes exhaustive-arrays='*' one=yes unlimited=yes k=yes') ;;
+            *) echo "unexpected fixture output: $stdout" >&2; exit 1 ;;
+          esac
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0030/${process.env.CANONICAL_ID}`;
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac StockProfitDp.java StockProfitDpTest.java && java StockProfitDpTest',stdout:process.env.STDOUT,checks:['standard single/unlimited/k examples','falling/empty/singleton boundaries','large-k degeneration','null/negative-price/negative-k rejection','exhaustive cross-check against independent brute-force state search for every price array length 0..6 over values 0..3 and k=0..4']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-structured-source',title:'Structured interview note preserving the stock-DP family wording',locator:'note_structured/67614c15000000000b021d4b.json',source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'repository-tagged-source',title:'Tagged stock-DP interview question record',locator:'note_tagged/67614c15000000000b021d4b.json#question_id='+qid,source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'Stock DP exhaustive deterministic Java oracle fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The source preserves a stock best-time DP family with basic, unlimited and N-limited transaction variants, but does not preserve API, price bounds, fees/cooldown/shorting, position limits or whether N means exactly versus at most.',source_ids:['repository-structured-source','repository-tagged-source'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'candidate-contract',text:'The candidate explicitly chooses non-negative integer prices, one-share maximum holding, no fee/cooldown/shorting, at-most-one for basic and at-most-k completed transactions for N-limited; these are answer-side assumptions.',source_ids:['repository-structured-source','repository-tagged-source'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'implementation-validation',text:'The executable fixture cross-checks all three DP variants against an independent exhaustive buy/sell/skip state-search oracle for all price arrays length 0..6 over values 0..3, plus explicit example and invalid-input boundaries.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [ ] `cq_q_6ae96feaa0e3c49daad3242f62e1cc8e` writer stage complete: source wording and Canonical ownership were re-read, the candidate explicitly separates source-preserved variants from its at-most-k/no-fee/no-cooldown execution contract, and the JDK 21 fixture exhaustively cross-checks all arrays of length 0..6 over prices 0..3 against an independent brute-force state search. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          NODE
+
+      - name: Run repository gates for writer stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:coverage
+
+      - name: Commit candidate only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during stock-DP candidate build: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0030/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0030 stock DP candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
