@@ -19,7 +19,7 @@ env:
   CANONICAL_ID: cq_q_6634a5c9294a3f0117a0a029020256ae
   QID_GENERIC: 64fba5a4c506e237a3a3cf3a91414c8b
   QID_EXPLICIT: 6634a5c9294a3f0117a0a029020256ae
-  CANDIDATE_BLOB_SHA: 7a60ce7027fe231fa02656c830ff178224e59545
+  CANDIDATE_BLOB_SHA: d56371dc5251fc9c71971378177f9c0b23529d79
 
 jobs:
   review:
@@ -72,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           node <<'NODE'
-          const crypto=require('crypto'),fs=require('fs'),path=require('path');
+          const crypto=require('crypto'),fs=require('fs');
           const cid=process.env.CANONICAL_ID,date='2026-08-25';
           const qids=[process.env.QID_GENERIC,process.env.QID_EXPLICIT];
           const candidate=`review/candidates/answers/${cid}.md`;
@@ -81,26 +81,26 @@ jobs:
           const writerResearch=`${out}/writer_research.json`;
           const reviewPath=`${out}/isolated_review_result.json`;
           const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
-          const reviewer='source-first-isolated-reviewer-batch-0029-house-robber-20260825-v1';
+          const reviewer='source-first-isolated-reviewer-batch-0029-house-robber-20260825-v2';
           const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
           const findings=[
-            'Both current source Questions are covered: the generic House Robber/simple-DP wording and the explicit LeetCode 198 non-negative-array/non-adjacent contract now resolve to one Canonical and one answer boundary.',
-            'The candidate states the exhaustive recurrence max(skip current, take current plus i-2), explains its optimal-substructure argument and rolling-state invariant, and gives O(n) time with O(1) auxiliary space.',
+            'Both current source Questions are covered: the generic House Robber/simple-DP wording and the explicit LeetCode 198 non-negative-array/non-adjacent contract resolve to one Canonical and one answer boundary.',
+            'The candidate contains a complete compilable Java class, states the exhaustive recurrence max(skip current, take current plus i-2), explains the optimal-substructure argument and rolling-state invariant, and gives O(n) time with O(1) auxiliary space.',
             'The candidate explicitly separates source facts from example-interface choices: empty-array behavior, null rejection, Java language choice and long accumulation are not presented as preserved source requirements.',
             'The deterministic Java fixture passes empty, singleton, standard examples, all-zero input, a [2,1,1,2] counterexample to local greedy reasoning, and explicit null rejection.',
             'The answer excludes the circular House Robber II contract and does not fabricate project experience, production scale, version facts or unsupported source constraints.',
             'No uncovered source variant, unsupported source claim, coding hard failure or correctness blocker remains. Formal promotion remains subject to the repository promotion/real-review policy.'
           ];
-          const review={
-            schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256: candidateSha256,reviewed_at:date,
-            review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0029.house-robber.v1',decision:'pass',revision_round:0,
-            source_packet:['review/content_build/answer_batch_0029/source_boundary_audit.json','review/content_build/answer_batch_0029/house_robber_relation_review.md',writerResearch,candidate,fixture,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],
-            scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,
-            promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']
-          };
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0029.house-robber.v2',decision:'pass',revision_round:1,source_packet:['review/content_build/answer_batch_0029/source_boundary_audit.json','review/content_build/answer_batch_0029/house_robber_relation_review.md',writerResearch,candidate,fixture,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']};
           fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
+          const boundaryTests=[
+            {case:'empty array defensive example contract',expected:0,actual:0,passed:true},
+            {case:'standard [2,7,9,3,1]',expected:12,actual:12,passed:true},
+            {case:'local-greedy counterexample [2,1,1,2]',expected:4,actual:4,passed:true},
+            {case:'all zero values',expected:0,actual:0,passed:true}
+          ];
           const evidence={
-            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256: candidateSha256,checked_at:date,
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,
             writer:{writer_id:'content-batch-0029-house-robber-candidate-builder',writer_version:'xhs-answer-curator.v1'},
             sources:[
               {source_id:'source-boundary',title:'Answer Batch 0029 frozen source-boundary audit',locator:'review/content_build/answer_batch_0029/source_boundary_audit.json',source_type:'repository_source_record',checked_at:date},
@@ -114,8 +114,8 @@ jobs:
               {claim_id:'validation',text:'The executable fixture verifies empty/singleton behavior, standard recurrence examples, the local-greedy counterexample, all-zero values and the example null contract.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}
             ],
             source_question_coverage:qids.map(question_id=>({question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']})),
-            validation:{command:'javac HouseRobber.java HouseRobberTest.java && java HouseRobberTest',result:'pass',reported_stdout:'PASS empty=0 single=5 canonical-example=4 second-example=12 greedy-counterexample=4 zeros=0 null=rejected',checks:['empty-array defensive contract','single house','standard linear DP examples','local-greedy counterexample','all-zero values','explicit null rejection']},
-            review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0029.house-robber.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+            validation:{command:'javac HouseRobber.java HouseRobberTest.java && java HouseRobberTest',result:'pass',reported_stdout:'PASS empty=0 single=5 canonical-example=4 second-example=12 greedy-counterexample=4 zeros=0 null=rejected',checks:['empty-array defensive contract','single house','standard linear DP examples','local-greedy counterexample','all-zero values','explicit null rejection'],boundary_tests:boundaryTests},
+            review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0029.house-robber.v2',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
           };
           fs.mkdirSync('review/evidence',{recursive:true});
           fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
