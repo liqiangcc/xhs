@@ -1,0 +1,172 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_73af437ce6f5e3b9ca7799372632dbaf",
+  "candidate_sha256": "24c5a8b625ee1d74662a92814d41f163dc45412ab15e092688d4e0762a396642",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0032-matrix-region-sum-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0032 exact source-first singleton boundary",
+      "locator": "review/content_build/answer_batch_0032/source_boundary_audit.md",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Matrix region-sum writer fixture plus actual-candidate independent oracle",
+      "locator": "review/content_build/answer_batch_0032/cq_q_73af437ce6f5e3b9ca7799372632dbaf/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Matrix region-sum independent source-first review",
+      "locator": "review/content_build/answer_batch_0032/cq_q_73af437ce6f5e3b9ca7799372632dbaf/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source identifies immutable 2D region-sum / LeetCode 304 without preserving Java-specific API, numeric width, or invalid-input contracts.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-behavior",
+      "text": "The actual candidate constructs a 2D prefix table and answers inclusive sub-rectangles by four-term inclusion-exclusion.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "boundaries",
+      "text": "Independent checks confirm snapshot immutability, long accumulation, rectangular-input enforcement and invalid-region rejection under the explicit answer-side contract.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The implementation fills one (R+1)x(C+1) table once and each query reads four entries, matching O(RC) preprocessing/space and O(1) query time.",
+      "source_ids": [
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "73af437ce6f5e3b9ca7799372632dbaf",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "writer randomized fixture plus independently compiled actual-candidate exhaustive/random direct-sum oracle",
+    "result": "pass",
+    "reported_stdout": "PASS actual-candidate exhaustive-regions=14070 random-matrices=5000 random-queries=100000 snapshot=immutable long-overflow=covered jagged-empty-bounds=rejected",
+    "checks": [
+      "exhaustive small matrices",
+      "100,000 random regions",
+      "snapshot immutability",
+      "long overflow boundary",
+      "jagged/empty rejection",
+      "invalid region rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "actual candidate exhaustive small matrices",
+        "expected": "all inclusive sub-rectangle sums equal direct nested-loop oracle",
+        "actual": "PASS actual-candidate exhaustive-regions=14070 random-matrices=5000 random-queries=100000 snapshot=immutable long-overflow=covered jagged-empty-bounds=rejected",
+        "passed": true
+      },
+      {
+        "case": "deterministic randomized matrices",
+        "expected": "100,000 random regions equal direct summation oracle",
+        "actual": "pass across 5,000 matrices",
+        "passed": true
+      },
+      {
+        "case": "immutable snapshot",
+        "expected": "caller mutation after construction does not change answer",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "long accumulation",
+        "expected": "2x2 Integer.MAX_VALUE matrix sums without int overflow",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "Java API boundaries",
+        "expected": "jagged/empty matrices and invalid region rejected",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0032-matrix-region-sum-20260825",
+    "review_version": "batch-0032.matrix-region-sum.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The exact repository source identifies the immutable two-dimensional region-sum problem and preserves the LeetCode 304 context; it does not preserve Java API, numeric-width, invalid-input, or mutation-after-construction contracts.",
+      "The candidate keeps those unstated API choices explicit as answer-side contracts instead of presenting them as recovered source requirements.",
+      "The two-dimensional prefix recurrence and four-term inclusion-exclusion query are internally consistent, including the +1 sentinel row/column convention and inclusive query endpoints.",
+      "Independent review compiles and runs the actual candidate against a direct nested-loop oracle over exhaustive small matrices and 100,000 deterministic randomized regions.",
+      "Snapshot immutability, long accumulation beyond int range, jagged/empty input rejection, and invalid-region rejection are independently exercised and match the candidate text.",
+      "O(RC) preprocessing/space and O(1) query claims match the implementation structure; the answer correctly separates mutable-matrix alternatives as a different contract.",
+      "No project experience is fabricated."
+    ]
+  }
+}
