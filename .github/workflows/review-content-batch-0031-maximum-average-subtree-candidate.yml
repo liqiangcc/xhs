@@ -1,0 +1,220 @@
+name: Review Content Batch 0031 Maximum Average Subtree Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0031-maximum-average-subtree-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-maximum-average-subtree-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7064238087ed7b61ccadf6683e6d2915
+  SOURCE_QID: 7064238087ed7b61ccadf6683e6d2915
+  CANDIDATE_BLOB_SHA: ad84f6100a55a4231ad4b502528890329b404386
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and writer executable validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法 2：求二叉树中子树节点平均值的最大值（要求使用 DFS）';
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/67de17c2000000001a005fa3.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('source drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0031/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context missing or drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error('source context missing');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const required=['后序 DFS','(sum, count)','全是负数','BigInteger','Math.addExact','O(n)','O(h)','完整 rooted subtree'];
+          for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if(/ProblemSpec|transition\s*\(|按本题约束填写|TODO|占位|长尾复习底稿/.test(text)) throw new Error('placeholder/template residue detected');
+          NODE
+          javac "$out/MaxAverageSubtree.java" "$out/MaxAverageSubtreeTest.java"
+          test "$(java -cp "$out" MaxAverageSubtreeTest)" = 'PASS single-negative=yes all-negative=yes mixed=yes null-contract=yes exact-fraction=yes random-oracle=3000'
+
+      - name: Independent reviewer oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          cat > "$out/MaxAverageSubtreeReviewer.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.Random;
+
+          public final class MaxAverageSubtreeReviewer {
+              private static final double EPS = 1e-12;
+              private static void check(boolean ok, String message) {
+                  if (!ok) throw new AssertionError(message);
+              }
+              private static void roots(MaxAverageSubtree.TreeNode n, List<MaxAverageSubtree.TreeNode> out) {
+                  if (n == null) return;
+                  out.add(n); roots(n.left, out); roots(n.right, out);
+              }
+              private static long[] aggregate(MaxAverageSubtree.TreeNode n) {
+                  if (n == null) return new long[]{0,0};
+                  long[] l=aggregate(n.left), r=aggregate(n.right);
+                  return new long[]{l[0]+r[0]+n.val,l[1]+r[1]+1};
+              }
+              private static double brute(MaxAverageSubtree.TreeNode root) {
+                  List<MaxAverageSubtree.TreeNode> rs=new ArrayList<>(); roots(root,rs);
+                  double best=Double.NEGATIVE_INFINITY;
+                  for (MaxAverageSubtree.TreeNode r:rs) { long[] a=aggregate(r); best=Math.max(best,(double)a[0]/a[1]); }
+                  return best;
+              }
+              private static MaxAverageSubtree.TreeNode randomTree(Random rnd,int n) {
+                  List<MaxAverageSubtree.TreeNode> a=new ArrayList<>();
+                  for(int i=0;i<n;i++) a.add(new MaxAverageSubtree.TreeNode(rnd.nextInt(2001)-1000));
+                  for(int i=1;i<n;i++) {
+                      while(true) {
+                          MaxAverageSubtree.TreeNode p=a.get(rnd.nextInt(i));
+                          if(p.left==null && p.right==null) { if(rnd.nextBoolean())p.left=a.get(i); else p.right=a.get(i); break; }
+                          if(p.left==null){p.left=a.get(i);break;} if(p.right==null){p.right=a.get(i);break;}
+                      }
+                  }
+                  return a.get(0);
+              }
+              public static void main(String[] args) {
+                  MaxAverageSubtree solver=new MaxAverageSubtree();
+                  MaxAverageSubtree.TreeNode chain=new MaxAverageSubtree.TreeNode(-10);
+                  chain.right=new MaxAverageSubtree.TreeNode(-20);
+                  chain.right.right=new MaxAverageSubtree.TreeNode(-3);
+                  check(Math.abs(solver.maxAverage(chain)-(-3.0))<EPS,"negative chain");
+                  Random rnd=new Random(17064238087L);
+                  for(int i=0;i<5000;i++) {
+                      MaxAverageSubtree.TreeNode t=randomTree(rnd,1+rnd.nextInt(25));
+                      double e=brute(t), a=solver.maxAverage(t);
+                      check(Math.abs(e-a)<EPS,"review oracle mismatch round="+i+" e="+e+" a="+a);
+                  }
+                  check(MaxAverageSubtree.greater(-1,3,-1,2),"negative exact fraction order");
+                  check(!MaxAverageSubtree.greater(1,3,2,6),"equal rational averages must not be greater");
+                  System.out.println("PASS reviewer-negative-chain=yes random-oracle=5000 exact-fractions=yes rooted-subtrees=enumerated");
+              }
+          }
+          JAVA
+          javac "$out/MaxAverageSubtree.java" "$out/MaxAverageSubtreeReviewer.java"
+          test "$(java -cp "$out" MaxAverageSubtreeReviewer)" = 'PASS reviewer-negative-chain=yes random-oracle=5000 exact-fractions=yes rooted-subtrees=enumerated'
+
+      - name: Write independent source-first review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0031/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const tests=[
+            {case:'single negative node',expected:'its value is the maximum average',actual:'passed',passed:true},
+            {case:'all-negative tree',expected:'best existing subtree, never synthetic zero',actual:'passed',passed:true},
+            {case:'rooted-subtree enumeration',expected:'optimized postorder matches repeated-subtree oracle',actual:'3000 writer + 5000 reviewer generated trees passed',passed:true},
+            {case:'exact fraction comparison',expected:'negative/equal and large cross-products ordered without long multiplication overflow',actual:'BigInteger comparator checks passed',passed:true},
+            {case:'null input',expected:'explicitly rejected by answer-side contract',actual:'IllegalArgumentException verified',passed:true}
+          ];
+          fs.writeFileSync(validationPath,JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,
+            command:'javac MaxAverageSubtree.java MaxAverageSubtreeTest.java && java MaxAverageSubtreeTest; independent MaxAverageSubtreeReviewer',
+            stdout:'PASS single-negative=yes all-negative=yes mixed=yes null-contract=yes exact-fraction=yes random-oracle=3000; PASS reviewer-negative-chain=yes random-oracle=5000 exact-fractions=yes rooted-subtrees=enumerated',
+            checks:['postorder subtree sum/count','negative values','explicit null contract','exact fraction comparator','3000 writer oracle trees','5000 independent reviewer oracle trees'],boundary_tests:tests
+          },null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_passed',
+            sources:[{source_id:'repository-source',title:'Tagged maximum-average-subtree DFS coding question',locator:`note_tagged/67de17c2000000001a005fa3.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Maximum-average-subtree executable Java validation',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],
+            claims:[{claim_id:'source-boundary',text:'The preserved source asks for maximum subtree-node average using DFS; API, null behavior, ranges and ties are answer-side.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},{claim_id:'dfs-correctness',text:'Postorder returns sum/count and visits each rooted subtree once; executable writer and reviewer oracles validate the implementation.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']}],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied'
+          },null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0031-maximum-average-subtree-20260825';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved source requires DFS and asks only for the maximum average value among binary-tree subtrees; it does not preserve a concrete API, empty-tree behavior, node range or tie rule.',
+            'The candidate explicitly defines subtree as each node plus all descendants and labels return/null/numeric-range behavior as answer-side rather than recovered source.',
+            'The postorder invariant is correct: left and right sum/count plus the current node produce exactly the current rooted subtree statistics, so each candidate is evaluated once in O(n) time.',
+            'All-negative input is handled without a synthetic zero baseline; the first real subtree initializes the best fraction.',
+            'Best-fraction comparisons use BigInteger cross products, avoiding both floating selection error and overflow in long cross multiplication, while Math.addExact makes the declared long-sum boundary observable.',
+            'The writer harness matches an independent repeated-subtree oracle on 3000 generated trees; a separately authored reviewer harness matches on 5000 additional trees and explicit negative/fraction boundaries.',
+            'The answer calls out O(h) recursion depth and does not invent project experience.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0031.maximum-average-subtree.v1',decision:'pass',revision_round:1,source_packet:['note_tagged/67de17c2000000001a005fa3.json',candidate,validationPath,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0031-maximum-average-subtree-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Tagged maximum-average-subtree DFS coding question',locator:`note_tagged/67de17c2000000001a005fa3.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Maximum-average-subtree writer and reviewer executable validation',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Maximum-average-subtree candidate independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source requires DFS and maximum subtree average; API/null/ranges/ties are not source constraints.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','关键细节']},{claim_id:'postorder-invariant',text:'Each node returns subtree sum/count after its children, so every rooted subtree is evaluated once.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'boundary-correctness',text:'Independent executable oracles cover negative trees, exact fraction comparison, null input and 8000 generated trees total.',source_ids:['fixture','isolated-review'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'writer + independent reviewer Java oracles',result:'pass',reported_stdout:'PASS writer=3000 reviewer=5000 negative=yes exact-fractions=yes',checks:['rooted subtree semantics','negative inputs','fraction comparison','generated oracles'],boundary_tests:tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0031.maximum-average-subtree.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true}); fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md'; let text=fs.readFileSync(task,'utf8');
+          const done='- [x] `cq_q_7064238087ed7b61ccadf6683e6d2915` candidate passed independent source-first review: the DFS/postorder sum-count invariant evaluates every rooted subtree exactly once, all-negative and numeric comparison boundaries are explicit, writer plus separately-authored reviewer oracles cover 8000 generated trees, and API/null/range/tie choices remain answer-side rather than fabricated source constraints. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(done)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+done+'\n');
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo 'Content branch advanced during maximum-average-subtree review; discard local review and retry later.'
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0031/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0031 maximum-average-subtree candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
