@@ -1,0 +1,202 @@
+name: Audit Content Batch 0032 Source Packet
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/audit-content-batch-0032-source-packet.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-source-packet
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+
+jobs:
+  extract-or-validate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Detect completed source-first boundary
+        id: boundary
+        shell: bash
+        run: |
+          if test -f "review/content_build/answer_batch_${BATCH}/source_boundary_audit.md"; then
+            echo 'frozen=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'frozen=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate frozen source packet
+        if: steps.boundary.outputs.frozen == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          batch = os.environ['BATCH']
+          task_path = pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md')
+          packet_path = pathlib.Path(f'review/reports/ANSWER_BATCH_{batch}_SOURCE_PACKET.json')
+          boundary_path = pathlib.Path(f'review/content_build/answer_batch_{batch}/source_boundary_audit.md')
+          for path in (task_path, packet_path, boundary_path):
+              if not path.exists():
+                  raise SystemExit(f'missing frozen source-first artifact: {path}')
+          task_text = task_path.read_text(encoding='utf-8')
+          if '## Canonicals' not in task_text:
+              raise SystemExit('batch task is missing the Canonicals section')
+          canonical_section = task_text.split('## Canonicals', 1)[1].split('\n## ', 1)[0]
+          ids = list(dict.fromkeys(re.findall(r'^- `(cq_q_[0-9a-f]{32})`', canonical_section, flags=re.MULTILINE)))
+          packet = json.loads(packet_path.read_text(encoding='utf-8'))
+          packet_ids = [row.get('canonical_id') for row in packet.get('canonicals') or []]
+          disposition_ids = re.findall(r'^\| `(cq_q_[0-9a-f]{32})` \|', boundary_path.read_text(encoding='utf-8'), flags=re.MULTILINE)
+          if len(ids) != 10 or packet.get('schema_version') != 'answer_batch_source_packet.v2' or packet.get('batch') != batch:
+              raise SystemExit('frozen source packet identity mismatch')
+          if set(packet_ids) != set(ids) or len(packet_ids) != 10 or set(disposition_ids) != set(ids):
+              raise SystemExit('frozen packet/boundary does not preserve all original batch members')
+          print('PASS: source-first boundary exists; frozen packet remains immutable evidence.')
+          PY
+
+      - name: Extract repository-source packet
+        if: steps.boundary.outputs.frozen != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          batch = os.environ['BATCH']
+          task = pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md').read_text(encoding='utf-8')
+          if '## Canonicals' not in task:
+              raise SystemExit('batch task is missing the Canonicals section')
+          canonical_section = task.split('## Canonicals', 1)[1].split('\n## ', 1)[0]
+          ids = list(dict.fromkeys(re.findall(r'^- `(cq_q_[0-9a-f]{32})`', canonical_section, flags=re.MULTILINE)))
+          if len(ids) != 10:
+              raise SystemExit(f'expected 10 unique Canonicals in the Canonicals section, got {len(ids)}')
+
+          def norm(value):
+              return re.sub(r'[^\w\u4e00-\u9fa5]', '', str(value or '').lower())
+
+          canon = {}
+          for line in pathlib.Path('data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines():
+              if line.strip():
+                  row = json.loads(line)
+                  if row.get('canonical_id') in ids:
+                      canon[row['canonical_id']] = row
+          missing = [cid for cid in ids if cid not in canon]
+          if missing:
+              raise SystemExit(f'missing active Canonicals before boundary review: {missing}')
+
+          by_qid = {}
+          by_wording = {}
+          for cid, row in canon.items():
+              for qid in row.get('question_ids') or []:
+                  by_qid[qid] = cid
+              by_qid.setdefault(cid.removeprefix('cq_q_'), cid)
+              for text in [row.get('canonical_title'), *(row.get('aliases') or [])]:
+                  key = norm(text)
+                  if key:
+                      by_wording.setdefault(key, set()).add(cid)
+          for line in pathlib.Path('data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines():
+              if line.strip():
+                  row = json.loads(line)
+                  cid = row.get('canonical_id')
+                  if cid in canon:
+                      key = norm(row.get('original_question'))
+                      if key:
+                          by_wording.setdefault(key, set()).add(cid)
+
+          hits = {cid: [] for cid in ids}
+          for path in sorted(pathlib.Path('note_tagged').glob('*.json')):
+              try:
+                  note = json.loads(path.read_text(encoding='utf-8'))
+              except Exception:
+                  continue
+              note_id = note.get('note_id') or path.stem
+              for q in note.get('tagged_questions') or []:
+                  cid = by_qid.get(q.get('question_id'))
+                  basis = 'question_id' if cid else None
+                  if not cid:
+                      matches = by_wording.get(norm(q.get('original_question')), set())
+                      if len(matches) == 1:
+                          cid = next(iter(matches)); basis = 'normalized_original_question_exact'
+                  if cid not in hits:
+                      continue
+                  desc_path = pathlib.Path('note_desc') / f'{note_id}.txt'
+                  img_path = pathlib.Path('note_img_txt') / f'{note_id}.txt'
+                  hits[cid].append({
+                      'note_id': note_id,
+                      'note_tagged_path': str(path),
+                      'note_desc_path': str(desc_path) if desc_path.exists() else None,
+                      'note_img_txt_path': str(img_path) if img_path.exists() else None,
+                      'match_basis': basis,
+                      'tagged_question': q,
+                      'note_desc': desc_path.read_text(encoding='utf-8') if desc_path.exists() else None,
+                      'note_img_txt': img_path.read_text(encoding='utf-8') if img_path.exists() else None,
+                  })
+
+          packet = {
+              'schema_version': 'answer_batch_source_packet.v2',
+              'batch': batch,
+              'source_policy': 'repository_source_only_exact_id_or_exact_normalized_wording_no_fuzzy_inference',
+              'canonicals': [{'canonical_id': cid, 'canonical_record': canon[cid], 'source_hits': hits[cid]} for cid in ids],
+          }
+          out_json = pathlib.Path(f'review/reports/ANSWER_BATCH_{batch}_SOURCE_PACKET.json')
+          out_md = pathlib.Path(f'review/reports/ANSWER_BATCH_{batch}_SOURCE_PACKET.md')
+          out_json.parent.mkdir(parents=True, exist_ok=True)
+          out_json.write_text(json.dumps(packet, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          lines = [f'# Answer Batch {batch} — Repository Source Packet', '', 'Mechanically extracted from repository source only; no answer-content inference is made.', 'Matching is limited to current Question id or a unique exact normalized wording match; fuzzy semantic matching is forbidden.', '']
+          for entry in packet['canonicals']:
+              lines += [f'## `{entry["canonical_id"]}`', '', '### Canonical record', '', '```json', json.dumps(entry['canonical_record'], ensure_ascii=False, indent=2), '```', '', f'### Source hits ({len(entry["source_hits"])})', '']
+              for i, hit in enumerate(entry['source_hits'], 1):
+                  lines += [f'#### Source {i}: `{hit["note_id"]}`', '', f'- matched by: `{hit["match_basis"]}`', f'- tagged: `{hit["note_tagged_path"]}`']
+                  if hit['note_desc_path']: lines.append(f'- caption: `{hit["note_desc_path"]}`')
+                  if hit['note_img_txt_path']: lines.append(f'- image transcript: `{hit["note_img_txt_path"]}`')
+                  lines += ['', 'Tagged question:', '', '```json', json.dumps(hit['tagged_question'], ensure_ascii=False, indent=2), '```', '']
+                  if hit['note_desc'] is not None: lines += ['Caption text:', '', '```text', hit['note_desc'].rstrip(), '```', '']
+                  if hit['note_img_txt'] is not None: lines += ['Image transcript:', '', '```text', hit['note_img_txt'].rstrip(), '```', '']
+              if not entry['source_hits']:
+                  lines += ['No exact-id or unique exact-normalized source hit found.', '']
+          rendered = '\n'.join(lines).rstrip()
+          rendered = re.sub(r'[ \t]+$', '', rendered, flags=re.MULTILINE)
+          out_md.write_text(rendered + '\n', encoding='utf-8')
+          missing_hits = [cid for cid in ids if not hits[cid]]
+          print('source-hit-missing:', missing_hits)
+          if missing_hits:
+              raise SystemExit('source packet is incomplete; do not infer missing sources')
+          PY
+
+      - name: Commit packet only from one stable content snapshot
+        if: steps.boundary.outputs.frozen != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          files="review/reports/ANSWER_BATCH_${BATCH}_SOURCE_PACKET.json review/reports/ANSWER_BATCH_${BATCH}_SOURCE_PACKET.md"
+          if [ -z "$(git status --porcelain -- $files)" ]; then
+            echo 'No packet changes.'
+            exit 0
+          fi
+          base_head="$(git rev-parse HEAD)"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced: $base_head -> $remote_head; discard mixed-snapshot packet."
+            exit 0
+          fi
+          git config user.name 'xhs-source-audit-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add $files
+          git diff --cached --check
+          git commit -m "review: extract batch ${BATCH} repository source packet"
+          git push origin "HEAD:$CONTENT_BRANCH"
