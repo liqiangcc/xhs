@@ -1,0 +1,342 @@
+name: Build Content Batch 0030 Spiral Matrix II Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0030-spiral-matrix-ii-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-spiral-matrix-ii-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6dfc45bd535b894c5de755254b01ca58
+  SOURCE_QID: 6dfc45bd535b894c5de755254b01ca58
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard source wording and Canonical ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/68c926620000000013029638.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!=='算法：螺旋矩阵 II（LeetCode 59）。'||source.question_type!=='算法手撕_Coding') throw new Error('Spiral Matrix II tagged source drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const q=qs.find(x=>x.question_id===qid),c=cs.find(x=>x.canonical_id===cid);
+          if(q?.canonical_id!==cid||!c||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error('Spiral Matrix II Canonical ownership drifted');
+          if(c.answer_type && c.answer_type!=='coding') throw new Error(`answer type drifted: ${c.answer_type}`);
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "/tmp/$CANONICAL_ID.context.json"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const ctx=JSON.parse(fs.readFileSync(`/tmp/${cid}.context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||ctx.canonical?.canonical_id!==cid) throw new Error('answer context drifted');
+          if(JSON.stringify(ctx.canonical.question_ids||[])!==JSON.stringify([qid])) throw new Error('context ownership drifted');
+          NODE
+
+      - name: Write source-bounded candidate and independent Java oracle fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          mkdir -p "$out"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6dfc45bd535b894c5de755254b01ca58","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 螺旋矩阵 II（LeetCode 59）：按边界逐层填充 1 到 n²
+
+          ## 核心结论
+
+          仓库原题明确写的是 **LeetCode 59：Spiral Matrix II**。官方题意是：给定正整数 `n`，生成一个 `n x n` 矩阵，把 `1..n²` 按顺时针螺旋顺序填入。最直接的实现是维护 `top / bottom / left / right` 四条未填边界，每轮依次填写上边、右边、下边、左边，然后四条边界向内收缩。
+
+          关键不变量是：循环开始时，边界之外的格子已经全部且只被写入一次，边界矩形内部仍未写入；下一轮只写当前最外层。因此每个格子恰好访问一次，时间复杂度 `O(n²)`，除返回矩阵外额外空间 `O(1)`。
+
+          ## 1 分钟版
+
+          - 初始化 `top=0, bottom=n-1, left=0, right=n-1, value=1`。
+          - 先从左到右填 `top` 行，再 `top++`。
+          - 再从上到下填 `right` 列，再 `right--`。
+          - 如果还有剩余行，从右到左填 `bottom` 行，再 `bottom--`。
+          - 如果还有剩余列，从下到上填 `left` 列，再 `left++`。
+          - 四条边界交叉后结束。
+
+          两个 `if` 不是装饰：矩形缩到单行或单列时，如果继续无条件写下边或左边，会重复覆盖中心层。虽然本题始终是方阵，奇数阶矩阵最终也会收缩到一个中心格，所以仍要保持边界检查。
+
+          ## 3 分钟版
+
+          这题可以把未填区域看成一个不断缩小的闭区间矩形 `[top..bottom] x [left..right]`。每一轮完成这个矩形的最外圈：
+
+          1. `top` 行：`left -> right`；
+          2. `right` 列：`top -> bottom`；
+          3. 如果 `top <= bottom`，`bottom` 行：`right -> left`；
+          4. 如果 `left <= right`，`left` 列：`bottom -> top`。
+
+          每写完一条边就立即收缩对应边界，保证后面的边不会再次碰到已经写过的角。`value` 每写一个格子加一，从 1 连续增长到 `n²`；因为每个合法坐标只在其所属的最外层被访问一次，所以最终既不会漏格，也不会重复值。
+
+          LeetCode 59 的公开约束是 `1 <= n <= 20`，因此 `n²` 对 Java `int` 完全安全。不过实现本身不依赖这个小上限；真正决定复杂度的是输出就有 `n²` 个格子，所以任何正确算法至少需要 `Ω(n²)` 的写入工作。
+
+          ## 关键细节
+
+          - **输入输出**：输入是正整数 `n`，输出新建的 `n x n` 整数矩阵；本题没有输入矩阵可原地修改。
+          - **顺序**：从左上角写 `1`，先向右，再向下、向左、向上，整体是顺时针。
+          - **角点处理**：上边写完就 `top++`，右边写完就 `right--`，因此右上角不会被重复写；其余角同理。
+          - **中心层**：奇数 `n` 最后只剩一个格子，边界检查保证它只被填写一次。
+          - **复杂度**：恰好写 `n²` 个位置，时间 `O(n²)`；边界变量只占常数空间，若不计输出矩阵额外空间是 `O(1)`。
+          - **数值范围**：官方当前约束 `n <= 20`，最大值 `400`；使用 `int` 足够。
+          - **失败边界**：正式 LeetCode API 不需要处理 `n <= 0`，因为官方输入域已经排除；仓库里的可执行 helper 会对非正数显式抛错，只作为本地防御式 API 约定，不能说成原题要求。
+
+          ## 原理机制
+
+          ```java
+          public final class SpiralMatrixII {
+              private SpiralMatrixII() {}
+
+              public static int[][] generateMatrix(int n) {
+                  if (n <= 0) {
+                      throw new IllegalArgumentException("n must be positive");
+                  }
+
+                  int[][] matrix = new int[n][n];
+                  int top = 0;
+                  int bottom = n - 1;
+                  int left = 0;
+                  int right = n - 1;
+                  int value = 1;
+
+                  while (top <= bottom && left <= right) {
+                      for (int col = left; col <= right; col++) {
+                          matrix[top][col] = value++;
+                      }
+                      top++;
+
+                      for (int row = top; row <= bottom; row++) {
+                          matrix[row][right] = value++;
+                      }
+                      right--;
+
+                      if (top <= bottom) {
+                          for (int col = right; col >= left; col--) {
+                              matrix[bottom][col] = value++;
+                          }
+                          bottom--;
+                      }
+
+                      if (left <= right) {
+                          for (int row = bottom; row >= top; row--) {
+                              matrix[row][left] = value++;
+                          }
+                          left++;
+                      }
+                  }
+                  return matrix;
+              }
+          }
+          ```
+
+          这个实现使用“收缩边界”来定义下一步坐标。仓库测试的 oracle 不复制这个机制，而是维护当前位置、方向向量和 `visited` 矩阵：如果下一步越界或已经访问，就顺时针转向。两种状态机在 `n=1..20` 的完整官方输入域逐项比较，并额外固定断言 `n=1/2/3` 的已知矩阵。
+
+          ## 项目经验版
+
+          这是纯算法题，仓库来源没有真实项目场景、性能指标或生产故障材料，因此不编造“线上使用螺旋矩阵”的经验。可迁移的工程习惯是：对二维状态机先定义坐标边界和“不重复访问”不变量，再选择边界收缩或方向转向实现；验证时最好用结构不同的 oracle，而不是把同一套循环复制成测试。
+
+          ## 常见追问
+
+          - 问：为什么第三、第四段要再判断边界？答：当剩余区域已经缩成单行或单列时，前两段可能已经把这一层全部填完；继续写会重复覆盖。
+          - 问：能不能用方向数组做？答：可以。方向数组 + visited 的实现更统一，但需要额外 `O(n²)` visited 状态；边界收缩在本题上只需常数额外状态。
+          - 问：为什么复杂度不是 `O(n)`，明明只有四个 for？答：四个循环会在不同层覆盖全部 `n²` 个格子，总迭代次数是 `n²`，不是四倍 `n`。
+          - 问：如何证明没有漏格？答：每轮完整写当前未填矩形的外圈，随后边界各向内一格；归纳到边界交叉时，所有层都已写完。
+          - 问：为什么不需要 visited？答：边界本身编码了“哪些区域还没写”，只要每条边写完立即收缩，就不会重新进入已完成区域。
+          - 问：如果题目改成读取任意 `m x n` 矩阵的螺旋顺序呢？答：同样可以用四边界，但输出语义从“生成连续整数矩阵”变成“按顺序读取现有矩阵”，属于 Spiral Matrix I 的不同契约。
+
+          ## 易错点
+
+          - 写完上边后没有先收缩 `top`，导致右上角被重复写。
+          - 单行/单列中心层没有条件判断，重复覆盖已经写过的格子。
+          - 把 `O(n²)` 输出规模误报成 `O(n)`。
+          - 用 visited 实现却声称额外空间 `O(1)`。
+          - 把本地 helper 的 `n <= 0` 异常策略说成 LeetCode 59 的官方输入要求。
+          - 把 Spiral Matrix I 的“读取矩阵”与 Spiral Matrix II 的“生成矩阵”混为一题。
+          EOF
+
+          cat > "$out/SpiralMatrixII.java" <<'JAVA'
+          public final class SpiralMatrixII {
+              private SpiralMatrixII() {}
+
+              public static int[][] generateMatrix(int n) {
+                  if (n <= 0) throw new IllegalArgumentException("n must be positive");
+                  int[][] matrix = new int[n][n];
+                  int top = 0, bottom = n - 1, left = 0, right = n - 1, value = 1;
+                  while (top <= bottom && left <= right) {
+                      for (int col = left; col <= right; col++) matrix[top][col] = value++;
+                      top++;
+                      for (int row = top; row <= bottom; row++) matrix[row][right] = value++;
+                      right--;
+                      if (top <= bottom) {
+                          for (int col = right; col >= left; col--) matrix[bottom][col] = value++;
+                          bottom--;
+                      }
+                      if (left <= right) {
+                          for (int row = bottom; row >= top; row--) matrix[row][left] = value++;
+                          left++;
+                      }
+                  }
+                  return matrix;
+              }
+          }
+          JAVA
+
+          cat > "$out/SpiralMatrixIITest.java" <<'JAVA'
+          import java.util.Arrays;
+
+          public final class SpiralMatrixIITest {
+              private static void require(boolean ok, String message) {
+                  if (!ok) throw new AssertionError(message);
+              }
+
+              private static int[][] oracle(int n) {
+                  int[][] matrix = new int[n][n];
+                  boolean[][] seen = new boolean[n][n];
+                  int[][] dirs = {{0,1},{1,0},{0,-1},{-1,0}};
+                  int row = 0, col = 0, dir = 0;
+                  for (int value = 1; value <= n * n; value++) {
+                      matrix[row][col] = value;
+                      seen[row][col] = true;
+                      if (value == n * n) break;
+                      int nr = row + dirs[dir][0], nc = col + dirs[dir][1];
+                      if (nr < 0 || nr >= n || nc < 0 || nc >= n || seen[nr][nc]) {
+                          dir = (dir + 1) % 4;
+                          nr = row + dirs[dir][0];
+                          nc = col + dirs[dir][1];
+                      }
+                      row = nr;
+                      col = nc;
+                  }
+                  return matrix;
+              }
+
+              private static void assertMatrix(int[][] actual, int[][] expected, String label) {
+                  require(Arrays.deepEquals(actual, expected), label + " actual=" + Arrays.deepToString(actual) + " expected=" + Arrays.deepToString(expected));
+              }
+
+              private static void assertPermutation(int[][] matrix) {
+                  int n = matrix.length;
+                  boolean[] seen = new boolean[n * n + 1];
+                  for (int[] row : matrix) {
+                      require(row.length == n, "not square");
+                      for (int value : row) {
+                          require(value >= 1 && value <= n * n, "value out of range: " + value);
+                          require(!seen[value], "duplicate value: " + value);
+                          seen[value] = true;
+                      }
+                  }
+                  for (int value = 1; value <= n * n; value++) require(seen[value], "missing value: " + value);
+              }
+
+              public static void main(String[] args) {
+                  assertMatrix(SpiralMatrixII.generateMatrix(1), new int[][]{{1}}, "n=1");
+                  assertMatrix(SpiralMatrixII.generateMatrix(2), new int[][]{{1,2},{4,3}}, "n=2");
+                  assertMatrix(SpiralMatrixII.generateMatrix(3), new int[][]{{1,2,3},{8,9,4},{7,6,5}}, "n=3");
+                  int checked = 0;
+                  for (int n = 1; n <= 20; n++) {
+                      int[][] actual = SpiralMatrixII.generateMatrix(n);
+                      assertMatrix(actual, oracle(n), "oracle n=" + n);
+                      assertPermutation(actual);
+                      checked++;
+                  }
+                  boolean rejected = false;
+                  try { SpiralMatrixII.generateMatrix(0); } catch (IllegalArgumentException expected) { rejected = true; }
+                  require(rejected, "helper should reject non-positive n");
+                  System.out.println("PASS fixed=3 official-domain=1..20 oracle=direction-visited permutation=yes invalid-helper=yes checked=" + checked);
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          javac "$out/SpiralMatrixII.java" "$out/SpiralMatrixIITest.java"
+          stdout="$(java -cp "$out" SpiralMatrixIITest)"
+          test "$stdout" = 'PASS fixed=3 official-domain=1..20 oracle=direction-visited permutation=yes invalid-helper=yes checked=20'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0030/${cid}`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          fs.writeFileSync(path.join(out,'source_boundary.json'),JSON.stringify({schema_version:'answer_source_boundary.v1',canonical_id:cid,checked_at:date,source_question_id:qid,source_wording:'算法：螺旋矩阵 II（LeetCode 59）。',preserved:['LeetCode 59 problem identity','Spiral Matrix II task identity'],not_preserved:['implementation language','required algorithm','exception behavior outside official input domain'],official_mapping:{title:'59. Spiral Matrix II',contract:'Given a positive integer n, generate an n x n matrix filled with 1..n^2 in spiral order.',constraints:'1 <= n <= 20',locator:'https://leetcode.com/problems/spiral-matrix-ii/'}},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac SpiralMatrixII.java SpiralMatrixIITest.java && java SpiralMatrixIITest',stdout:process.env.STDOUT,checks:['fixed n=1,2,3 matrices','full official n=1..20 domain against direction+visited oracle','1..n^2 permutation invariant','defensive helper rejects non-positive n']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',candidate_sha256:candidateSha256,sources:[{source_id:'repository-source',title:'Tagged repository Spiral Matrix II question',locator:`note_tagged/68c926620000000013029638.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'leetcode-59-official',title:'LeetCode 59 Spiral Matrix II official problem page',locator:'https://leetcode.com/problems/spiral-matrix-ii/',source_type:'official_documentation',checked_at:date},{source_id:'fixture',title:'Independent direction+visited Java oracle fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'official-contract',text:'LeetCode 59 takes positive n and generates an n x n matrix containing 1..n^2 in spiral order; the current official constraints are 1 <= n <= 20.',source_ids:['repository-source','leetcode-59-official'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'boundary-implementation',text:'The boundary-shrinking Java implementation matches a structurally different direction+visited oracle for every n in the official 1..20 domain and preserves the 1..n^2 permutation.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [ ] `cq_q_6dfc45bd535b894c5de755254b01ca58` writer stage complete: repository source explicitly maps to LeetCode 59, the candidate uses a boundary-shrinking invariant without inventing source-mandated implementation details, and JDK 21 validation compares the exact implementation against a structurally different direction+visited oracle for every official `n=1..20` input plus permutation and defensive invalid-helper checks. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          NODE
+
+      - name: Run writer-stage candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:coverage
+
+      - name: Commit writer mutation only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Spiral Matrix II writer: $base_head -> $remote_head; discard local mutation and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0030/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: build batch 0030 Spiral Matrix II candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
