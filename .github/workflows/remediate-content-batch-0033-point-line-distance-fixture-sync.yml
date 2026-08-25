@@ -1,0 +1,91 @@
+name: Remediate Content Batch 0033 Point Line Fixture Sync
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0033-point-line-distance-fixture-sync.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-point-line-fixture-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7642700411d0977839a2cd01a41e50ad
+  CANDIDATE_BLOB_SHA: d13a786f7d0ac879f80500725e07af8ec4c02e28
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Re-extract exact fenced implementation into fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          CANDIDATE="$candidate" OUT="$out" node <<'NODE'
+          const fs=require('fs');
+          const text=fs.readFileSync(process.env.CANDIDATE,'utf8');
+          const open='```cpp\n';
+          const i=text.indexOf(open);
+          if(i<0) throw new Error('C++ fence missing');
+          const start=i+open.length,end=text.indexOf('\n```',start);
+          if(end<0) throw new Error('C++ fence close missing');
+          fs.writeFileSync(`${process.env.OUT}/PointLineDistance.cpp`,text.slice(start,end)+'\n');
+          NODE
+          cmp -s <(awk '/^```cpp$/{f=1;next} f&&/^```$/{exit} f{print}' "$candidate") "$out/PointLineDistance.cpp"
+
+      - name: Re-run exact C++ fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          g++ -std=c++20 -O2 -Wall -Wextra -pedantic "$out/PointLineDistanceTest.cpp" -o "$out/point_line_distance_test"
+          stdout="$("$out/point_line_distance_test")"
+          test "$stdout" = 'PASS fixed=5 random=5000 degenerate=rejected order=invariant nonnegative=true'
+          node -e "const fs=require('fs');const p='${out}/code_validation.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.exact_fenced_code_matches_fixture=true;j.remediated_at='2026-08-26';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\\n')"
+          git diff --check
+
+      - name: Run writer-safe gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit remediation only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during point-line fixture remediation: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/content_build/answer_batch_0033/$CANONICAL_ID/PointLineDistance.cpp" "review/content_build/answer_batch_0033/$CANONICAL_ID/code_validation.json"
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: align batch 0033 point-line fixture with fenced code'
+          git push origin "HEAD:$CONTENT_BRANCH"
