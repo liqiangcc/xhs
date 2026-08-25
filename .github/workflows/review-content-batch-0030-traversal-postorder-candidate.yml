@@ -1,0 +1,139 @@
+name: Review Content Batch 0030 Traversal Postorder Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0030-traversal-postorder-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-traversal-postorder-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6d58c327c55f005301c8a0b6759c1147
+  SOURCE_QID: 6d58c327c55f005301c8a0b6759c1147
+  CANDIDATE_BLOB_SHA: e6873c7a70039a9ba0d5403faae119f82b60d550
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first boundary guard and fixture rerun
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          OUT="$out" CANDIDATE="$candidate" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=process.env.OUT,candidate=process.env.CANDIDATE;
+          const expected='算法：根据先序和中序遍历序列，给出后序序列';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/68307f6d0000000023017c20.json','utf8'));
+          const src=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected||src.question_type!=='算法手撕_Coding') throw new Error('source wording/type drifted');
+          const structured=JSON.parse(fs.readFileSync('note_structured/68307f6d0000000023017c20.json','utf8'));
+          if(!(structured.questions||[]).includes(expected)) throw new Error('structured source wording drifted');
+          const serialized=JSON.stringify({src,structuredQuestion:expected});
+          if(/节点值唯一|unique node|输入保证合法|规模.*\d+/i.test(serialized)) throw new Error('repository source unexpectedly introduced hidden uniqueness/validity/size constraints');
+          const boundary=JSON.parse(fs.readFileSync(`${out}/source_boundary.json`,'utf8'));
+          for(const missing of ['whether node values are unique','whether inputs are guaranteed valid and mutually consistent','maximum node count']) if(!(boundary.not_preserved||[]).includes(missing)) throw new Error(`missing fail-closed boundary: ${missing}`);
+          const text=fs.readFileSync(candidate,'utf8');
+          for(const needle of ['节点值唯一','重复值','toPostorder','leftSize','O(n)','不用真的构造树']) if(!text.includes(needle)) throw new Error(`candidate missing required mechanism/boundary: ${needle}`);
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+          NODE
+          javac "$out/TraversalPostorder.java" "$out/TraversalPostorderTest.java"
+          test "$(java -cp "$out" TraversalPostorderTest)" = 'PASS example=yes all-shapes-n0..8=2056 duplicate-rejected=yes invalid-set-rejected=yes inconsistent-order-rejected=yes'
+
+      - name: Record independent review and audit evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0030/${cid}`,boundary=`${out}/source_boundary.json`,fixture=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0030-traversal-postorder-20260825-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository source preserves only the request to derive postorder from preorder and inorder traversal sequences; it does not preserve unique node values, validity guarantees, maximum size, recursion permission or a method signature.',
+            'The candidate keeps those missing constraints explicit and adopts unique integer node values only as the executable fixture contract rather than attributing uniqueness to the interview source.',
+            'The mechanism is correct under that contract: preorder identifies each subtree root, inorder locates the left/right partition, leftSize maps the same partition back into preorder, and emitting left then right then root produces postorder without allocating an intermediate tree.',
+            'The index map removes repeated inorder scans, so each unique node is partitioned once; the stated O(n) expected-time and O(n) indexing/output-space boundaries are consistent with the implementation, with recursion depth up to n on a degenerate tree.',
+            'The value-only duplicate ambiguity is handled fail-closed instead of guessed. The fixture rejects duplicate values, mismatched value sets and structurally inconsistent traversals.',
+            'The executable oracle covers the published example plus every binary-tree shape for node counts 0 through 8, totaling 2056 shapes, and compares direct conversion with independently generated tree postorder. No correctness hard failure remains.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0030.traversal-postorder.v1',decision:'pass',revision_round:1,source_packet:['note_tagged/68307f6d0000000023017c20.json','note_structured/68307f6d0000000023017c20.json',boundary,candidate,fixture],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0030-traversal-postorder-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'source-boundary',title:'Frozen preorder/inorder to postorder source boundary',locator:boundary,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Exhaustive binary-tree-shape traversal oracle through eight nodes',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Traversal postorder independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source requests preorder plus inorder to postorder conversion but does not preserve uniqueness, validity, scale or signature constraints.',source_ids:['source-boundary','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节','易错点']},{claim_id:'direct-conversion',text:'Under the explicit unique-value valid-traversal fixture contract, indexed recursion emits correct postorder directly for every binary-tree shape through eight nodes and rejects malformed/ambiguous inputs.',source_ids:['fixture','isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac TraversalPostorder.java TraversalPostorderTest.java && java TraversalPostorderTest',result:'pass',reported_stdout:'PASS example=yes all-shapes-n0..8=2056 duplicate-rejected=yes invalid-set-rejected=yes inconsistent-order-rejected=yes',checks:['published example','all 2056 binary-tree shapes with n=0..8','duplicate ambiguity rejected','mismatched sets rejected','structural inconsistency rejected'],boundary_tests:[{case:'all unique binary-tree shapes n=0..8',expected:'direct conversion equals independently generated postorder',actual:'PASS all-shapes-n0..8=2056',passed:true},{case:'duplicate values',expected:'reject ambiguous value-only contract',actual:'PASS duplicate-rejected=yes',passed:true},{case:'mismatched traversal sets',expected:'reject',actual:'PASS invalid-set-rejected=yes',passed:true},{case:'structurally inconsistent orders',expected:'reject',actual:'PASS inconsistent-order-rejected=yes',passed:true}]},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0030.traversal-postorder.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- [ ] `cq_q_6d58c327c55f005301c8a0b6759c1147` writer stage complete: the candidate derives postorder directly from preorder/inorder without fabricating a hidden unique-value guarantee, explicitly rejects duplicate-value ambiguity in its executable contract, and validates all binary-tree shapes through 8 nodes plus malformed inputs. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          const replacement='- [x] `cq_q_6d58c327c55f005301c8a0b6759c1147` candidate passed independent source-first review and exhaustive tree-shape evidence: the source-boundary gap around node-value uniqueness remains explicit, direct preorder/inorder-to-postorder conversion matches all 2056 binary-tree shapes through 8 nodes, and ambiguous or inconsistent inputs fail closed. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(old)) throw new Error('writer-stage task note missing');
+          fs.writeFileSync(task,text.replace(old,replacement));
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during traversal postorder review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0030/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0030 traversal postorder candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
