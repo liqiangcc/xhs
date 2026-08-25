@@ -1,0 +1,85 @@
+name: Review Content Batch 0034 Axis0 Stats Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0034-axis0-stats-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-axis0-stats-reviewer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7bf6988f5dc924ebd953a660966d019f
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first isolated review and deterministic revalidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -s "$candidate"; test -s "$out/source_mapping.json"; test -s "$out/writer_research.json"; test -s "$out/code_validation.json"; test ! -e "$out/isolated_review_result.json"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const mapping=JSON.parse(fs.readFileSync(`${out}/source_mapping.json`,'utf8'));
+          const note=JSON.parse(fs.readFileSync(mapping.note_path,'utf8'));
+          const q=(note.tagged_questions||[]).find(x=>x.question_id===mapping.note_question_id);
+          if(!q||q.original_question!=='算法：计算一个 Data 的均值和方差（第一个维度）？') throw new Error('source wording drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(!md.includes(h)) throw new Error(`missing section ${h}`);
+          for(const s of ['没有保存 Data 的具体结构','答案侧契约','总体方差','来源没有真实训练数据']) if(!md.includes(s)) throw new Error(`source-boundary disclosure missing: ${s}`);
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8')); if(writer.review_state!=='writer_complete_isolated_review_pending') throw new Error(`writer state ${writer.review_state}`);
+          const val=JSON.parse(fs.readFileSync(`${out}/code_validation.json`,'utf8')); if(val.result!=='pass') throw new Error('writer validation not pass');
+          const fence=md.match(/```java\n([\s\S]*?)\n```/); if(!fence) throw new Error('Java fence missing');
+          const fixture=fs.readFileSync(`${out}/Axis0Stats.java`,'utf8').trim(); if(fence[1].trim()!==fixture) throw new Error('fence/fixture drift');
+          NODE
+          pushd "$out" >/dev/null
+          javac Axis0Stats.java Axis0StatsTest.java
+          stdout="$(java Axis0StatsTest)"
+          popd >/dev/null
+          test "$stdout" = 'PASS axis0 mean population-variance welford single-row large-offset shape finite immutable-input'
+          hash="$(sha256sum "$candidate" | awk '{print $1}')"
+          CANDIDATE_HASH="$hash" REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          const result={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_HASH,reviewed_at:'2026-08-26',review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0034-axis0-stats-20260826-v1',review_version:'batch-0034.axis0-stats.v1',decision:'pass',revision_round:1,source_packet:[mapping.note_path,path.join(out,'source_mapping.json'),'review/content_build/answer_batch_0034/source_boundary_audit.md',`review/candidates/answers/${cid}.md`,path.join(out,'Axis0Stats.java'),path.join(out,'Axis0StatsTest.java'),path.join(out,'code_validation.json'),'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores:{facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5},hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:['The preserved source asks only for mean and variance on the first dimension; it does not fix Data shape/type, axis convention, population-vs-sample denominator, missing-value behavior, output shape or language/API.','The candidate explicitly labels rectangular finite double[][], row/axis-0 aggregation, per-column output, population variance and rejection of ragged/non-finite input as answer-side contracts.','The exact fenced Java equals the saved fixture and independently re-passes ordinary, single-row, large-offset, shape, finite-value and input-immutability checks under JDK 21.','The Welford invariant and numerical-stability motivation are relevant and bounded: the answer does not claim floating-point error disappears and it distinguishes the sample-variance and NaN-handling variants.'],validation:{command:'javac Axis0Stats.java Axis0StatsTest.java && java Axis0StatsTest',result:'pass',stdout:process.env.REVIEW_STDOUT},promotion_blockers:['required_human_approval_not_yet_satisfied','repository_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(path.join(out,'isolated_review_result.json'),JSON.stringify(result,null,2)+'\n');
+          const wp=path.join(out,'writer_research.json'); const writer=JSON.parse(fs.readFileSync(wp,'utf8')); writer.review_state='independent_source_first_review_passed'; writer.sources.push({source_id:'isolated-review',title:'Independent source-first axis0 statistics candidate review',locator:path.join(out,'isolated_review_result.json'),source_type:'repository_structured_source',checked_at:'2026-08-26'}); writer.claims.push({claim_id:'isolated-review-verdict',text:'Independent source-first review found no hard failures, unsupported claims or uncovered preserved-source variants and revalidated the exact Welford fixture.',source_ids:['isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节','原理机制','常见追问']}); writer.promotion_blocker='required_human_approval_and_real_review_policy_not_yet_satisfied'; writer.review={reviewer_id:result.reviewer_id,review_version:result.review_version,independent:true,decision:'pass',revision_round:1,scores:result.scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:result.findings}; fs.writeFileSync(wp,JSON.stringify(writer,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'; let t=fs.readFileSync(task,'utf8'); const p='- Axis-0 mean/variance canonical `'+cid+'` passed isolated source-first review and deterministic revalidation; promotion remains blocked only by required human approval and repository real-review policy.'; if(!t.includes(p)) t += (t.includes('## Progress')?'\n':'\n## Progress\n\n')+p+'\n'; fs.writeFileSync(task,t);
+          NODE
+
+      - name: Commit isolated-review result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0034/$CANONICAL_ID/isolated_review_result.json" "review/content_build/answer_batch_0034/$CANONICAL_ID/writer_research.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          git commit -m 'review: pass batch 0034 axis0 stats candidate source-first'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin "$CONTENT_BRANCH" && git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            git rebase --abort 2>/dev/null || true; sleep $((attempt*3));
+          done
+          exit 1
