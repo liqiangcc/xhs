@@ -1,0 +1,146 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_6d4e32839e2073f17a3c433f128a9590",
+  "candidate_sha256": "065dc216412af85a28a54076ad2b923e1fad0476af87a410ceac37bb00ded1f7",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0030-linked-list-dedup-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "source-boundary",
+      "title": "Frozen generic linked-list duplicate-removal source boundary",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6d4e32839e2073f17a3c433f128a9590/source_boundary.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Four-contract exhaustive bounded linked-list fixture",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6d4e32839e2073f17a3c433f128a9590/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Linked-list dedup independent source-first review",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6d4e32839e2073f17a3c433f128a9590/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-ambiguity",
+      "text": "The repository source preserves duplicate removal on a linked list but does not preserve sortedness or keep-one/remove-all semantics, so a unique hidden LeetCode contract cannot be asserted.",
+      "source_ids": [
+        "source-boundary",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "four-contract-algorithms",
+      "text": "Four explicitly separated sorted/unsorted and keep-one/remove-all implementations are executable and match independent bounded oracles.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6d4e32839e2073f17a3c433f128a9590",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac LinkedListDedup.java LinkedListDedupTest.java && java LinkedListDedupTest",
+    "result": "pass",
+    "reported_stdout": "PASS four-contract-examples=yes exhaustive-ternary-length7=yes empty=yes head-tail-duplicates=yes",
+    "checks": [
+      "four contract examples",
+      "all ternary lists length 0..7 for four implementations"
+    ],
+    "boundary_tests": [
+      {
+        "case": "sorted keep one",
+        "expected": "1,1,2,3,3 -> 1,2,3",
+        "actual": "PASS four-contract-examples=yes",
+        "passed": true
+      },
+      {
+        "case": "sorted remove all repeated values",
+        "expected": "1,1,2,3,3 -> 2",
+        "actual": "PASS four-contract-examples=yes",
+        "passed": true
+      },
+      {
+        "case": "unsorted keep first",
+        "expected": "3,1,3,2,1 -> 3,1,2",
+        "actual": "PASS four-contract-examples=yes",
+        "passed": true
+      },
+      {
+        "case": "unsorted keep globally unique only",
+        "expected": "3,1,3,2,1,4 -> 2,4",
+        "actual": "PASS four-contract-examples=yes",
+        "passed": true
+      },
+      {
+        "case": "bounded exhaustive domain",
+        "expected": "all four implementations equal independent value-sequence oracles for every ternary list through length 7",
+        "actual": "PASS exhaustive-ternary-length7=yes",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0030-linked-list-dedup-20260825-v1",
+    "review_version": "batch-0030.linked-list-dedup.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "All three repository source representations preserve only the generic request to remove duplicate linked-list elements; none preserves sortedness, keep-one versus remove-all semantics, mutation policy, key type, memory bound or method signature.",
+      "The candidate does not silently collapse this ambiguity into LeetCode 82 or 83. It makes the two contract axes explicit and tells the interviewee to clarify them before selecting an implementation.",
+      "For sorted input, adjacency is a valid global duplicate signal; keep-one uses one scan and O(1) extra space, while remove-all uses a dummy predecessor to skip complete equal-value runs including a duplicated head run.",
+      "For unsorted input, the candidate correctly introduces memory: a seen set for stable keep-first and a two-pass frequency map for retaining only globally unique values.",
+      "The executable fixture validates all four declared contracts over every length-0-through-7 list over a three-value alphabet, including empty, head/tail duplicate, all-equal and non-adjacent duplicate cases.",
+      "The candidate distinguishes source facts from executable Java fixture assumptions and does not fabricate a hidden interviewer contract or project experience. No correctness hard failure remains."
+    ]
+  }
+}
