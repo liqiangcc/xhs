@@ -1,0 +1,145 @@
+name: Remediate Content Batch 0034 Generic SQL Unrecoverable Source
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0034-sql-unrecoverable.yml
+      - scripts/content/remediate_batch_0034_sql_unrecoverable.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-sql-unrecoverable
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7d04809b2086ccc4aa1ff84aa977aa3e
+  QUESTION_ID: 7d04809b2086ccc4aa1ff84aa977aa3e
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply source-first fail-closed retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/remediate_batch_0034_sql_unrecoverable.py > /tmp/remediate_batch_0034_sql_unrecoverable.py
+          python3 -m py_compile /tmp/remediate_batch_0034_sql_unrecoverable.py
+          python3 /tmp/remediate_batch_0034_sql_unrecoverable.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify explainable invalid projection and retired reachability
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.')
+          cid='cq_q_7d04809b2086ccc4aa1ff84aa977aa3e'
+          qid='7d04809b2086ccc4aa1ff84aa977aa3e'
+          expected='SQL 实战：编写涵盖复杂窗口聚合与大表关联的大数据查询语句。'
+          canon={json.loads(x)['canonical_id'] for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()}
+          questions={row['question_id']:row for row in (json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip())}
+          progress_ids={row.get('canonical_id') for row in json.loads((root/'review/progress.json').read_text(encoding='utf-8')).get('items',[])}
+          audit=json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8'))
+          decisions={row.get('question_id'):row for row in audit.get('decisions',[])}
+          if cid in canon: raise SystemExit('retired Canonical still active')
+          row=questions.get(qid)
+          if not row: raise SystemExit('invalid Question projection missing')
+          if row.get('original_question')!=expected: raise SystemExit(f'wording drifted: {row.get("original_question")!r}')
+          if row.get('canonical_id') is not None or row.get('is_valid_for_library') is not False or row.get('exclusion_reason')!='incomplete_or_unreadable':
+              raise SystemExit(f'invalid projection incorrect: {row}')
+          if cid in progress_ids: raise SystemExit('ReviewProgress still active')
+          if (root/'review/answers'/f'{cid}.md').exists(): raise SystemExit('active Answer still exists')
+          if not (root/'review/archive/answers'/f'{cid}.md').exists(): raise SystemExit('archived baseline Answer missing')
+          if (root/'review/candidates/answers'/f'{cid}.md').exists(): raise SystemExit('unexpected candidate exists')
+          decision=decisions.get(qid)
+          if not decision or decision.get('decision')!='exclude' or decision.get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit('validity audit exclusion missing')
+          note=decision.get('exclusion_note') or ''
+          for token in ('表结构','关联键','窗口','期望输出','SQL 方言','strict-valid Coding'):
+              if token not in note: raise SystemExit(f'exclusion explanation missing {token}')
+          print('PASS batch0034 generic SQL source retired fail-closed and remains explainable')
+          PY
+
+      - name: Verify complete repository gates after retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Record bounded batch progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md')
+          t=p.read_text(encoding='utf-8')
+          line='- [x] Source-unrecoverable singleton `cq_q_7d04809b2086ccc4aa1ff84aa977aa3e` is excluded fail-closed: the repository preserves only a generic SQL request involving complex window aggregation and large-table joins, without schema, keys, metric/output contract, window semantics, samples, dialect, or scale/skew constraints; its Canonical is retired, baseline Answer archived, ReviewProgress removed, and invalid Question projection remains explainable.'
+          if line not in t:
+              if '## Progress' not in t: t=t.rstrip()+'\n\n## Progress\n\n'
+              t=t.rstrip()+'\n'+line+'\n'
+              p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during remediation: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; a later run may retry against current state.'
+            exit 0
+          fi
+          git add -A
+          if git diff --cached --quiet; then echo 'No batch 0034 SQL remediation changes.'; exit 0; fi
+          git diff --cached --check
+          git config user.name xhs-remediation-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: retire unrecoverable batch 0034 generic SQL question'
+          git push origin "HEAD:$CONTENT_BRANCH"
