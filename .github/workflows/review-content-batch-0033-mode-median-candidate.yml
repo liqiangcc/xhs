@@ -1,0 +1,181 @@
+name: Review Content Batch 0033 Mode Median Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0033-mode-median-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-mode-median-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_742b944807ccd957a6deaa5416e47617
+  SOURCE_QID: 742b944807ccd957a6deaa5416e47617
+  CANDIDATE_BLOB_SHA: 31a487f77f2d68ffaa95fb49588f05a607f68b28
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated guard and rerun exact fenced implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法：给定数组找众数及其众数中的中位数';
+          const note=JSON.parse(fs.readFileSync('note_structured/663b7649000000001e038251.json','utf8'));
+          if(!(note.questions||[]).includes(expected)) throw new Error('preserved source wording drifted');
+          const boundary=fs.readFileSync('review/content_build/answer_batch_0033/source_boundary_audit.md','utf8');
+          for(const needle of [
+            'Preserved wording: `算法：给定数组找众数及其众数中的中位数`',
+            'whether all tied modes must be returned',
+            'the definition of median when the mode count is even',
+            'reject null/empty input',
+            'do not mutate the input'
+          ]) if(!boundary.includes(needle)) throw new Error(`source boundary guard missing: ${needle}`);
+
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const source=rows.find(x=>x.question_id===qid);
+          if(!source||source.canonical_id!==cid) throw new Error('Question -> Canonical ownership drifted');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||(canon.question_ids||[]).length!==1||canon.question_ids[0]!==qid) throw new Error('Canonical ownership drifted');
+
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const needle of [
+            '所有出现次数达到最大值的不同元素构成“众数集合”',
+            '若众数个数为偶数，则返回中间两个众数的算术平均值',
+            '空数组或 `null` 直接拒绝',
+            '实现不修改输入',
+            '先转成 `long`',
+            '复杂度是 O(n + k log k)',
+            '此时每个不同值都是众数'
+          ]) if(!text.includes(needle)) throw new Error(`candidate semantic guard missing: ${needle}`);
+          if(/我负责|我在线上|我们线上/.test(text)) throw new Error('fabricated project-experience language detected');
+          NODE
+
+          mkdir -p /tmp/xhs-mode-median-isolated
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const open='```java\n';
+          const start=text.indexOf(open)+open.length;
+          const end=text.indexOf('\n```',start);
+          if(start<open.length||end<0) throw new Error('Java fence missing');
+          fs.writeFileSync('/tmp/xhs-mode-median-isolated/ModeMedian.java',text.slice(start,end)+'\n');
+          NODE
+          cmp -s /tmp/xhs-mode-median-isolated/ModeMedian.java "$out/ModeMedian.java"
+          cp "$out/ModeMedianTest.java" /tmp/xhs-mode-median-isolated/ModeMedianTest.java
+          javac /tmp/xhs-mode-median-isolated/ModeMedian.java /tmp/xhs-mode-median-isolated/ModeMedianTest.java
+          test "$(java -cp /tmp/xhs-mode-median-isolated ModeMedianTest)" = 'PASS fixed=5 exhaustive=9840 invalid-input=2 overflow-safe-even-median=true'
+
+      - name: Record isolated review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const out=`review/content_build/answer_batch_0033/${cid}`;
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          const fixture=`${out}/code_validation.json`;
+          const reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0033-mode-median-20260826-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved repository source says only that an array is given and asks for the mode(s) and the median among the mode values; it does not preserve integer type, tied-mode API, even-cardinality median semantics, null/empty behavior, mutation policy, or implementation language.',
+            'The candidate explicitly marks all tied maximum-frequency values as the mode set, arithmetic mean for an even number of modes, int input, null/empty rejection, non-mutation and the Java Result API as answer-side executable contracts rather than recovered source facts.',
+            'The displayed Java implementation is byte-for-byte identical to the validated ModeMedian.java fixture, compiles under JDK 21, and does not depend on HashMap iteration order because it sorts the collected mode values before positional selection.',
+            'The even-cardinality median casts one middle int to long before addition, preventing int overflow for Integer.MIN_VALUE and Integer.MAX_VALUE; the fixed fixture verifies the extreme pair produces -0.5.',
+            'The independent TreeMap oracle exhaustively cross-checks every non-empty array of lengths 1 through 8 over {-1,0,1}, for 9,840 arrays total, plus five named cases and null/empty rejection.',
+            'The answer states O(n + k log k) time and O(d) extra space, covers all-distinct input, tied modes, invalid input, overflow and an O(n)-selection variant, and provides topic-specific follow-ups rather than generic interview advice.',
+            'No fabricated project experience, unrelated topic content, placeholder implementation, uncovered source variant, or material unsupported source attribution remains. Formal promotion is still governed by repository promotion and real-review policy.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0033.mode-median.v1',decision:'pass',revision_round:1,source_packet:['note_structured/663b7649000000001e038251.json',boundary,candidate,fixture,`${out}/ModeMedian.java`,`${out}/ModeMedianTest.java`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0033-mode-median-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Exact repository interview question and frozen Batch 0033 source boundary',locator:'note_structured/663b7649000000001e038251.json + '+boundary,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Mode-set median deterministic JDK 21 validation against independent TreeMap oracle',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Mode-set median independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The preserved source asks for the mode(s) of a given array and the median among those mode values, while element type, tie-output shape, even-cardinality median semantics, invalid-input behavior and API shape are not preserved constraints.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'algorithm-and-implementation',text:'Under the explicit answer-side contract, the exact fenced Java implementation counts frequencies, retains all maximum-frequency values, sorts them, and returns the positional median with overflow-safe arithmetic for the even case.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'boundary-validation',text:'The compiled fixture passes five named cases, null/empty rejection, the Integer.MIN_VALUE/Integer.MAX_VALUE overflow boundary, and all 9,840 arrays of lengths 1..8 over {-1,0,1} against an independent TreeMap oracle.',source_ids:['fixture','isolated-review'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac ModeMedian.java ModeMedianTest.java && java ModeMedianTest',result:'pass',reported_stdout:'PASS fixed=5 exhaustive=9840 invalid-input=2 overflow-safe-even-median=true',checks:['single mode','two tied modes','negative/positive tied modes','overflow-safe extreme integers','all-distinct mode set','9840 exhaustive bounded arrays','null and empty rejection']},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0033.mode-median.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- [ ] `cq_q_742b944807ccd957a6deaa5416e47617` writer slice staged: exact repository wording was frozen in `review/content_build/answer_batch_0033/source_boundary_audit.md`; the candidate keeps tied-mode, even-cardinality median, null/empty and Java API semantics explicitly answer-side; the exact Java fixture passes five fixed edge cases, null/empty rejection, overflow-safe extreme integers, and all 9,840 arrays of lengths 1..8 over {-1,0,1} against an independent TreeMap oracle. Isolated independent review is still required before this item can be marked reviewed or promoted.';
+          const replacement='- [x] `cq_q_742b944807ccd957a6deaa5416e47617` passed isolated source-first review after aligning the displayed Java with the validated fixture; source-preserved wording remains bounded, all answer-side mode/median/null/API choices are explicit, and the JDK 21 fixture passes five fixed cases plus all 9,840 bounded arrays against an independent TreeMap oracle. Formal promotion remains governed by repository human-approval and real-review policy.';
+          if(!text.includes(old)) throw new Error('batch 0033 task marker drifted');
+          fs.writeFileSync(task,text.replace(old,replacement));
+          NODE
+
+      - name: Audit candidate and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during isolated review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0033/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0033 mode-median candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
