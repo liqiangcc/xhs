@@ -1,0 +1,166 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_6f7fea89b155fae92067cb5b3a8aa7d8",
+  "candidate_sha256": "b7fdfc17df23770496a06af8aa2d3c59c5a9b2e0fab8a943811311fe8c0787c6",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0031-reverse-k-group-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Tagged linked-list K-group reversal question",
+      "locator": "note_tagged/6822deb7000000002100178b.json#question_id=6f7fea89b155fae92067cb5b3a8aa7d8",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Reverse-K-group independent array and identity oracle",
+      "locator": "review/content_build/answer_batch_0031/cq_q_6f7fea89b155fae92067cb5b3a8aa7d8/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Reverse-K-group independent source-first review",
+      "locator": "review/content_build/answer_batch_0031/cq_q_6f7fea89b155fae92067cb5b3a8aa7d8/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source preserves linked-list K-group reversal but not the API, final-short-group rule, allocation policy, invalid-K behavior or cyclic-input semantics.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "pointer-invariant",
+      "text": "Under the declared complete-groups-only contract, probing kth before mutation and reversing [groupPrev.next,kth] with groupNext as the exclusive boundary preserves all nodes and reconnects both sides of each group.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The iterative solution scans/relinks each node only a constant number of times and uses a constant number of pointers plus a dummy sentinel, yielding O(n) time and O(1) auxiliary space for a finite acyclic list.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "oracle-validation",
+      "text": "The Java implementation matches an independent array grouping reference on fixed boundaries and 3000 generated list/k pairs while retaining every original node identity and introducing no cycle.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6f7fea89b155fae92067cb5b3a8aa7d8",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac ReverseKGroup.java ReverseKGroupTest.java && java ReverseKGroupTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=6 random-oracle=3000 identity=preserved cycle=none incomplete-tail=unchanged invalid-k=rejected",
+    "checks": [
+      "fixed boundaries",
+      "independent array reference",
+      "node identity",
+      "cycle absence",
+      "invalid k"
+    ],
+    "boundary_tests": [
+      {
+        "case": "1->2->3->4->5, k=2",
+        "expected": "2->1->4->3->5",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "0->1->2->3->4, k=3",
+        "expected": "2->1->0->3->4 with incomplete tail unchanged",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "k=1 and k>length boundaries",
+        "expected": "same node order and identity",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "3000 deterministic lists length 0..30, k 1..10",
+        "expected": "order equals independent array grouping reference, every original node identity retained, no cycles",
+        "actual": "all passed",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0031-reverse-k-group-20260825",
+    "review_version": "batch-0031.reverse-k-group.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source asks only for linked-list nodes reversed in groups of K; it does not specify API shape, behavior for a final short group, allocation policy, invalid K or cyclic inputs.",
+      "The candidate makes the common complete-group-only contract explicit instead of attributing the short-tail rule to the source.",
+      "The pointer boundaries are coherent: groupPrev precedes the group, kth is the group end, groupNext is excluded from reversal, and prev starts at groupNext so the old group head reconnects to the suffix during reversal.",
+      "The implementation probes a full K-node group before mutating pointers, preventing partial reversal and rollback problems when the remaining suffix is too short.",
+      "The standalone Java implementation preserves original node identities, introduces no cycles and matches an independent array grouping reference across fixed cases and 3000 deterministic generated cases.",
+      "The candidate correctly treats k=1, empty input and k greater than list length as explicit boundaries and rejects k<1 under the answer-side contract.",
+      "No production linked-list topology or project experience is invented; cyclic-input semantics are explicitly left outside the finite-list contract."
+    ]
+  }
+}
