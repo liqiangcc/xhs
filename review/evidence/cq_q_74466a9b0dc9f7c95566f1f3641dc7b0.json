@@ -1,0 +1,170 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_74466a9b0dc9f7c95566f1f3641dc7b0",
+  "candidate_sha256": "30a1d03c89335fd66f24a3c8bcff69ae5dcf4b10b3821286345ff154a64cf28c",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "content-batch-0033-longest-consecutive-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Exact tagged repository question and frozen Batch 0033 source boundary",
+      "locator": "note_tagged/67fcfada000000001c00fe70.json + review/content_build/answer_batch_0033/source_boundary_audit.md",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Longest Consecutive deterministic JDK 21 validation against independent sorting oracle",
+      "locator": "review/content_build/answer_batch_0033/cq_q_74466a9b0dc9f7c95566f1f3641dc7b0/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Longest Consecutive independent source-first review",
+      "locator": "review/content_build/answer_batch_0033/cq_q_74466a9b0dc9f7c95566f1f3641dc7b0/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source identifies Longest Consecutive Sequence (LeetCode 128); Java/null/mutation/integer-bound details are answer-side contracts.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "algorithm",
+      "text": "Under the explicit candidate contract, the exact fenced Java uses a HashSet, starts only at values without representable predecessors, and guards Java int boundary arithmetic.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "The JDK 21 fixture passes six named cases, null rejection, non-mutation, both int-boundary directions, and all 97,656 bounded arrays against an independent sorting oracle.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "74466a9b0dc9f7c95566f1f3641dc7b0",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac LongestConsecutive.java LongestConsecutiveTest.java && java LongestConsecutiveTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=6 exhaustive=97656 null=rejected input=unmodified int-boundaries=safe",
+    "checks": [
+      "classic length 4",
+      "dense length 9",
+      "duplicates",
+      "MIN boundary",
+      "MAX boundary",
+      "all equal",
+      "97656 exhaustive arrays",
+      "null rejection",
+      "non-mutation"
+    ],
+    "boundary_tests": [
+      {
+        "case": "[100,4,200,1,3,2]",
+        "expected": "4",
+        "actual": "4",
+        "passed": true
+      },
+      {
+        "case": "[0,3,7,2,5,8,4,6,0,1]",
+        "expected": "9",
+        "actual": "9",
+        "passed": true
+      },
+      {
+        "case": "duplicates [1,2,0,1]",
+        "expected": "3",
+        "actual": "3",
+        "passed": true
+      },
+      {
+        "case": "MIN, MIN+1, MAX",
+        "expected": "2 without wraparound",
+        "actual": "2",
+        "passed": true
+      },
+      {
+        "case": "MAX-1, MAX, MIN",
+        "expected": "2 without wraparound",
+        "actual": "2",
+        "passed": true
+      },
+      {
+        "case": "exhaustive bounded oracle",
+        "expected": "all arrays length 0..7 over {-2,-1,0,1,2} match sorting oracle",
+        "actual": "97656 arrays passed",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0033-longest-consecutive-20260826-v1",
+    "review_version": "batch-0033.longest-consecutive.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved repository source identifies the task as Longest Consecutive Sequence (LeetCode 128) and does not preserve a Java signature, null behavior, mutation policy, exact integer bounds, or a mandatory data structure in the repository snapshot.",
+      "The candidate explicitly labels int[] input, empty=0, null rejection, non-mutation and the HashSet implementation as answer-side executable contracts rather than recovered source facts.",
+      "The displayed Java is byte-for-byte identical to the validated fixture, compiles under JDK 21, de-duplicates values, and expands a consecutive run only from a value with no representable predecessor.",
+      "The Integer.MIN_VALUE and Integer.MAX_VALUE guards prevent Java int wraparound from incorrectly connecting the two numeric extremes; fixed tests cover both boundary directions.",
+      "An independent sorting oracle checks all 97,656 arrays of lengths 0 through 7 over {-2,-1,0,1,2}, while named cases cover classic examples, duplicates, all-equal input, null rejection and non-mutation.",
+      "The average O(n) claim is bounded to the average constant-time HashSet membership assumption; the answer also presents sorting as an O(n log n) alternative and does not claim strict worst-case linear hashing.",
+      "No fabricated project experience, placeholder code, unrelated topic content, uncovered source variant, or material unsupported claim remains."
+    ]
+  }
+}
