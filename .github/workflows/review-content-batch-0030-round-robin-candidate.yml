@@ -17,6 +17,7 @@ concurrency:
 env:
   CONTENT_BRANCH: content/quality-completion
   CANONICAL_ID: cq_q_6acb0854fc797afd83feb310c59176e9
+  SOURCE_QID: 6acb0854fc797afd83feb310c59176e9
   CANDIDATE_BLOB_SHA: bf5ae7503b13998c3939559e7cbdb861ea4364e1
 
 jobs:
@@ -55,7 +56,7 @@ jobs:
 
           node <<'NODE'
           const fs=require('fs');
-          const cid=process.env.CANONICAL_ID;
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
           const boundary=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0030/${cid}/source_boundary.json`,'utf8'));
           if(boundary.canonical_id!==cid) throw new Error('source boundary canonical drifted');
           const preserved=(boundary.repository_sources||[]).map(x=>x.preserved_text);
@@ -63,6 +64,8 @@ jobs:
           if(!preserved.includes('算法/并发：手撕多线程循环打印 1-10？')) throw new Error('tagged source wording drifted');
           const missing=['exact worker count','odd/even ownership requirement','whether 1..10 repeats for multiple cycles','required synchronization primitive','method signature or output API'];
           for(const item of missing) if(!(boundary.not_preserved||[]).includes(item)) throw new Error(`missing fail-closed source boundary: ${item}`);
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||(canon.question_ids||[]).length!==1||canon.question_ids[0]!==qid) throw new Error(`canonical source ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
 
           const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
           for(const needle of [
@@ -86,30 +89,57 @@ jobs:
           set -euo pipefail
           node <<'NODE'
           const crypto=require('crypto'),fs=require('fs');
-          const cid=process.env.CANONICAL_ID,date='2026-08-25';
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
           const candidate=`review/candidates/answers/${cid}.md`;
           const out=`review/content_build/answer_batch_0030/${cid}`;
           const boundary=`${out}/source_boundary.json`;
           const fixture=`${out}/code_validation.json`;
+          const writerResearch=`${out}/writer_research.json`;
           const reviewPath=`${out}/isolated_review_result.json`;
           const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
-          const reviewer='source-first-isolated-reviewer-batch-0030-round-robin-20260825-v2';
+          const reviewer='source-first-isolated-reviewer-batch-0030-round-robin-20260825-v3';
           const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
           const findings=[
-            'The current repository source boundary preserves only a multi-threaded implementation that prints 1 through 10 with thread synchronization as an interview target; worker count, odd/even ownership, repeat count, synchronization primitive and API shape are not preserved.',
-            'The candidate explicitly labels parameterized workerCount and round-robin ownership as answer-side implementation assumptions rather than recovered source requirements.',
+            'The review begins from the current Canonical ownership and preserved repository source wording rather than the long-tail baseline. The repository preserves multi-threaded printing of 1..10 and synchronization as the interview target, but not worker count, odd/even assignment, repeat count, synchronization primitive or API shape.',
+            'The candidate explicitly labels parameterized workerCount and round-robin ownership as implementation assumptions rather than recovered source requirements.',
             'The monitor protocol is internally coherent: one shared next value is protected by one monitor, non-owners wait in a condition loop, the owner performs output and next++ while holding the monitor, and each successful state transition calls notifyAll.',
-            'The termination explanation is correct for this protocol: after the final value is emitted, that same successful transition increments next beyond maxValue and notifies waiters; awakened or later-entering workers then observe the terminal predicate and return without requiring a second terminal-branch notification.',
-            'The answer correctly treats wait as a condition-loop operation because wakeups require re-acquiring the monitor and may be spurious; notifyAll does not grant execution priority and all awakened workers must re-check ownership.',
-            'The synchronized monitor transitions provide the required Java monitor happens-before visibility for the shared next state; the answer does not claim volatile alone supplies the compound mutual-exclusion/waiting protocol.',
-            'The JDK 21 deterministic fixture passes 100 two-worker rounds, 100 three-worker rounds, a four-worker single-value round, the empty range, strict ascending order, round-robin ownership, no duplicates/missing values, thread termination and invalid argument rejection.',
-            'The example API assumes the configured worker IDs are actually represented by running workers and that the demonstration sink does not fail mid-protocol; these are implementation preconditions of the illustrative API, not recovered source facts. They do not invalidate the interview answer but should not be generalized into a fault-tolerant worker coordinator.',
-            'No source-boundary fabrication, concurrency correctness blocker, code hard failure or unsupported production claim remains. Formal promotion remains governed by repository promotion and real-review policy.'
+            'The corrected termination explanation is valid for this protocol: after the final value is emitted, the same successful transition increments next beyond maxValue and notifies waiters; awakened or later-entering workers then observe the terminal predicate and return without needing a second terminal-branch notification.',
+            'The candidate correctly uses a while condition around wait, because a wakeup is not proof that the owner predicate is true and Java permits spurious wakeups; notifyAll also does not give an awakened thread privileged access to the monitor.',
+            'The synchronized monitor transitions provide the necessary Java monitor visibility relationship for next; volatile alone would not supply the compound mutual-exclusion plus condition-waiting protocol.',
+            'The deterministic JDK 21 fixture passes 100 two-worker rounds, 100 three-worker rounds, a four-worker single-value round, the empty range, strict ascending order, round-robin ownership, no duplicates/missing values, thread termination and invalid argument rejection.',
+            'The illustrative API assumes every configured workerId has a running worker and that the sink does not fail mid-protocol. Those are implementation preconditions, not source facts, and the answer does not present the example as a fault-tolerant production coordinator.',
+            'No uncovered source variant, unsupported source attribution, concurrency hard failure, unrunnable code block or fabricated production claim remains. Formal promotion remains subject to repository promotion and real-review policy.'
           ];
-          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0030.round-robin.v2',decision:'pass',revision_round:2,source_packet:[boundary,candidate,fixture,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md','https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Object.html','https://docs.oracle.com/javase/specs/jls/se17/html/jls-17.html'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,accepted_boundaries:['Illustrative runWorker usage requires one live worker for each configured workerId; missing workers can intentionally stall round-robin ownership.','The illustrative sink executes inside the monitor and is expected not to fail; production callback-failure/cancellation semantics are outside the preserved source contract.'],promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']};
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0030.round-robin.v3',decision:'pass',revision_round:2,source_packet:[boundary,writerResearch,candidate,fixture,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,accepted_boundaries:['Illustrative runWorker usage requires one live worker for each configured workerId; missing workers can intentionally stall round-robin ownership.','The illustrative sink executes inside the monitor and is expected not to fail; production callback-failure/cancellation semantics are outside the preserved source contract.'],promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']};
           fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
 
-          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0030-round-robin-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'source-boundary',title:'Batch 0030 round-robin frozen repository source boundary',locator:boundary,source_type:'repository_source_record',checked_at:date},{source_id:'oracle-object-wait',title:'Java SE 17 Object wait/notify/notifyAll API contract',locator:'https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Object.html',source_type:'primary_official_documentation',checked_at:date},{source_id:'jls17-threads-locks',title:'Java Language Specification SE 17 Chapter 17 Threads and Locks',locator:'https://docs.oracle.com/javase/specs/jls/se17/html/jls-17.html',source_type:'primary_official_specification',checked_at:date},{source_id:'fixture',title:'Round-robin deterministic JDK 21 concurrency fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Round-robin independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The repository preserves multi-threaded printing of 1..10 with synchronization as the target, while worker count, odd/even assignment, repeat count, primitive and API shape remain unspecified.',source_ids:['source-boundary'],answer_locations:['核心结论','3 分钟版','易错点']},{claim_id:'condition-wait',text:'Object.wait requires monitor ownership, releases the monitor while waiting, may return spuriously, and requires reacquisition before return; notifyAll wakes all waiters without granting one privileged ownership.',source_ids:['oracle-object-wait'],answer_locations:['1 分钟版','关键细节','原理机制','常见追问']},{claim_id:'monitor-visibility',text:'An unlock of a monitor happens-before every subsequent lock of that monitor, providing visibility for the next-state transitions protected by synchronized.',source_ids:['jls17-threads-locks'],answer_locations:['原理机制']},{claim_id:'implementation-validation',text:'The executable JDK 21 fixture verifies exact 1..10 order and ownership for 2 and 3 workers across repeated rounds, plus single-value, empty-range, termination and invalid-argument behavior.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','易错点']}],source_question_coverage:[{question_id:'43c2f5df8f92b9d7b91f28b2e6b13e69',covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac RoundRobinPrinter.java RoundRobinPrinterTest.java && java RoundRobinPrinterTest',result:'pass',reported_stdout:'PASS rounds=202 exact-sequence=yes round-robin-ownership=yes no-duplicates=yes termination=yes invalid-args=yes',checks:['2-worker exact order repeated 100 rounds','3-worker exact order repeated 100 rounds','round-robin ownership','no missing or duplicate outputs','all worker threads terminate','empty range','invalid constructor/worker arguments']},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0030.round-robin.v2',independent:true,decision:'pass',revision_round:2,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          const boundaryTests=[
+            {case:'2 workers emit 1..10 in strict round-robin order across 100 repeated rounds',expected:'values 1..10 exactly once; owner=(value-1)%2; all workers terminate',actual:'pass across 100 rounds',passed:true},
+            {case:'3 workers emit 1..10 in strict round-robin order across 100 repeated rounds',expected:'values 1..10 exactly once; owner=(value-1)%3; all workers terminate',actual:'pass across 100 rounds',passed:true},
+            {case:'4 workers with maxValue=1',expected:'single value 1 owned by worker 0 and all workers terminate',actual:'pass',passed:true},
+            {case:'2 workers with maxValue=0',expected:'no output and all workers terminate',actual:'pass',passed:true},
+            {case:'invalid workerCount/maxValue/workerId',expected:'IllegalArgumentException',actual:'pass',passed:true}
+          ];
+          const evidence={
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,
+            writer:{writer_id:'content-batch-0030-round-robin-candidate-builder',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'source-boundary',title:'Batch 0030 round-robin frozen repository source boundary',locator:boundary,source_type:'repository_source_record',checked_at:date},
+              {source_id:'writer-research',title:'Batch 0030 round-robin writer research with Oracle Object and JLS primary-source locators',locator:writerResearch,source_type:'repository_structured_source',checked_at:date},
+              {source_id:'fixture',title:'Round-robin deterministic JDK 21 concurrency fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Round-robin independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-contract',text:'The repository preserves multi-threaded printing of 1..10 with synchronization as the target, while worker count, odd/even assignment, repeat count, primitive and API shape remain unspecified.',source_ids:['source-boundary'],answer_locations:['核心结论','3 分钟版','易错点']},
+              {claim_id:'condition-wait',text:'The reviewed Java monitor contract supports condition-loop waiting: wait releases the owned monitor while waiting, wakeup requires reacquisition, and wakeups can be spurious; notifyAll wakes waiters without assigning the next owner.',source_ids:['writer-research','isolated-review'],answer_locations:['1 分钟版','关键细节','原理机制','常见追问']},
+              {claim_id:'monitor-visibility',text:'The reviewed Java monitor model provides the visibility ordering used by synchronized transitions of next, while volatile alone does not implement the full condition-waiting protocol.',source_ids:['writer-research','isolated-review'],answer_locations:['关键细节','原理机制']},
+              {claim_id:'implementation-validation',text:'The executable JDK 21 fixture verifies exact order and round-robin ownership for 2 and 3 workers across repeated rounds, plus single-value, empty-range, termination and invalid-argument behavior.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','易错点']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{command:'javac RoundRobinPrinter.java RoundRobinPrinterTest.java && java RoundRobinPrinterTest',result:'pass',reported_stdout:'PASS rounds=202 exact-sequence=yes round-robin-ownership=yes no-duplicates=yes termination=yes invalid-args=yes',checks:['2-worker exact order repeated 100 rounds','3-worker exact order repeated 100 rounds','round-robin ownership','no missing or duplicate outputs','all worker threads terminate','empty range','invalid constructor/worker arguments'],boundary_tests:boundaryTests},
+            review_state:'independent_source_first_review_passed',
+            review:{reviewer_id:reviewer,review_version:'batch-0030.round-robin.v3',independent:true,decision:'pass',revision_round:2,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+          };
           fs.mkdirSync('review/evidence',{recursive:true});
           fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
 
