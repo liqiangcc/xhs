@@ -1,0 +1,270 @@
+name: Build Content Batch 0032 Symmetric Character Map Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0032-symmetric-char-map-candidate.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-symmetric-char-map-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+  CANONICAL_ID: cq_q_735f5e34d9dfae656347c8b21c6d7142
+  SOURCE_QID: 735f5e34d9dfae656347c8b21c6d7142
+
+jobs:
+  build-candidate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Guard exact source and frozen boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "review/reports/ANSWER_BATCH_${BATCH}_SOURCE_PACKET.json"
+          test -f "review/content_build/answer_batch_${BATCH}/source_boundary_audit.md"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH;
+          const expected='算法：将一个字符串改变其字符，使其与另一个字符串相等（映射替换）';
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          const packet=JSON.parse(fs.readFileSync(`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,'utf8'));
+          const hit=(packet.canonicals||[]).find(x=>x.canonical_id===cid)?.source_hits?.[0];
+          if(!hit||hit.match_basis!=='question_id'||hit.tagged_question?.question_id!==qid) throw new Error('exact source packet hit missing');
+          const transcript=hit.note_img_txt||'';
+          for(const needle of ['字符x变成y','y也需要变','aabba','eeffe','asdf','asag']) if(!transcript.includes(needle)) throw new Error(`source transcript detail missing: ${needle}`);
+          const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
+          if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary missing');
+          NODE
+
+      - id: state
+        shell: bash
+        run: |
+          candidate="review/candidates/answers/$CANONICAL_ID.md"; out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then test -e "$out/code_validation.json"; test -e "$out/writer_research.json"; echo 'pending=false' >> "$GITHUB_OUTPUT"; else echo 'pending=true' >> "$GITHUB_OUTPUT"; fi
+
+      - name: Write source-bounded candidate and brute-force oracle fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"; out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"; mkdir -p "$out"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_735f5e34d9dfae656347c8b21c6d7142","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 对称字符映射：判断一个字符串能否整体替换成另一个字符串
+
+          ## 核心结论
+
+          来源补充了一个关键规则：如果字符 `x` 要变成 `y`，那么 `y` 也必须变成 `x`。因此这里把题目建模为**一次全局、对称的字符映射**：每个字符只能和一个字符配对，允许字符映射到自己；映射必须满足 `f(f(c)) = c`。逐位置看两个字符串，如果 `source[i] = x`、`target[i] = y`，就必须同时满足 `x -> y` 和 `y -> x`，任何已有配对冲突都直接返回 `false`。
+
+          例如来源给出的 `aabba -> eeffe` 可用 `a <-> e`、`b <-> f` 完成；而 `asdf -> asag` 不行，因为前两个位置要求 `a -> a`、`s -> s`，后面又要求 `d -> a`，这会与 `a` 已经只能和自己配对冲突。
+
+          来源没有说明“可以连续执行任意多轮不同的交换”。本答案只实现上述一次全局对称映射；如果面试官允许任意序列的字符交换，多个交换的复合不一定仍是自反映射，问题契约会变成另一道题。
+
+          ## 1 分钟版
+
+          - 两个字符串先按 Unicode code point 比长度；长度不同一定无法逐位置变成目标。
+          - 用 `Map<Integer,Integer>` 保存已经确定的配对关系。
+          - 当前位置是 `x -> y` 时，若 `x` 已有伙伴且不是 `y`，冲突；若 `y` 已有伙伴且不是 `x`，也冲突。
+          - 没冲突就同时写入 `map[x]=y` 和 `map[y]=x`；当 `x==y` 时就是固定点。
+          - 扫描结束仍无冲突，说明存在一个满足所有位置约束的对称映射。
+          - 设字符串有 `n` 个 code point、涉及 `u` 个不同字符，时间 `O(n)`，额外空间 `O(u)`。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.HashMap;
+          import java.util.Map;
+          import java.util.Objects;
+
+          public final class SymmetricCharMapping {
+              public static boolean canTransform(String source, String target) {
+                  Objects.requireNonNull(source, "source");
+                  Objects.requireNonNull(target, "target");
+
+                  int[] a = source.codePoints().toArray();
+                  int[] b = target.codePoints().toArray();
+                  if (a.length != b.length) return false;
+
+                  Map<Integer, Integer> partner = new HashMap<>();
+                  for (int i = 0; i < a.length; i++) {
+                      int x = a[i], y = b[i];
+                      Integer px = partner.get(x);
+                      Integer py = partner.get(y);
+                      if (px != null && px != y) return false;
+                      if (py != null && py != x) return false;
+                      partner.put(x, y);
+                      partner.put(y, x);
+                  }
+                  return true;
+              }
+          }
+          ```
+
+          这段代码同时检查“函数性”和“对称性”。只检查 `x -> y` 不够，因为可能出现 `a -> e` 后又要求 `b -> e`；对称规则意味着 `e` 只能回到 `a`，所以第二个方向也必须检查。
+
+          ## 关键细节
+
+          - **核心不变量**：扫描完前 `i` 个位置后，`partner` 中每个记录都成对存在；若 `partner[x]=y`，就有 `partner[y]=x`，并且它满足前 `i` 个位置的全部约束。
+          - **固定点合法**：`a -> a` 相当于 `a` 不变，此后任何别的字符都不能再和 `a` 配对。这正是 `asdf -> asag` 失败的原因之一。
+          - **不是普通单向 isomorphic string**：普通同构只要求一致的一一映射；这里来源额外要求 `x` 变 `y` 时 `y` 同时变 `x`，所以映射还是一个 involution（由固定点和两两交换组成）。
+          - **长度按 code point**：使用 `String.codePoints()`，避免把 `🙂` 之类非 BMP 字符拆成两个 UTF-16 `char`。
+          - **空串**：本答案把两个空串视为可以转换，因为空约束由空映射满足；这是答案侧接口定义。
+          - **null**：本实现拒绝 `null`，不把它当成空串。
+          - **若允许多轮交换**：例如先交换 `a/b` 再交换 `b/c`，复合映射可能形成长度大于 2 的循环；那就不能再用本题的一次对称映射判定，需要先澄清操作模型。
+
+          ## 原理机制
+
+          每个位置 `(x,y)` 都给映射增加两个约束：`f(x)=y` 和 `f(y)=x`。如果把字符看成图上的点，那么合法映射只允许两种连通分量：单个自环 `x->x`，或者两个点互相连接 `x<->y`。扫描时一旦某个点被要求连接到第二个不同伙伴，就说明不存在这样的映射。
+
+          因此哈希表不是“记一下出现过什么”而已，它保存的是目前已经证明必须成立的配对契约。每一步只需查询两个端点，所以总扫描是线性的。
+
+          ## 项目经验版
+
+          来源是纯算法题，没有真实项目经历可还原，因此不虚构业务案例。如果工程里真有“字符重命名”需求，我会先把规则写成明确的映射契约：是一次 simultaneous rename、可否固定不变、是否允许多轮、字符集按 byte/char/code point 哪一层处理。不同契约会直接改变判定算法。
+
+          ## 常见追问
+
+          - 问：为什么要同时检查 `x` 和 `y` 两边？答：来源要求替换是对称的；`x->y` 一旦成立，`y->x` 就必须同时成立，否则可能出现两个字符都映射到同一个目标的非法情况。
+          - 问：这和“同构字符串”有什么区别？答：同构通常要求双射但不要求映射自身是逆映射；这里要求 `f(f(c))=c`，所以不能出现 `a->b, b->c, c->a` 这样的 3-cycle。
+          - 问：`x` 能不能映射到自己？答：来源没有禁止，而且示例 `asdf -> asag` 的相同位置自然要求 `a->a`、`s->s`；本答案允许固定点。
+          - 问：如果长度不同呢？答：在“一次逐字符全局替换、不插入删除字符”的契约下，长度不同直接不可能。
+          - 问：如果允许连续做很多次 pair swap 呢？答：那是不同契约；任意 transposition 的复合可以产生更一般的置换，不能继续用“每个字符只有一个对称伙伴”的判定。
+          - 问：为什么不用两个独立的 map？答：这里正向和反向本来必须是同一关系，因为映射等于自己的逆；一个 `partner` map 同时记录两边更直接，也更容易维护不变量。
+
+          ## 易错点
+
+          - 只检查 `source` 字符是否稳定映射到 `target`，漏掉 `target` 端已经被别的字符占用。
+          - 把题目误写成普通单向替换，忽略来源明确的 `x<->y` 对称要求。
+          - 看见相同字符位置就跳过，不把 `x->x` 固定点写入约束，导致后面错误允许别的字符映射到 `x`。
+          - 把任意多轮字符交换和一次全局对称映射混为一谈。
+          - 用 UTF-16 `char` 却声称支持任意 Unicode 字符。
+          EOF
+
+          cat > "$out/SymmetricCharMappingFixture.java" <<'JAVA'
+          import java.util.HashMap;
+          import java.util.Map;
+          import java.util.Objects;
+          import java.util.Random;
+
+          public final class SymmetricCharMappingFixture {
+              static boolean actual(String source, String target) {
+                  Objects.requireNonNull(source); Objects.requireNonNull(target);
+                  int[] a=source.codePoints().toArray(), b=target.codePoints().toArray();
+                  if(a.length!=b.length) return false;
+                  Map<Integer,Integer> p=new HashMap<>();
+                  for(int i=0;i<a.length;i++){
+                      int x=a[i],y=b[i]; Integer px=p.get(x),py=p.get(y);
+                      if(px!=null&&px!=y) return false;
+                      if(py!=null&&py!=x) return false;
+                      p.put(x,y); p.put(y,x);
+                  }
+                  return true;
+              }
+
+              static boolean oracle(String source, String target) {
+                  int[] a=source.codePoints().toArray(), b=target.codePoints().toArray();
+                  if(a.length!=b.length) return false;
+                  Map<Integer,Integer> f=new HashMap<>();
+                  for(int i=0;i<a.length;i++){
+                      Integer old=f.putIfAbsent(a[i],b[i]);
+                      if(old!=null&&old!=b[i]) return false;
+                  }
+                  for(Map.Entry<Integer,Integer> e:f.entrySet()){
+                      int x=e.getKey(), y=e.getValue();
+                      Integer back=f.get(y);
+                      if(back==null||back!=x) return false;
+                  }
+                  return true;
+              }
+
+              static String randomString(Random r,int n){
+                  int[] alphabet={'a','b','c','d','你',0x1F642}; int[] a=new int[n];
+                  for(int i=0;i<n;i++) a[i]=alphabet[r.nextInt(alphabet.length)];
+                  return new String(a,0,a.length);
+              }
+
+              static void check(String a,String b){
+                  boolean x=actual(a,b),y=oracle(a,b);
+                  if(x!=y) throw new AssertionError(a+" -> "+b+" actual="+x+" oracle="+y);
+              }
+
+              public static void main(String[] args){
+                  check("aabba","eeffe"); check("asdf","asag"); check("",""); check("aa","aa"); check("ab","ba");
+                  check("🙂a🙂","你b你"); check("🙂你","你🙂");
+                  if(actual("a","ab")) throw new AssertionError("length mismatch accepted");
+                  Random r=new Random(735L);
+                  for(int t=0;t<20000;t++){int n=r.nextInt(12);check(randomString(r,n),randomString(r,n));}
+                  System.out.println("PASS source-examples unicode fixed-points randomized=20000 oracle=independent-forward-map-plus-involution-check");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer evidence
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          javac "$out/SymmetricCharMappingFixture.java"
+          stdout="$(java -cp "$out" SymmetricCharMappingFixture)"
+          test "$stdout" = 'PASS source-examples unicode fixed-points randomized=20000 oracle=independent-forward-map-plus-involution-check'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const batch=process.env.BATCH,cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_${batch}/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac SymmetricCharMappingFixture.java && java SymmetricCharMappingFixture',stdout:process.env.STDOUT,checks:['source aabba->eeffe true','source asdf->asag false','fixed points','pair swap','length mismatch','Unicode code points','20,000 deterministic randomized pairs vs independent forward-map plus involution oracle']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Batch 0032 exact source packet including recovered symmetric-replacement examples',locator:`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'Symmetric character mapping deterministic fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'Recovered source explicitly says x->y implies y->x and gives aabba->eeffe as true and asdf->asag as false; it does not state that arbitrary sequences of pair swaps are allowed.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},{claim_id:'algorithm-behavior',text:'The fixture validates a single global involutive mapping model against an independently structured forward-map plus involution check across fixed examples and 20,000 deterministic random string pairs.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'unicode-boundary',text:'The implementation compares Unicode code points and the executable fixture covers non-BMP characters.',source_ids:['fixture'],answer_locations:['1 分钟版','关键细节']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record bounded progress
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,pathlib
+          batch=os.environ['BATCH']; cid=os.environ['CANONICAL_ID']; path=pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md'); text=path.read_text(encoding='utf-8')
+          note=f"- [ ] `{cid}` candidate staged source-first: recovered x<->y symmetric replacement and both source examples are preserved; one-global-involution interpretation is explicit; Java candidate passes source examples, Unicode/fixed-point boundaries and 20,000 deterministic oracle cases. Independent review still required.\n"
+          if note not in text: path.write_text(text.rstrip()+"\n"+note,encoding='utf-8')
+          PY
+
+      - name: Commit candidate from stable content snapshot
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='${{ steps.base.outputs.head }}'; git fetch --depth=1 origin "$CONTENT_BRANCH"; remote="$(git rev-parse origin/$CONTENT_BRANCH)"
+          if [ "$remote" != "$base" ]; then echo "content branch advanced: $base -> $remote; discard mixed snapshot"; exit 0; fi
+          candidate="review/candidates/answers/$CANONICAL_ID.md"; out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"; task="tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$candidate" "$out" "$task"; git diff --cached --check; git commit -m "content: stage batch ${BATCH} symmetric character-map candidate"; git push origin "HEAD:$CONTENT_BRANCH"
