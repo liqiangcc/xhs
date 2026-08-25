@@ -1,0 +1,303 @@
+name: Build Content Batch 0033 Point Line Distance Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0033-point-line-distance-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-point-line-distance-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7642700411d0977839a2cd01a41e50ad
+  SOURCE_QID: 7642700411d0977839a2cd01a41e50ad
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Freeze exact source boundary and verify ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='编程题：计算二维空间中点到直线的距离（C++实现）。';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/663bb0e8000000001e027dad.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!==expected) throw new Error(`source wording drifted: ${source?.original_question}`);
+          if(source.question_type!=='算法手撕_Coding') throw new Error(`source type drifted: ${source.question_type}`);
+          if(source.domain?.l2!=='几何') throw new Error(`source domain drifted: ${JSON.stringify(source.domain)}`);
+
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const row=rows.find(x=>x.question_id===qid);
+          if(!row||row.canonical_id!==cid) throw new Error(`Question -> Canonical ownership drifted: ${row?.canonical_id}`);
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error(`Canonical ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse to overwrite writer artifact');
+
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          let text=fs.readFileSync(boundary,'utf8');
+          const heading=`## ${cid}`;
+          if(!text.includes(heading)) {
+            text += `\n## ${cid}\n\n- Exact repository source: \`note_tagged/663bb0e8000000001e027dad.json\`.\n- Preserved wording: \`${expected}\`\n- Source-preserved facts: this is a two-dimensional point-to-line distance coding task and the requested implementation language is C++.\n- Not preserved by the repository source and therefore answer-side contracts only: how the infinite line is represented, the function signature, coordinate type/range, finite-value policy, degenerate-line behavior, required C++ standard, output precision, and whether distance to a segment rather than an infinite line is intended.\n- Candidate policy for this slice: represent the infinite line by two distinct points A and B, use finite \`long double\` coordinates, reject A==B, return non-negative perpendicular distance to the infinite line, and compile the exact displayed implementation as C++20.\n- Promotion remains blocked until an isolated independent reviewer verifies source boundaries, exact fenced-code execution, numerical/degenerate cases, evidence, and repository gates.\n`;
+            fs.writeFileSync(boundary,text);
+          }
+          NODE
+
+      - name: Write source-bounded C++ candidate and exact fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0033/$cid"
+          mkdir -p "$out"
+
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7642700411d0977839a2cd01a41e50ad","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 二维空间中点到直线的距离（C++）
+
+          ## 核心结论
+
+          仓库来源只保留“计算二维空间中点到直线的距离（C++实现）”，没有保存直线的输入表示、坐标范围或退化输入约定。这里明确采用一个可执行契约：用两个不同的点 `A`、`B` 表示一条无限直线，点 `P` 到直线的距离为三角形平行四边形面积除以底边长度，即 `|cross(B-A, P-A)| / |B-A|`；若 `A == B`，它不能定义唯一直线，函数直接拒绝。
+
+          ## 1 分钟版
+
+          - 设方向向量 `v = B - A`，从直线上一点到目标点的向量 `w = P - A`。
+          - 二维叉积绝对值 `|v.x * w.y - v.y * w.x|` 等于以 `v`、`w` 为邻边的平行四边形面积。
+          - 面积也等于“底边长度 `|v|` × 高”，这个高就是点到无限直线的垂直距离。
+          - 因此 `distance = |cross(v,w)| / hypot(v.x,v.y)`，时间和额外空间都是 O(1)。
+          - `A == B` 时分母为 0，而且两个相同点不能确定一条直线；本答案把它定义为非法输入。
+          - 这是“点到无限直线”的距离，不是“点到线段”的距离；线段问题还需要判断投影是否落在线段内部。
+
+          ## 3 分钟版
+
+          ```cpp
+          #include <cmath>
+          #include <stdexcept>
+
+          struct Point {
+              long double x;
+              long double y;
+          };
+
+          long double pointToLineDistance(const Point& p, const Point& a, const Point& b) {
+              const long double dx = b.x - a.x;
+              const long double dy = b.y - a.y;
+              const long double length = std::hypotl(dx, dy);
+              if (length == 0.0L) {
+                  throw std::invalid_argument("line requires two distinct points");
+              }
+
+              const long double wx = p.x - a.x;
+              const long double wy = p.y - a.y;
+              const long double twiceArea = dx * wy - dy * wx;
+              return std::fabsl(twiceArea) / length;
+          }
+          ```
+
+          例如直线经过 `(0,0)`、`(4,0)`，点是 `(1,3)`，叉积绝对值为 `|4*3-0*1|=12`，底边长度为 `4`，所以距离是 `3`。如果把直线的两个端点交换，叉积符号会反过来，但取绝对值后距离不变。
+
+          ## 关键细节
+
+          - **来源边界**：仓库没有说明直线是 `Ax+By+C=0`、两点式还是点斜式；这里选择“两点确定无限直线”只是答案侧 API 契约。
+          - **不是线段距离**：无限直线允许垂足落在 `A-B` 延长线上；如果问题其实要求点到线段距离，需要先算投影参数并在端点距离与垂距之间分情况。
+          - **退化直线**：`A == B` 时方向向量长度为 0，不存在唯一直线。本实现抛 `std::invalid_argument`，而不是返回 0、无穷或 NaN。
+          - **数值类型**：候选使用 `long double` 和 `std::hypotl`。来源没有保存精度要求；如果业务坐标特别大、特别小或来自整数网格，还应结合范围选择缩放、精确谓词或更严格的误差策略。
+          - **非负性与方向无关**：叉积取绝对值，所以点在直线两侧得到相同距离；交换 `A`、`B` 也不会改变结果。
+          - **复杂度**：固定次数减法、乘法、绝对值和平方根，时间 O(1)，额外空间 O(1)。
+
+          ## 原理机制
+
+          二维向量叉积虽然常写成一个标量 `v.x*w.y - v.y*w.x`，它的绝对值表示两个向量张成的平行四边形面积。若把 `v=B-A` 作为底边，这个面积同时等于 `|v| * h`，其中 `h` 是 `P` 到直线 `AB` 的垂直高度。两边相除就得到距离公式。
+
+          也可以把两点式改写成一般式 `Ax + By + C = 0`，再使用 `|A*x0 + B*y0 + C| / sqrt(A^2+B^2)`。两种写法本质相同；本候选用叉积形式，是因为两点输入时不需要先构造并额外管理一般式系数。
+
+          ## 项目经验版
+
+          来源没有提供真实项目经历，不能虚构“自动驾驶线上就这样算”。工程落地时我会先确认坐标系、单位、数值范围、直线还是线段、退化输入来源以及误差容忍，再用水平线、竖直线、斜线、在线点、端点交换、退化点和随机对照样例验证；这些是验证方法，不是原题保存下来的项目事实。
+
+          ## 常见追问
+
+          - 问：为什么叉积除以底边长度就是距离？答：叉积绝对值是平行四边形面积，而面积等于底乘高；高就是点到直线的垂距。
+          - 问：如果直线给的是 `Ax+By+C=0` 呢？答：直接用 `|A*x0+B*y0+C| / sqrt(A^2+B^2)`，同时要求 `A`、`B` 不能同时为 0。
+          - 问：交换直线上的两个点会影响结果吗？答：只会让叉积变号，绝对值和底边长度不变，所以距离不变。
+          - 问：如果 `A==B` 怎么处理？答：两个相同点不能唯一确定直线；本候选显式抛异常，避免除以 0 后继续传播无意义结果。
+          - 问：点到线段怎么改？答：先计算点在 `AB` 上的投影参数；投影在线段内部时用垂距，投影在外部时取到最近端点的距离。
+
+          ## 易错点
+
+          - 忘记对叉积取绝对值，导致直线两侧得到正负不同的“距离”。
+          - 分母写错为方向向量长度平方；面积除以底边长度才是高度。
+          - 把点到无限直线和点到线段混为一谈。
+          - 不处理 `A==B`，直接除以 0。
+          - 题目没给输入表示、精度和异常约定，却把自己的函数签名说成原题要求。
+          - 用整数保存最终计算，导致除法截断或中间乘法溢出。
+          EOF
+
+          cat > "$out/PointLineDistance.cpp" <<'CPP'
+          #include <cmath>
+          #include <stdexcept>
+
+          struct Point {
+              long double x;
+              long double y;
+          };
+
+          long double pointToLineDistance(const Point& p, const Point& a, const Point& b) {
+              const long double dx = b.x - a.x;
+              const long double dy = b.y - a.y;
+              const long double length = std::hypotl(dx, dy);
+              if (length == 0.0L) {
+                  throw std::invalid_argument("line requires two distinct points");
+              }
+
+              const long double wx = p.x - a.x;
+              const long double wy = p.y - a.y;
+              const long double twiceArea = dx * wy - dy * wx;
+              return std::fabsl(twiceArea) / length;
+          }
+          CPP
+
+          cat > "$out/PointLineDistanceTest.cpp" <<'CPP'
+          #include <algorithm>
+          #include <cmath>
+          #include <cstdint>
+          #include <iostream>
+          #include <random>
+          #include <stdexcept>
+          #include "PointLineDistance.cpp"
+
+          static long double oracle(const Point& p, const Point& a, const Point& b) {
+              const long double A = b.y - a.y;
+              const long double B = a.x - b.x;
+              const long double C = -(A * a.x + B * a.y);
+              const long double denom = std::hypotl(A, B);
+              if (denom == 0.0L) throw std::invalid_argument("degenerate oracle line");
+              return std::fabsl(A * p.x + B * p.y + C) / denom;
+          }
+
+          static void check(const Point& p, const Point& a, const Point& b, long double expected) {
+              const long double actual = pointToLineDistance(p, a, b);
+              const long double scale = std::max({1.0L, std::fabsl(actual), std::fabsl(expected)});
+              if (std::fabsl(actual - expected) > 1e-15L * scale) {
+                  throw std::runtime_error("fixed-case mismatch");
+              }
+              const long double reversed = pointToLineDistance(p, b, a);
+              if (std::fabsl(actual - reversed) > 1e-15L * scale) {
+                  throw std::runtime_error("endpoint-order invariance failed");
+              }
+          }
+
+          int main() {
+              check({1,3}, {0,0}, {4,0}, 3.0L);
+              check({5,2}, {2,-10}, {2,20}, 3.0L);
+              check({0,1}, {0,0}, {1,1}, std::sqrt(0.5L));
+              check({7,7}, {1,1}, {9,9}, 0.0L);
+              check({-3,4}, {-1,-2}, {5,10}, oracle({-3,4},{-1,-2},{5,10}));
+
+              bool degenerateThrown = false;
+              try { (void)pointToLineDistance({1,2}, {3,4}, {3,4}); }
+              catch (const std::invalid_argument&) { degenerateThrown = true; }
+              if (!degenerateThrown) throw std::runtime_error("degenerate line must be rejected");
+
+              std::mt19937_64 rng(20260826ULL);
+              std::uniform_int_distribution<int> d(-1000, 1000);
+              std::uint64_t randomChecked = 0;
+              for (int i = 0; i < 5000; ++i) {
+                  Point a{(long double)d(rng),(long double)d(rng)};
+                  Point b{(long double)d(rng),(long double)d(rng)};
+                  if (a.x == b.x && a.y == b.y) { --i; continue; }
+                  Point p{(long double)d(rng),(long double)d(rng)};
+                  const long double actual = pointToLineDistance(p,a,b);
+                  const long double expected = oracle(p,a,b);
+                  const long double scale = std::max({1.0L,std::fabsl(actual),std::fabsl(expected)});
+                  if (std::fabsl(actual-expected) > 1e-14L * scale) {
+                      throw std::runtime_error("random oracle mismatch");
+                  }
+                  const long double reversed = pointToLineDistance(p,b,a);
+                  if (std::fabsl(actual-reversed) > 1e-14L * scale) {
+                      throw std::runtime_error("random endpoint-order mismatch");
+                  }
+                  if (actual < 0.0L) throw std::runtime_error("distance must be non-negative");
+                  ++randomChecked;
+              }
+              if (randomChecked != 5000) throw std::runtime_error("unexpected random count");
+              std::cout << "PASS fixed=5 random=5000 degenerate=rejected order=invariant nonnegative=true\n";
+          }
+          CPP
+
+      - name: Compile exact candidate fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          g++ -std=c++20 -O2 -Wall -Wextra -pedantic "$out/PointLineDistanceTest.cpp" -o "$out/point_line_distance_test"
+          stdout="$("$out/point_line_distance_test")"
+          test "$stdout" = 'PASS fixed=5 random=5000 degenerate=rejected order=invariant nonnegative=true'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0033/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'g++ -std=c++20 -O2 -Wall -Wextra -pedantic PointLineDistanceTest.cpp && ./point_line_distance_test',stdout:process.env.STDOUT,checks:['horizontal line','vertical line','45-degree diagonal','point on line','nontrivial sloped line','degenerate identical line points rejected','endpoint-order invariance','5,000 deterministic random integer-coordinate cases against independent general-form oracle','non-negative result']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Exact tagged repository question and Batch 0033 frozen source boundary',locator:'note_tagged/663bb0e8000000001e027dad.json + review/content_build/answer_batch_0033/source_boundary_audit.md',source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Point-to-infinite-line deterministic C++20 validation against independent general-form oracle',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'The repository source preserves only a 2D point-to-line C++ coding task; line representation, API, numeric policy, degenerate behavior, precision and line-vs-segment details are not preserved source constraints.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'implementation',text:'Under the explicit answer-side contract of an infinite line through two distinct points, the exact compiled C++20 implementation returns abs(cross(B-A,P-A))/|B-A| and rejects A==B.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'behavior-validation',text:'The fixture passes five fixed geometry cases, degenerate rejection, endpoint-order invariance, non-negativity, and 5,000 deterministic random cases against an independent Ax+By+C oracle.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md';
+          let text=fs.readFileSync(task,'utf8');
+          const marker='- [ ] Every candidate passes `answer audit --require-evidence`.';
+          const note='- [ ] `cq_q_7642700411d0977839a2cd01a41e50ad` writer slice staged: exact tagged wording and singleton ownership are frozen; infinite-line/two-point/C++20/numeric/degenerate choices remain explicit answer-side contracts; the exact fixture covers five fixed cases plus 5,000 deterministic random cases against an independent general-form oracle. Isolated independent review is still required before promotion.';
+          if(!text.includes(note)) {
+            if(!text.includes(marker)) throw new Error('task completion marker missing');
+            text=text.replace(marker,marker+'\n'+note);
+            fs.writeFileSync(task,text);
+          }
+          NODE
+          git diff --check
+
+      - name: Run writer-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit writer slice only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during point-line-distance writer slice: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0033/$CANONICAL_ID" review/content_build/answer_batch_0033/source_boundary_audit.md tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0033 point-line-distance candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
