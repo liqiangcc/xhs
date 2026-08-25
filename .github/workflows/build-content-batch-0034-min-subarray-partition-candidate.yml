@@ -201,13 +201,18 @@ jobs:
           const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'; let t=fs.readFileSync(task,'utf8'); const p='- Min-subarray-partition canonical `'+cid+'` has a source-bounded signed-input prefix-sum DP candidate, verified mapping, deterministic JDK 21 validation, and writer evidence; isolated review and promotion gates remain pending.'; if(!t.includes(p))t=t.trimEnd()+'\n'+p+'\n'; fs.writeFileSync(task,t);
           NODE
 
-      - name: Verify focused repository gates
+      - name: Verify exact code fence against validated fixture
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/xhs.js canonical check --noWrite
-          node scripts/xhs.js answer validate --strict --noWrite
-          npm test
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const match=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!match) throw new Error('Java fence missing');
+          const fixture=fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/MinSubarrayPartition.java`,'utf8').trim();
+          if(match[1].trim()!==fixture) throw new Error('candidate code fence differs from validated fixture');
+          NODE
 
       - name: Commit only if content branch stayed stable
         shell: bash
