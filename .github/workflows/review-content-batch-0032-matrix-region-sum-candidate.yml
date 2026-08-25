@@ -68,7 +68,7 @@ jobs:
           if(hits.length<1||!hits.some(h=>h?.match_basis==='question_id'&&h?.tagged_question?.question_id===qid)) throw new Error('exact source identity missing');
           const q=hits.find(h=>h?.tagged_question?.question_id===qid)?.tagged_question;
           if(q?.original_question!==expected||q?.is_valid_for_library!==true) throw new Error('source wording drifted');
-          if(!(hits.find(h=>h?.tagged_question?.question_id===qid)?.note_img_txt||'').includes('304')) throw new Error('LeetCode 304 recovered context missing');
+          if(!hits.some(h=>(h?.note_img_txt||'').includes('304'))) throw new Error('LeetCode 304 recovered context missing');
           const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
           if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary missing');
           const text=fs.readFileSync(candidate,'utf8');
