@@ -1,0 +1,293 @@
+name: Build Content Batch 0029 Reverse Sum Pairs Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0029-reverse-sum-pairs-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0029-reverse-sum-pairs-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_60a7b0fe580fecd852c13c4e3c279272
+  SOURCE_QID: 60a7b0fe580fecd852c13c4e3c279272
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard frozen source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0029/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('Canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：给定数组，求满足 a[i] + reverse(a[i]) == a[j] + reverse(a[j]) 的 (i, j) 对数';
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          const packet=fs.readFileSync('review/content_build/answer_batch_0029/source_boundary_audit.md','utf8');
+          if(!packet.includes(expected)||!packet.includes(cid)) throw new Error('frozen batch source packet missing current Canonical');
+          NODE
+
+      - id: state
+        name: Guard writer idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/code_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded candidate and executable fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_60a7b0fe580fecd852c13c4e3c279272","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 统计满足 a[i] + reverse(a[i]) 相等的下标对
+
+          ## 核心结论
+
+          把每个元素映射成一个可比较的键 `key(x) = x + reverse(x)`，题目就变成“统计键相同的下标对”。遍历数组时，用哈希表记录每个键之前出现了多少次；当前键已经出现 `c` 次，就新增 `c` 个以当前下标为右端点的合法对，然后把计数加一。这样不需要枚举所有 `(i,j)`，时间从 O(n²) 降到 O(n·d)，其中 `d` 是数字位数；若输入是 32 位非负整数，`d <= 10`，可视为 O(n)，额外空间 O(n)。
+
+          ## 1 分钟版
+
+          - 题源只保存了等式，没有保存输入范围、负数语义和 `(i,j)` 是否要求 `i < j`；下面先声明最小可执行契约：输入是非负 `int[]`，统计无序下标对 `i < j`。
+          - 对每个 `x` 计算十进制反转值 `reverse(x)`，前导零自然消失，例如 `120 -> 21`，`0 -> 0`。
+          - 定义 `key = (long)x + reverse(x)`；使用 `long`，避免反转值或加和超过 `int`。
+          - `count[key]` 表示当前下标之前已经有多少元素得到同一个键。当前出现时先把这个计数加入答案，再把 `count[key]` 加一。
+          - 这等价于每个键出现 `m` 次贡献 `m*(m-1)/2` 对，但单遍写法不需要二次遍历。
+
+          ## 3 分钟版
+
+          ```java
+          static long countPairs(int[] nums) {
+              if (nums == null) {
+                  throw new IllegalArgumentException("nums must not be null");
+              }
+              Map<Long, Long> seen = new HashMap<>();
+              long pairs = 0;
+              for (int x : nums) {
+                  if (x < 0) {
+                      throw new IllegalArgumentException("this candidate defines reverse only for non-negative ints");
+                  }
+                  long key = (long) x + reverseNonNegativeInt(x);
+                  long previous = seen.getOrDefault(key, 0L);
+                  pairs += previous;
+                  seen.put(key, previous + 1);
+              }
+              return pairs;
+          }
+
+          static long reverseNonNegativeInt(int x) {
+              long reversed = 0;
+              int value = x;
+              while (value > 0) {
+                  reversed = reversed * 10 + value % 10;
+                  value /= 10;
+              }
+              return reversed;
+          }
+          ```
+
+          不变量是：处理完前 `k` 个元素后，`seen` 精确记录这 `k` 个元素每个 `key` 的频次，`pairs` 精确等于这 `k` 个元素内部所有满足等式且 `i < j` 的下标对数。处理第 `k+1` 个元素时，所有新增合法对只能是“之前某个相同 key 的元素 + 当前元素”，数量正好是 `seen[key]`；更新频次后不变量继续成立。
+
+          ## 关键细节
+
+          - **为什么哈希键有效**：原条件只比较 `a[i] + reverse(a[i])` 与 `a[j] + reverse(a[j])` 是否相等，所以只要把这个表达式的结果作为键，同键即合法、异键即不合法。
+          - **为什么先加答案再增频次**：这样当前元素只和之前下标配对，天然保证 `i < j`，不会把自己和自己配对，也不会重复计算 `(j,i)`。
+          - **数值类型**：即使 `x` 是 `int`，十进制反转结果也可能超过 `int`，例如某些 10 位整数反转后大于 2³¹-1；因此反转值、键和答案都使用 `long`。
+          - **前导零**：十进制整数反转后不保留前导零，`120` 的反转是 `21`。这是示例契约；如果原题把输入当字符串，语义就需要重新确认。
+          - **负数**：题源没有定义 `reverse(-12)` 是 `-21`、`21` 还是非法。本候选不擅自选择一种隐藏语义，而是显式只接受非负整数；若面试官允许负数，需要先补充契约。
+          - **答案规模**：若所有元素键都相同，答案是 `n*(n-1)/2`，可能超过 `int`，所以返回 `long`。
+
+          ## 原理机制
+
+          这是“按等价键分组后计数组合数”的典型做法。函数 `f(x)=x+reverse(x)` 把每个元素投影到一个键空间；题目的二元关系恰好是 `f(a[i]) == f(a[j])`。因此数组被划分成若干互不相交的键分组，每组大小为 `m` 时贡献 `C(m,2)` 个合法下标对。
+
+          单遍哈希做法把组合计数在线化：一个组中第 1 个元素新增 0 对，第 2 个新增 1 对，第 3 个新增 2 对，直到第 `m` 个新增 `m-1` 对，总和就是 `0+1+...+(m-1)=m(m-1)/2`。哈希表保存的是完成这个增量计算所需的最小状态。
+
+          ## 项目经验版
+
+          题源没有真实项目背景、线上规模或性能数据，不能虚构。工程上如果数据量非常大，除了 O(n) 哈希内存，还要关注键分布、装箱开销和结果是否溢出；若数据已按键排序或可以外部排序，也可以采用排序后按组计数，以 O(n log n) 时间换取不同的内存/流式处理特性。是否值得这样做要由真实数据规模和内存约束决定。
+
+          ## 常见追问
+
+          - 问：为什么不是双重循环？答：因为合法性只由单元素函数 `f(x)=x+reverse(x)` 的结果决定，可以先按 `f(x)` 分组；哈希表让每个元素只处理一次，而不是和所有其他元素比较。
+          - 问：为什么当前元素新增的对数恰好等于之前同 key 的频次？答：任何新合法对都必须包含当前下标，另一端只能从之前相同 key 的元素中选择；之前有多少个就新增多少对。
+          - 问：如果所有元素的 key 都相同呢？答：第 k 个元素新增 `k-1` 对，最终得到 `n(n-1)/2`，因此答案应使用 `long`。
+          - 问：`120` 怎么反转？答：本候选按十进制整数语义得到 `21`；如果题目要求保留字符前导零，那已经是字符串契约，需要改写 `reverse` 定义。
+          - 问：负数怎么办？答：当前题源没有保存负数语义，所以本候选明确拒绝负数；面试现场应先问清 `reverse` 对符号的定义，再决定实现。
+          - 问：能不能先把所有 key 排序？答：可以。排序后连续相同 key 的组直接算 `m(m-1)/2`，时间 O(n log n)，额外空间取决于排序实现；哈希方案平均 O(n) 时间但需要 O(n) 频次表。
+
+          ## 易错点
+
+          - 直接 O(n²) 枚举所有 `(i,j)`，没有利用“同一个单元素表达式结果即可判等”的结构。
+          - 用 `int` 保存十进制反转结果或 `x + reverse(x)`，导致溢出后错误分组。
+          - 先把当前频次加一再累加答案，误把元素和自己组成一对。
+          - 同时计算 `(i,j)` 和 `(j,i)`，把无序下标对重复计数。
+          - 题源没定义负数或字符串前导零，却把某一种解释说成原题硬约束。
+          EOF
+
+          cat > "$out/ReverseSumPairs.java" <<'JAVA'
+          import java.util.HashMap;
+          import java.util.Map;
+
+          final class ReverseSumPairs {
+              static long countPairs(int[] nums) {
+                  if (nums == null) {
+                      throw new IllegalArgumentException("nums must not be null");
+                  }
+                  Map<Long, Long> seen = new HashMap<>();
+                  long pairs = 0;
+                  for (int x : nums) {
+                      if (x < 0) {
+                          throw new IllegalArgumentException("this candidate defines reverse only for non-negative ints");
+                      }
+                      long key = (long) x + reverseNonNegativeInt(x);
+                      long previous = seen.getOrDefault(key, 0L);
+                      pairs += previous;
+                      seen.put(key, previous + 1);
+                  }
+                  return pairs;
+              }
+
+              static long reverseNonNegativeInt(int x) {
+                  long reversed = 0;
+                  int value = x;
+                  while (value > 0) {
+                      reversed = reversed * 10 + value % 10;
+                      value /= 10;
+                  }
+                  return reversed;
+              }
+          }
+          JAVA
+
+          cat > "$out/ReverseSumPairsTest.java" <<'JAVA'
+          final class ReverseSumPairsTest {
+              private static void expect(long expected, int[] nums) {
+                  long actual = ReverseSumPairs.countPairs(nums);
+                  if (actual != expected) {
+                      throw new AssertionError("expected=" + expected + " actual=" + actual);
+                  }
+              }
+
+              public static void main(String[] args) {
+                  expect(0, new int[]{});
+                  expect(0, new int[]{1});
+                  expect(1, new int[]{12, 21});
+                  expect(3, new int[]{12, 21, 30});
+                  expect(6, new int[]{0, 0, 0, 0});
+                  expect(2, new int[]{10, 1, 100, 2});
+                  if (ReverseSumPairs.reverseNonNegativeInt(120) != 21L) throw new AssertionError("120 must reverse to 21");
+                  if (ReverseSumPairs.reverseNonNegativeInt(Integer.MAX_VALUE) != 7463847412L) throw new AssertionError("int reverse must use long");
+                  boolean nullRejected=false;
+                  try { ReverseSumPairs.countPairs(null); } catch (IllegalArgumentException expected) { nullRejected=true; }
+                  if (!nullRejected) throw new AssertionError("null contract must be explicit");
+                  boolean negativeRejected=false;
+                  try { ReverseSumPairs.countPairs(new int[]{-12, 12}); } catch (IllegalArgumentException expected) { negativeRejected=true; }
+                  if (!negativeRejected) throw new AssertionError("negative contract must be explicit");
+                  System.out.println("PASS empty=0 singleton=0 pair=1 triple-same-key=3 four-zero=6 mixed=2 leading-zero=21 int-reverse-uses-long null=rejected negative=rejected");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer research
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          javac "$out/ReverseSumPairs.java" "$out/ReverseSumPairsTest.java"
+          stdout="$(java -cp "$out" ReverseSumPairsTest)"
+          test "$stdout" = 'PASS empty=0 singleton=0 pair=1 triple-same-key=3 four-zero=6 mixed=2 leading-zero=21 int-reverse-uses-long null=rejected negative=rejected'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const out=`review/content_build/answer_batch_0029/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac ReverseSumPairs.java ReverseSumPairsTest.java && java ReverseSumPairsTest',stdout:process.env.STDOUT,checks:['empty and singleton arrays','same-key pair and three-element combination count','zero reverse semantics','distinct-key mixed case','leading-zero integer reverse semantics','32-bit input reverse stored in long','explicit null rejection','explicit negative-value boundary']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Answer Batch 0029 frozen source-boundary audit',locator:'review/content_build/answer_batch_0029/source_boundary_audit.md',source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Reverse-sum pair deterministic Java fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-contract',text:'The preserved source asks to count index pairs whose a[i] + reverse(a[i]) values are equal; it does not preserve numeric bounds, negative-number semantics or pair ordering.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'hash-counting',text:'Under the candidate contract of non-negative int input and unordered i<j pairs, grouping by x + reverse(x) and adding the previous frequency for each key counts each valid pair exactly once.',source_ids:['fixture'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},{claim_id:'numeric-boundaries',text:'The executable fixture verifies integer leading-zero reverse semantics, long storage for reversed 32-bit inputs, answer combination counting, and explicit rejection of undefined null/negative contracts.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- Reverse-sum pair-count candidate staged source-first with an explicit non-negative/int and i<j contract plus deterministic Java validation; isolated source-first review remains pending.';
+          if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          NODE
+
+      - name: Audit candidate and repository gates
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm test
+
+      - name: Commit candidate only from stable content head
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during reverse-sum writer: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0029/$CANONICAL_ID/context.json" "review/content_build/answer_batch_0029/$CANONICAL_ID/ReverseSumPairs.java" "review/content_build/answer_batch_0029/$CANONICAL_ID/ReverseSumPairsTest.java" "review/content_build/answer_batch_0029/$CANONICAL_ID/code_validation.json" "review/content_build/answer_batch_0029/$CANONICAL_ID/writer_research.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0029 reverse-sum pair candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
