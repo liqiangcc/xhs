@@ -1,0 +1,375 @@
+name: Build Content Batch 0032 Horse Race Concurrency Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0032-horse-race-concurrency-candidate.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-horse-race-concurrency-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+  CANONICAL_ID: cq_q_70f1e04dd1a513a0e5bb79021e564eab
+  SOURCE_QID: 70f1e04dd1a513a0e5bb79021e564eab
+
+jobs:
+  build-candidate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard exact source and frozen boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "review/reports/ANSWER_BATCH_${BATCH}_SOURCE_PACKET.json"
+          test -f "review/content_build/answer_batch_${BATCH}/source_boundary_audit.md"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH;
+          const expected='多线程题目：10 个线程模拟赛马，所有马就绪后才能开跑，所有马到达终点后裁判宣布赛马成绩';
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
+          if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen source-first boundary missing');
+          NODE
+
+      - id: state
+        name: Guard writer idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/code_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded Java candidate and deterministic fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          mkdir -p "$out"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_70f1e04dd1a513a0e5bb79021e564eab","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 10 个线程模拟赛马：全部就绪后开跑，全部到达后裁判公布结果
+
+          ## 核心结论
+
+          这道题有两个不同方向的一次性同步条件：**10 匹马都就绪后才能统一放行**，以及**10 匹马都结束后裁判才能宣布成绩**。一个直接实现是用三个 `CountDownLatch`：`ready(10)` 收集就绪信号，`start(1)` 作为统一起跑门，`finish(10)` 收集完成信号。每个马线程先 `ready.countDown()` 再等待 `start.await()`；裁判等待 `ready.await()` 后打开起跑门；每个马线程结束时在 `finally` 中 `finish.countDown()`；裁判最后等待 `finish.await()` 再宣布。
+
+          原题只要求上述并发语义，并没有规定必须使用 `CountDownLatch`。这里选择它作为答案侧实现；用 `CyclicBarrier`/`Phaser` 也可以表达部分或全部协调语义，但不能把具体工具反写成原题约束。
+
+          ## 1 分钟版
+
+          - `ready = new CountDownLatch(10)`：每匹马完成初始化后减 1，裁判等它归零。
+          - `start = new CountDownLatch(1)`：所有马都在这个门上等待；裁判确认全部 ready 后一次 `countDown()` 同时放行。
+          - `finish = new CountDownLatch(10)`：每匹马无论成功还是异常都在 `finally` 里减 1，避免裁判永久等待。
+          - 成绩容器必须是线程安全的，例如 `ConcurrentLinkedQueue`；队列插入动作就定义为本模拟中的“冲线记分点”。
+          - 裁判流程严格是 `ready.await()` → `start.countDown()` → `finish.await()` → announce。
+          - 线程中断或执行失败要显式记录，不能为了“保证结束”静默吞掉；全部线程回收后由裁判汇总失败。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.List;
+          import java.util.concurrent.ConcurrentLinkedQueue;
+          import java.util.concurrent.CountDownLatch;
+          import java.util.concurrent.atomic.AtomicReference;
+          import java.util.function.IntConsumer;
+
+          public final class HorseRace {
+              private static final int HORSES = 10;
+
+              public static List<Integer> race(IntConsumer runHorse) throws InterruptedException {
+                  CountDownLatch ready = new CountDownLatch(HORSES);
+                  CountDownLatch start = new CountDownLatch(1);
+                  CountDownLatch finish = new CountDownLatch(HORSES);
+                  ConcurrentLinkedQueue<Integer> finishOrder = new ConcurrentLinkedQueue<>();
+                  AtomicReference<Throwable> failure = new AtomicReference<>();
+
+                  for (int id = 0; id < HORSES; id++) {
+                      final int horseId = id;
+                      Thread horse = new Thread(() -> {
+                          ready.countDown();
+                          try {
+                              start.await();
+                              runHorse.accept(horseId);
+                              finishOrder.add(horseId); // 本模拟把这里定义为冲线记分点
+                          } catch (InterruptedException e) {
+                              failure.compareAndSet(null, e);
+                              Thread.currentThread().interrupt();
+                          } catch (Throwable t) {
+                              failure.compareAndSet(null, t);
+                          } finally {
+                              finish.countDown();
+                          }
+                      }, "horse-" + horseId);
+                      horse.start();
+                  }
+
+                  ready.await();       // 10 匹马全部就绪
+                  start.countDown();   // 裁判统一放行
+                  finish.await();      // 10 匹马全部到达或退出
+
+                  Throwable t = failure.get();
+                  if (t != null) {
+                      throw new IllegalStateException("horse failed", t);
+                  }
+                  return List.copyOf(finishOrder); // 此后裁判才可以宣布
+              }
+          }
+          ```
+
+          调用侧可以把 `runHorse` 实现成睡眠、计算或可控测试动作。关键并不是“睡多久”，而是同步关系：任何 `runHorse` 都不应在全部 ready 之前执行；裁判也不能在全部 `finish.countDown()` 之前宣布。
+
+          ## 关键细节
+
+          - **为什么不是一个 latch 就够**：ready、统一起跑、全部完成是三个不同阶段。`ready(10)` 是多方到裁判，`start(1)` 是裁判到所有马，`finish(10)` 又是多方到裁判，方向和生命周期不同。
+          - **为什么 `ready.countDown()` 在 `start.await()` 前**：如果马先等 start 再报告 ready，裁判又在等 ready 归零，会形成逻辑死锁。
+          - **为什么 `finish.countDown()` 放在 `finally`**：马线程执行动作抛异常或被中断时，也必须让完成计数有确定去向；否则裁判可能永远阻塞。异常仍需单独上报，不能用 `countDown` 把失败伪装成成功成绩。
+          - **成绩顺序的定义**：多个线程真实“物理到达”的绝对纳秒顺序并不是 Java 普通容器能无歧义观测的概念。本实现明确把成功执行 `finishOrder.add(id)` 定义为冲线记分点，因此队列顺序就是程序可观察的成绩顺序。
+          - **线程安全**：多个马线程并发写成绩，不能用未同步的 `ArrayList`。这里使用 `ConcurrentLinkedQueue`，裁判只在 `finish.await()` 返回后读取最终快照。
+          - **可见性**：`CountDownLatch` 的同步点为阶段之间提供 happens-before 保证；裁判在 `finish.await()` 返回后再读取已完成线程产生的结果，避免靠 `sleep` 猜测时序。
+          - **一次性语义**：`CountDownLatch` 不能重置。如果要反复跑多轮比赛，应该每轮重新创建 latch，或者评估 `CyclicBarrier` / `Phaser` 等可复用协调器。
+
+          ## 原理机制
+
+          这道题本质是两个 barrier-like 阶段加一个单次广播门。第一阶段，10 个马线程各自报告 ready，裁判作为等待方只有在计数归零后继续；第二步，裁判把 `start` 从 1 减到 0，一次释放所有等待马；第三阶段，10 个马线程各自报告 finish，裁判再次等计数归零。这样同步条件由明确状态驱动，而不是由调度时间或 `Thread.sleep` 的经验值驱动。
+
+          `CountDownLatch` 还给出内存可见性边界：某线程在 `countDown()` 前完成的动作，对成功从对应 `await()` 返回的线程可见。因此，裁判在 finish latch 之后读取成绩和失败状态，语义比“等一会儿再读”稳定得多。
+
+          ## 项目经验版
+
+          来源没有提供真实线上项目经历，因此不虚构“生产上就是这样写的”。实际工程里我会进一步明确：线程池还是裸线程、比赛是否有超时、单匹马失败是取消整场还是记录 DNF、裁判线程被中断怎么恢复、结果排序的精确定义，以及多轮比赛是否需要可复用 barrier。这些都属于接口/业务契约，不能由一道只有同步要求的题目擅自补成事实。
+
+          ## 常见追问
+
+          - 问：为什么可以用三个 `CountDownLatch`？答：分别表示“10→裁判的 ready 汇聚”“裁判→10 的起跑广播”“10→裁判的 finish 汇聚”，每个 latch 只承担一个阶段。
+          - 问：可以用 `CyclicBarrier` 吗？答：可以。比如 ready 阶段可以让 10 匹马加裁判参与 barrier，或让 barrier action 触发起跑；但仍要把“全部结束后宣布”这个阶段表达清楚。工具可以替换，语义不能丢。
+          - 问：为什么不能 `sleep(1秒)` 后让裁判宣布？答：线程调度和任务耗时没有这种确定上界，`sleep` 只是延迟，不是完成条件。
+          - 问：如果一匹马抛异常怎么办？答：本实现 `finally` 释放 finish 计数，同时记录首个失败；裁判等全部线程退出后抛出汇总异常，因此既不死锁，也不把失败当正常名次。
+          - 问：如何做超时？答：可以使用 `await(timeout, unit)`，超时后进入明确的取消/中断/失败策略；不能仅返回一个不完整成绩列表并假装比赛完成。
+          - 问：多轮比赛怎么办？答：`CountDownLatch` 是一次性的；每轮重新创建协调对象，或者改用适合复用阶段的 `CyclicBarrier`/`Phaser`。
+
+          ## 易错点
+
+          - 马线程先 `start.await()`，后 `ready.countDown()`，裁判又先等 ready，直接形成逻辑死锁。
+          - 用同一个 latch 混合 ready/start/finish 三种方向不同的信号，状态含义不清晰。
+          - 只在正常路径 `finish.countDown()`，异常后裁判永远等不到 0。
+          - 多线程并发写普通 `ArrayList`，结果结构本身发生数据竞争。
+          - 用固定 `sleep` 代替“所有马已经完成”的同步条件。
+          - 没定义“冲线顺序”的程序观测点，却声称容器顺序等于绝对物理完成时间。
+          EOF
+
+          cat > "$out/HorseRaceFixture.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.HashSet;
+          import java.util.List;
+          import java.util.Set;
+          import java.util.concurrent.ConcurrentLinkedQueue;
+          import java.util.concurrent.CountDownLatch;
+          import java.util.concurrent.TimeUnit;
+          import java.util.concurrent.atomic.AtomicBoolean;
+          import java.util.concurrent.atomic.AtomicInteger;
+          import java.util.concurrent.atomic.AtomicReference;
+
+          public final class HorseRaceFixture {
+              static final int HORSES = 10;
+
+              static final class Outcome {
+                  final List<Integer> order;
+                  final List<String> events;
+                  Outcome(List<Integer> order, List<String> events) {
+                      this.order = order;
+                      this.events = events;
+                  }
+              }
+
+              static Outcome race(boolean failOne) throws Exception {
+                  CountDownLatch ready = new CountDownLatch(HORSES);
+                  CountDownLatch start = new CountDownLatch(1);
+                  CountDownLatch finish = new CountDownLatch(HORSES);
+                  ConcurrentLinkedQueue<Integer> order = new ConcurrentLinkedQueue<>();
+                  ConcurrentLinkedQueue<String> events = new ConcurrentLinkedQueue<>();
+                  AtomicReference<Throwable> failure = new AtomicReference<>();
+                  AtomicBoolean announced = new AtomicBoolean(false);
+                  AtomicInteger started = new AtomicInteger();
+                  List<Thread> threads = new ArrayList<>();
+
+                  for (int i = 0; i < HORSES; i++) {
+                      final int id = i;
+                      Thread t = new Thread(() -> {
+                          events.add("ready:" + id);
+                          ready.countDown();
+                          try {
+                              start.await();
+                              events.add("start:" + id);
+                              started.incrementAndGet();
+                              if (failOne && id == 3) throw new IllegalStateException("simulated failure");
+                              // Deterministic stagger: all threads have crossed the start gate before this work matters.
+                              Thread.sleep((HORSES - id) * 2L);
+                              order.add(id);
+                              events.add("finish:" + id);
+                          } catch (InterruptedException e) {
+                              failure.compareAndSet(null, e);
+                              Thread.currentThread().interrupt();
+                          } catch (Throwable t1) {
+                              failure.compareAndSet(null, t1);
+                              events.add("failed:" + id);
+                          } finally {
+                              finish.countDown();
+                          }
+                      }, "horse-" + id);
+                      threads.add(t);
+                      t.start();
+                  }
+
+                  if (!ready.await(5, TimeUnit.SECONDS)) throw new AssertionError("ready timeout");
+                  events.add("go");
+                  start.countDown();
+                  if (!finish.await(5, TimeUnit.SECONDS)) throw new AssertionError("finish timeout");
+                  events.add("announce");
+                  announced.set(true);
+                  for (Thread t : threads) t.join(1000);
+                  if (!announced.get()) throw new AssertionError("announce missing");
+                  if (failOne && failure.get() == null) throw new AssertionError("failure not captured");
+                  return new Outcome(List.copyOf(order), List.copyOf(events));
+              }
+
+              static void assertNormalRound(Outcome o) {
+                  int go = o.events.indexOf("go");
+                  int announce = o.events.indexOf("announce");
+                  if (go < 0 || announce < 0 || go >= announce) throw new AssertionError(o.events);
+                  Set<Integer> readyIds = new HashSet<>();
+                  Set<Integer> startIds = new HashSet<>();
+                  Set<Integer> finishIds = new HashSet<>();
+                  for (int i = 0; i < o.events.size(); i++) {
+                      String e = o.events.get(i);
+                      if (e.startsWith("ready:")) {
+                          if (i > go) throw new AssertionError("ready after go: " + o.events);
+                          readyIds.add(Integer.parseInt(e.substring(6)));
+                      } else if (e.startsWith("start:")) {
+                          if (i < go) throw new AssertionError("start before go: " + o.events);
+                          startIds.add(Integer.parseInt(e.substring(6)));
+                      } else if (e.startsWith("finish:")) {
+                          if (i > announce) throw new AssertionError("finish after announce: " + o.events);
+                          finishIds.add(Integer.parseInt(e.substring(7)));
+                      }
+                  }
+                  if (readyIds.size() != HORSES || startIds.size() != HORSES || finishIds.size() != HORSES) throw new AssertionError(o.events);
+                  if (o.order.size() != HORSES || new HashSet<>(o.order).size() != HORSES) throw new AssertionError(o.order);
+              }
+
+              static void assertFailureRound(Outcome o) {
+                  int announce = o.events.indexOf("announce");
+                  if (announce < 0) throw new AssertionError("referee did not terminate after horse failure");
+                  long ready = o.events.stream().filter(s -> s.startsWith("ready:")).count();
+                  long starts = o.events.stream().filter(s -> s.startsWith("start:")).count();
+                  long failures = o.events.stream().filter(s -> s.equals("failed:3")).count();
+                  if (ready != HORSES || starts != HORSES || failures != 1) throw new AssertionError(o.events);
+              }
+
+              public static void main(String[] args) throws Exception {
+                  for (int round = 0; round < 60; round++) assertNormalRound(race(false));
+                  assertFailureRound(race(true));
+                  System.out.println("PASS rounds=60 all-ready-before-go all-start-after-go all-finish-before-announce unique-results=10 failure-does-not-deadlock");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer evidence
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          javac "$out/HorseRaceFixture.java"
+          stdout="$(java -cp "$out" HorseRaceFixture)"
+          test "$stdout" = 'PASS rounds=60 all-ready-before-go all-start-after-go all-finish-before-announce unique-results=10 failure-does-not-deadlock'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const batch=process.env.BATCH,cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_${batch}/${cid}`;
+          const validation={schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac HorseRaceFixture.java && java HorseRaceFixture',stdout:process.env.STDOUT,checks:['all ten ready events precede referee go','all horse work starts after go','all ten successful finishes precede announce','ten unique results per normal round','failure path still releases finish latch and terminates referee wait','60 repeated normal rounds under scheduler variation']};
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify(validation,null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Batch 0032 exact source-first singleton boundary',locator:`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'Horse-race concurrency deterministic Java fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The preserved source requires ten horse threads, a no-start-before-all-ready gate, and no-referee-announcement-before-all-finished; it does not require a specific Java synchronizer.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},{claim_id:'phase-ordering',text:'The executable fixture verifies all ten ready events precede go, every horse action starts after go, and all successful finishes precede announce across 60 rounds.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'failure-liveness',text:'The failure fixture verifies finish is released from finally so a failed horse cannot permanently block the referee completion wait, while the failure remains explicitly observable.',source_ids:['fixture'],answer_locations:['1 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record bounded progress in batch task
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib
+          batch=os.environ['BATCH']; cid=os.environ['CANONICAL_ID']
+          path=pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md')
+          text=path.read_text(encoding='utf-8')
+          note=f"- [ ] `{cid}` candidate staged source-first: exact singleton boundary preserved; three-latch Java implementation treats CountDownLatch as an answer-side choice; executable fixture verifies all-ready-before-go, start-after-go, finish-before-announce, unique results and failure-path liveness over repeated rounds. Independent review still required.\n"
+          if note not in text:
+              path.write_text(text.rstrip()+"\n"+note,encoding='utf-8')
+          PY
+
+      - name: Commit candidate from one stable content snapshot
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          task="tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          base_head='${{ steps.base.outputs.head }}'
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced: $base_head -> $remote_head; discard mixed-snapshot candidate."
+            exit 0
+          fi
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$candidate" "$out" "$task"
+          git diff --cached --check
+          git commit -m "content: stage batch ${BATCH} horse-race concurrency candidate"
+          git push origin "HEAD:$CONTENT_BRANCH"
