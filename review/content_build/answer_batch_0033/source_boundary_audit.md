@@ -35,3 +35,13 @@
 - Disposition: fail closed as `incomplete_or_unreadable`. Neither the raw note nor the structured projection preserves the DP state, input/output, constraints, examples, recurrence, or problem identity, so no deterministic Coding contract can be recovered.
 - Required remediation: mark the tagged row invalid with an explicit reason, record the validity-audit exclusion, retire singleton Canonical `cq_q_754f6f2262137c4a1450a526c68c6553`, remove its ReviewProgress, archive its placeholder baseline Answer, rebuild Question/index/type projections, and keep the invalid Question as an explained non-Canonical projection.
 - No generic DP answer may be promoted as a substitute for the forgotten source question.
+
+## cq_q_7560e894f762ce0a02c9838d710a0b25
+
+- Exact repository projections: `note_structured/67ee3c15000000001c0327c9.json` and `note_tagged/67ee3c15000000001c0327c9.json`.
+- Stronger OCR source: `note_img_txt/67ee3c15000000001c0327c9.txt` preserves only `最后代码题给一段代码回答是在实现什么, 并且有哪些问题`; it does not preserve the code body.
+- Raw note JSON has only the generic post description and image metadata; the missing code is not recoverable there either.
+- Current projected wording: `代码理解：给一段代码，分析其实现功能及潜在问题？`.
+- Disposition: fail closed as `incomplete_or_unreadable`. Without the actual code, neither its behavior nor its potential defects can be reviewed deterministically.
+- Required remediation: mark the tagged row invalid with an explicit reason, record the validity-audit exclusion, retire singleton Canonical `cq_q_7560e894f762ce0a02c9838d710a0b25`, remove its ReviewProgress, archive its placeholder baseline Answer, rebuild Question/index/type projections, and preserve the invalid row as an explained non-Canonical projection.
+- A generic code-review checklist must not be promoted as if it answered the missing code sample.
