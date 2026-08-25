@@ -1,0 +1,167 @@
+name: Extend Answer Code Validation for C
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/extend-answer-code-validation-c.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extend-answer-code-validation-c
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  extend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Extend source-appropriate code validation to C
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v gcc
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/lib/answer_quality.js')
+          s=p.read_text(encoding='utf-8')
+          old="const regex = /(?:```|~~~)(java|sql|javascript|js|go)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
+          new="const regex = /(?:```|~~~)(java|sql|javascript|js|go|c)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
+          if old not in s: raise SystemExit('extractCodeBlocks language regex drifted')
+          s=s.replace(old,new,1)
+
+          marker="function parseJavaScript(code) {"
+          if marker not in s: raise SystemExit('parseJavaScript marker missing')
+          compile_c=r'''function compileC(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-gcc-'));
+    try {
+        const filePath = path.join(tempDir, 'candidate.c');
+        const objectPath = path.join(tempDir, 'candidate.o');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('gcc', ['-std=c17', '-Wall', '-Wextra', '-Werror', '-pedantic', '-c', filePath, '-o', objectPath], {
+            encoding: 'utf8',
+            timeout: 15000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'gcc_not_available' };
+        if (result.error) return { ok: false, error: 'c_compile_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'c_compile_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 2000),
+            };
+        }
+        return { ok: true };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+'''
+          s=s.replace(marker,compile_c+marker,1)
+
+          old_dispatch="""            const validation = block.language === 'java'\n                ? compileJava(block.code)\n                : block.language === 'sql'\n                    ? parseSql(block.code)\n                    : block.language === 'go'\n                        ? compileGo(block.code)\n                        : parseJavaScript(block.code);"""
+          new_dispatch="""            const validation = block.language === 'java'\n                ? compileJava(block.code)\n                : block.language === 'sql'\n                    ? parseSql(block.code)\n                    : block.language === 'go'\n                        ? compileGo(block.code)\n                        : block.language === 'c'\n                            ? compileC(block.code)\n                            : parseJavaScript(block.code);"""
+          if old_dispatch not in s: raise SystemExit('specialized validation dispatch drifted')
+          s=s.replace(old_dispatch,new_dispatch,1)
+
+          old_req="/(?:```|~~~)(?:java|sql|javascript|js|go)\\b/i.test(answer.content)"
+          new_req="/(?:```|~~~)(?:java|sql|javascript|js|go|c)\\b/i.test(answer.content)"
+          if old_req not in s: raise SystemExit('require-code language regex drifted')
+          s=s.replace(old_req,new_req,1)
+
+          old_export="    compileJava,\n    parseSql,"
+          new_export="    compileJava,\n    compileC,\n    parseSql,"
+          if old_export not in s: raise SystemExit('module export marker drifted')
+          s=s.replace(old_export,new_export,1)
+          p.write_text(s,encoding='utf-8')
+
+          t=Path('test/answer_code_validation.test.js')
+          x=t.read_text(encoding='utf-8')
+          old_import="const { compileJava, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
+          new_import="const { compileJava, compileC, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
+          if old_import not in x: raise SystemExit('test import drifted')
+          x=x.replace(old_import,new_import,1)
+          insert="""
+
+test('C validation compiles complete source and rejects broken implementations', () => {
+    assert.equal(compileC('#include <stddef.h>\\nchar *copy(char *dst, const char *src) { char *out = dst; while ((*dst++ = *src++) != \\'\\0\\') {} return out; }').ok, true);
+    assert.equal(compileC('char *copy(char *dst, const char *src) { return dst + ; }').ok, false);
+});
+"""
+          anchor="\ntest('SQL validation checks statement structure balance and placeholders', () => {"
+          if anchor not in x: raise SystemExit('test insertion anchor drifted')
+          x=x.replace(anchor,insert+anchor,1)
+          t.write_text(x,encoding='utf-8')
+
+          c=Path('config/answer_quality.json')
+          j=c.read_text(encoding='utf-8')
+          if 'runnable_java_or_sql' not in j: raise SystemExit('answer quality coding requirement drifted')
+          j=j.replace('runnable_java_or_sql','runnable_source_appropriate_code_or_sql',1)
+          c.write_text(j,encoding='utf-8')
+          PY
+
+      - name: Verify C validator regression and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test test/answer_code_validation.test.js
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during C-validator change: $base_head -> $remote_head"
+            echo 'Discarding verified local mutation; retry later against current state.'
+            exit 0
+          fi
+          git add scripts/lib/answer_quality.js test/answer_code_validation.test.js config/answer_quality.json
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'C validation support already present.'; exit 0; fi
+          git config user.name 'xhs-refactor-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'quality: validate source-appropriate C coding answers'
+          git push origin "HEAD:$CONTENT_BRANCH"
