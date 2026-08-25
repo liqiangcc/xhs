@@ -1,0 +1,107 @@
+name: Remediate Content Batch 0033 Coin Change Enumeration Bound
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0033-coin-change-overflow.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-coin-change-overflow-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_768f8eb71596f7b6824861aae95d9f08
+  ORIGINAL_CANDIDATE_BLOB_SHA: 98f59eb3dd4b520cf685889a3f8ffb55e77beaca
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Replace overflow-prone loop guard and re-extract exact fence
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$ORIGINAL_CANDIDATE_BLOB_SHA"
+          CANDIDATE="$candidate" OUT="$out" node <<'NODE'
+          const fs=require('fs');
+          const p=process.env.CANDIDATE;
+          let text=fs.readFileSync(p,'utf8');
+          const old='for (int count = 0; count * coin <= remaining; count++) {';
+          const replacement='for (int count = 0, max = remaining / coin; count <= max; count++) {';
+          if((text.match(new RegExp(old.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g'))||[]).length!==1) throw new Error('expected exactly one overflow-prone loop guard');
+          text=text.replace(old,replacement);
+          text=text.replace('- **复杂度**：枚举时间至少 O(K)，K 是返回组合数，递归控制栈深度只有固定币种数；保存全部结果还要 O(K)。计数 DP 对 3 个固定币种是 O(N) 时间、O(N) 空间，可进一步按数学关系优化，但没必要牺牲可读性。','- **复杂度**：枚举时间至少 O(K)，K 是返回组合数，递归控制栈深度只有固定币种数；保存全部结果还要 O(K)。循环上界使用 `remaining / coin`，避免 `count * coin` 在大 `int` 输入附近先发生乘法溢出。计数 DP 对 3 个固定币种是 O(N) 时间、O(N) 空间，可进一步按数学关系优化，但没必要牺牲可读性。');
+          fs.writeFileSync(p,text);
+          const open='```java\n'; const i=text.indexOf(open); if(i<0) throw new Error('Java fence missing');
+          const start=i+open.length,end=text.indexOf('\n```',start); if(end<0) throw new Error('Java fence close missing');
+          fs.writeFileSync(`${process.env.OUT}/CoinChange123.java`,text.slice(start,end)+'\n');
+          NODE
+          grep -F 'for (int count = 0, max = remaining / coin; count <= max; count++) {' "$candidate"
+          ! grep -F 'count * coin <= remaining' "$candidate"
+
+      - name: Re-run exact Java fixture and writer-safe gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          rm -rf /tmp/xhs-coin-change-0033-remediation
+          mkdir -p /tmp/xhs-coin-change-0033-remediation
+          javac -d /tmp/xhs-coin-change-0033-remediation "$out/CoinChange123.java" "$out/CoinChange123Test.java"
+          stdout="$(java -cp /tmp/xhs-coin-change-0033-remediation CoinChange123Test)"
+          test "$stdout" = 'PASS fixed=0..5 exhaustive=0..200 enumeration=unique-complete dp=count negative=empty'
+          STDOUT="$stdout" OUT="$out" node <<'NODE'
+          const fs=require('fs'); const p=`${process.env.OUT}/code_validation.json`; const j=JSON.parse(fs.readFileSync(p,'utf8'));
+          j.stdout=process.env.STDOUT; j.exact_fenced_code_matches_fixture=true; j.remediated_at='2026-08-26';
+          j.checks.push('enumeration loop bound uses remaining/coin rather than overflow-prone count*coin comparison');
+          fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');
+          NODE
+          git diff --check
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit remediation only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during coin-change overflow remediation: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0033/$CANONICAL_ID/CoinChange123.java" "review/content_build/answer_batch_0033/$CANONICAL_ID/code_validation.json"
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: harden batch 0033 coin-change loop bound'
+          git push origin "HEAD:$CONTENT_BRANCH"
