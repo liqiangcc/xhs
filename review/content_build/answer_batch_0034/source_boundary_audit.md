@@ -26,3 +26,13 @@
 - Answer-side adapter: linearly reduce multiple versions with the LeetCode-165 comparator; semantically equal versions retain the first original representation.
 - The repository does not preserve concrete ACM stdin/stdout layout or tie-representation rules; those remain explicit adapter choices.
 - Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
+
+## cq_q_7d3154a0b8c8da4bf0d09accd6921e94
+
+- Exact repository source: `note_tagged/670b6b1a000000001b03d867.json`, question `7d3154a0b8c8da4bf0d09accd6921e94`.
+- Preserved wording: `算法思路：如何判断并找到两个单链表的相交节点？请口述双指针思路`
+- Preserved response shape: explain the two-pointer idea for finding the intersection node of two singly linked lists.
+- Not preserved by the source: node class/value type, whether cycles are allowed, or any mutation allowance.
+- Candidate executable policy only: lists are finite acyclic singly linked lists; intersection means the same node object/shared suffix rather than equal values; return the first shared node or null; do not mutate either list.
+- A cyclic-list variant is deliberately outside the candidate contract because the switch-head termination proof assumes finite acyclic traversals.
+- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
