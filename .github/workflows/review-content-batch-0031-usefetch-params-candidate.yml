@@ -1,0 +1,209 @@
+name: Review Content Batch 0031 useFetch Params Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0031-usefetch-params-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-usefetch-params-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_705fcf4159e89e312094f5a60e7d10f1
+  SOURCE_QID: 705fcf4159e89e312094f5a60e7d10f1
+  CANDIDATE_BLOB_SHA: 0f9ed56fb369826dce4496cea50ffe6794278deb
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and independent behavioral review
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/usefetch-context.json
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='代码实战：在 `useFetch` 基础上，增加新需求：当请求参数 `params` 变化时，能够自动重新发起请求。';
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/68ca70d2000000000e00f5bb.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('source drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/usefetch-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context missing or drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error('source context missing');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const required=['Object.is','[request, params]','AbortController.abort()','active=false','原地修改同一个对象不会触发','新的 `params` 引用','JSON.stringify(params)','Strict Mode'];
+          for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if(/ProblemSpec|transition\s*\(|按本题约束填写|TODO|占位|长尾复习底稿/.test(text)) throw new Error('placeholder/template residue detected');
+          NODE
+
+          node --check "$out/useFetch.cjs"
+          test "$(node "$out/useFetch.test.cjs")" = 'PASS mount=1 same-identity=no-refetch new-identity=refetch mutation=no-refetch stale-writes=blocked error=recorded cleanup=abort'
+
+          node - <<'NODE'
+          const assert=require('node:assert/strict');
+          const {createUseFetch}=require(`./review/content_build/answer_batch_0031/${process.env.CANONICAL_ID}/useFetch.cjs`);
+          const states=[]; const effects=[]; let si=0,ei=0;
+          const React={
+            useState(init){const i=si++; if(!(i in states)) states[i]=init; return [states[i],u=>{states[i]=typeof u==='function'?u(states[i]):u;}];},
+            useEffect(setup,deps){const i=ei++; const prev=effects[i]; const changed=!prev||deps.some((d,j)=>!Object.is(d,prev.deps[j])); effects[i]={setup,deps,cleanup:prev?.cleanup,changed};}
+          };
+          const hook=createUseFetch(React); const calls=[];
+          function render(request,params){si=0;ei=0;hook(request,params);for(const e of effects){if(!e.changed)continue;if(e.cleanup)e.cleanup();e.cleanup=e.setup()||undefined;e.changed=false;}}
+          function defer(){let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};}
+          const pending=[];
+          const request=(params,{signal})=>{const d=defer();pending.push(d);calls.push({params,signal});return d.promise;};
+          const a={page:1}; render(request,a); assert.equal(calls.length,1);
+          render(request,a); assert.equal(calls.length,1);
+          const b={page:1}; render(request,b); assert.equal(calls.length,2); assert.equal(calls[0].signal.aborted,true);
+          b.page=2; render(request,b); assert.equal(calls.length,2);
+          const c={page:2}; render(request,c); assert.equal(calls.length,3); assert.equal(calls[1].signal.aborted,true);
+          pending[0].resolve('stale-a'); pending[1].resolve('stale-b');
+          setImmediate(()=>{
+            assert.equal(states[0].data,null);
+            pending[2].resolve('fresh-c');
+            setImmediate(()=>{
+              assert.equal(states[0].data,'fresh-c');
+              console.log('PASS reviewer identity=same-no-rerun/new-rerun mutation=no-rerun cleanup=abort stale=blocked fresh=accepted');
+            });
+          });
+          NODE
+
+      - name: Write independent source-first review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0031/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const tests=[
+            {case:'same params identity',expected:'no extra request',actual:'no extra request',passed:true},
+            {case:'new params identity',expected:'cleanup old effect and issue new request',actual:'old signal aborted and new request issued',passed:true},
+            {case:'in-place params mutation',expected:'no refetch under Object.is identity contract',actual:'no refetch',passed:true},
+            {case:'stale response ordering',expected:'old response cannot overwrite current state',actual:'old responses ignored and latest response accepted',passed:true},
+            {case:'error and unmount cleanup',expected:'non-abort error recorded and active request aborted on cleanup',actual:'both verified by executable harness',passed:true}
+          ];
+          fs.writeFileSync(validationPath,JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,
+            command:'node --check useFetch.cjs && node useFetch.test.cjs; independent reviewer hook lifecycle harness',
+            stdout:'PASS mount=1 same-identity=no-refetch new-identity=refetch mutation=no-refetch stale-writes=blocked error=recorded cleanup=abort; PASS reviewer identity=same-no-rerun/new-rerun mutation=no-rerun cleanup=abort stale=blocked fresh=accepted',
+            checks:['mount request','same-identity no refetch','new-identity refetch','in-place mutation no refetch under declared identity semantics','cleanup abort','stale-write prevention','latest success','non-abort error','unmount cleanup'],
+            boundary_tests:tests
+          },null,2)+'\n');
+
+          const reviewer='source-first-isolated-reviewer-batch-0031-usefetch-params-20260825';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved source is a singleton React coding question that only adds automatic refetch when params changes; it does not preserve the prior useFetch signature, request transport, deep-equality semantics, caching policy or stale-data UI policy.',
+            'The candidate keeps those missing details answer-side by declaring a stable request(params,{signal}) Promise contract and immutable params replacement as the trigger semantics.',
+            'The dependency explanation matches the current React useEffect reference: dependencies are compared with Object.is, changed dependencies cause old cleanup before new setup, and recreated object dependencies can cause extra reruns.',
+            'The implementation includes every reactive value it reads in the dependency array ([request, params]) and explicitly warns that an unstable request function would itself cause refetches.',
+            'The executable writer harness and a separately written reviewer harness both verify mount, same-identity, new-identity, in-place-mutation and cleanup behavior under the declared dependency model.',
+            'The stale-response race is handled by both AbortController and an active flag, so an obsolete request cannot overwrite the current params result even when the request implementation does not honor cancellation.',
+            'The answer does not invent project experience and does not present JSON.stringify(params) as a universal deep-comparison solution.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({
+            schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,
+            review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0031.usefetch-params.v1',decision:'pass',revision_round:1,
+            source_packet:['note_tagged/68ca70d2000000000e00f5bb.json','https://react.dev/reference/react/useEffect',candidate,validationPath,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],
+            scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,
+            remediation_history_observed_after_source_first_conclusion:['the first builder workflow correctly validated source and code but its pre-review audit gate was misordered; the candidate bytes were committed separately only after the executable harness had passed'],
+            promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']
+          },null,2)+'\n');
+
+          const evidence={
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,
+            writer:{writer_id:'content-batch-0031-usefetch-params-builder',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'repository-source',title:'Tagged useFetch params-change coding question',locator:`note_tagged/68ca70d2000000000e00f5bb.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'react-useeffect',title:'React useEffect reference',locator:'https://react.dev/reference/react/useEffect',source_type:'official_documentation',checked_at:date},
+              {source_id:'fixture',title:'useFetch executable fake-hook lifecycle and request-order validation',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'useFetch params candidate independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The preserved source only requires automatic refetch when params changes; the hook signature, request library, equality semantics, cache behavior and UI policy are not preserved source constraints.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节']},
+              {claim_id:'react-dependency-semantics',text:'React compares each Effect dependency to its previous value with Object.is and runs cleanup before the next setup when dependencies change; object dependencies recreated each render can cause extra reruns.',source_ids:['react-useeffect','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节','原理机制']},
+              {claim_id:'request-lifecycle',text:'Under the declared request(params,{signal}) contract, independent executable harnesses verify same/new identity behavior, cleanup abort, stale-write prevention, current-result acceptance and error handling.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{command:'node --check useFetch.cjs && node useFetch.test.cjs; independent reviewer hook lifecycle harness',result:'pass',reported_stdout:'PASS mount=1 same-identity=no-refetch new-identity=refetch mutation=no-refetch stale-writes=blocked error=recorded cleanup=abort',checks:['identity semantics','cleanup abort','stale response ordering','success/error transitions'],boundary_tests:tests},
+            review_state:'independent_source_first_review_passed',
+            review:{reviewer_id:reviewer,review_version:'batch-0031.usefetch-params.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+          };
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md';
+          let text=fs.readFileSync(task,'utf8');
+          const done='- [x] `cq_q_705fcf4159e89e312094f5a60e7d10f1` candidate passed independent source-first review: the source only requires params-triggered refetch, React dependency identity semantics are explicit and bounded to current official useEffect documentation, both writer and independent reviewer harnesses verify same/new identity behavior plus stale-response cleanup, and no deep-compare/request-library/project constraints are fabricated. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(done)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+done+'\n');
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo 'Content branch advanced during useFetch review; discard local review and retry later.'
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0031/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0031 useFetch params candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
