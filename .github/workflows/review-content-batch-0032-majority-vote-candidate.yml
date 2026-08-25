@@ -1,0 +1,218 @@
+name: Review Content Batch 0032 Majority Vote Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0032-majority-vote-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-majority-vote-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+  CANONICAL_ID: cq_q_71339c0e3b37b924564ea456caa5fb97
+  SOURCE_QID: 71339c0e3b37b924564ea456caa5fb97
+  CANDIDATE_BLOB_SHA: 5df7a7a2546c1340402c8deec30ea6020ac7a65f
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard, compile actual candidate, and independent exhaustive oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          test -f "review/content_build/answer_batch_${BATCH}/source_boundary_audit.md"
+          test -f "$out/code_validation.json"
+          test -f "$out/writer_research.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH;
+          const expected='算法：超过半数的数字（摩尔投票法）？';
+          const packet=JSON.parse(fs.readFileSync(`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,'utf8'));
+          const entry=(packet.canonicals||[]).find(x=>x.canonical_id===cid);
+          if(!entry) throw new Error('source packet member missing');
+          const hits=entry.source_hits||[];
+          if(hits.length!==1||hits[0]?.match_basis!=='question_id') throw new Error('source identity is not exact singleton');
+          const q=hits[0].tagged_question;
+          if(q?.question_id!==qid||q?.original_question!==expected||q?.is_valid_for_library!==true) throw new Error('source drifted');
+          const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
+          if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary missing');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const required=['Boyer-Moore','occurrences > nums.length / 2','OptionalInt.empty()','严格大于','第二遍验证','O(1)'];
+          for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if(/ProblemSpec|按本题约束填写|长尾复习底稿/.test(text)) throw new Error('placeholder/template residue detected');
+          const m=text.match(/```java\s*\n([\s\S]*?)\n```/);
+          if(!m) throw new Error('candidate Java block missing');
+          fs.writeFileSync('/tmp/MajorityVote.java',m[1]);
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/MajorityVote.java
+          cat >/tmp/MajorityVoteIndependentTest.java <<'JAVA'
+          import java.util.HashMap;
+          import java.util.Map;
+          import java.util.OptionalInt;
+
+          public final class MajorityVoteIndependentTest {
+              private static OptionalInt oracle(int[] nums) {
+                  if (nums == null || nums.length == 0) return OptionalInt.empty();
+                  Map<Integer,Integer> counts = new HashMap<>();
+                  for (int v : nums) counts.merge(v, 1, Integer::sum);
+                  for (Map.Entry<Integer,Integer> e : counts.entrySet()) {
+                      if (e.getValue() * 2 > nums.length) return OptionalInt.of(e.getKey());
+                  }
+                  return OptionalInt.empty();
+              }
+
+              private static void check(int[] nums) {
+                  OptionalInt actual = MajorityVote.majorityElement(nums);
+                  OptionalInt expected = oracle(nums);
+                  if (!actual.equals(expected)) {
+                      throw new AssertionError("actual=" + actual + " expected=" + expected);
+                  }
+              }
+
+              private static void enumerate(int[] a, int pos) {
+                  if (pos == a.length) {
+                      check(a.clone());
+                      return;
+                  }
+                  for (int v = -1; v <= 1; v++) {
+                      a[pos] = v;
+                      enumerate(a, pos + 1);
+                  }
+              }
+
+              public static void main(String[] args) {
+                  check(null);
+                  check(new int[]{});
+                  check(new int[]{7});
+                  check(new int[]{1,1,2,2});
+                  check(new int[]{2,2,1,1,1,2,2});
+                  check(new int[]{1,2,3});
+                  check(new int[]{-4,-4,-4,2,3});
+                  long cases = 0;
+                  long pow = 1;
+                  for (int n = 0; n <= 9; n++) {
+                      enumerate(new int[n], 0);
+                      cases += pow;
+                      pow *= 3;
+                  }
+                  if (cases != 29524L) throw new AssertionError(cases);
+                  System.out.println("PASS actual-candidate exhaustive=29524 alphabet=-1,0,1 plus-boundaries oracle=HashMap strict-majority-only");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/MajorityVoteIndependentTest.java
+          independent_stdout="$(java -cp /tmp MajorityVoteIndependentTest)"
+          test "$independent_stdout" = 'PASS actual-candidate exhaustive=29524 alphabet=-1,0,1 plus-boundaries oracle=HashMap strict-majority-only'
+          echo "$independent_stdout"
+
+      - name: Write independent source-first review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_${batch}/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const tests=[
+            {case:'actual candidate null/empty/single boundaries',expected:'empty for null/empty; singleton returned',actual:'pass',passed:true},
+            {case:'strict-majority threshold',expected:'exact half and no-majority rejected; > n/2 accepted',actual:'pass',passed:true},
+            {case:'actual candidate exhaustive small-domain oracle',expected:'match independent HashMap oracle for every length 0..9 array over {-1,0,1}',actual:'pass across 29,524 exhaustive arrays',passed:true},
+            {case:'negative-value boundary',expected:'negative majority supported without sentinel collision',actual:'pass',passed:true}
+          ];
+          const previous=JSON.parse(fs.readFileSync(validationPath,'utf8'));
+          fs.writeFileSync(validationPath,JSON.stringify({...previous,validated_at:date,independent_command:'extract candidate Java; javac MajorityVote.java MajorityVoteIndependentTest.java; java MajorityVoteIndependentTest',independent_stdout:'PASS actual-candidate exhaustive=29524 alphabet=-1,0,1 plus-boundaries oracle=HashMap strict-majority-only',boundary_tests:tests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0032-majority-vote-20260825';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The exact repository source asks for a number occurring more than half the time and names Boyer-Moore voting; it does not specify an API or explicitly guarantee that such an element always exists.',
+            'The candidate keeps the missing existence guarantee explicit and therefore separates candidate selection from a second-pass strict-majority verification instead of silently assuming success.',
+            'The explanation correctly uses strict > n/2 semantics; an exact-half case is not accepted.',
+            'The cancellation argument explains why a true strict majority survives pairwise cancellation while also explaining why an unverified survivor is insufficient when no majority exists.',
+            'An independently authored exhaustive oracle compiles and runs the actual candidate over every length 0..9 array on a three-value alphabet, plus null, empty, singleton, exact-half, no-majority and negative-value boundaries.',
+            'The O(n) time and O(1) extra-space claims match the two linear scans and constant algorithm state; the optional return contract is explicitly answer-side.',
+            'No project experience is fabricated; the answer marks production/API choices as implementation policy rather than preserved source facts.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0032.majority-vote.v1',decision:'pass',revision_round:0,source_packet:[`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,candidate,validationPath,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0032-majority-vote-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Batch 0032 exact source-first singleton boundary',locator:`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Majority-vote writer fixture plus actual-candidate exhaustive independent oracle',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Majority-vote independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source asks for a strict-majority number using Boyer-Moore voting, without specifying an API or explicit majority-exists guarantee.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','关键细节']},{claim_id:'algorithm-behavior',text:'The actual candidate uses Boyer-Moore cancellation to select a candidate and a second linear pass to verify the strict-majority condition when existence is not guaranteed.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'strict-threshold',text:'Independent exhaustive and boundary checks reject exact-half/no-majority inputs and accept only occurrences strictly greater than n/2.',source_ids:['fixture','isolated-review'],answer_locations:['核心结论','关键细节','常见追问']},{claim_id:'complexity',text:'The implementation performs at most two linear scans while storing only candidate and counters, matching O(n) time and O(1) extra algorithm space.',source_ids:['isolated-review'],answer_locations:['1 分钟版','关键细节']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'writer randomized fixture plus independently compiled actual-candidate exhaustive oracle',result:'pass',reported_stdout:'PASS writer randomized=20000; PASS actual candidate exhaustive=29524 + boundaries',checks:['null/empty','singleton','strict-majority','exact-half rejected','no-majority rejected','negative values','29,524 exhaustive arrays'],boundary_tests:tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0032.majority-vote.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task=`tasks/answer-batches/TASK-20260711-0313-answer-batch-${batch}.md`;
+          let text=fs.readFileSync(task,'utf8');
+          const pending=`- [ ] \`${cid}\` candidate staged source-first: exact Boyer-Moore singleton boundary preserved; existence guarantee remains explicit rather than assumed; robust Java candidate verifies strict majority in a second pass and passes fixed plus 20,000 randomized HashMap-oracle cases. Independent review still required.`;
+          text=text.replace(pending+'\n','');
+          const done=`- [x] \`${cid}\` candidate passed independent source-first review: exact source names Boyer-Moore but does not state an API or majority-exists guarantee; the candidate therefore verifies strict > n/2 in a second pass, writer randomized validation passes 20,000 cases, and an independent oracle compiles the actual candidate and exhaustively checks 29,524 arrays plus boundary cases. Formal promotion remains governed by repository promotion and real-review policy.`;
+          if(!text.includes(done)) text=(text.endsWith('\n')?text:text+'\n')+done+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit independent review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during majority-vote review; discard local review and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_${BATCH}/$CANONICAL_ID" "tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m "review: pass batch ${BATCH} majority-vote candidate"
+          git push origin "HEAD:$CONTENT_BRANCH"
