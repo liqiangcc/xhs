@@ -46,97 +46,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          candidate="review/candidates/answers/$CANONICAL_ID.md"
           node <<'NODE'
           const fs=require('fs');
-          const path=`review/candidates/answers/${process.env.CANONICAL_ID}.md`;
-          let text=fs.readFileSync(path,'utf8');
+          const cid=process.env.CANONICAL_ID;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const fixture=`review/content_build/answer_batch_0030/${cid}/LinkedListDedup.java`;
+          let text=fs.readFileSync(candidate,'utf8');
           if(!text.includes('final class ListNode {')||!text.includes('static ListNode keepOneSorted')) throw new Error('expected pre-remediation Java block not found');
-          const replacement=`\`\`\`java
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-
-public final class LinkedListDedup {
-    static final class ListNode {
-        int val;
-        ListNode next;
-        ListNode(int val) { this.val = val; }
-    }
-
-    // 合同 A：输入按 val 非递减；每个值最终保留一个节点。
-    static ListNode keepOneSorted(ListNode head) {
-        for (ListNode cur = head; cur != null && cur.next != null; ) {
-            if (cur.val == cur.next.val) cur.next = cur.next.next;
-            else cur = cur.next;
-        }
-        return head;
-    }
-
-    // 合同 B：输入按 val 非递减；只保留原链表中出现恰好一次的值。
-    static ListNode removeAllDuplicatesSorted(ListNode head) {
-        ListNode dummy = new ListNode(0);
-        dummy.next = head;
-        ListNode prev = dummy, cur = head;
-        while (cur != null) {
-            if (cur.next != null && cur.val == cur.next.val) {
-                int duplicate = cur.val;
-                while (cur != null && cur.val == duplicate) cur = cur.next;
-                prev.next = cur;
-            } else {
-                prev = cur;
-                cur = cur.next;
-            }
-        }
-        return dummy.next;
-    }
-
-    // 合同 C：输入可无序；按原顺序保留每个值第一次出现的节点。
-    static ListNode keepFirstUnsorted(ListNode head) {
-        Set<Integer> seen = new HashSet<>();
-        ListNode dummy = new ListNode(0);
-        dummy.next = head;
-        ListNode prev = dummy, cur = head;
-        while (cur != null) {
-            if (!seen.add(cur.val)) prev.next = cur.next;
-            else prev = cur;
-            cur = cur.next;
-        }
-        return dummy.next;
-    }
-
-    // 合同 D：输入可无序；只保留原链表中出现恰好一次的值。
-    static ListNode keepOnlyGloballyUniqueUnsorted(ListNode head) {
-        Map<Integer, Integer> freq = new HashMap<>();
-        for (ListNode cur = head; cur != null; cur = cur.next) {
-            freq.merge(cur.val, 1, Integer::sum);
-        }
-        ListNode dummy = new ListNode(0), tail = dummy;
-        for (ListNode cur = head; cur != null; ) {
-            ListNode next = cur.next;
-            if (freq.get(cur.val) == 1) {
-                tail.next = cur;
-                tail = cur;
-            }
-            cur = next;
-        }
-        tail.next = null;
-        return dummy.next;
-    }
-}
-\`\`\``;
+          const java=fs.readFileSync(fixture,'utf8').trim();
+          if(!java.includes('public final class LinkedListDedup')||!java.includes('keepOnlyGloballyUniqueUnsorted')) throw new Error('validated fixture implementation missing expected wrapper');
           const start=text.indexOf('```java');
           if(start<0) throw new Error('Java fence missing');
           const end=text.indexOf('```',start+7);
           if(end<0) throw new Error('Java closing fence missing');
+          const replacement='```java\n'+java+'\n```';
           text=text.slice(0,start)+replacement+text.slice(end+3);
-          fs.writeFileSync(path,text);
+          fs.writeFileSync(candidate,text);
           NODE
           git diff --check
-          grep -q 'public final class LinkedListDedup' "$candidate"
+          grep -q 'public final class LinkedListDedup' "review/candidates/answers/$CANONICAL_ID.md"
 
-      - name: Re-run direct fixture and candidate audit preconditions
+      - name: Re-run direct fixture and repository gates
         shell: bash
         run: |
           set -euo pipefail
