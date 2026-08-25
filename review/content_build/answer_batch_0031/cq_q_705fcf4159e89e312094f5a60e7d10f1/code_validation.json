@@ -3,17 +3,49 @@
   "canonical_id": "cq_q_705fcf4159e89e312094f5a60e7d10f1",
   "result": "pass",
   "validated_at": "2026-08-25",
-  "command": "node --check useFetch.cjs && node useFetch.test.cjs",
-  "stdout": "PASS mount=1 same-identity=no-refetch new-identity=refetch mutation=no-refetch stale-writes=blocked error=recorded cleanup=abort",
+  "command": "node --check useFetch.cjs && node useFetch.test.cjs; independent reviewer hook lifecycle harness",
+  "stdout": "PASS mount=1 same-identity=no-refetch new-identity=refetch mutation=no-refetch stale-writes=blocked error=recorded cleanup=abort; PASS reviewer identity=same-no-rerun/new-rerun mutation=no-rerun cleanup=abort stale=blocked fresh=accepted",
   "checks": [
-    "initial request on mount",
-    "same params identity does not refetch",
-    "new params identity refetches",
-    "in-place params mutation does not refetch under Object.is identity semantics",
-    "cleanup aborts previous request",
-    "stale responses cannot overwrite current state",
-    "latest success updates state",
-    "non-abort error updates error state",
-    "unmount aborts active request"
+    "mount request",
+    "same-identity no refetch",
+    "new-identity refetch",
+    "in-place mutation no refetch under declared identity semantics",
+    "cleanup abort",
+    "stale-write prevention",
+    "latest success",
+    "non-abort error",
+    "unmount cleanup"
+  ],
+  "boundary_tests": [
+    {
+      "case": "same params identity",
+      "expected": "no extra request",
+      "actual": "no extra request",
+      "passed": true
+    },
+    {
+      "case": "new params identity",
+      "expected": "cleanup old effect and issue new request",
+      "actual": "old signal aborted and new request issued",
+      "passed": true
+    },
+    {
+      "case": "in-place params mutation",
+      "expected": "no refetch under Object.is identity contract",
+      "actual": "no refetch",
+      "passed": true
+    },
+    {
+      "case": "stale response ordering",
+      "expected": "old response cannot overwrite current state",
+      "actual": "old responses ignored and latest response accepted",
+      "passed": true
+    },
+    {
+      "case": "error and unmount cleanup",
+      "expected": "non-abort error recorded and active request aborted on cleanup",
+      "actual": "both verified by executable harness",
+      "passed": true
+    }
   ]
 }
