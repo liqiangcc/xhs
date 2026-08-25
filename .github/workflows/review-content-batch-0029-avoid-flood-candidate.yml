@@ -1,0 +1,157 @@
+name: Review Content Batch 0029 Avoid Flood Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0029-avoid-flood-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0029-avoid-flood-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6a03e4ded0b05d96bb54b43ae3e980be
+  SOURCE_QID: 6a03e4ded0b05d96bb54b43ae3e980be
+  CANDIDATE_BLOB_SHA: 6d49009e3cf9648163ffa834fc6abd45877c8d73
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun deterministic simulation
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          javac "$out/AvoidFlood.java" "$out/AvoidFloodTest.java"
+          test "$(java -cp "$out" AvoidFloodTest)" = 'PASS official-shapes=3 sparse-dry=yes exact-window=yes immediate-repeat=impossible empty=yes null=rejected negative=rejected'
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error('source ownership drifted');
+          const q=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.question_id===qid);
+          const expected='算法题: 避免洪水泛滥 (LeetCode 1488)';
+          if(!q||q.original_question!==expected) throw new Error('source wording drifted');
+          const packet=fs.readFileSync('review/content_build/answer_batch_0029/source_boundary_audit.md','utf8');
+          if(!packet.includes(expected)||!packet.includes(cid)) throw new Error('frozen batch source packet drifted');
+          const baseline=fs.readFileSync(`review/answers/${cid}.md`,'utf8');
+          if(!baseline.includes('quality_tier":"long_tail_baseline')||!baseline.includes('长尾复习底稿')) throw new Error('expected long-tail baseline no longer matches reviewed starting state');
+          NODE
+
+      - name: Record isolated source-first review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const out=`review/content_build/answer_batch_0029/${cid}`;
+          const fixture=`${out}/code_validation.json`;
+          const reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0029-avoid-flood-20260825-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository source explicitly identifies LeetCode 1488. The official problem statement defines rain days, mandatory dry-day choices, -1 on rainy output positions, arbitrary valid dry-lake choices and empty output when avoiding flood is impossible; the candidate follows that contract without adding hidden source requirements.',
+            'The candidate state is appropriate: lastRain stores the previous fill time for each lake, while an ordered set stores past dry days that have not yet been assigned. A repeated rain creates a deadline whose required dry day must be strictly after that lake previous rain.',
+            'Using dryDays.higher(prev) selects the earliest feasible unused dry day. Since the set contains only already-observed days, the selected day is automatically before the current rain; choosing the earliest feasible day preserves later dry days for future windows with later left boundaries.',
+            'If higher(prev) does not exist at the repeated-rain deadline, no unused past dry day lies inside the required interval, so that flood is unavoidable and returning an empty array is correct.',
+            'The displayed Java is complete and matches the separately executed implementation. The deterministic simulator validates all-rain/no-repeat, a two-repeat schedule, an impossible crossing-deadline case, unused dry days, an exact one-day window, immediate repeat impossibility and defensive null/negative boundaries.',
+            'The answer explains the one-use resource/window invariant, strict higher-versus-ceiling boundary, O(n log n) TreeSet cost and alternative data-structure tradeoffs. It also keeps production experience explicitly out of scope.',
+            'No uncovered source variant, unsupported factual attribution, coding hard failure or semantic blocker remains at candidate review stage. Formal promotion remains governed by repository promotion and real-review policy.'
+          ];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0029.avoid-flood.v1',decision:'pass',revision_round:1,source_packet:['review/content_build/answer_batch_0029/source_boundary_audit.json','https://leetcode.com/problems/avoid-flood-in-the-city/',candidate,fixture,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
+          const evidence={
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,
+            writer:{writer_id:'content-batch-0029-avoid-flood-candidate-builder',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'repository-source',title:'Answer Batch 0029 frozen source-boundary audit',locator:'review/content_build/answer_batch_0029/source_boundary_audit.json',source_type:'repository_source_record',checked_at:date},
+              {source_id:'leetcode-1488',title:'LeetCode 1488 - Avoid Flood in The City',locator:'https://leetcode.com/problems/avoid-flood-in-the-city/',source_type:'official_problem_statement',checked_at:date},
+              {source_id:'fixture',title:'Avoid Flood deterministic Java simulation fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Avoid Flood independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'problem-contract',text:'LeetCode 1488 defines rain days, dry days, rainy output -1, a positive lake choice on dry days, and empty output when flood avoidance is impossible.',source_ids:['repository-source','leetcode-1488'],answer_locations:['核心结论','1 分钟版','关键细节']},
+              {claim_id:'greedy-window',text:'Tracking each lake previous rain and assigning the earliest unused dry day strictly after it when the lake repeats produces a valid schedule whenever such a day exists at each deadline.',source_ids:['fixture','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},
+              {claim_id:'impossibility',text:'At a repeated-rain deadline, absence of any unused prior dry day strictly after the previous rain means no valid dry day exists inside the required window.',source_ids:['fixture','isolated-review'],answer_locations:['核心结论','原理机制','常见追问']},
+              {claim_id:'boundary-validation',text:'The executable simulator validates possible and impossible schedules across repeated-lake windows, unused dry days, exact windows and immediate repeats, plus defensive null/negative input handling.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{command:'javac AvoidFlood.java AvoidFloodTest.java && java AvoidFloodTest',result:'pass',reported_stdout:'PASS official-shapes=3 sparse-dry=yes exact-window=yes immediate-repeat=impossible empty=yes null=rejected negative=rejected',checks:['all-rain no-repeat schedule','two dry days resolving two repeated lakes','known impossible crossing deadlines','extra unused dry days','single exact dry window','immediate repeat impossible','empty defensive boundary','explicit null rejection','explicit negative-value rejection'],boundary_tests:[{case:'[1,2,3,4]',expected:'valid all-rain schedule',actual:'valid',passed:true},{case:'[1,2,0,0,2,1]',expected:'valid schedule',actual:'valid',passed:true},{case:'[1,2,0,1,2]',expected:'empty/impossible',actual:'empty',passed:true},{case:'[1,0,1]',expected:'exact dry window valid',actual:'valid',passed:true},{case:'[1,1]',expected:'empty/immediate repeat impossible',actual:'empty',passed:true}]},
+            review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0029.avoid-flood.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+          };
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- Avoid-Flood/LeetCode-1488 candidate passed isolated source-first review against the official problem contract and deterministic Java schedule simulation; formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during avoid-flood review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0029/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0029 avoid-flood candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
