@@ -1,0 +1,55 @@
+name: Fix Content Batch 0032 Top-K Review Workflow
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/fix-content-batch-0032-topk-review.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-topk-review-fixer
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - name: Fix candidate path inside isolated Node guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='.github/workflows/review-content-batch-0032-topk-frequency-candidate.yml'
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('.github/workflows/review-content-batch-0032-topk-frequency-candidate.yml')
+          text=path.read_text(encoding='utf-8')
+          old="const text=fs.readFileSync(candidate,'utf8');"
+          new="const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');"
+          if old not in text:
+              raise SystemExit('expected buggy line not found')
+          path.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+          git diff --check
+      - name: Commit repaired review gate from stable master
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(git rev-parse HEAD)"
+          git fetch --depth=1 origin master
+          remote="$(git rev-parse origin/master)"
+          if [ "$base" != "$remote" ]; then
+            echo "master advanced: $base -> $remote; discard and retry later"
+            exit 0
+          fi
+          git config user.name 'xhs-ci-fixer'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add .github/workflows/review-content-batch-0032-topk-frequency-candidate.yml
+          git commit -m 'ci: fix top-k source-first candidate path guard'
+          git push origin HEAD:master
