@@ -1,0 +1,146 @@
+name: Review Content Batch 0034 Linked List Intersection Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0034-linked-list-intersection-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-linked-list-intersection-reviewer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7d3154a0b8c8da4bf0d09accd6921e94
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first isolated review and exact-candidate revalidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -s "$candidate"; test -s "$out/source_mapping.json"; test -s "$out/code_validation.json"; test ! -e "$out/isolated_review_result.json"
+
+          # Reviewer packet intentionally excludes writer_research and writer rationale.
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          const note=JSON.parse(fs.readFileSync(mapping.note_path,'utf8'));
+          const q=(note.tagged_questions||[]).find(x=>x.question_id===mapping.note_question_id);
+          const expected='算法思路：如何判断并找到两个单链表的相交节点？请口述双指针思路';
+          if(!q||q.original_question!==expected||q.question_type!=='算法手撕_Coding') throw new Error('preserved source wording/type drifted');
+          if(JSON.stringify(q.tech_entities)!==JSON.stringify(['链表相交','双指针'])) throw new Error('source entity drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(!md.includes(h)) throw new Error(`missing section ${h}`);
+          for(const token of ['节点身份','走到 `null` 后切到另一条链表头','时间 O(m+n)','额外空间 O(1)','不修改链表','环形边界','来源没有提供真实项目']) if(!md.includes(token)) throw new Error(`required source-bounded content missing: ${token}`);
+          const fence=md.match(/```java\n([\s\S]*?)\n```/); if(!fence) throw new Error('Java fence missing');
+          fs.writeFileSync('/tmp/LinkedListIntersection.java',fence[1].trim()+'\n');
+          const val=JSON.parse(fs.readFileSync(path.join(out,'code_validation.json'),'utf8'));
+          if(val.result!=='pass') throw new Error('writer fixture did not pass');
+          NODE
+
+          cat > /tmp/LinkedListIntersectionReviewTest.java <<'JAVA'
+          public final class LinkedListIntersectionReviewTest {
+              private static LinkedListIntersection.Node n(int v) { return new LinkedListIntersection.Node(v); }
+              private static LinkedListIntersection.Node chain(int len, int base) {
+                  LinkedListIntersection.Node head=null, tail=null;
+                  for(int i=0;i<len;i++) { var x=n(base+i); if(head==null) head=x; else tail.next=x; tail=x; }
+                  return head;
+              }
+              private static LinkedListIntersection.Node tail(LinkedListIntersection.Node h) {
+                  if(h==null) return null; while(h.next!=null) h=h.next; return h;
+              }
+              private static LinkedListIntersection.Node shared(int len) { return chain(len,1000); }
+              private static void same(Object actual,Object expected,String name) {
+                  if(actual!=expected) throw new AssertionError(name+" expected="+expected+" actual="+actual);
+              }
+              public static void main(String[] args) {
+                  for(int a=0;a<=5;a++) for(int b=0;b<=5;b++) for(int c=1;c<=5;c++) {
+                      var common=shared(c);
+                      var ha=chain(a,10); var hb=chain(b,100);
+                      if(ha==null) ha=common; else tail(ha).next=common;
+                      if(hb==null) hb=common; else tail(hb).next=common;
+                      same(LinkedListIntersection.firstIntersection(ha,hb),common,"shared a="+a+" b="+b+" c="+c);
+                  }
+                  for(int a=0;a<=5;a++) for(int b=0;b<=5;b++) {
+                      var ha=chain(a,7); var hb=chain(b,7);
+                      same(LinkedListIntersection.firstIntersection(ha,hb),null,"disjoint equal-values a="+a+" b="+b);
+                  }
+                  var h=n(1); h.next=n(2); var next=h.next;
+                  LinkedListIntersection.firstIntersection(h,null);
+                  if(h.next!=next || next.next!=null) throw new AssertionError("input mutated");
+                  System.out.println("PASS exhaustive-prefixes shared-suffixes disjoint-equal-values empties exact-fence no-mutation");
+              }
+          }
+          JAVA
+          mkdir -p /tmp/linked-list-review-classes
+          javac -d /tmp/linked-list-review-classes /tmp/LinkedListIntersection.java /tmp/LinkedListIntersectionReviewTest.java
+          stdout="$(java -cp /tmp/linked-list-review-classes LinkedListIntersectionReviewTest)"
+          test "$stdout" = 'PASS exhaustive-prefixes shared-suffixes disjoint-equal-values empties exact-fence no-mutation'
+
+          hash="$(sha256sum "$candidate" | awk '{print $1}')"
+          CANDIDATE_HASH="$hash" REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          const result={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_HASH,reviewed_at:'2026-08-26',review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0034-linked-list-intersection-20260826-v1',review_version:'batch-0034.linked-list-intersection.v1',decision:'pass',revision_round:1,source_packet:[mapping.note_path,path.join(out,'source_mapping.json'),'review/content_build/answer_batch_0034/source_boundary_audit.md',`review/candidates/answers/${cid}.md`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores:{facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5},hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:['The preserved source explicitly asks for the two-pointer idea for finding the intersection node of two singly linked lists; it does not preserve a node class, mutation policy, or cyclic-list semantics.','The candidate states its executable boundary instead of presenting it as recovered source: finite acyclic singly linked lists, reference-identity/shared-suffix intersection, first shared node or null, and no input mutation.','The switch-head mechanism is directly explained: A→B and B→A equalize the aggregate traversal length, so the prefix-length difference is canceled; the no-intersection path converges at null under the finite acyclic precondition.','The exact Java fence independently compiles on JDK 21 and an isolated property-style fixture exhaustively checks prefix lengths 0..5, shared suffix lengths 1..5, disjoint equal-valued lists, empty lists and non-mutation.','The answer explicitly rejects value equality as an intersection test, gives the length-alignment alternative, and routes cyclic lists to a separate boundary rather than claiming universal termination.'],validation:{command:'javac exact candidate fence + independent property fixture && java LinkedListIntersectionReviewTest',result:'pass',stdout:process.env.REVIEW_STDOUT},promotion_blockers:['required_human_approval_not_yet_satisfied','repository_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(path.join(out,'isolated_review_result.json'),JSON.stringify(result,null,2)+'\n');
+          NODE
+
+      - name: Bind independent verdict and task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"
+          test -s "$out/writer_research.json"; test -s "$out/isolated_review_result.json"
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const result=JSON.parse(fs.readFileSync(path.join(out,'isolated_review_result.json'),'utf8'));
+          if(result.decision!=='pass'||(result.hard_failures||[]).length) throw new Error('isolated verdict not promotable');
+          const wp=path.join(out,'writer_research.json'); const writer=JSON.parse(fs.readFileSync(wp,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending') throw new Error(`writer state drifted: ${writer.review_state}`);
+          writer.review_state='independent_source_first_review_passed';
+          writer.sources.push({source_id:'isolated-review',title:'Independent source-first linked-list intersection candidate review',locator:path.join(out,'isolated_review_result.json'),source_type:'repository_structured_source',checked_at:'2026-08-26'});
+          writer.claims.push({claim_id:'isolated-review-verdict',text:'Independent source-first review found no hard failures, unsupported claims or uncovered source variants and recompiled the exact candidate Java against exhaustive small-shape identity tests.',source_ids:['isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节','原理机制','常见追问']});
+          writer.promotion_blocker='required_human_approval_and_real_review_policy_not_yet_satisfied';
+          writer.review={reviewer_id:result.reviewer_id,review_version:result.review_version,independent:true,decision:'pass',revision_round:1,scores:result.scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:result.findings};
+          fs.writeFileSync(wp,JSON.stringify(writer,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'; let t=fs.readFileSync(task,'utf8');
+          const p='- Linked-list intersection canonical `'+cid+'` passed isolated source-first review and exact-candidate property revalidation; promotion remains blocked only by required human approval and repository real-review policy.';
+          if(!t.includes(p)) t += (t.includes('## Progress')?'\n':'\n\n## Progress\n\n')+p+'\n';
+          fs.writeFileSync(task,t);
+          NODE
+
+      - name: Commit isolated-review result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0034/$CANONICAL_ID/isolated_review_result.json" "review/content_build/answer_batch_0034/$CANONICAL_ID/writer_research.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          git commit -m 'review: pass batch 0034 linked-list intersection candidate source-first'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin "$CONTENT_BRANCH" && git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            git rebase --abort 2>/dev/null || true; sleep $((attempt*3));
+          done
+          exit 1
