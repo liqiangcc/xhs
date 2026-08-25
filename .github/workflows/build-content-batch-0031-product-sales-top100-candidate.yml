@@ -1,0 +1,242 @@
+name: Build Content Batch 0031 Product Sales Top100 Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0031-product-sales-top100-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-product-sales-top100-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_70386671a2450c14b84a24d2cefeb7df
+  SOURCE_QID: 70386671a2450c14b84a24d2cefeb7df
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify singleton source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='大数据任务计算：给定订单详情表, 计算指定日期商品销量的 Top100 并按销量降序排序。';
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/660911ad000000001b010de1.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('tagged source drifted');
+          if(tagged.domain?.l2!=='Hive') throw new Error(`domain drifted: ${tagged.domain?.l2}`);
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0031/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error('source context missing');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded Hive SQL candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_70386671a2450c14b84a24d2cefeb7df","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 指定日期商品销量 Top100，并按销量降序排序
+
+          ## 核心结论
+
+          先按指定日期过滤订单明细，再按商品聚合销量，最后对聚合结果做全局降序排序并取前 100。原题没有给真实表名、字段名、订单有效状态、销量口径或并列第 100 名的处理方式，所以这些不能冒充成题目已知条件。
+
+          这里声明一个最小可执行假设：订单详情表是 `order_detail(dt, product_id, quantity)`；`dt` 表示题目要求的业务日期或分区日期；每一行已经是应计入销量的有效明细；“销量”按 `SUM(quantity)` 计算；Top100 表示**最多返回 100 行**。同销量时原题没有规定顺序，因此增加 `product_id ASC` 作为答案侧的确定性 tie-breaker。
+
+          ## 1 分钟版
+
+          - `WHERE dt = '${target_date}'`：先缩小到指定日期，避免把其它日期销量混进来；若 `dt` 是 Hive 分区列，也有利于只读目标分区。
+          - `GROUP BY product_id`：把同一商品当天的多条订单明细归到一起。
+          - `SUM(quantity)`：在这里明确把销量定义为件数之和；如果真实题意是“订单行数/订单数/支付后净销量”，聚合表达式和过滤条件都要跟着真实口径改。
+          - `ORDER BY sales DESC, product_id ASC LIMIT 100`：销量作为第一排序键做全局降序，商品 ID 只用于同销量时稳定排序，然后取最多 100 行。
+          - 简单的“全局 Top100”不需要为了用窗口函数而强行套窗口函数；只有题目要求“并列第 100 名全部保留”或“分组内 TopN”时，`RANK/DENSE_RANK/ROW_NUMBER` 才更自然。
+
+          ## 3 分钟版
+
+          ```sql
+          WITH product_sales AS (
+              SELECT
+                  product_id,
+                  SUM(quantity) AS sales
+              FROM order_detail
+              WHERE dt = '${target_date}'
+              GROUP BY product_id
+          )
+          SELECT
+              product_id,
+              sales
+          FROM product_sales
+          ORDER BY sales DESC, product_id ASC
+          LIMIT 100;
+          ```
+
+          SQL 的逻辑顺序是：日期过滤 -> 商品聚合 -> 聚合结果排序 -> 截取前 100。不能先对订单明细 `LIMIT 100` 再聚合，那样只是在 100 条明细里找销量，结果会错；也不能直接按单行 `quantity` 排序，因为题目要的是“商品总销量”。
+
+          如果真实表是按日期分区的 Hive 表，应让日期条件直接命中分区列；如果日期来自时间戳字段，则要先确认业务时区和“指定日期”的定义，再写对应过滤条件，不能凭空把 `dt` 当成原题已给字段。
+
+          ## 关键细节
+
+          - **销量口径**：这里用 `SUM(quantity)`。若一行代表一件商品且没有数量列，可能改成 `COUNT(*)`；若有退款、取消、支付状态，应按真实业务定义先过滤或计算净销量。
+          - **Top100 并列语义**：当前契约固定最多 100 行。若第 100 名并列商品都要保留，应先聚合，再用 `RANK()` 或 `DENSE_RANK()` 按销量排名，并明确到底采用哪一种并列规则。
+          - **确定性排序**：只写 `ORDER BY sales DESC` 时，同销量商品之间顺序未定义。加 `product_id ASC` 不改变“按销量降序”的主排序要求，但让测试、重跑和下游消费更稳定。
+          - **全局排序**：最终 Top100 必须基于全体聚合后的商品销量比较；局部分区内排序不能直接等价于最终全局 Top100，除非还有后续全局合并阶段。
+          - **先过滤再聚合**：指定日期条件应在聚合前生效，否则会把其它日期销量累计进目标商品。
+          - **空结果**：若指定日期没有有效订单，结果就是 0 行，不应该虚构 100 行或补零销量商品。
+          - **少于 100 个商品**：返回实际存在的全部商品，`LIMIT 100` 只是上限。
+
+          ## 原理机制
+
+          这道题真正的数据粒度变化是“订单明细行 -> 商品日销量”。`WHERE` 先限定输入集合，`GROUP BY product_id` 把多条明细折叠成一条商品聚合记录，`SUM(quantity)` 得到该商品在目标日期的销量。只有聚合完成后，排序键 `sales` 才是题目要求比较的指标。
+
+          之后 `ORDER BY sales DESC` 建立全局结果顺序，`LIMIT 100` 截取前缀。第二排序键只是解决销量相同的非确定性，不参与销量高低判断。若把 `LIMIT` 放在聚合前、或者把单行数量当作商品总销量，都会破坏这个粒度转换。
+
+          ## 项目经验版
+
+          来源没有给真实订单规模、分区设计、数据倾斜、执行引擎版本或线上耗时，因此不虚构生产指标。真实 Hive 任务里会先检查表的分区列、`quantity` 的业务定义、无效订单/退款口径和热点商品分布，再用执行计划与任务指标确认扫描分区、聚合和最终排序是否符合预期；这些属于落地验证步骤，不是本题来源事实。
+
+          ## 常见追问
+
+          - 问：为什么不能直接 `ORDER BY quantity DESC LIMIT 100`？答：因为一件商品可能有多条订单明细，题目要比较的是商品总销量，必须先按商品聚合。
+          - 问：为什么日期条件要放在聚合前？答：目标是“指定日期”的销量，先过滤才能保证 `SUM` 只累计该日期输入；否则会混入其它日期数据。
+          - 问：销量到底用 `SUM(quantity)` 还是 `COUNT(*)`？答：原题没给 schema。这里明确假设存在数量列且销量是数量之和；真实表若一行就是一件、或业务统计订单数，应按真实口径修改。
+          - 问：同销量怎么办？答：原题没规定。当前答案为了稳定地“最多返回 100 行”增加 `product_id ASC`；如果业务要求并列第 100 名全部保留，要改成显式排名语义。
+          - 问：必须用窗口函数吗？答：简单全局 Top100 不必，聚合后 `ORDER BY ... LIMIT 100` 更直接；分组内 TopN 或保留边界并列时再使用 `ROW_NUMBER/RANK/DENSE_RANK`。
+          - 问：如果只有 30 个商品？答：返回 30 行；Top100 是上限，不是必须补足 100 行。
+
+          ## 易错点
+
+          - 在订单明细层先 `LIMIT 100`，再计算商品销量。
+          - 忘记日期过滤，导致跨天累计。
+          - 直接按单行 `quantity` 排序，没有先按商品聚合。
+          - 把自定义的 `order_detail/dt/product_id/quantity` 字段名说成原题已经给出。
+          - 没说明销量口径，却默认 `COUNT(*)` 或 `SUM(quantity)` 一定正确。
+          - 用窗口函数制造复杂度，却没有先说明 Top100 的并列语义。
+          EOF
+
+          cat > "$out/top100_validation.py" <<'PY'
+          import sqlite3
+
+          con=sqlite3.connect(':memory:')
+          con.execute('create table order_detail(dt text not null, product_id text not null, quantity integer not null)')
+          target='2026-08-25'
+          other='2026-08-24'
+          for i in range(1,106):
+              product=f'P{i:03d}'
+              total=105 if i in (104,105) else i
+              first=total//2
+              second=total-first
+              con.execute('insert into order_detail values(?,?,?)',(target,product,first))
+              con.execute('insert into order_detail values(?,?,?)',(target,product,second))
+              con.execute('insert into order_detail values(?,?,?)',(other,product,10000))
+
+          sql='''
+          WITH product_sales AS (
+              SELECT product_id, SUM(quantity) AS sales
+              FROM order_detail
+              WHERE dt = ?
+              GROUP BY product_id
+          )
+          SELECT product_id, sales
+          FROM product_sales
+          ORDER BY sales DESC, product_id ASC
+          LIMIT 100
+          '''
+          rows=con.execute(sql,(target,)).fetchall()
+          assert len(rows)==100, len(rows)
+          assert rows[0]==('P104',105), rows[:3]
+          assert rows[1]==('P105',105), rows[:3]
+          assert rows[2]==('P103',103), rows[:3]
+          assert rows[-1]==('P006',6), rows[-3:]
+          ids={r[0] for r in rows}
+          assert 'P005' not in ids and 'P006' in ids
+          assert all(rows[i][1] >= rows[i+1][1] for i in range(len(rows)-1))
+          assert con.execute(sql,(other,)).fetchone()==('P001',10000)
+          empty=con.execute(sql,('2099-01-01',)).fetchall()
+          assert empty==[]
+          print('PASS rows=100 aggregation=yes date-isolation=yes descending=yes deterministic-tie=yes cutoff=P006 empty-date=zero')
+          PY
+
+      - name: Execute fixture and freeze writer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          stdout="$(python3 "$out/top100_validation.py")"
+          test "$stdout" = 'PASS rows=100 aggregation=yes date-isolation=yes descending=yes deterministic-tie=yes cutoff=P006 empty-date=zero'
+          STDOUT="$stdout" node - <<'NODE'
+          const fs=require('fs'),path=require('path'),crypto=require('crypto');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const out=`review/content_build/answer_batch_0031/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          fs.writeFileSync(path.join(out,'source_boundary.json'),JSON.stringify({
+            schema_version:'answer_source_boundary.v1',canonical_id:cid,checked_at:date,
+            source_questions:[{question_id:qid,original_question:'大数据任务计算：给定订单详情表, 计算指定日期商品销量的 Top100 并按销量降序排序。',source_locator:'note_tagged/660911ad000000001b010de1.json'}],
+            preserved_constraints:['order-detail input','specified date','compute product sales','return Top100','sort by sales descending'],
+            answer_side_assumptions:['Hive-compatible SQL','order_detail(dt, product_id, quantity) minimal schema','sales means SUM(quantity)','rows are already valid sales details','Top100 means at most 100 rows','product_id ascending deterministic tie-breaker']
+          },null,2)+'\n');
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,
+            command:'python3 top100_validation.py',stdout:process.env.STDOUT,
+            checks:['multiple detail rows aggregate per product','target date isolated from another date','global sales descending order','deterministic equal-sales tie order','105 products truncated to exactly 100','cutoff excludes P005 and includes P006','empty date returns zero rows']
+          },null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,
+            review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'repository-source',title:'Tagged product-sales Top100 coding question',locator:`note_tagged/660911ad000000001b010de1.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'fixture',title:'Deterministic SQL aggregation/date/order/limit fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The source requires specified-date product-sales Top100 sorted by sales descending, but does not preserve schema names, sales business definition, invalid-order filtering or tie semantics.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},
+              {claim_id:'query-shape',text:'Under the declared minimal schema, filtering by date before grouping, summing quantity per product, then globally ordering aggregated sales and limiting to 100 produces the requested result shape.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},
+              {claim_id:'boundaries',text:'The fixture verifies cross-date isolation, repeated detail aggregation, equal-sales deterministic ties, a 105-to-100 cutoff and an empty-date result.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            promotion_blocker:'isolated_independent_review_not_yet_performed'
+          },null,2)+'\n');
+          NODE
+
+      - name: Commit candidate atomically
+        shell: bash
+        env:
+          BASE_HEAD: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0031/$CANONICAL_ID"
+          git commit -m 'content: build batch 0031 product-sales Top100 candidate'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_HEAD"
+          git push origin "HEAD:$CONTENT_BRANCH"
