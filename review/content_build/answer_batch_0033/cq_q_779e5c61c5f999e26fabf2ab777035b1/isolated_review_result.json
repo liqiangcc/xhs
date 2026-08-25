@@ -1,0 +1,46 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_779e5c61c5f999e26fabf2ab777035b1",
+  "candidate_sha256": "2476f46b5937b4cc39a53bdc885b03351e250d0aaec26cbc16bf0d2f4164490a",
+  "reviewed_at": "2026-08-26",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0033-top-ten-students-sql-20260826-v2",
+  "review_version": "batch-0033.top-ten-students-sql.v2",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "note_img_txt/67ee3c15000000001c0327c9.txt",
+    "note_tagged/67ee3c15000000001c0327c9.json",
+    "review/content_build/answer_batch_0033/source_boundary_audit.md",
+    "review/candidates/answers/cq_q_779e5c61c5f999e26fabf2ab777035b1.md",
+    "review/content_build/answer_batch_0033/cq_q_779e5c61c5f999e26fabf2ab777035b1/sql_validation.json",
+    "review/content_build/answer_batch_0033/cq_q_779e5c61c5f999e26fabf2ab777035b1/top_ten_students.sql",
+    "review/content_build/answer_batch_0033/cq_q_779e5c61c5f999e26fabf2ab777035b1/sql_validation.py",
+    "config/answer_quality.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The stronger OCR source preserves only an SQL task to find students with top-ten grades; the tagged projection adds MySQL/SQL/LIMIT classification, but neither source preserves schema, score granularity, tie, NULL/no-score, version or output rules.",
+    "The candidate explicitly scopes its primary query to one non-NULL final score per scored student, at most ten rows, INNER JOIN exclusion of no-score students, and student_id as deterministic cutoff tie-breaker.",
+    "The primary fenced SQL is byte-for-byte identical to the executable fixture and produces correct empty, fewer-than-ten, and greater-than-ten results.",
+    "A cutoff tie is deterministically resolved by score DESC then student_id ASC; the answer correctly states this is a row-limit policy, not a claim that equal scores have different mathematical rank.",
+    "The answer separates exactly-ten-row LIMIT semantics from top-ten rank levels including ties, and distinguishes RANK from DENSE_RANK for MySQL 8+ follow-up semantics.",
+    "The answer fail-closes the one-student-many-course case by requiring an explicit aggregation metric before ranking instead of guessing AVG or SUM.",
+    "No placeholder SQL, source-fabricated schema, fabricated production claim or uncovered preserved source requirement remains."
+  ],
+  "promotion_blockers": [
+    "repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
