@@ -1,0 +1,183 @@
+name: Remediate Content Batch 0033 Missing Code Review Source
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0033-missing-code-review-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-missing-code-review-source
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7560e894f762ce0a02c9838d710a0b25
+  SOURCE_QID: 7560e894f762ce0a02c9838d710a0b25
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze source-first exclusion disposition
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='代码理解：给一段代码，分析其实现功能及潜在问题？';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67ee3c15000000001c0327c9.json','utf8'));
+          const row=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==expected) throw new Error('tagged source wording drifted');
+          const structured=JSON.parse(fs.readFileSync('note_structured/67ee3c15000000001c0327c9.json','utf8'));
+          if(!(structured.questions||[]).includes(expected)) throw new Error('structured source wording drifted');
+          const ocr=fs.readFileSync('note_img_txt/67ee3c15000000001c0327c9.txt','utf8');
+          const preserved='最后代码题给一段代码回答是在实现什么,';
+          if(!ocr.includes(preserved)||!ocr.includes('并且有哪些问题')) throw new Error('strong OCR source wording drifted');
+          if(/class\s+\w+|public\s+static|#include\s*<|def\s+\w+\s*\(|function\s+\w+\s*\(/.test(ocr)) throw new Error('OCR now appears to preserve a concrete code body; source must be re-audited instead of retired');
+          const raw=fs.readFileSync('note_json/67ee3c15000000001c0327c9.json','utf8');
+          if(!raw.includes('感觉面的时间好短')||raw.includes(expected)) throw new Error('raw note boundary unexpectedly changed');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])||Number(canon.frequency)!==1) throw new Error(`retirement is only safe for expected singleton Canonical: ${JSON.stringify(canon)}`);
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          let text=fs.readFileSync(boundary,'utf8');
+          const heading=`## ${cid}`;
+          const section=`\n## ${cid}\n\n- Exact repository projections: \`note_structured/67ee3c15000000001c0327c9.json\` and \`note_tagged/67ee3c15000000001c0327c9.json\`.\n- Stronger OCR source: \`note_img_txt/67ee3c15000000001c0327c9.txt\` preserves only \`最后代码题给一段代码回答是在实现什么, 并且有哪些问题\`; it does not preserve the code body.\n- Raw note JSON has only the generic post description and image metadata; the missing code is not recoverable there either.\n- Current projected wording: \`${expected}\`.\n- Disposition: fail closed as \`incomplete_or_unreadable\`. Without the actual code, neither its behavior nor its potential defects can be reviewed deterministically.\n- Required remediation: mark the tagged row invalid with an explicit reason, record the validity-audit exclusion, retire singleton Canonical \`${cid}\`, remove its ReviewProgress, archive its placeholder baseline Answer, rebuild Question/index/type projections, and preserve the invalid row as an explained non-Canonical projection.\n- A generic code-review checklist must not be promoted as if it answered the missing code sample.\n`;
+          if(!text.includes(heading)) fs.writeFileSync(boundary,text+section);
+          NODE
+
+      - name: Apply fail-closed singleton retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json,pathlib,shutil
+          root=pathlib.Path('.'); cid='cq_q_7560e894f762ce0a02c9838d710a0b25'; qid='7560e894f762ce0a02c9838d710a0b25'; text='代码理解：给一段代码，分析其实现功能及潜在问题？'; note_id='67ee3c15000000001c0327c9'
+          explanation='最强 OCR source 只保留“最后代码题给一段代码回答是在实现什么，并且有哪些问题”，实际代码正文没有被保存；raw note JSON 也只有通用描述和图片元数据。缺少代码就无法确定实现功能、缺陷、输入输出或语言语义，不能用通用 code review 清单代替，按 incomplete_or_unreadable fail closed。'
+          def rj(p): return json.loads(p.read_text(encoding='utf-8'))
+          def wj(p,v): p.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          def rjl(p): return [json.loads(x) for x in p.read_text(encoding='utf-8').splitlines() if x.strip()]
+          def wjl(p,rows): p.write_text(''.join(json.dumps(r,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n' for r in rows),encoding='utf-8')
+          note_path=root/f'note_tagged/{note_id}.json'; note=rj(note_path); matches=[(i,r) for i,r in enumerate(note.get('tagged_questions') or []) if r.get('question_id')==qid]
+          if len(matches)!=1 or matches[0][1].get('original_question')!=text: raise SystemExit('tagged source drifted')
+          idx,row=matches[0]; row['is_valid_for_library']=False; row['invalid_reason']='incomplete_or_unreadable'; wj(note_path,note)
+          audit_path=root/'config/question_validity_audit.json'; audit=rj(audit_path); decisions=audit.setdefault('decisions',[]); found=[d for d in decisions if d.get('source_note_id')==note_id and d.get('source_question_index')==idx]
+          if len(found)>1: raise SystemExit('duplicate validity decisions')
+          payload={'source_note_id':note_id,'source_question_index':idx,'question_id':qid,'original_question':text,'decision':'exclude','exclusion_reason':'incomplete_or_unreadable','exclusion_note':explanation}
+          if found: found[0].clear(); found[0].update(payload)
+          else: decisions.append(payload)
+          cp=root/'data/questions/canonical_questions.jsonl'; canon=rjl(cp); target=[r for r in canon if r.get('canonical_id')==cid]
+          if len(target)!=1 or target[0].get('question_ids')!=[qid] or int(target[0].get('frequency',0))!=1: raise SystemExit('Canonical retirement guard failed')
+          wjl(cp,[r for r in canon if r.get('canonical_id')!=cid])
+          qp=root/'data/questions/questions.jsonl'; wjl(qp,[r for r in rjl(qp) if r.get('canonical_id')!=cid and r.get('question_id')!=qid])
+          pp=root/'review/progress.json'; progress=rj(pp)
+          if isinstance(progress,dict) and isinstance(progress.get('items'),list): progress['items']=[r for r in progress['items'] if r.get('canonical_id')!=cid]
+          elif isinstance(progress,list): progress=[r for r in progress if r.get('canonical_id')!=cid]
+          elif isinstance(progress,dict): progress.pop(cid,None)
+          else: raise SystemExit('unexpected progress shape')
+          wj(pp,progress)
+          active=root/'review/answers'/f'{cid}.md'; archived=root/'review/archive/answers'/f'{cid}.md'; archived.parent.mkdir(parents=True,exist_ok=True)
+          if active.exists():
+              if archived.exists(): raise SystemExit('archive collision')
+              shutil.move(str(active),str(archived))
+          elif not archived.exists(): raise SystemExit('baseline answer missing')
+          for item in [root/'review/candidates/answers'/f'{cid}.md',root/'review/evidence'/f'{cid}.json']:
+              if item.exists():
+                  dest=root/'review/archive'/item.relative_to(root/'review'); dest.parent.mkdir(parents=True,exist_ok=True)
+                  if dest.exists(): raise SystemExit(f'archive collision {dest}')
+                  shutil.move(str(item),str(dest))
+          source_invalid=0
+          for p in sorted((root/'note_tagged').glob('*.json')):
+              try: n=rj(p)
+              except Exception: continue
+              source_invalid += sum(1 for r in n.get('tagged_questions') or [] if r.get('is_valid_for_library') is False)
+          audit['source_invalid_row_count']=source_invalid; audit['include_count']=sum(1 for d in decisions if d.get('decision')=='include'); audit['exclude_count']=sum(1 for d in decisions if d.get('decision')=='exclude'); audit['audited_at']='2026-08-26'; wj(audit_path,audit)
+          taskp=root/'tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md'; task=taskp.read_text(encoding='utf-8')
+          task=task.replace('- Canonical count: `8` active (`10` original source members; `2` fail-closed exclusions)','- Canonical count: `7` active (`10` original source members; `3` fail-closed exclusions)')
+          old=f'- `{cid}` — coding; risks: long_tail_baseline, placeholder_implementation'; new=f'- `{cid}` — retired; source-first exclusion: the source preserves the existence of a code-review task but not the code body required to answer it'
+          if old in task: task=task.replace(old,new)
+          elif new not in task: raise SystemExit('canonical list marker drifted')
+          marker='- [ ] Every candidate passes `answer audit --require-evidence`.'; line=f'- [x] `{cid}` was retired source-first: OCR preserves only that an unseen code sample had to be explained and reviewed; because the code body is absent, behavior and defects are not recoverable.'
+          if line not in task:
+              if marker not in task: raise SystemExit('completion marker missing')
+              task=task.replace(marker,marker+'\n'+line)
+          taskp.write_text(task.rstrip()+'\n',encoding='utf-8')
+          print('PASS staged missing-code singleton retirement')
+          PY
+
+      - name: Rebuild and verify full repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+          python3 <<'PY'
+          import json,pathlib
+          root=pathlib.Path('.'); cid='cq_q_7560e894f762ce0a02c9838d710a0b25'; qid='7560e894f762ce0a02c9838d710a0b25'
+          canon=[json.loads(x) for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          if any(r.get('canonical_id')==cid for r in canon): raise SystemExit('retired Canonical remains')
+          qs=[json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]; rows=[r for r in qs if r.get('question_id')==qid]
+          if len(rows)!=1 or rows[0].get('canonical_id') is not None or rows[0].get('is_valid_for_library') is not False or rows[0].get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit(f'invalid projection incorrect: {rows}')
+          progress=json.loads((root/'review/progress.json').read_text(encoding='utf-8')); items=progress.get('items',[]) if isinstance(progress,dict) else progress
+          if any(r.get('canonical_id')==cid for r in items): raise SystemExit('ReviewProgress remains')
+          if (root/'review/answers'/f'{cid}.md').exists() or not (root/'review/archive/answers'/f'{cid}.md').exists(): raise SystemExit('archive state invalid')
+          task=(root/'tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md').read_text(encoding='utf-8')
+          if '- Canonical count: `7` active' not in task or f'- [x] `{cid}` was retired source-first' not in task: raise SystemExit('task disposition missing')
+          print('PASS missing code-review body retained only as explained invalid projection')
+          PY
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during missing-code retirement: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: retire unrecoverable batch 0033 missing-code projection'
+          git push origin "HEAD:$CONTENT_BRANCH"
