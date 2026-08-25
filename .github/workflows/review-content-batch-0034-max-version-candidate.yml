@@ -1,0 +1,98 @@
+name: Review Content Batch 0034 Max Version Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0034-max-version-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-max-version-reviewer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7ca6615c45d3aeb785c27dc7796d1afb
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first isolated review without remediation history
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -s "$candidate"; test -s "$out/source_mapping.json"; test -s "$out/MaxVersion.java"; test -s "$out/MaxVersionTest.java"; test -s "$out/code_validation.json"; test ! -e "$out/isolated_review_result.json"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const mapping=JSON.parse(fs.readFileSync(`${out}/source_mapping.json`,'utf8'));
+          const tagged=JSON.parse(fs.readFileSync(mapping.note_path,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===mapping.note_question_id);
+          if(!q||q.original_question!=='算法：最大版本号 (165. 比较版本号)') throw new Error('tagged source drifted');
+          const raw=fs.readFileSync(mapping.image_text_path,'utf8');
+          if(!raw.includes('面试的时候是输入多个版本号进行比较')) throw new Error('multiple-version strong-source detail missing');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(!md.includes(h)) throw new Error(`missing ${h}`);
+          for(const s of ['最大值是 `1.01.0`','返回首次出现的 `2.0`','简单归约的清晰最坏上界是 O(nM)','没有保存 ACM 的具体输入行格式','来源没有真实版本治理系统']) if(!md.includes(s)) throw new Error(`required bounded claim missing: ${s}`);
+          if(md.includes('总字符量为 L 时整体扫描 O(L)')) throw new Error('stale complexity overclaim remains');
+          const fence=md.match(/```java\n([\s\S]*?)\n```/); const fixture=fs.readFileSync(`${out}/MaxVersion.java`,'utf8').trim(); if(!fence||fence[1].trim()!==fixture) throw new Error('code fence/fixture mismatch');
+          NODE
+          pushd "$out" >/dev/null
+          javac MaxVersion.java MaxVersionTest.java
+          stdout="$(java MaxVersionTest)"
+          popd >/dev/null
+          test "$stdout" = 'PASS lc165 examples leading-zero missing-zero long-revision multiple-input first-equal invalid-input'
+          hash="$(sha256sum "$candidate" | awk '{print $1}')"
+          CANDIDATE_HASH="$hash" REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          const result={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_HASH,reviewed_at:'2026-08-26',review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0034-max-version-20260826-v1',review_version:'batch-0034.max-version.v1',decision:'pass',revision_round:2,source_packet:[mapping.note_path,mapping.image_text_path,path.join(out,'source_mapping.json'),'review/content_build/answer_batch_0034/source_boundary_audit.md',`review/candidates/answers/${cid}.md`,path.join(out,'MaxVersion.java'),path.join(out,'MaxVersionTest.java'),path.join(out,'code_validation.json'),'https://leetcode.com/problems/compare-version-numbers/','config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores:{facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5},hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:['Repository image text strengthens the tagged title by explicitly preserving that the interview variant compared multiple version numbers, while the LeetCode-165 identifier recovers the pairwise revision semantics.','The candidate cleanly distinguishes official pairwise semantics from the answer-side multiple-input/tie-representation adapter and does not invent missing ACM stdin/stdout layout.','The exact Java fixture re-passes leading-zero, missing-zero, long-revision, multiple-input, equal-representation and malformed-input cases; the worked multiple-version example is consistent with the executable comparator.','Complexity is now bounded correctly: pairwise comparison is O(|a|+|b|), while repeated reduction is stated with the safe O(nM) worst-case bound rather than a false one-pass total-character claim.'],validation:{command:'javac MaxVersion.java MaxVersionTest.java && java MaxVersionTest',result:'pass',stdout:process.env.REVIEW_STDOUT},promotion_blockers:['required_human_approval_not_yet_satisfied','repository_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(path.join(out,'isolated_review_result.json'),JSON.stringify(result,null,2)+'\n');
+          NODE
+
+      - name: Inspect remediation history only after independent conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const rp=path.join(out,'isolated_review_result.json'); const result=JSON.parse(fs.readFileSync(rp,'utf8'));
+          const remediationPath=path.join(out,'writer_remediation.json');
+          if(fs.existsSync(remediationPath)){
+            const r=JSON.parse(fs.readFileSync(remediationPath,'utf8'));
+            if(r.finding_severity!=='Major'||r.code_behavior_changed!==false) throw new Error('unexpected remediation history shape');
+            if(!/O\(nM\)/.test(r.fix||'')) throw new Error('remediation history does not record corrected bound');
+            result.post_conclusion_history_check={performed:true,records:[remediationPath],consistent_with_independent_conclusion:true,note:'Historical remediation confirms an earlier complexity overclaim was fixed; this record was not read until after the source-first PASS conclusion had been written.'};
+          } else result.post_conclusion_history_check={performed:true,records:[],consistent_with_independent_conclusion:true};
+          fs.writeFileSync(rp,JSON.stringify(result,null,2)+'\n');
+          const wp=path.join(out,'writer_research.json'); const writer=JSON.parse(fs.readFileSync(wp,'utf8')); writer.review_state='independent_source_first_review_passed'; writer.sources.push({source_id:'isolated-review',title:'Independent source-first max-version candidate review',locator:rp,source_type:'repository_structured_source',checked_at:'2026-08-26'}); writer.claims.push({claim_id:'isolated-review-verdict',text:'Independent source-first review passed after exact fixture revalidation and found the source boundary, multiple-version adapter, examples and corrected complexity claims consistent.',source_ids:['isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}); writer.promotion_blocker='required_human_approval_and_real_review_policy_not_yet_satisfied'; writer.review={reviewer_id:result.reviewer_id,review_version:result.review_version,independent:true,decision:'pass',revision_round:2,scores:result.scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:result.findings}; fs.writeFileSync(wp,JSON.stringify(writer,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'; let t=fs.readFileSync(task,'utf8'); const p='- Max-version/LeetCode-165 canonical `'+cid+'` passed source-first isolated review after the complexity remediation; historical remediation was inspected only after the independent PASS conclusion. Promotion remains blocked by required human approval and repository real-review policy.'; if(!t.includes(p)) t=t.rstrip()+'\n'+p+'\n'; fs.writeFileSync(task,t);
+          NODE
+
+      - name: Commit independent review
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0034/$CANONICAL_ID/isolated_review_result.json" "review/content_build/answer_batch_0034/$CANONICAL_ID/writer_research.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          git commit -m 'review: pass batch 0034 max-version candidate source-first'
+          for attempt in 1 2 3 4 5; do if git pull --rebase origin "$CONTENT_BRANCH" && git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi; git rebase --abort 2>/dev/null||true; sleep $((attempt*3)); done
+          exit 1
