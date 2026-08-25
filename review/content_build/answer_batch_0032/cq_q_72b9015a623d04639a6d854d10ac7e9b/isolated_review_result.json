@@ -1,0 +1,45 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_72b9015a623d04639a6d854d10ac7e9b",
+  "candidate_sha256": "fa69e0c157cc9b370dad9cf9997f6f668f83d9cffe91e3f1334d08f740df93e3",
+  "reviewed_at": "2026-08-25",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0032-distinct-string-permutations-20260825",
+  "review_version": "batch-0032.distinct-string-permutations.v1",
+  "decision": "pass",
+  "revision_round": 0,
+  "source_packet": [
+    "review/reports/ANSWER_BATCH_0032_SOURCE_PACKET.json",
+    "review/content_build/answer_batch_0032/source_boundary_audit.md",
+    "review/candidates/answers/cq_q_72b9015a623d04639a6d854d10ac7e9b.md",
+    "review/content_build/answer_batch_0032/cq_q_72b9015a623d04639a6d854d10ac7e9b/code_validation.json",
+    "config/answer_quality.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The exact repository source asks only for all permutations of a string with no repeated characters; it does not prescribe language, result order, empty-input semantics or character encoding.",
+    "The candidate explicitly marks Java, Unicode code-point handling, empty-string-as-one-empty-permutation, duplicate-input rejection and unspecified output order as answer-side contracts rather than recovered source constraints.",
+    "The swap-and-restore backtracking invariant is correct: positions before first are fixed for the current branch, each remaining position is chosen exactly once for first, and the swap is restored before the next sibling branch.",
+    "Because the preserved input precondition excludes repeated characters, the candidate correctly avoids unnecessary per-level duplicate suppression while explaining how the contract would change if duplicates were allowed.",
+    "Independent validation compiles the actual candidate and compares its result set with a separately implemented lexicographic next-permutation oracle across 148 deterministic mixed ASCII/Unicode inputs of lengths zero through eight.",
+    "The independent oracle also verifies that no duplicate outputs are emitted, non-BMP code points remain intact, repeated input code points fail closed, and null is rejected rather than silently mapped to a value.",
+    "The O(n * n!) total-output time and O(n) auxiliary recursion/state claims are consistent with a result set containing n! strings of length n; the candidate separately accounts for O(n * n!) output storage when materializing the list.",
+    "The answer makes the factorial growth boundary operational by warning that large n should use streaming/callback consumption when full materialization is unnecessary.",
+    "No project experience is fabricated."
+  ],
+  "promotion_blockers": [
+    "repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}

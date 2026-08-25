@@ -11,5 +11,14 @@
     "non-BMP Unicode code point remains one logical character",
     "duplicate-character input fails closed because it violates the preserved source precondition",
     "for distinct inputs of lengths 0 through 8, output count is n!, every output is unique, and every output preserves the input character multiset"
+  ],
+  "independent_command": "compile actual candidate; javac StringPermutations.java StringPermutationsIndependentTest.java; java StringPermutationsIndependentTest",
+  "independent_stdout": "PASS actual-candidate lexicographic-independent-oracle cases=148 n=0..8 mixed-unicode duplicate-codepoint=rejected null=rejected",
+  "boundary_tests": [
+    {"case":"empty input","expected":"one empty permutation under the explicit answer-side contract","actual":"pass","passed":true},
+    {"case":"distinct inputs n=0..8","expected":"candidate set equals independently enumerated lexicographic permutation set","actual":"pass across 148 mixed ASCII/Unicode cases","passed":true},
+    {"case":"non-BMP code point","expected":"logical character is not split into UTF-16 surrogate halves","actual":"pass","passed":true},
+    {"case":"duplicate code point","expected":"fail closed because source precondition says no repeated characters","actual":"IllegalArgumentException","passed":true},
+    {"case":"null input","expected":"implementation rejects null rather than fabricating a permutation","actual":"NullPointerException","passed":true}
   ]
 }
