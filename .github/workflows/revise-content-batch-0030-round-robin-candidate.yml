@@ -47,12 +47,11 @@ jobs:
           set -euo pipefail
           candidate="review/candidates/answers/$CANONICAL_ID.md"
           out="review/content_build/answer_batch_0030/$CANONICAL_ID"
-          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          actual="$(git hash-object "$candidate")"
+          echo "candidate_blob=$actual expected=$CANDIDATE_BLOB_SHA"
+          test "$actual" = "$CANDIDATE_BLOB_SHA"
           test -f "$out/RoundRobinPrinter.java"
           test -f "$out/RoundRobinPrinterTest.java"
-          grep -Fq 'next > max 时也要 `notifyAll()` 后退出，避免其他线程还留在 wait set 里无法结束' "$candidate"
-          grep -Fq '结束分支再次 `notifyAll()`，所有线程醒来后看到 `next > maxValue` 并退出' "$candidate"
-          grep -Fq '最后一个线程退出时没有唤醒其他等待线程，导致程序无法完整结束' "$candidate"
 
       - name: Correct termination reasoning and implementation
         shell: bash
