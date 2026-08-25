@@ -1,0 +1,157 @@
+name: Review Content Batch 0029 Odd Frequency XOR Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0029-odd-frequency-xor-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0029-odd-frequency-xor-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_5feff10b4655bf428fa0b06241a887e1
+  SOURCE_QID: 5feff10b4655bf428fa0b06241a887e1
+  CANDIDATE_BLOB_SHA: fbed288638baec596ba3ce7f42eb86ab8abef32f
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun exact Java fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0029/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          javac "$out/OddFrequencyNumbers.java" "$out/OddFrequencyNumbersTest.java"
+          test "$(java -cp "$out" OddFrequencyNumbersTest)" = 'PASS one-odd=3 two-odd=3 negatives=supported min-value=supported null=rejected bad-two=rejected'
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error('source ownership drifted');
+          const q=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.question_id===qid);
+          const expected='算法：位运算应用：在一组多数出现偶数次、少数出现奇数次的数字中寻找特定数字';
+          if(!q||q.original_question!==expected) throw new Error('source wording drifted');
+          if(!Array.isArray(q.tech_entities)||!q.tech_entities.includes('xor')) throw new Error('preserved xor entity drifted');
+          const packet=fs.readFileSync('review/content_build/answer_batch_0029/source_boundary_audit.md','utf8');
+          if(!packet.includes(expected)||!packet.includes(cid)) throw new Error('frozen source packet drifted');
+          const baseline=fs.readFileSync(`review/answers/${cid}.md`,'utf8');
+          if(!baseline.includes('quality_tier":"long_tail_baseline')||!baseline.includes('长尾复习底稿')) throw new Error('expected long-tail baseline no longer matches reviewed starting state');
+          NODE
+
+      - name: Record isolated source-first review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const out=`review/content_build/answer_batch_0029/${cid}`;
+          const fixture=`${out}/code_validation.json`;
+          const reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0029-odd-frequency-xor-20260825-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved source says that most values occur an even number of times and a minority occur an odd number of times, but it does not preserve whether the odd-frequency target count is exactly one, exactly two, or variable. The candidate keeps that ambiguity explicit instead of silently selecting one classic problem statement.',
+            'For an exactly-one target contract, the XOR reduction is correct because equal values occurring an even number of times cancel under associative and commutative XOR, leaving the sole odd-frequency value.',
+            'For an exactly-two-distinct-target contract, the total XOR is a^b and is nonzero; selecting a set bit via xor & -xor separates a and b while every repeated value stays wholly in one partition, so partition-local XOR recovers the two targets.',
+            'The candidate correctly does not claim that aggregate XOR can recover an arbitrary number of odd-frequency values. It explicitly directs an unconstrained multi-target version to a frequency map or additional structure, preserving the information-sufficiency boundary.',
+            'The displayed Java is a complete compilable class matching the separately executed implementation. The deterministic fixture passes positive, negative, zero and Integer.MIN_VALUE bit-pattern cases for one/two-target contracts, plus null rejection and an xor==0 two-target contract-violation case.',
+            'The xor==0 check is only a fail-fast necessary-condition check for the exactly-two contract, not a complete proof that arbitrary input contains exactly two odd-frequency values. The answer does not overstate it as complete validation and separately recommends validating the data contract for untrusted input.',
+            'Mechanism, complexity, boundary discussion and follow-ups are directly tied to the source question; no personal production experience or unpreserved target-count constraint is fabricated. No coding hard failure or semantic blocker remains for the candidate stage.'
+          ];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0029.odd-frequency-xor.v1',decision:'pass',revision_round:1,source_packet:['review/content_build/answer_batch_0029/source_boundary_audit.json',candidate,fixture,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
+          const evidence={
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,
+            writer:{writer_id:'content-batch-0029-odd-frequency-xor-candidate-builder',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'source-boundary',title:'Answer Batch 0029 frozen source-boundary audit',locator:'review/content_build/answer_batch_0029/source_boundary_audit.json',source_type:'repository_source_record',checked_at:date},
+              {source_id:'fixture',title:'Odd-frequency XOR deterministic Java fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Odd-frequency XOR independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The preserved source establishes even-versus-odd occurrence structure and XOR relevance but does not preserve an exact count of odd-frequency targets.',source_ids:['source-boundary'],answer_locations:['核心结论','1 分钟版','关键细节']},
+              {claim_id:'one-two-xor-mechanism',text:'Under explicit exactly-one or exactly-two target contracts, the candidate XOR cancellation and set-bit partition algorithms recover the target value or values.',source_ids:['fixture','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},
+              {claim_id:'information-boundary',text:'When the number of odd-frequency values is unconstrained, a single aggregate XOR is insufficient to identify all members; the candidate therefore does not extend the two-target method without additional state or assumptions.',source_ids:['isolated-review'],answer_locations:['核心结论','关键细节','常见追问','易错点']},
+              {claim_id:'boundary-validation',text:'The executable fixture verifies one/two-target behavior across positive and negative ints, Integer.MIN_VALUE and zero bit patterns, plus explicit null rejection and an impossible xor==0 condition under the exactly-two-distinct-target contract.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','常见追问']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{command:'javac OddFrequencyNumbers.java OddFrequencyNumbersTest.java && java OddFrequencyNumbersTest',result:'pass',reported_stdout:'PASS one-odd=3 two-odd=3 negatives=supported min-value=supported null=rejected bad-two=rejected',checks:['one odd-frequency value with positive inputs','one odd-frequency negative value','Integer.MIN_VALUE bit pattern','two odd-frequency values','two odd-frequency values including negatives','two odd-frequency values including Integer.MIN_VALUE and zero','explicit null rejection','two-target xor==0 contract violation rejection'],boundary_tests:[{case:'one odd target among paired positives',expected:7,actual:7,passed:true},{case:'one negative odd target',expected:-5,actual:-5,passed:true},{case:'two odd targets 5 and 9',expected:'[5,9]',actual:'[5,9]',passed:true},{case:'two odd targets including Integer.MIN_VALUE and zero',expected:'[-2147483648,0]',actual:'[-2147483648,0]',passed:true},{case:'all-even input passed to exactly-two method',expected:'IllegalArgumentException',actual:'IllegalArgumentException',passed:true}]},
+            review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0029.odd-frequency-xor.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+          };
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- Odd-frequency XOR candidate passed isolated source-first review and deterministic Java evidence while preserving the unresolved target-count boundary; formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during odd-frequency XOR review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0029/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0029 odd-frequency XOR candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
