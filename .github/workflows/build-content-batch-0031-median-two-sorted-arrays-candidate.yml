@@ -1,0 +1,299 @@
+name: Build Content Batch 0031 Median Two Sorted Arrays Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0031-median-two-sorted-arrays-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-median-two-sorted-arrays-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6fef2a666fc368e6c247fe3bf666a855
+  SOURCE_QID: 6fef2a666fc368e6c247fe3bf666a855
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify singleton source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/689a0b3f000000002501b5bc.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法手撕：寻找两个正序数组的中位数（Median of Two Sorted Arrays，力扣 4）。';
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('tagged source drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0031/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error('source context missing');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and executable oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6fef2a666fc368e6c247fe3bf666a855","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 寻找两个正序数组的中位数（Median of Two Sorted Arrays）
+
+          ## 核心结论
+
+          两个数组都已经非递减有序，真正要利用的是“**不合并也能确定左右两半的分界**”。在较短数组上二分切分位置 `i`，另一个数组的切分位置由左半部分总元素数唯一确定为 `j = (m+n+1)/2 - i`。当 `Aleft <= Bright` 且 `Bleft <= Aright` 时，说明两个数组合起来的左半部分所有元素都不大于右半部分所有元素；此时中位数只由四个边界值决定。
+
+          题源保留了“两个正序数组的中位数 / LeetCode 4”，但没有保存 Java API、null 行为等接口细节。这里明确采用答案侧契约：输入为两个非 `null`、各自非递减排序的 `int[]`，至少一个非空；不额外扫描验证“是否有序”，因为那会把目标 `O(log(min(m,n)))` 算法退化为线性预检查。
+
+          ## 1 分钟版
+
+          - 始终在较短数组 `A` 上二分，保证分区位置合法区间短，复杂度 `O(log(min(m,n)))`。
+          - 目标左半元素数是 `(m+n+1)/2`，这样奇数总长度时左半比右半多一个。
+          - 对当前切分 `i`，另一数组切分 `j` 被固定下来；只检查四个边界 `Aleft/Aright/Bleft/Bright`。
+          - 若 `Aleft > Bright`，A 切得太靠右，`high = i-1`；若 `Bleft > Aright`，A 切得太靠左，`low = i+1`。
+          - 合法分区时：总长度奇数返回 `max(Aleft,Bleft)`；偶数返回 `(maxLeft + minRight)/2.0`。
+          - 偶数求和要先提升到 `long`，否则两个 `int` 极值相加可能溢出。
+
+          ## 3 分钟版
+
+          假设短数组长度为 `m`，长数组长度为 `n`。我们不是在值域上二分，而是在“短数组拿多少个元素放进合并后左半部分”这个位置上二分。
+
+          对切分位置 `i`：
+
+          - `A` 左边有 `i` 个，右边有 `m-i` 个；
+          - 左半总数固定为 `leftSize = (m+n+1)/2`，所以 `B` 必须切在 `j = leftSize-i`；
+          - 用负无穷/正无穷处理切在数组首尾的情况。
+
+          当且仅当交叉边界满足 `Aleft <= Bright && Bleft <= Aright`，当前分区才是合并有序序列的正确中间分区。数组内部本来已经有序，所以无需比较左半内部或右半内部的其它元素。
+
+          ```java
+          public final class MedianTwoSortedArrays {
+              private MedianTwoSortedArrays() {}
+
+              public static double median(int[] nums1, int[] nums2) {
+                  if (nums1 == null || nums2 == null) {
+                      throw new IllegalArgumentException("arrays must be non-null");
+                  }
+                  if (nums1.length + nums2.length == 0) {
+                      throw new IllegalArgumentException("at least one array must be non-empty");
+                  }
+                  if (nums1.length > nums2.length) return median(nums2, nums1);
+
+                  int m = nums1.length;
+                  int n = nums2.length;
+                  int leftSize = (m + n + 1) / 2;
+                  int low = 0, high = m;
+
+                  while (low <= high) {
+                      int i = low + (high - low) / 2;
+                      int j = leftSize - i;
+
+                      long aLeft  = i == 0 ? Long.MIN_VALUE : nums1[i - 1];
+                      long aRight = i == m ? Long.MAX_VALUE : nums1[i];
+                      long bLeft  = j == 0 ? Long.MIN_VALUE : nums2[j - 1];
+                      long bRight = j == n ? Long.MAX_VALUE : nums2[j];
+
+                      if (aLeft <= bRight && bLeft <= aRight) {
+                          long maxLeft = Math.max(aLeft, bLeft);
+                          if (((m + n) & 1) == 1) return maxLeft;
+                          long minRight = Math.min(aRight, bRight);
+                          return (maxLeft + minRight) / 2.0;
+                      }
+                      if (aLeft > bRight) high = i - 1;
+                      else low = i + 1;
+                  }
+                  throw new IllegalArgumentException("inputs must be sorted non-decreasingly");
+              }
+          }
+          ```
+
+          最后的异常只是防御性兜底：在“两个输入确实有序”的题目契约下，一定存在合法分区。实现没有先 `O(m+n)` 验证排序，否则就失去了这道题要求利用有序性的核心收益。
+
+          ## 关键细节
+
+          - **为什么只二分短数组**：如果在长数组随意切，推导出来的 `j` 可能大量越界；在短数组的 `[0,m]` 上二分且 `m<=n`，目标左半规模保证存在合法组合。
+          - **为什么是 `(m+n+1)/2`**：奇数长度时把中位数包含在左半，统一成“奇数取左侧最大值”；偶数时两边等长。
+          - **首尾切分**：`i=0` 表示 A 左半为空，`i=m` 表示 A 右半为空。使用逻辑上的 ±∞ 后，交叉边界判断仍保持同一形式。
+          - **重复值**：条件用 `<=` 而不是 `<`，所以重复元素不会破坏合法分区。
+          - **极值溢出**：输入是 `int`，但边界变量和偶数中位数求和使用 `long`，覆盖 `Integer.MIN_VALUE/MAX_VALUE`。
+          - **一个数组为空**：短数组二分区间只有 `i=0`，算法自然退化为从另一个有序数组中间取值，不需要特殊合并逻辑。
+          - **两个数组都空**：中位数没有定义，当前答案侧契约显式拒绝。
+          - **是否验证排序**：题源已经给“正序数组”。全量验证排序需要 `O(m+n)`；若工程 API 面向不可信输入，应在接口层另行校验，并承认复杂度改变。
+
+          ## 原理机制
+
+          设正确分区左边集合为 `L`、右边集合为 `R`。中位数问题只需要满足两个条件：`|L|` 与 `|R|` 相等或左边多 1 个，并且 `max(L) <= min(R)`。第一个条件通过 `leftSize` 和 `j=leftSize-i` 强制满足；第二个条件因为每个数组内部已经有序，只需检查跨数组的两个可能冲突：`Aleft <= Bright` 和 `Bleft <= Aright`。
+
+          如果 `Aleft > Bright`，说明从 A 拿到左边的元素太多，必须把 `i` 向左移；反之若 `Bleft > Aright`，A 左边拿得太少，必须把 `i` 向右移。这两个方向具有单调性，因此可以二分，而不是逐个尝试所有切分位置。
+
+          合法分区后，奇数总长度的中位数就是左半最大值；偶数则是左半最大与右半最小的平均值。整个过程不构造合并数组，额外空间 `O(1)`。
+
+          ## 项目经验版
+
+          来源是算法题，没有真实业务数组规模、数据分布或线上延迟指标，因此不虚构项目经历。工程里如果两个“有序集合”来自远端存储或分页接口，随机访问成本可能远高于内存数组，此时应先重新评估访问模型；这道题的 `O(log(min(m,n)))` 结论建立在数组随机访问为 `O(1)` 的模型上。
+
+          ## 常见追问
+
+          - 问：为什么不能直接归并到一半？答：可以做到 `O(m+n)` 时间和 `O(1)` 额外空间，但没有充分利用两个数组都已排序这一条件；二分分区把时间降到 `O(log(min(m,n)))`。
+          - 问：为什么合法分区只看四个边界？答：每个数组内部左右两段已经分别有序，唯一可能破坏“所有左边 <= 所有右边”的是两个跨数组边界，因此检查 `Aleft<=Bright` 与 `Bleft<=Aright` 就足够。
+          - 问：为什么 `Aleft > Bright` 时向左？答：A 左半最后一个元素已经比 B 右半第一个元素大，说明 A 放进左半的元素过多；减小 `i` 才可能消除这个交叉冲突。
+          - 问：偶数长度为什么要用 `long`？答：例如两个中间值都是 `Integer.MAX_VALUE`，先按 `int` 相加会溢出；提升后求和再除以 `2.0` 才安全。
+          - 问：如果一个数组为空呢？答：分区法仍成立，空数组左右边界由 ±∞ 哨兵表示，中位数直接由另一个数组中间元素决定。
+          - 问：要不要检查输入真的有序？答：算法题契约已经声明有序；若额外线性检查，会改变目标复杂度。面向不可信调用方的工程接口可以单独选择校验，但要明确成本。
+
+          ## 易错点
+
+          - 在较长数组上二分，导致另一数组分区位置难以保持合法范围。
+          - 把 `leftSize` 写成 `(m+n)/2` 后又没有正确处理奇偶，产生 off-by-one。
+          - 分区切在首尾时直接访问 `i-1/i` 或 `j-1/j` 越界。
+          - 合法条件只检查一个方向，漏掉 `Bleft > Aright`。
+          - 偶数中位数先用 `int` 相加，极值时溢出。
+          - 为了“健壮”先扫描验证排序，却仍宣称整体是 `O(log(min(m,n)))`。
+          EOF
+
+          cat > "$out/MedianTwoSortedArrays.java" <<'JAVA'
+          public final class MedianTwoSortedArrays {
+              private MedianTwoSortedArrays() {}
+
+              public static double median(int[] nums1, int[] nums2) {
+                  if (nums1 == null || nums2 == null) throw new IllegalArgumentException("arrays must be non-null");
+                  if (nums1.length + nums2.length == 0) throw new IllegalArgumentException("at least one array must be non-empty");
+                  if (nums1.length > nums2.length) return median(nums2, nums1);
+                  int m = nums1.length, n = nums2.length;
+                  int leftSize = (m + n + 1) / 2;
+                  int low = 0, high = m;
+                  while (low <= high) {
+                      int i = low + (high - low) / 2;
+                      int j = leftSize - i;
+                      long aLeft = i == 0 ? Long.MIN_VALUE : nums1[i - 1];
+                      long aRight = i == m ? Long.MAX_VALUE : nums1[i];
+                      long bLeft = j == 0 ? Long.MIN_VALUE : nums2[j - 1];
+                      long bRight = j == n ? Long.MAX_VALUE : nums2[j];
+                      if (aLeft <= bRight && bLeft <= aRight) {
+                          long maxLeft = Math.max(aLeft, bLeft);
+                          if (((m + n) & 1) == 1) return maxLeft;
+                          long minRight = Math.min(aRight, bRight);
+                          return (maxLeft + minRight) / 2.0;
+                      }
+                      if (aLeft > bRight) high = i - 1;
+                      else low = i + 1;
+                  }
+                  throw new IllegalArgumentException("inputs must be sorted non-decreasingly");
+              }
+          }
+          JAVA
+
+          cat > "$out/MedianTwoSortedArraysTest.java" <<'JAVA'
+          import java.util.Arrays;
+          import java.util.Random;
+
+          public final class MedianTwoSortedArraysTest {
+              private static double reference(int[] a, int[] b) {
+                  int[] merged = new int[a.length + b.length];
+                  int i = 0, j = 0, k = 0;
+                  while (i < a.length || j < b.length) {
+                      if (j == b.length || (i < a.length && a[i] <= b[j])) merged[k++] = a[i++];
+                      else merged[k++] = b[j++];
+                  }
+                  int n = merged.length;
+                  if ((n & 1) == 1) return merged[n / 2];
+                  return ((long) merged[n / 2 - 1] + merged[n / 2]) / 2.0;
+              }
+
+              private static void check(int[] a, int[] b) {
+                  double expected = reference(a, b);
+                  double actual = MedianTwoSortedArrays.median(a, b);
+                  if (Double.compare(expected, actual) != 0) throw new AssertionError(Arrays.toString(a) + " / " + Arrays.toString(b) + " expected=" + expected + " actual=" + actual);
+              }
+
+              private static int[] randomSorted(Random random, int n) {
+                  int[] out = new int[n];
+                  for (int i = 0; i < n; i++) out[i] = random.nextInt(41) - 20;
+                  Arrays.sort(out);
+                  return out;
+              }
+
+              public static void main(String[] args) {
+                  check(new int[]{1,3}, new int[]{2});
+                  check(new int[]{1,2}, new int[]{3,4});
+                  check(new int[]{}, new int[]{1,2,3,4});
+                  check(new int[]{0,0}, new int[]{0,0});
+                  check(new int[]{-5,-3,-1}, new int[]{2,4,6,8});
+                  check(new int[]{Integer.MIN_VALUE}, new int[]{Integer.MAX_VALUE});
+                  check(new int[]{Integer.MAX_VALUE}, new int[]{Integer.MAX_VALUE});
+                  try { MedianTwoSortedArrays.median(new int[]{}, new int[]{}); throw new AssertionError("both empty must fail"); }
+                  catch (IllegalArgumentException expected) {}
+                  try { MedianTwoSortedArrays.median(null, new int[]{1}); throw new AssertionError("null must fail"); }
+                  catch (IllegalArgumentException expected) {}
+
+                  Random random = new Random(0x6fef2a66L);
+                  int cases = 5000;
+                  for (int t = 0; t < cases; t++) {
+                      int m = random.nextInt(21), n = random.nextInt(21);
+                      if (m + n == 0) n = 1;
+                      check(randomSorted(random, m), randomSorted(random, n));
+                  }
+                  System.out.println("PASS fixed=7 random-oracle=5000 odd-even=yes empty-side=yes duplicates=yes extremes=yes overflow-safe=yes invalid-empty-null=rejected");
+              }
+          }
+          JAVA
+
+          javac "$out/MedianTwoSortedArrays.java" "$out/MedianTwoSortedArraysTest.java"
+          stdout="$(java -cp "$out" MedianTwoSortedArraysTest)"
+          test "$stdout" = 'PASS fixed=7 random-oracle=5000 odd-even=yes empty-side=yes duplicates=yes extremes=yes overflow-safe=yes invalid-empty-null=rejected'
+
+          STDOUT="$stdout" node - <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const out=`review/content_build/answer_batch_0031/${cid}`;
+          fs.writeFileSync(path.join(out,'source_boundary.json'),JSON.stringify({schema_version:'answer_source_boundary.v1',canonical_id:cid,checked_at:'2026-08-25',source_question_id:qid,source_wording:'算法手撕：寻找两个正序数组的中位数（Median of Two Sorted Arrays，力扣 4）。',preserved:['two sorted arrays','median','Median of Two Sorted Arrays / LeetCode 4 context'],not_preserved:['Java API','null behavior','whether both arrays can be empty','whether sortedness must be validated at runtime','numeric element type beyond the answer implementation'],answer_side_contract:{inputs:'two non-null int arrays sorted non-decreasingly; at least one non-empty',validation:'trust source sortedness instead of linear pre-scan',algorithm:'binary partition on shorter array',complexity:'O(log(min(m,n))) time and O(1) auxiliary space'}},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac MedianTwoSortedArrays.java MedianTwoSortedArraysTest.java && java MedianTwoSortedArraysTest',stdout:process.env.STDOUT,checks:['odd total length','even total length','one empty side','duplicates','negative/disjoint ranges','Integer.MIN/MAX extremes','overflow-safe even average','both-empty rejection','null rejection','5000 deterministic merge-oracle comparisons'],boundary_tests:[{case:'[1,3] and [2]',expected:'2.0',actual:'2.0',passed:true},{case:'[MIN] and [MAX]',expected:'-0.5 without int overflow',actual:'-0.5',passed:true},{case:'5000 sorted pairs, lengths 0..20',expected:'binary-partition result equals direct merge reference',actual:'all passed',passed:true}]},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Tagged Median of Two Sorted Arrays question',locator:`note_tagged/689a0b3f000000002501b5bc.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'Median binary-partition deterministic merge oracle',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The preserved source asks for the median of two sorted arrays (LeetCode 4 context) but does not preserve a Java API, null/empty contract or runtime sortedness-validation requirement.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'partition-behavior',text:'Under the declared int-array contract, binary partition on the shorter array matches a direct merge median oracle across fixed boundaries and 5000 deterministic generated sorted-array pairs, including extreme integer values.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Guard repository consistency and commit from stable head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during median build; discard local candidate and retry later."; exit 0; fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0031/$CANONICAL_ID"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0031 median-two-sorted-arrays candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
