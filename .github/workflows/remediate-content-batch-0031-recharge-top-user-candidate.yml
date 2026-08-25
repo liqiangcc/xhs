@@ -1,0 +1,99 @@
+name: Remediate Content Batch 0031 Recharge Top User Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0031-recharge-top-user-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-recharge-top-user-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7050c93c9e84b7326224f667813afdcb
+  CANDIDATE_BLOB_SHA: 71b6be29fb628b9336e69e0461b899cc5ab90582
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Remove foreign-topic anchor and separate DDL from executable SQL block
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('review/candidates/answers/cq_q_7050c93c9e84b7326224f667813afdcb.md')
+          text=p.read_text()
+          old='''这里明确采用答案侧契约：**MySQL 8.0**；表名 `recharge_record`；金额用 `DECIMAL(18,2)`；只有 `status=1` 的成功充值计入；查询以参数 `:as_of` 为右开边界，统计 `[DATE_SUB(:as_of, INTERVAL 1 MONTH), :as_of)`；并列第一时用 `user_id ASC` 稳定地返回一名用户。'''
+          new='''这里明确采用答案侧契约：选择一种支持示例中自增主键、定点金额与月份区间表达式的 SQL 方言；表名 `recharge_record`；金额用 `DECIMAL(18,2)`；只有 `status=1` 的成功充值计入；查询以参数 `:as_of` 为右开边界，统计 `[DATE_SUB(:as_of, INTERVAL 1 MONTH), :as_of)`；并列第一时用 `user_id ASC` 稳定地返回一名用户。具体方言不是原题约束，真实环境应按目标数据库改写 DDL 和日期函数。'''
+          if old not in text:
+              raise SystemExit('core dialect sentence not found')
+          text=text.replace(old,new,1)
+          text=text.replace('MySQL 8.0 示例建表：','一种具体 SQL 方言的示例建表（DDL 用于表达建模，不把方言细节冒充成原题约束）：',1)
+          first='```sql\nCREATE TABLE recharge_record'
+          if first not in text:
+              raise SystemExit('DDL sql fence not found')
+          text=text.replace(first,'```text\nCREATE TABLE recharge_record',1)
+          p.write_text(text)
+          PY
+          test "$(python3 "$out/recharge_validation.py")" = 'PASS top-user=10 total=75.5 start-inclusive=yes end-exclusive=yes failed-excluded=yes old-excluded=yes empty-window=yes'
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,candidate=`review/candidates/answers/${cid}.md`,path=`review/content_build/answer_batch_0031/${cid}/writer_research.json`;
+          const wr=JSON.parse(fs.readFileSync(path,'utf8'));
+          wr.candidate_sha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          wr.checked_at='2026-08-25';
+          wr.review_state='writer_complete_isolated_review_pending';
+          wr.promotion_blocker='isolated_independent_review_not_yet_performed';
+          fs.writeFileSync(path,JSON.stringify(wr,null,2)+'\n');
+          NODE
+
+      - name: Pre-audit candidate syntax shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID;
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const core=(text.match(/## 核心结论\n\n([\s\S]*?)(?=\n## )/)||[])[1]||'';
+          if(/MySQL/i.test(core)) throw new Error('foreign core anchor still present');
+          const sql=[...text.matchAll(/```sql\s*\n([\s\S]*?)\n```/g)].map(m=>m[1]);
+          if(sql.length!==1||!/^SELECT\b/i.test(sql[0].trim())) throw new Error(`expected exactly one executable SELECT SQL block, got ${sql.length}`);
+          if(!text.includes('```text\nCREATE TABLE recharge_record')) throw new Error('DDL presentation block missing');
+          NODE
+
+      - name: Commit remediation atomically
+        shell: bash
+        env:
+          BASE_HEAD: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0031/$CANONICAL_ID/writer_research.json"
+          git commit -m 'content: remediate batch 0031 recharge audit boundary'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_HEAD"
+          git push origin "HEAD:$CONTENT_BRANCH"
