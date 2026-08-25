@@ -1,0 +1,329 @@
+name: Build Content Batch 0030 Traversal Postorder Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0030-traversal-postorder-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-traversal-postorder-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6d58c327c55f005301c8a0b6759c1147
+  SOURCE_QID: 6d58c327c55f005301c8a0b6759c1147
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard preserved traversal source and canonical ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法：根据先序和中序遍历序列，给出后序序列';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/68307f6d0000000023017c20.json','utf8'));
+          const src=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected||src.question_type!=='算法手撕_Coding') throw new Error('tagged traversal source drifted');
+          if(!(src.tech_entities||[]).includes('二叉树')||!(src.tech_entities||[]).includes('树遍历')) throw new Error('tagged traversal entities drifted');
+          const structured=JSON.parse(fs.readFileSync('note_structured/68307f6d0000000023017c20.json','utf8'));
+          if(!(structured.questions||[]).includes(expected)) throw new Error('structured traversal source drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const q=qs.find(x=>x.question_id===qid);
+          if(!q||q.original_question!==expected||q.canonical_id!==cid) throw new Error('Question projection drifted');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error(`Canonical ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/traversal-context.json
+          node -e "const c=require('/tmp/traversal-context.json'); if(!c.ok||c.answer_type!=='coding') throw new Error('answer type drifted')"
+
+      - name: Write source-bounded candidate and exhaustive tree-shape fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0030/$cid"; candidate="review/candidates/answers/$cid.md"
+          mkdir -p "$out" review/candidates/answers
+          test ! -e "$candidate"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6d58c327c55f005301c8a0b6759c1147","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 根据先序和中序遍历序列得到后序序列
+
+          ## 核心结论
+
+          先序的第一个元素一定是当前子树根；在中序中找到根后，根左边就是左子树、右边就是右子树，由此还能得到左右子树节点数。于是可以不用真的构造树：按“左子树 → 右子树 → 根”的顺序递归，把后序结果直接写入输出数组。
+
+          但仓库原题只保留“根据先序和中序遍历序列，给出后序序列”，**没有说明节点值是否唯一、输入是否合法、数据规模和函数签名**。下面给出的 O(n) 实现明确采用“节点值唯一，且两条序列来自同一棵合法二叉树”的常见合同；如果节点值允许重复，仅靠值序列通常不能唯一确定后序结果，必须有节点 identity/额外约束或接受多解。
+
+          ## 1 分钟版
+
+          - 先序 `preorder[preL]` 是当前子树根。
+          - 用哈希表保存 `value -> inorderIndex`，O(1) 期望时间定位根在中序中的位置。
+          - `leftSize = rootIndex - inL`，所以左子树对应先序 `[preL+1, preL+leftSize]`，右子树紧随其后。
+          - 不必建树；递归先处理左区间，再处理右区间，最后把根写入后序数组。
+          - 每个节点只处理一次，建索引 O(n)，递归 O(n)，总时间 O(n)，索引 O(n)，递归栈最坏 O(n)。
+          - 若节点值重复，先序+中序按“值”可能有歧义。例如 `pre=[1,1,2]`、`in=[1,1,2]` 可以对应不同后序，因此当前实现 fail-fast 拒绝重复值。
+
+          ## 3 分钟版
+
+          ```java
+          static int[] toPostorder(int[] preorder, int[] inorder) {
+              if (preorder == null || inorder == null || preorder.length != inorder.length) {
+                  throw new IllegalArgumentException("length mismatch");
+              }
+              int n = preorder.length;
+              Map<Integer, Integer> inIndex = new HashMap<>();
+              for (int i = 0; i < n; i++) {
+                  if (inIndex.put(inorder[i], i) != null) {
+                      throw new IllegalArgumentException("duplicate node value");
+                  }
+              }
+              Set<Integer> seenPre = new HashSet<>();
+              for (int value : preorder) {
+                  if (!seenPre.add(value) || !inIndex.containsKey(value)) {
+                      throw new IllegalArgumentException("invalid traversal set");
+                  }
+              }
+
+              int[] postorder = new int[n];
+              int[] write = {0};
+              emit(preorder, 0, 0, n, inIndex, postorder, write);
+              return postorder;
+          }
+
+          static void emit(int[] pre, int preL, int inL, int len,
+                           Map<Integer, Integer> inIndex,
+                           int[] post, int[] write) {
+              if (len == 0) return;
+              int root = pre[preL];
+              Integer rootIndex = inIndex.get(root);
+              if (rootIndex == null || rootIndex < inL || rootIndex >= inL + len) {
+                  throw new IllegalArgumentException("inconsistent traversals");
+              }
+              int leftSize = rootIndex - inL;
+              int rightSize = len - 1 - leftSize;
+              emit(pre, preL + 1, inL, leftSize, inIndex, post, write);
+              emit(pre, preL + 1 + leftSize, rootIndex + 1, rightSize, inIndex, post, write);
+              post[write[0]++] = root;
+          }
+          ```
+
+          例如先序 `[1,2,4,5,3]`、中序 `[4,2,5,1,3]`：根是 `1`，中序左边 `[4,2,5]` 有 3 个节点，所以先序接下来的 `[2,4,5]` 是左子树，剩下 `[3]` 是右子树。递归后得到后序 `[4,5,2,3,1]`。
+
+          ## 关键细节
+
+          - **为什么能切分先序**：先序顺序是“根、完整左子树、完整右子树”。中序定位根后得到 `leftSize`，这个节点数正好决定先序中左子树占多长区间。
+          - **为什么不需要构树**：题目只要求后序序列。递归区间已经隐式表达子树结构，直接在回溯阶段写根即可，省掉 TreeNode 分配。
+          - **唯一值合同**：用 `value -> inorderIndex` 的单值映射天然要求值唯一。来源没有说这一点，所以必须把它写成实现假设，而不是冒充原题约束。
+          - **重复值为什么危险**：相同值在中序里可能对应多个位置；选择不同位置会产生不同子树切分。没有节点 identity 时，遍历序列本身未必唯一确定结构甚至后序结果。
+          - **输入合法性**：仅检查“值集合相同”还不够；递归时若根索引落在当前中序区间之外，说明两条序列的结构约束彼此矛盾，应 fail-fast。
+          - **复杂度**：哈希索引使每个根只定位一次，总时间 O(n)。额外空间 O(n) 来自索引和输出；递归调用栈平衡树 O(log n)，退化树 O(n)。如果 n 可能非常大，需要考虑显式栈以避免调用栈溢出。
+
+          ## 原理机制
+
+          两种遍历提供了互补信息：先序告诉我们“谁是根以及子树出现的先后顺序”，中序告诉我们“根左右各有哪些节点”。唯一节点值使这两类信息能在每一层递归中无歧义对齐。递归不变量是：`pre[preL .. preL+len)` 与 `in[inL .. inL+len)` 描述同一棵子树；处理结束后，输出恰好追加这棵子树的后序序列。
+
+          对当前子树，先序首元素给出根；中序根位置把节点集合分成左右两部分；`leftSize` 再把先序剩余区间按同样大小切成左右子树。左右递归都完成后追加根，正好满足后序“左、右、根”。
+
+          ## 项目经验版
+
+          来源只是算法题，没有真实项目规模和生产指标，不能虚构。工程里如果这是序列恢复/树结构转换的一部分，我会先冻结节点 identity、重复值规则、最大 n、异常输入策略和栈深限制；再用生成树做性质测试：从树生成先序/中序，算法恢复出的后序必须与原树真实后序完全一致。
+
+          ## 常见追问
+
+          - 问：为什么不是 O(n²)？答：如果每层都线性扫描中序找根，退化树会 O(n²)；提前建 `value -> inorderIndex` 后每个节点只做 O(1) 期望定位，总计 O(n)。
+          - 问：必须先重建二叉树吗？答：不必须。只要最终目标是后序序列，递归区间就足够表达结构，左右子问题完成后直接写根即可。
+          - 问：如果值重复怎么办？答：原题没有说明。仅按值的先序+中序可能多解；要么题目额外保证唯一值，要么提供节点 identity/出现次序等可消歧信息，否则不能承诺唯一后序。
+          - 问：空树怎么处理？答：两条空序列返回空后序；长度不一致、集合不一致或结构矛盾则视为非法输入。
+          - 问：递归会不会栈溢出？答：最坏退化树递归深度 n。若规模合同允许非常深的树，应改成显式栈或其它迭代方案；来源没有数据规模，不能假定一定安全。
+
+          ## 易错点
+
+          - 每次递归都 `indexOf`/线性扫描中序，导致最坏 O(n²)。
+          - 切先序右子树时忘记加上 `leftSize`，区间错位。
+          - 为了求后序先完整构树，增加不必要的对象分配和代码面。
+          - 来源没说节点唯一，却直接把“值唯一”写成原题事实。
+          - 只检查两条序列长度相同，不检查重复、集合或递归区间一致性。
+          - 只跑一个平衡树样例，没有覆盖空树、单节点、纯左/纯右退化树和非法输入。
+          EOF
+
+          cat > "$out/TraversalPostorder.java" <<'JAVA'
+          import java.util.HashMap;
+          import java.util.HashSet;
+          import java.util.Map;
+          import java.util.Set;
+
+          public final class TraversalPostorder {
+              public static int[] toPostorder(int[] preorder, int[] inorder) {
+                  if (preorder == null || inorder == null || preorder.length != inorder.length) {
+                      throw new IllegalArgumentException("length mismatch");
+                  }
+                  int n = preorder.length;
+                  Map<Integer,Integer> inIndex = new HashMap<>();
+                  for (int i=0;i<n;i++) {
+                      if (inIndex.put(inorder[i], i) != null) throw new IllegalArgumentException("duplicate node value");
+                  }
+                  Set<Integer> seenPre = new HashSet<>();
+                  for (int value : preorder) {
+                      if (!seenPre.add(value) || !inIndex.containsKey(value)) throw new IllegalArgumentException("invalid traversal set");
+                  }
+                  int[] out = new int[n];
+                  int[] write = {0};
+                  emit(preorder, 0, 0, n, inIndex, out, write);
+                  if (write[0] != n) throw new IllegalArgumentException("inconsistent traversal length");
+                  return out;
+              }
+              private static void emit(int[] pre, int preL, int inL, int len, Map<Integer,Integer> inIndex, int[] out, int[] write) {
+                  if (len == 0) return;
+                  if (preL < 0 || preL >= pre.length || preL + len > pre.length) throw new IllegalArgumentException("preorder interval invalid");
+                  int root = pre[preL];
+                  Integer rootIndex = inIndex.get(root);
+                  if (rootIndex == null || rootIndex < inL || rootIndex >= inL + len) throw new IllegalArgumentException("inconsistent traversals");
+                  int leftSize = rootIndex - inL;
+                  int rightSize = len - 1 - leftSize;
+                  emit(pre, preL + 1, inL, leftSize, inIndex, out, write);
+                  emit(pre, preL + 1 + leftSize, rootIndex + 1, rightSize, inIndex, out, write);
+                  out[write[0]++] = root;
+              }
+          }
+          JAVA
+
+          cat > "$out/TraversalPostorderTest.java" <<'JAVA'
+          import java.util.*;
+
+          public final class TraversalPostorderTest {
+              static final class Node { int v; Node l,r; Node(int v,Node l,Node r){this.v=v;this.l=l;this.r=r;} }
+              static int shapeCount = 0;
+
+              public static void main(String[] args) {
+                  eq(new int[]{4,5,2,3,1}, TraversalPostorder.toPostorder(new int[]{1,2,4,5,3}, new int[]{4,2,5,1,3}), "example");
+                  eq(new int[]{}, TraversalPostorder.toPostorder(new int[]{}, new int[]{}), "empty");
+                  eq(new int[]{7}, TraversalPostorder.toPostorder(new int[]{7}, new int[]{7}), "single");
+                  for (int n=0;n<=8;n++) for (Node tree : shapes(n)) {
+                      assignPreorderIds(tree, new int[]{1});
+                      int[] pre=preorder(tree), in=inorder(tree), post=postorder(tree);
+                      eq(post, TraversalPostorder.toPostorder(pre,in), "shape n="+n+" pre="+Arrays.toString(pre)+" in="+Arrays.toString(in));
+                      shapeCount++;
+                  }
+                  throwsIAE(() -> TraversalPostorder.toPostorder(new int[]{1,1,2}, new int[]{1,1,2}), "duplicate ambiguity");
+                  throwsIAE(() -> TraversalPostorder.toPostorder(new int[]{1,2}, new int[]{1,3}), "set mismatch");
+                  throwsIAE(() -> TraversalPostorder.toPostorder(new int[]{1,2,3}, new int[]{3,1,2}), "structural inconsistency");
+                  throwsIAE(() -> TraversalPostorder.toPostorder(new int[]{1}, new int[]{}), "length mismatch");
+                  System.out.println("PASS example=yes all-shapes-n0..8="+shapeCount+" duplicate-rejected=yes invalid-set-rejected=yes inconsistent-order-rejected=yes");
+              }
+
+              static List<Node> shapes(int n) {
+                  if (n==0) return List.of((Node)null);
+                  List<Node> out=new ArrayList<>();
+                  for(int left=0;left<n;left++) {
+                      int right=n-1-left;
+                      for(Node l:shapes(left)) for(Node r:shapes(right)) out.add(new Node(0,copy(l),copy(r)));
+                  }
+                  return out;
+              }
+              static Node copy(Node x){return x==null?null:new Node(x.v,copy(x.l),copy(x.r));}
+              static void assignPreorderIds(Node x,int[] next){if(x==null)return;x.v=next[0]++;assignPreorderIds(x.l,next);assignPreorderIds(x.r,next);}
+              static int[] preorder(Node x){List<Integer>a=new ArrayList<>();pre(x,a);return a.stream().mapToInt(Integer::intValue).toArray();}
+              static int[] inorder(Node x){List<Integer>a=new ArrayList<>();in(x,a);return a.stream().mapToInt(Integer::intValue).toArray();}
+              static int[] postorder(Node x){List<Integer>a=new ArrayList<>();post(x,a);return a.stream().mapToInt(Integer::intValue).toArray();}
+              static void pre(Node x,List<Integer>a){if(x==null)return;a.add(x.v);pre(x.l,a);pre(x.r,a);}
+              static void in(Node x,List<Integer>a){if(x==null)return;in(x.l,a);a.add(x.v);in(x.r,a);}
+              static void post(Node x,List<Integer>a){if(x==null)return;post(x.l,a);post(x.r,a);a.add(x.v);}
+              static void eq(int[] e,int[] a,String label){if(!Arrays.equals(e,a))throw new AssertionError(label+" expected="+Arrays.toString(e)+" actual="+Arrays.toString(a));}
+              static void throwsIAE(Runnable r,String label){try{r.run();throw new AssertionError(label+" did not reject");}catch(IllegalArgumentException expected){}}
+          }
+          JAVA
+
+          cat > "$out/source_boundary.json" <<'JSON'
+          {
+            "schema_version":"answer_source_boundary.v1",
+            "canonical_id":"cq_q_6d58c327c55f005301c8a0b6759c1147",
+            "checked_at":"2026-08-25",
+            "repository_sources":[
+              {"path":"note_tagged/68307f6d0000000023017c20.json","question_id":"6d58c327c55f005301c8a0b6759c1147","preserved_text":"算法：根据先序和中序遍历序列，给出后序序列"},
+              {"path":"note_structured/68307f6d0000000023017c20.json","preserved_text":"算法：根据先序和中序遍历序列，给出后序序列"}
+            ],
+            "preserved_constraints":["input includes preorder and inorder traversal sequences","requested output is a postorder traversal sequence","domain is binary-tree traversal"],
+            "not_preserved":["whether node values are unique","whether inputs are guaranteed valid and mutually consistent","node value type","maximum node count","required function signature","whether recursion is allowed"],
+            "candidate_contract_assumptions":["executable Java contract requires unique integer node values","preorder and inorder must describe the same valid binary tree","duplicate values are rejected because value-only traversals can be ambiguous without node identity","candidate computes postorder directly without allocating tree nodes"]
+          }
+          JSON
+
+          javac "$out/TraversalPostorder.java" "$out/TraversalPostorderTest.java"
+          stdout="$(java -cp "$out" TraversalPostorderTest)"
+          case "$stdout" in
+            'PASS example=yes all-shapes-n0..8='*' duplicate-rejected=yes invalid-set-rejected=yes inconsistent-order-rejected=yes') ;;
+            *) echo "unexpected fixture stdout: $stdout"; exit 1;;
+          esac
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0030/${process.env.CANONICAL_ID}`;
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac TraversalPostorder.java TraversalPostorderTest.java && java TraversalPostorderTest',stdout:process.env.STDOUT,checks:['published example','empty and single-node trees','every binary-tree shape for node counts 0 through 8 with unique preorder-assigned identities','duplicate values rejected as ambiguous under value-only contract','mismatched sets rejected','structurally inconsistent traversals rejected']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'2024 backend interview record preserving preorder plus inorder to postorder wording',locator:'note_tagged/68307f6d0000000023017c20.json',source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'Exhaustive binary-tree-shape traversal fixture through eight nodes',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The preserved source asks only to derive postorder from preorder and inorder; uniqueness, validity guarantees, scale and signature are not preserved constraints.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','关键细节','易错点']},{claim_id:'direct-linear-conversion',text:'Under the explicit unique-value valid-traversal contract, the executable fixture verifies direct O(n)-style indexed recursion on every binary-tree shape through eight nodes and rejects duplicate/invalid traversal inputs.',source_ids:['fixture'],answer_locations:['核心结论','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [ ] `cq_q_6d58c327c55f005301c8a0b6759c1147` writer stage complete: the candidate derives postorder directly from preorder/inorder without fabricating a hidden unique-value guarantee, explicitly rejects duplicate-value ambiguity in its executable contract, and validates all binary-tree shapes through 8 nodes plus malformed inputs. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          NODE
+
+      - name: Run repository gates for writer stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:coverage
+
+      - name: Commit candidate only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during traversal candidate build: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0030/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0030 traversal postorder candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
