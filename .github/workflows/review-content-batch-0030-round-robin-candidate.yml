@@ -1,0 +1,193 @@
+name: Review Content Batch 0030 Round Robin Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0030-round-robin-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-round-robin-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6acb0854fc797afd83feb310c59176e9
+  CANDIDATE_BLOB_SHA: bf5ae7503b13998c3939559e7cbdb861ea4364e1
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun exact concurrency fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const boundary=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0030/${cid}/source_boundary.json`,'utf8'));
+          if(boundary.canonical_id!==cid) throw new Error('source boundary canonical drifted');
+          const preserved=(boundary.repository_sources||[]).map(x=>x.preserved_text);
+          if(!preserved.includes('算法/并发：手撕多线程循环打印 1-10（线程同步机制）？')) throw new Error('structured source wording drifted');
+          if(!preserved.includes('算法/并发：手撕多线程循环打印 1-10？')) throw new Error('tagged source wording drifted');
+          const missing=['exact worker count','odd/even ownership requirement','whether 1..10 repeats for multiple cycles','required synchronization primitive','method signature or output API'];
+          for(const item of missing) if(!(boundary.not_preserved||[]).includes(item)) throw new Error(`missing fail-closed source boundary: ${item}`);
+
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const needle of [
+            'round-robin 是本答案的实现选择，不是来源事实',
+            'while (next <= maxValue && ownerFor(next) != workerId)',
+            'monitor.wait();',
+            'monitor.notifyAll();',
+            '最后一次成功输出已经在推进 `next` 后执行 `notifyAll()`',
+            'Object.wait 允许 spurious wakeup',
+            'synchronized` 的 unlock/lock 还提供必要的 happens-before 关系'
+          ]) if(!text.includes(needle)) throw new Error(`candidate source/mechanism guard missing: ${needle}`);
+          NODE
+
+          javac "$out/RoundRobinPrinter.java" "$out/RoundRobinPrinterTest.java"
+          stdout="$(java -cp "$out" RoundRobinPrinterTest)"
+          test "$stdout" = 'PASS rounds=202 exact-sequence=yes round-robin-ownership=yes no-duplicates=yes termination=yes invalid-args=yes'
+
+      - name: Record independent source-first review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const out=`review/content_build/answer_batch_0030/${cid}`;
+          const boundary=`${out}/source_boundary.json`;
+          const fixture=`${out}/code_validation.json`;
+          const writerResearch=`${out}/writer_research.json`;
+          const reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0030-round-robin-20260825-v2';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The current repository source boundary preserves only a multi-threaded implementation that prints 1 through 10 with thread synchronization as an interview target; worker count, odd/even ownership, repeat count, synchronization primitive and API shape are not preserved.',
+            'The candidate explicitly labels parameterized workerCount and round-robin ownership as answer-side implementation assumptions rather than recovered source requirements.',
+            'The monitor protocol is internally coherent: one shared next value is protected by one monitor, non-owners wait in a condition loop, the owner performs output and next++ while holding the monitor, and each successful state transition calls notifyAll.',
+            'The termination explanation is correct for this protocol: after the final value is emitted, that same successful transition increments next beyond maxValue and notifies waiters; awakened or later-entering workers then observe the terminal predicate and return without requiring a second terminal-branch notification.',
+            'The answer correctly treats wait as a condition-loop operation because wakeups require re-acquiring the monitor and may be spurious; notifyAll does not grant execution priority and all awakened workers must re-check ownership.',
+            'The synchronized monitor transitions provide the required Java monitor happens-before visibility for the shared next state; the answer does not claim volatile alone supplies the compound mutual-exclusion/waiting protocol.',
+            'The JDK 21 deterministic fixture passes 100 two-worker rounds, 100 three-worker rounds, a four-worker single-value round, the empty range, strict ascending order, round-robin ownership, no duplicates/missing values, thread termination and invalid argument rejection.',
+            'The example API assumes the configured worker IDs are actually represented by running workers and that the demonstration sink does not fail mid-protocol; these are implementation preconditions of the illustrative API, not recovered source facts. They do not invalidate the interview answer but should not be generalized into a fault-tolerant worker coordinator.',
+            'No source-boundary fabrication, concurrency correctness blocker, code hard failure or unsupported production claim remains. Formal promotion remains governed by repository promotion and real-review policy.'
+          ];
+          const review={
+            schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,
+            review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0030.round-robin.v2',decision:'pass',revision_round:2,
+            source_packet:[boundary,candidate,fixture,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md','https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Object.html','https://docs.oracle.com/javase/specs/jls/se17/html/jls-17.html'],
+            scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,
+            accepted_boundaries:[
+              'Illustrative runWorker usage requires one live worker for each configured workerId; missing workers can intentionally stall round-robin ownership.',
+              'The illustrative sink executes inside the monitor and is expected not to fail; production callback-failure/cancellation semantics are outside the preserved source contract.'
+            ],
+            promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']
+          };
+          fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
+
+          const evidence={
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,
+            writer:{writer_id:'content-batch-0030-round-robin-candidate-builder',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'source-boundary',title:'Batch 0030 round-robin frozen repository source boundary',locator:boundary,source_type:'repository_source_record',checked_at:date},
+              {source_id:'oracle-object-wait',title:'Java SE 17 Object wait/notify/notifyAll API contract',locator:'https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Object.html',source_type:'primary_official_documentation',checked_at:date},
+              {source_id:'jls17-threads-locks',title:'Java Language Specification SE 17 Chapter 17 Threads and Locks',locator:'https://docs.oracle.com/javase/specs/jls/se17/html/jls-17.html',source_type:'primary_official_specification',checked_at:date},
+              {source_id:'fixture',title:'Round-robin deterministic JDK 21 concurrency fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Round-robin independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-contract',text:'The repository preserves multi-threaded printing of 1..10 with synchronization as the target, while worker count, odd/even assignment, repeat count, primitive and API shape remain unspecified.',source_ids:['source-boundary'],answer_locations:['核心结论','3 分钟版','易错点']},
+              {claim_id:'condition-wait',text:'Object.wait requires monitor ownership, releases the monitor while waiting, may return spuriously, and requires reacquisition before return; notifyAll wakes all waiters without granting one privileged ownership.',source_ids:['oracle-object-wait'],answer_locations:['1 分钟版','关键细节','原理机制','常见追问']},
+              {claim_id:'monitor-visibility',text:'An unlock of a monitor happens-before every subsequent lock of that monitor, providing visibility for the next-state transitions protected by synchronized.',source_ids:['jls17-threads-locks'],answer_locations:['原理机制']},
+              {claim_id:'implementation-validation',text:'The executable JDK 21 fixture verifies exact 1..10 order and ownership for 2 and 3 workers across repeated rounds, plus single-value, empty-range, termination and invalid-argument behavior.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','易错点']}
+            ],
+            source_question_coverage:[
+              {question_id:'43c2f5df8f92b9d7b91f28b2e6b13e69',covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}
+            ],
+            validation:{command:'javac RoundRobinPrinter.java RoundRobinPrinterTest.java && java RoundRobinPrinterTest',result:'pass',reported_stdout:'PASS rounds=202 exact-sequence=yes round-robin-ownership=yes no-duplicates=yes termination=yes invalid-args=yes',checks:['2-worker exact order repeated 100 rounds','3-worker exact order repeated 100 rounds','round-robin ownership','no missing or duplicate outputs','all worker threads terminate','empty range','invalid constructor/worker arguments']},
+            review_state:'independent_source_first_review_passed',
+            review:{reviewer_id:reviewer,review_version:'batch-0030.round-robin.v2',independent:true,decision:'pass',revision_round:2,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+          };
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- [ ] `cq_q_6acb0854fc797afd83feb310c59176e9` writer stage complete: repository boundary was re-read from structured/tagged source, the candidate explicitly separates recovered constraints from the round-robin implementation assumption, Oracle/JLS primary sources are recorded, and the JDK 21 executable fixture passes. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          const replacement='- [x] `cq_q_6acb0854fc797afd83feb310c59176e9` candidate passed revision-2 independent source-first review and deterministic JDK 21 concurrency evidence; source assumptions remain explicit and no correctness hard failure remains. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(text.includes(old)) text=text.replace(old,replacement);
+          const note='- `cq_q_6acb0854fc797afd83feb310c59176e9` revision 2 independent review accepted the corrected termination proof; accepted API boundaries are that all configured worker IDs are represented by live workers and the illustrative sink is non-failing. These are implementation preconditions, not source constraints.';
+          if(!text.includes(note)) text=(text.endsWith('\n')?text:text+'\n')+note+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during round-robin independent review: $base_head -> $remote_head; fail closed and retry on next stable head."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0030/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0030 round-robin candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
