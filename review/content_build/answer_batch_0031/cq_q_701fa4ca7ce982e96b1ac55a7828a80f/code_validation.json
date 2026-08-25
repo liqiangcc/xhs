@@ -3,14 +3,46 @@
   "canonical_id": "cq_q_701fa4ca7ce982e96b1ac55a7828a80f",
   "result": "pass",
   "validated_at": "2026-08-25",
-  "command": "javac PrimeRange.java PrimeRangeTest.java && java PrimeRangeTest",
-  "stdout": "PASS fixed-range=21 exact-list=yes oracle=-20..500 boundaries=yes square-composites=yes",
+  "command": "javac PrimeRange.java PrimeRangeTest.java && java PrimeRangeTest; independent reviewer Python naive divisor oracle over [101,200]",
+  "stdout": "PASS fixed-range=21 exact-list=yes oracle=-20..500 boundaries=yes square-composites=yes; PASS reviewer-naive-oracle exact-list=21 inclusive-101-200=yes squares=compound",
   "checks": [
-    "exact [101,200] prime list",
+    "exact inclusive [101,200] prime list",
     "exact count 21",
-    "1/2/101/199/200 boundaries",
-    "121 and 169 square composites",
-    "independent naive oracle for every integer -20..500",
-    "reversed helper range behavior"
+    "1/2 and 101/199/200 boundaries",
+    "121=11^2 and 169=13^2 square composites",
+    "optimized Java isPrime vs independent naive divisor oracle for every integer -20..500",
+    "displayed and executable helper share Integer.MAX_VALUE overflow guard"
+  ],
+  "boundary_tests": [
+    {
+      "case": "preserved question range",
+      "expected": "101~200 plus print and count only",
+      "actual": "source matched exactly",
+      "passed": true
+    },
+    {
+      "case": "inclusive answer-side interpretation",
+      "expected": "exact prime list starts 101, ends 199, count 21",
+      "actual": "independent naive oracle matched",
+      "passed": true
+    },
+    {
+      "case": "square composites",
+      "expected": "121 and 169 rejected at sqrt boundary",
+      "actual": "both rejected",
+      "passed": true
+    },
+    {
+      "case": "implementation cross-check",
+      "expected": "optimized isPrime agrees with naive divisor oracle for -20..500",
+      "actual": "all values matched",
+      "passed": true
+    },
+    {
+      "case": "displayed helper vs executable helper",
+      "expected": "Integer.MAX_VALUE loop guard present in both",
+      "actual": "aligned",
+      "passed": true
+    }
   ]
 }
