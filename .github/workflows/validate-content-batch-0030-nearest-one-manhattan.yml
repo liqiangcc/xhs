@@ -1,0 +1,50 @@
+name: Validate Content Batch 0030 Nearest-One Manhattan
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/validate-content-batch-0030-nearest-one-manhattan.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6e200e154178aae3cd4320e22f0e44ec
+  SOURCE_QID: 6e200e154178aae3cd4320e22f0e44ec
+  CANDIDATE_BLOB_SHA: 52c1084e5db1b5a0e3b7b299351acb09b35fa1b0
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Guard source and execute independent oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/66589f330000000016013431.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!=='算法：二维数组求所有0距离最近的1的曼哈顿距离的最大值'||source.question_type!=='算法手撕_Coding') throw new Error('source drifted');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const needle of ['没有保存题号','不能悄悄套成某一道 LeetCode','多源 BFS','全是 0 怎么办','当前仓库来源没有保存这些信息']) if(!text.includes(needle)) throw new Error(`candidate boundary guard missing: ${needle}`);
+          NODE
+          javac "$out/NearestOneMaxDistance.java" "$out/NearestOneMaxDistanceTest.java"
+          stdout="$(java -cp "$out" NearestOneMaxDistanceTest)"
+          test "$stdout" = 'PASS fixed=6 randomized=7200 oracle=bruteforce-manhattan degenerate=explicit validation=yes'
+          echo "$stdout"
