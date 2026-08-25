@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - .github/workflows/extend-answer-code-validation-c.yml
+      - scripts/content/extend_answer_code_validation_c.py
   workflow_dispatch:
 
 permissions:
@@ -43,92 +44,17 @@ jobs:
           go-version: '1.23.x'
           cache: false
 
-      - name: Extend source-appropriate code validation to C
+      - name: Apply source-appropriate C validator extension
         shell: bash
         run: |
           set -euo pipefail
           command -v gcc
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('scripts/lib/answer_quality.js')
-          s=p.read_text(encoding='utf-8')
-          old="const regex = /(?:```|~~~)(java|sql|javascript|js|go)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
-          new="const regex = /(?:```|~~~)(java|sql|javascript|js|go|c)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
-          if old not in s: raise SystemExit('extractCodeBlocks language regex drifted')
-          s=s.replace(old,new,1)
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/extend_answer_code_validation_c.py > /tmp/extend_answer_code_validation_c.py
+          python3 -m py_compile /tmp/extend_answer_code_validation_c.py
+          python3 /tmp/extend_answer_code_validation_c.py
 
-          marker="function parseJavaScript(code) {"
-          if marker not in s: raise SystemExit('parseJavaScript marker missing')
-          compile_c=r'''function compileC(code) {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-gcc-'));
-    try {
-        const filePath = path.join(tempDir, 'candidate.c');
-        const objectPath = path.join(tempDir, 'candidate.o');
-        fs.writeFileSync(filePath, code, 'utf8');
-        const result = childProcess.spawnSync('gcc', ['-std=c17', '-Wall', '-Wextra', '-Werror', '-pedantic', '-c', filePath, '-o', objectPath], {
-            encoding: 'utf8',
-            timeout: 15000,
-        });
-        if (result.error?.code === 'ENOENT') return { ok: false, error: 'gcc_not_available' };
-        if (result.error) return { ok: false, error: 'c_compile_failed', detail: result.error.message };
-        if (result.status !== 0) {
-            return {
-                ok: false,
-                error: 'c_compile_failed',
-                detail: String(result.stderr || result.stdout || '').trim().slice(0, 2000),
-            };
-        }
-        return { ok: true };
-    } finally {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-}
-
-'''
-          s=s.replace(marker,compile_c+marker,1)
-
-          old_dispatch="""            const validation = block.language === 'java'\n                ? compileJava(block.code)\n                : block.language === 'sql'\n                    ? parseSql(block.code)\n                    : block.language === 'go'\n                        ? compileGo(block.code)\n                        : parseJavaScript(block.code);"""
-          new_dispatch="""            const validation = block.language === 'java'\n                ? compileJava(block.code)\n                : block.language === 'sql'\n                    ? parseSql(block.code)\n                    : block.language === 'go'\n                        ? compileGo(block.code)\n                        : block.language === 'c'\n                            ? compileC(block.code)\n                            : parseJavaScript(block.code);"""
-          if old_dispatch not in s: raise SystemExit('specialized validation dispatch drifted')
-          s=s.replace(old_dispatch,new_dispatch,1)
-
-          old_req="/(?:```|~~~)(?:java|sql|javascript|js|go)\\b/i.test(answer.content)"
-          new_req="/(?:```|~~~)(?:java|sql|javascript|js|go|c)\\b/i.test(answer.content)"
-          if old_req not in s: raise SystemExit('require-code language regex drifted')
-          s=s.replace(old_req,new_req,1)
-
-          old_export="    compileJava,\n    parseSql,"
-          new_export="    compileJava,\n    compileC,\n    parseSql,"
-          if old_export not in s: raise SystemExit('module export marker drifted')
-          s=s.replace(old_export,new_export,1)
-          p.write_text(s,encoding='utf-8')
-
-          t=Path('test/answer_code_validation.test.js')
-          x=t.read_text(encoding='utf-8')
-          old_import="const { compileJava, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
-          new_import="const { compileJava, compileC, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
-          if old_import not in x: raise SystemExit('test import drifted')
-          x=x.replace(old_import,new_import,1)
-          insert="""
-
-test('C validation compiles complete source and rejects broken implementations', () => {
-    assert.equal(compileC('#include <stddef.h>\\nchar *copy(char *dst, const char *src) { char *out = dst; while ((*dst++ = *src++) != \\'\\0\\') {} return out; }').ok, true);
-    assert.equal(compileC('char *copy(char *dst, const char *src) { return dst + ; }').ok, false);
-});
-"""
-          anchor="\ntest('SQL validation checks statement structure balance and placeholders', () => {"
-          if anchor not in x: raise SystemExit('test insertion anchor drifted')
-          x=x.replace(anchor,insert+anchor,1)
-          t.write_text(x,encoding='utf-8')
-
-          c=Path('config/answer_quality.json')
-          j=c.read_text(encoding='utf-8')
-          if 'runnable_java_or_sql' not in j: raise SystemExit('answer quality coding requirement drifted')
-          j=j.replace('runnable_java_or_sql','runnable_source_appropriate_code_or_sql',1)
-          c.write_text(j,encoding='utf-8')
-          PY
-
-      - name: Verify C validator regression and full repository gates
+      - name: Verify C regression and complete repository gates
         shell: bash
         run: |
           set -euo pipefail
