@@ -1,0 +1,173 @@
+name: Remediate Content Batch 0030 Linked List Dedup Runnable
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0030-linked-list-dedup-runnable.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-linked-list-dedup-runnable
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6d4e32839e2073f17a3c433f128a9590
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Wrap candidate Java methods in a compilable class
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          node <<'NODE'
+          const fs=require('fs');
+          const path=`review/candidates/answers/${process.env.CANONICAL_ID}.md`;
+          let text=fs.readFileSync(path,'utf8');
+          if(!text.includes('final class ListNode {')||!text.includes('static ListNode keepOneSorted')) throw new Error('expected pre-remediation Java block not found');
+          const replacement=`\`\`\`java
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+public final class LinkedListDedup {
+    static final class ListNode {
+        int val;
+        ListNode next;
+        ListNode(int val) { this.val = val; }
+    }
+
+    // 合同 A：输入按 val 非递减；每个值最终保留一个节点。
+    static ListNode keepOneSorted(ListNode head) {
+        for (ListNode cur = head; cur != null && cur.next != null; ) {
+            if (cur.val == cur.next.val) cur.next = cur.next.next;
+            else cur = cur.next;
+        }
+        return head;
+    }
+
+    // 合同 B：输入按 val 非递减；只保留原链表中出现恰好一次的值。
+    static ListNode removeAllDuplicatesSorted(ListNode head) {
+        ListNode dummy = new ListNode(0);
+        dummy.next = head;
+        ListNode prev = dummy, cur = head;
+        while (cur != null) {
+            if (cur.next != null && cur.val == cur.next.val) {
+                int duplicate = cur.val;
+                while (cur != null && cur.val == duplicate) cur = cur.next;
+                prev.next = cur;
+            } else {
+                prev = cur;
+                cur = cur.next;
+            }
+        }
+        return dummy.next;
+    }
+
+    // 合同 C：输入可无序；按原顺序保留每个值第一次出现的节点。
+    static ListNode keepFirstUnsorted(ListNode head) {
+        Set<Integer> seen = new HashSet<>();
+        ListNode dummy = new ListNode(0);
+        dummy.next = head;
+        ListNode prev = dummy, cur = head;
+        while (cur != null) {
+            if (!seen.add(cur.val)) prev.next = cur.next;
+            else prev = cur;
+            cur = cur.next;
+        }
+        return dummy.next;
+    }
+
+    // 合同 D：输入可无序；只保留原链表中出现恰好一次的值。
+    static ListNode keepOnlyGloballyUniqueUnsorted(ListNode head) {
+        Map<Integer, Integer> freq = new HashMap<>();
+        for (ListNode cur = head; cur != null; cur = cur.next) {
+            freq.merge(cur.val, 1, Integer::sum);
+        }
+        ListNode dummy = new ListNode(0), tail = dummy;
+        for (ListNode cur = head; cur != null; ) {
+            ListNode next = cur.next;
+            if (freq.get(cur.val) == 1) {
+                tail.next = cur;
+                tail = cur;
+            }
+            cur = next;
+        }
+        tail.next = null;
+        return dummy.next;
+    }
+}
+\`\`\``;
+          const start=text.indexOf('```java');
+          if(start<0) throw new Error('Java fence missing');
+          const end=text.indexOf('```',start+7);
+          if(end<0) throw new Error('Java closing fence missing');
+          text=text.slice(0,start)+replacement+text.slice(end+3);
+          fs.writeFileSync(path,text);
+          NODE
+          git diff --check
+          grep -q 'public final class LinkedListDedup' "$candidate"
+
+      - name: Re-run direct fixture and candidate audit preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          javac "$out/LinkedListDedup.java" "$out/LinkedListDedupTest.java"
+          test "$(java -cp "$out" LinkedListDedupTest)" = 'PASS four-contract-examples=yes exhaustive-ternary-length7=yes empty=yes head-tail-duplicates=yes'
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:coverage
+
+      - name: Commit runnable candidate only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during linked-list runnable remediation: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: make linked-list dedup candidate directly runnable'
+          git push origin "HEAD:$CONTENT_BRANCH"
