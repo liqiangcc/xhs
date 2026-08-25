@@ -1,0 +1,196 @@
+name: Remediate Path Sum Canonical Alias
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-path-sum-canonical-alias.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: path-sum-canonical-alias-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  TARGET_CANONICAL: cq_q_0b2b60b3fcf31abae6c4bff516b07ade
+  SOURCE_CANONICAL: cq_q_6ddf5b68ca5a4bc39dd5f03872c709a0
+  TARGET_QID: 0b2b60b3fcf31abae6c4bff516b07ade
+  SOURCE_QID: 6ddf5b68ca5a4bc39dd5f03872c709a0
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - id: boundary
+        name: Freeze source-first alias boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const tq=process.env.TARGET_QID,sq=process.env.SOURCE_QID,tc=process.env.TARGET_CANONICAL,sc=process.env.SOURCE_CANONICAL;
+          const byte=JSON.parse(fs.readFileSync('note_tagged/686cf6ea000000001c03308d.json','utf8'));
+          const t=(byte.tagged_questions||[]).find(x=>x.question_id===tq);
+          if(!t||t.original_question!=='算法手撕：二叉树路径总和（Path Sum）。'||!(t.business_context||[]).includes('LeetCode 112')) throw new Error('target Path Sum source drifted');
+          const tx=JSON.parse(fs.readFileSync('note_tagged/6828186e000000000f03a16f.json','utf8'));
+          const s=(tx.tagged_questions||[]).find(x=>x.question_id===sq);
+          if(!s||s.original_question!=='算法：二叉树路径总和'||s.question_type!=='算法手撕_Coding') throw new Error('generic Path Sum source drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const targetQ=qs.find(x=>x.question_id===tq),sourceQ=qs.find(x=>x.question_id===sq);
+          if(targetQ?.canonical_id!==tc||sourceQ?.canonical_id!==sc) throw new Error(`ownership drifted target=${targetQ?.canonical_id} source=${sourceQ?.canonical_id}`);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const targetC=cs.find(x=>x.canonical_id===tc),sourceC=cs.find(x=>x.canonical_id===sc);
+          if(!targetC||!sourceC) throw new Error('canonical missing');
+          if(JSON.stringify(targetC.question_ids||[])!==JSON.stringify([tq])) throw new Error('target canonical no longer singleton; expand review before applying');
+          if(JSON.stringify(sourceC.question_ids||[])!==JSON.stringify([sq])) throw new Error('source canonical no longer singleton; expand review before applying');
+          fs.writeFileSync('/tmp/target-title.txt',targetC.canonical_title);
+          fs.writeFileSync('/tmp/path-sum-alias-boundary.json',JSON.stringify({schema_version:'path_sum_alias_boundary.v1',checked_at:'2026-08-25',target:{canonical_id:tc,question_id:tq,wording:t.original_question,repository_mapping:'LeetCode 112'},source:{canonical_id:sc,question_id:sq,wording:s.original_question,repository_mapping:null},decision_basis:'Both repository sources name the binary-tree Path Sum problem. The generic Tencent wording omits the variant, while the ByteDance tagged record provides an explicit LeetCode 112 mapping. Treat the generic wording as an alias at the Canonical topic level, preserve its underspecification in the Answer, and do not promote the 112 mapping to a fact of the generic source.',relation:'alias'},null,2)+'\n');
+          NODE
+          echo "title=$(cat /tmp/target-title.txt)" >> "$GITHUB_OUTPUT"
+
+      - id: suggest
+        name: Explicitly select the two already-canonicalized Questions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical suggest --question-ids "$TARGET_QID,$SOURCE_QID" > /tmp/suggest.json
+          KEY="$(node <<'NODE'
+          const fs=require('fs');
+          const data=JSON.parse(fs.readFileSync('/tmp/suggest.json','utf8'));
+          const want=[process.env.TARGET_QID,process.env.SOURCE_QID].sort();
+          let found=null;
+          function walk(v){
+            if(!v||found)return;
+            if(Array.isArray(v)){for(const x of v)walk(x);return;}
+            if(typeof v!=='object')return;
+            if(v.relation_candidate_key&&Array.isArray(v.question_ids)&&JSON.stringify([...v.question_ids].sort())===JSON.stringify(want)) {found=v;return;}
+            for(const x of Object.values(v))walk(x);
+          }
+          walk(data);
+          if(!found) throw new Error('explicit pair relation candidate not found in suggest output');
+          process.stdout.write(found.relation_candidate_key);
+          NODE
+          )"
+          test -n "$KEY"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Record explicit source-first alias decision
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key '${{ steps.suggest.outputs.key }}' \
+            --relation alias \
+            --actor-type ai \
+            --actor-id 'source-first-path-sum-alias-reviewer-20260825-v1' \
+            --rationale 'Both current repository Questions name binary-tree Path Sum. The Tencent wording is generic and does not preserve a variant; the ByteDance source explicitly says Path Sum and its tagged record maps that source to LeetCode 112. Alias them at the Canonical topic level while preserving that only the ByteDance source supplies the 112 mapping.' > /tmp/decision.json
+
+      - name: Apply reviewed Canonical consolidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key '${{ steps.suggest.outputs.key }}' \
+            --canonical-id "$TARGET_CANONICAL" \
+            --canonical-title '${{ steps.boundary.outputs.title }}' > /tmp/apply.json
+          node <<'NODE'
+          const fs=require('fs'),tc=process.env.TARGET_CANONICAL,sc=process.env.SOURCE_CANONICAL,tq=process.env.TARGET_QID,sq=process.env.SOURCE_QID;
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          for(const qid of [tq,sq]) if(qs.find(x=>x.question_id===qid)?.canonical_id!==tc) throw new Error(`${qid} not consolidated into target`);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const target=cs.find(x=>x.canonical_id===tc);
+          if(cs.some(x=>x.canonical_id===sc)) throw new Error('source canonical still active');
+          if(!target||!target.question_ids.includes(tq)||!target.question_ids.includes(sq)) throw new Error('target canonical question coverage incomplete');
+          NODE
+
+      - name: Rewrite existing Path Sum candidate for both source variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "review/content_build/answer_batch_0013/$TARGET_CANONICAL"
+          cp /tmp/path-sum-alias-boundary.json "review/content_build/answer_batch_0013/$TARGET_CANONICAL/source_expansion_boundary.json"
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.TARGET_CANONICAL;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          let text=fs.readFileSync(candidate,'utf8');
+          const oldCore='仓库恢复出的原始面试记录只写了“算法手撕：二叉树路径总和（Path Sum）”，单看这句话并不足以区分 Path Sum、Path Sum II、Path Sum III。仓库的 tagged record 明确把它映射为 **LeetCode 112**；按这个映射，目标是判断是否存在一条**从根节点到叶子节点**的路径，使沿途节点值之和等于 `targetSum`。LeetCode 官方题面也明确规定 leaf 是“没有子节点的节点”，因此“某个中间前缀刚好等于目标值”不能提前返回成功。';
+          const newCore='仓库现在保留两条归一到同一 Path Sum 主题的来源：一条腾讯记录只写“算法：二叉树路径总和”，没有保留具体变体；另一条字节记录写“算法手撕：二叉树路径总和（Path Sum）”，且它的 tagged record 明确映射为 **LeetCode 112**。因此不能把 112 语义冒充成腾讯泛化来源的原题事实；下面把“泛化来源的变体缺口”和“字节来源的 112 显式映射”分开。按 112 映射，目标是判断是否存在一条**从根节点到叶子节点**的路径，使沿途节点值之和等于 `targetSum`。LeetCode 官方题面也明确规定 leaf 是“没有子节点的节点”，因此“某个中间前缀刚好等于目标值”不能提前返回成功。';
+          if(!text.includes(oldCore)) throw new Error('expected old Path Sum core boundary missing');
+          text=text.replace(oldCore,newCore);
+          text=text.replace('先说明题意边界：这里按仓库映射的 LeetCode 112，求的是“是否存在根到叶路径”，不是返回所有路径，也不是统计任意向下路径。','先说明题意边界：腾讯泛化来源本身不足以唯一确定 Path Sum 变体；这里的可执行实现按另一条仓库来源显式映射的 LeetCode 112，求“是否存在根到叶路径”，不是返回所有路径，也不是统计任意向下路径。');
+          text=text.replace('- 仓库 source record 的题面只有 `Path Sum`；具体采用 LeetCode 112 语义，是因为同一 tagged record 显式写了 `LeetCode 112`，不是从题名自行猜测。','- 两条 source variant 都只在题名层面指向“二叉树路径总和 / Path Sum”；其中只有字节 tagged record 显式写了 `LeetCode 112`。因此 112 是该来源的仓库映射，不是从腾讯泛化题名自行猜出的约束。');
+          fs.writeFileSync(candidate,text);
+          const hash=crypto.createHash('sha256').update(text).digest('hex');
+          fs.writeFileSync(`review/content_build/answer_batch_0013/${cid}/source_expansion_writer.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',relation:'alias',new_source_question_id:process.env.SOURCE_QID,candidate_sha256:hash,sources:[{source_id:'generic-tencent-source',title:'Tencent backend interview source preserving generic binary-tree path-sum wording',locator:'note_tagged/6828186e000000000f03a16f.json#question_id=6ddf5b68ca5a4bc39dd5f03872c709a0',source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'mapped-bytedance-source',title:'ByteDance source preserving Path Sum wording plus repository LeetCode 112 mapping',locator:'note_tagged/686cf6ea000000001c03308d.json#question_id=0b2b60b3fcf31abae6c4bff516b07ade',source_type:'repository_structured_source',checked_at:'2026-08-25'}],claims:[{claim_id:'alias-boundary',text:'The generic Tencent wording and ByteDance Path Sum wording name the same Path Sum topic, but only the ByteDance tagged record supplies a LeetCode 112 mapping; the candidate must preserve that asymmetry.',source_ids:['generic-tencent-source','mapped-bytedance-source'],answer_locations:['核心结论','1 分钟版','关键细节']}],source_question_coverage:[{question_id:process.env.TARGET_QID,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']},{question_id:process.env.SOURCE_QID,covered:true,answer_locations:['核心结论','1 分钟版','关键细节','项目经验版','常见追问']}],promotion_blocker:'source_expansion_requires_fresh_isolated_review'},null,2)+'\n');
+          NODE
+          node <<'NODE'
+          const fs=require('fs');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let t=fs.readFileSync(task,'utf8');
+          const note='- [ ] `cq_q_6ddf5b68ca5a4bc39dd5f03872c709a0` was source-first classified as an alias of reviewed Path Sum Canonical `cq_q_0b2b60b3fcf31abae6c4bff516b07ade` and consolidated through Explicit Pair → AI Decision → Apply. The surviving candidate now preserves the generic-source/LeetCode-112 mapping asymmetry; fresh isolated review/evidence is required before this remediation is complete.';
+          if(!t.includes(note)) fs.writeFileSync(task,(t.endsWith('\n')?t:t+'\n')+note+'\n');
+          const task13='tasks/answer-batches/TASK-20260711-0313-answer-batch-0013.md';
+          let t13=fs.readFileSync(task13,'utf8');
+          const n13='- Path Sum source expansion 2026-08-25: generic Tencent Question `6ddf5b68ca5a4bc39dd5f03872c709a0` was reviewed as an alias and consolidated into `cq_q_0b2b60b3fcf31abae6c4bff516b07ade`; candidate wording was revised to keep the generic variant gap separate from the ByteDance tagged LeetCode 112 mapping. Fresh isolated review is pending.';
+          if(!t13.includes(n13)) fs.writeFileSync(task13,(t13.endsWith('\n')?t13:t13+'\n')+n13+'\n');
+          NODE
+
+      - name: Validate post-consolidation writer state
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0013/$TARGET_CANONICAL"
+          javac "$out/PathSum.java" "$out/PathSumTest.java"
+          test "$(java -cp "$out" PathSumTest)" = 'PASS fixed=7 randomized=3000 oracle=root-to-leaf-sum-enumeration deep_iterative=5000'
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:coverage
+
+      - name: Commit bounded consolidation only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Path Sum alias remediation: $base_head -> $remote_head; discard work and retry later."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: consolidate generic Path Sum alias source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
