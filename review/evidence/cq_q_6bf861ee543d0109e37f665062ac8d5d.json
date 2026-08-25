@@ -1,0 +1,162 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_6bf861ee543d0109e37f665062ac8d5d",
+  "candidate_sha256": "50ea0d86413e3a412970d447e49f82947fba7657b3330a2f548dfb0c0f48c76b",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0030-producer-consumer-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "source-boundary",
+      "title": "Batch 0030 producer-consumer frozen repository source boundary",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6bf861ee543d0109e37f665062ac8d5d/source_boundary.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Producer-consumer deterministic JDK 21 fixture",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6bf861ee543d0109e37f665062ac8d5d/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Producer-consumer independent source-first review",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6bf861ee543d0109e37f665062ac8d5d/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The preserved source asks for producer-consumer simulation using a blocking queue, while hand-writing the queue is a separate sibling question.",
+      "source_ids": [
+        "source-boundary"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "blocking-handoff",
+      "text": "Under the declared JDK implementation, the candidate uses blocking queue put/take coordination, bounded capacity and one stop message per consumer; the source-first review and executable fixture validate those declared mechanics without extending them into business exactly-once semantics.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "implementation-validation",
+      "text": "The executable fixture validates FIFO for one consumer, complete non-duplicated item coverage for multiple consumers, one-stop-per-consumer termination, empty workload, invalid arguments and repeated capacity-one contention.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6bf861ee543d0109e37f665062ac8d5d",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac ProducerConsumerDemo.java ProducerConsumerDemoTest.java && java ProducerConsumerDemoTest",
+    "result": "pass",
+    "reported_stdout": "PASS fifo=yes multi-exactly-once=yes empty-stop=yes repeated-capacity1=50 invalid=yes",
+    "checks": [
+      "single-consumer FIFO with capacity 1",
+      "multi-consumer exact item-set coverage for 1000 items",
+      "one stop per consumer protocol",
+      "empty workload termination",
+      "50 repeated capacity-one runs",
+      "invalid argument rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "single consumer, capacity 1, 100 items",
+        "expected": "FIFO values 1..100 and one stop protocol message",
+        "actual": "PASS fifo=yes",
+        "passed": true
+      },
+      {
+        "case": "four consumers, capacity 7, 1000 items",
+        "expected": "each value 1..1000 appears exactly once after sorting and all four consumers terminate",
+        "actual": "PASS multi-exactly-once=yes",
+        "passed": true
+      },
+      {
+        "case": "empty workload with three consumers",
+        "expected": "no business items and all three consumers terminate via stop protocol",
+        "actual": "PASS empty-stop=yes",
+        "passed": true
+      },
+      {
+        "case": "50 repeated three-consumer runs at capacity 1",
+        "expected": "all 40 values covered exactly once on every run with no deadlock",
+        "actual": "PASS repeated-capacity1=50",
+        "passed": true
+      },
+      {
+        "case": "invalid simulation arguments",
+        "expected": "negative itemCount, zero consumers, or zero capacity are rejected",
+        "actual": "PASS invalid=yes",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0030-producer-consumer-20260825-v1",
+    "review_version": "batch-0030.producer-consumer.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source asks for a producer-consumer simulation using a blocking queue; the same source note separately asks to hand-write a blocking queue, so treating JDK BlockingQueue as the synchronization boundary is a source-faithful separation rather than an omitted implementation requirement.",
+      "The candidate explicitly labels producer count, consumer count, bounded ArrayBlockingQueue choice, capacity, finite item range, stop-message shutdown, timeout and retry/delivery semantics as answer-side assumptions or non-preserved constraints.",
+      "The implementation uses BlockingQueue.put/take rather than polling, a bounded queue for backpressure, and one stop message per consumer; all consumer futures must complete before run returns.",
+      "The JDK 21 fixture compiles and verifies single-consumer FIFO at capacity 1, multi-consumer exact item-set coverage for 1000 items, empty-workload termination, one stop per consumer by protocol completion, invalid arguments, and 50 repeated three-consumer capacity-one runs.",
+      "The answer correctly separates queue-level thread safety and handoff visibility from business acknowledgement, retry, idempotency and exactly-once semantics; it does not fabricate project outcomes.",
+      "Result.stopMessages is a declared protocol count rather than independent instrumentation of stop consumption, but completion of every consumer future plus N enqueued stop messages proves the stated finite-demo termination property; this does not create a correctness hard failure.",
+      "Formal promotion remains subject to repository promotion and real-review policy."
+    ]
+  }
+}
