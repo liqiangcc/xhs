@@ -1,0 +1,118 @@
+name: Remediate Content Batch 0034 Max Version Complexity
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0034-max-version-complexity.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-max-version-complexity
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7ca6615c45d3aeb785c27dc7796d1afb
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Detect and repair repeated-comparator complexity overclaim
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; candidate="review/candidates/answers/$cid.md"; out="review/content_build/answer_batch_0034/$cid"
+          test -s "$candidate"; test -s "$out/MaxVersion.java"; test -s "$out/MaxVersionTest.java"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          cid='cq_q_7ca6615c45d3aeb785c27dc7796d1afb'
+          p=Path(f'review/candidates/answers/{cid}.md')
+          text=p.read_text(encoding='utf-8')
+          old='- 总字符量为 L 时整体扫描 O(L)，除少量下标外额外空间 O(1)。'
+          new='- 单次 `compareVersion(a,b)` 时间是 O(|a|+|b|)、额外空间 O(1)。对 n 个版本直接反复与当前 `best` 比较时，若 M 是最长版本字符串长度，简单归约的清晰最坏上界是 O(nM)；不能只按“所有输入字符只读一次”宣称 O(L)，因为当前 best 可能被重复扫描。'
+          if old not in text:
+              raise SystemExit('expected overclaim text missing; refuse blind remediation')
+          text=text.replace(old,new)
+          anchor='- **ACM 格式**：截图只保存“ACM 不熟”，未保存 stdin/stdout 格式，所以不虚构 `n`、空格或换行布局。'
+          extra='- **复杂度边界**：pairwise comparator 线性于两个参与字符串；多版本直接 fold 会重复读取当前最大版本。如果需要严格按总输入字符量一次性处理，可先把每个版本解析/规范化后再比较，但会引入与解析结果相关的额外空间。'
+          if extra not in text:
+              text=text.replace(anchor,anchor+'\n'+extra)
+          p.write_text(text,encoding='utf-8')
+
+          evidence=Path(f'review/content_build/answer_batch_0034/{cid}/writer_remediation.json')
+          evidence.write_text(json.dumps({
+              'schema_version':'answer_writer_remediation.v1','canonical_id':cid,'remediated_at':'2026-08-26',
+              'finding_severity':'Major','finding':'The initial candidate claimed maxVersion was O(L) in total input characters while the simple fold may repeatedly rescan the current best string; that bound is not valid for highly unbalanced input lengths.',
+              'fix':'State pairwise O(|a|+|b|), simple n-version fold O(nM) using maximum version length M, and explain the parse-once space/time tradeoff.',
+              'code_behavior_changed':False
+          },ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+
+      - name: Revalidate exact implementation and repaired prose
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; candidate="review/candidates/answers/$cid.md"
+          grep -F '简单归约的清晰最坏上界是 O(nM)' "$candidate"
+          if grep -F '总字符量为 L 时整体扫描 O(L)' "$candidate"; then echo 'stale complexity overclaim remains' >&2; exit 1; fi
+          pushd "$out" >/dev/null
+          javac MaxVersion.java MaxVersionTest.java
+          stdout="$(java MaxVersionTest)"
+          popd >/dev/null
+          test "$stdout" = 'PASS lc165 examples leading-zero missing-zero long-revision multiple-input first-equal invalid-input'
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const m=md.match(/```java\n([\s\S]*?)\n```/); const fixture=fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/MaxVersion.java`,'utf8').trim(); if(!m||m[1].trim()!==fixture) throw new Error('prose remediation changed/drifted exact code fence');
+          NODE
+
+      - name: Run bounded answer gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer validate --strict --canonical-id "$CANONICAL_ID" --noWrite || node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:semantic
+          npm run ci:answer:code
+
+      - name: Record remediation in task
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'); t=p.read_text(encoding='utf-8')
+          line='- [x] Pre-review remediation for `cq_q_7ca6615c45d3aeb785c27dc7796d1afb`: corrected a Major complexity overclaim from O(total input characters) to pairwise O(|a|+|b|) / simple multi-version fold O(nM), with deterministic implementation tests re-passing.'
+          if line not in t: t=t.rstrip()+'\n'+line+'\n'; p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit only against unchanged content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          if [ "$(git rev-parse origin/$CONTENT_BRANCH)" != '${{ steps.base.outputs.head }}' ]; then echo 'content branch advanced; discard and retry later'; exit 0; fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0034/$CANONICAL_ID/writer_remediation.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          git diff --cached --check
+          git config user.name xhs-remediation-bot; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: fix max-version complexity bound'
+          git push origin "HEAD:$CONTENT_BRANCH"
