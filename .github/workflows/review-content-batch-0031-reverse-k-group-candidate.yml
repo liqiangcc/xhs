@@ -59,7 +59,7 @@ jobs:
           const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
           const c=cs.find(x=>x.canonical_id===cid),q=qs.find(x=>x.question_id===qid);
           if(!c||!q||q.canonical_id!==cid||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
-          const text=fs.readFileSync(candidate,'utf8');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
           const required=['完整的 K 节点分组原地反转','尾部不足 K 个保持不动','先找第 K 个节点','groupNext = kth.next','prev = groupNext','oldGroupHead','O(1)','输入是否可能有环'];
           for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
           if(/ProblemSpec|transition\s*\(|按本题约束填写/.test(text)) throw new Error('placeholder/template residue detected');
