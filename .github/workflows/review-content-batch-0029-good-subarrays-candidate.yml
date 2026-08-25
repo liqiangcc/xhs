@@ -54,7 +54,7 @@ jobs:
           out="review/content_build/answer_batch_0029/$CANONICAL_ID"
           test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
           javac "$out/SubarrayMultipleOfK.java" "$out/SubarrayMultipleOfKTest.java"
-          test "$(java -cp "$out" SubarrayMultipleOfKTest)" = 'PASS count-standard=7 count-zeros=6 count-negative-elements=2 negative-k=7 exists-standard=true exists-alt=true exists-false=false length-two-zero=true k-zero=rejected null=rejected'
+          test "$(java -cp "$out" SubarrayMultipleOfKTest)" = 'PASS count-standard=7 count-zeros=6 count-negative-elements=3 negative-k=7 exists-standard=true exists-alt=true exists-false=false length-two-zero=true k-zero=rejected null=rejected'
           node <<'NODE'
           const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
           const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
@@ -88,7 +88,8 @@ jobs:
             'The preserved source explicitly names continuous subarrays whose sum is a multiple of K, prefix-sum/hash optimization, and a combined LeetCode 523/974 business context. Because the exact output contract is not preserved, collapsing it to only existence or only count would fabricate precision.',
             'The candidate preserves that ambiguity constructively by exposing two methods under the same prefix-remainder invariant: a count method using remainder frequencies and an existence-with-minimum-length method using earliest indices.',
             'The displayed Java block is a complete compilable class and matches the separately executed fixture implementation.',
-            'The deterministic fixture passes the standard counting case, all-zero combinations, negative-element remainder normalization, negative-k normalization, positive and negative existence cases, the minimum length-two case, and explicit k=0/null boundaries.',
+            'The first fixture pass correctly exposed a hand-computed test expectation error for [-1,1,-4,4], k=5: the algorithm returns 3 valid divisible-sum subarrays and direct prefix-remainder enumeration confirms 3. The fixture and frozen validation record were corrected without changing candidate code.',
+            'The corrected deterministic fixture passes the standard counting case, all-zero combinations, negative-element remainder normalization, negative-k normalization, positive and negative existence cases, the minimum length-two case, and explicit k=0/null boundaries.',
             'The candidate explains the empty-prefix seed, why earliest index is required for the length constraint, normalized modulo for negative values, long counting bounds, and the difference between hash-state semantics for counting versus existence.',
             'Complexity and data-structure tradeoffs are scoped to the explicit k!=0 candidate contract; no exact 523/974 contract, project history, or k=0 semantics are invented beyond the frozen source.',
             'No uncovered preserved variant remains because both source-compatible 523/974 interpretations are represented and distinguished. No coding hard failure or unsupported source attribution remains; formal promotion still follows repository promotion and real-review policy.'
@@ -109,14 +110,14 @@ jobs:
               {claim_id:'boundary-validation',text:'The executable fixture verifies counting and existence variants, all-zero combinations, negative elements, negative k, minimum-length behavior, and explicit k=0/null boundaries.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}
             ],
             source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
-            validation:{command:'javac SubarrayMultipleOfK.java SubarrayMultipleOfKTest.java && java SubarrayMultipleOfKTest',result:'pass',reported_stdout:'PASS count-standard=7 count-zeros=6 count-negative-elements=2 negative-k=7 exists-standard=true exists-alt=true exists-false=false length-two-zero=true k-zero=rejected null=rejected',checks:['counting variant standard prefix-remainder case','all-zero counting combinations','negative element remainder normalization','negative k normalization','existence variant positive cases','existence variant negative case','minimum length two behavior','explicit k=0 rejection','explicit null rejection'],boundary_tests:[{case:'count [4,5,0,-2,-3,1], k=5',expected:7,actual:7,passed:true},{case:'count [0,0,0], k=5',expected:6,actual:6,passed:true},{case:'count negative elements [-1,1,-4,4], k=5',expected:2,actual:2,passed:true},{case:'exists [23,2,4,6,7], k=6',expected:true,actual:true,passed:true},{case:'exists [23,2,6,4,7], k=13',expected:false,actual:false,passed:true}]},
+            validation:{command:'javac SubarrayMultipleOfK.java SubarrayMultipleOfKTest.java && java SubarrayMultipleOfKTest',result:'pass',reported_stdout:'PASS count-standard=7 count-zeros=6 count-negative-elements=3 negative-k=7 exists-standard=true exists-alt=true exists-false=false length-two-zero=true k-zero=rejected null=rejected',checks:['counting variant standard prefix-remainder case','all-zero counting combinations','negative element remainder normalization','negative k normalization','existence variant positive cases','existence variant negative case','minimum length two behavior','explicit k=0 rejection','explicit null rejection'],boundary_tests:[{case:'count [4,5,0,-2,-3,1], k=5',expected:7,actual:7,passed:true},{case:'count [0,0,0], k=5',expected:6,actual:6,passed:true},{case:'count negative elements [-1,1,-4,4], k=5',expected:3,actual:3,passed:true},{case:'exists [23,2,4,6,7], k=6',expected:true,actual:true,passed:true},{case:'exists [23,2,6,4,7], k=13',expected:false,actual:false,passed:true}]},
             review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0029.good-subarrays.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
           };
           fs.mkdirSync('review/evidence',{recursive:true});
           fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
           const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md';
           let text=fs.readFileSync(task,'utf8');
-          const note='- Good-subarrays candidate passed isolated source-first review with both preserved 523/974 interpretations represented and deterministic Java evidence; formal promotion remains governed by repository promotion and real-review policy.';
+          const note='- Good-subarrays candidate passed isolated source-first review with both preserved 523/974 interpretations represented and corrected deterministic Java evidence; formal promotion remains governed by repository promotion and real-review policy.';
           if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
           NODE
 
