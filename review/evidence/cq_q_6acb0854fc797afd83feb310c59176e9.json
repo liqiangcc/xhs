@@ -1,0 +1,183 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_6acb0854fc797afd83feb310c59176e9",
+  "candidate_sha256": "bf4a0abd079cfde6ae84fbbe7a621015ea6abeb2b35764a62784ecad0a6ddaa6",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0030-round-robin-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "source-boundary",
+      "title": "Batch 0030 round-robin frozen repository source boundary",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6acb0854fc797afd83feb310c59176e9/source_boundary.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "writer-research",
+      "title": "Batch 0030 round-robin writer research with Oracle Object and JLS primary-source locators",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6acb0854fc797afd83feb310c59176e9/writer_research.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Round-robin deterministic JDK 21 concurrency fixture",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6acb0854fc797afd83feb310c59176e9/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Round-robin independent source-first review",
+      "locator": "review/content_build/answer_batch_0030/cq_q_6acb0854fc797afd83feb310c59176e9/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository preserves multi-threaded printing of 1..10 with synchronization as the target, while worker count, odd/even assignment, repeat count, primitive and API shape remain unspecified.",
+      "source_ids": [
+        "source-boundary"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "condition-wait",
+      "text": "The reviewed Java monitor contract supports condition-loop waiting: wait releases the owned monitor while waiting, wakeup requires reacquisition, and wakeups can be spurious; notifyAll wakes waiters without assigning the next owner.",
+      "source_ids": [
+        "writer-research",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "monitor-visibility",
+      "text": "The reviewed Java monitor model provides the visibility ordering used by synchronized transitions of next, while volatile alone does not implement the full condition-waiting protocol.",
+      "source_ids": [
+        "writer-research",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "implementation-validation",
+      "text": "The executable JDK 21 fixture verifies exact order and round-robin ownership for 2 and 3 workers across repeated rounds, plus single-value, empty-range, termination and invalid-argument behavior.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6acb0854fc797afd83feb310c59176e9",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac RoundRobinPrinter.java RoundRobinPrinterTest.java && java RoundRobinPrinterTest",
+    "result": "pass",
+    "reported_stdout": "PASS rounds=202 exact-sequence=yes round-robin-ownership=yes no-duplicates=yes termination=yes invalid-args=yes",
+    "checks": [
+      "2-worker exact order repeated 100 rounds",
+      "3-worker exact order repeated 100 rounds",
+      "round-robin ownership",
+      "no missing or duplicate outputs",
+      "all worker threads terminate",
+      "empty range",
+      "invalid constructor/worker arguments"
+    ],
+    "boundary_tests": [
+      {
+        "case": "2 workers emit 1..10 in strict round-robin order across 100 repeated rounds",
+        "expected": "values 1..10 exactly once; owner=(value-1)%2; all workers terminate",
+        "actual": "pass across 100 rounds",
+        "passed": true
+      },
+      {
+        "case": "3 workers emit 1..10 in strict round-robin order across 100 repeated rounds",
+        "expected": "values 1..10 exactly once; owner=(value-1)%3; all workers terminate",
+        "actual": "pass across 100 rounds",
+        "passed": true
+      },
+      {
+        "case": "4 workers with maxValue=1",
+        "expected": "single value 1 owned by worker 0 and all workers terminate",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "2 workers with maxValue=0",
+        "expected": "no output and all workers terminate",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "invalid workerCount/maxValue/workerId",
+        "expected": "IllegalArgumentException",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0030-round-robin-20260825-v3",
+    "review_version": "batch-0030.round-robin.v3",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The review begins from the current Canonical ownership and preserved repository source wording rather than the long-tail baseline. The repository preserves multi-threaded printing of 1..10 and synchronization as the interview target, but not worker count, odd/even assignment, repeat count, synchronization primitive or API shape.",
+      "The candidate explicitly labels parameterized workerCount and round-robin ownership as implementation assumptions rather than recovered source requirements.",
+      "The monitor protocol is internally coherent: one shared next value is protected by one monitor, non-owners wait in a condition loop, the owner performs output and next++ while holding the monitor, and each successful state transition calls notifyAll.",
+      "The corrected termination explanation is valid for this protocol: after the final value is emitted, the same successful transition increments next beyond maxValue and notifies waiters; awakened or later-entering workers then observe the terminal predicate and return without needing a second terminal-branch notification.",
+      "The candidate correctly uses a while condition around wait, because a wakeup is not proof that the owner predicate is true and Java permits spurious wakeups; notifyAll also does not give an awakened thread privileged access to the monitor.",
+      "The synchronized monitor transitions provide the necessary Java monitor visibility relationship for next; volatile alone would not supply the compound mutual-exclusion plus condition-waiting protocol.",
+      "The deterministic JDK 21 fixture passes 100 two-worker rounds, 100 three-worker rounds, a four-worker single-value round, the empty range, strict ascending order, round-robin ownership, no duplicates/missing values, thread termination and invalid argument rejection.",
+      "The illustrative API assumes every configured workerId has a running worker and that the sink does not fail mid-protocol. Those are implementation preconditions, not source facts, and the answer does not present the example as a fault-tolerant production coordinator.",
+      "No uncovered source variant, unsupported source attribution, concurrency hard failure, unrunnable code block or fabricated production claim remains. Formal promotion remains subject to repository promotion and real-review policy."
+    ]
+  }
+}
