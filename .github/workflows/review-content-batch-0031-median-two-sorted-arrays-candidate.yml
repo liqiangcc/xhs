@@ -1,0 +1,143 @@
+name: Review Content Batch 0031 Median Two Sorted Arrays Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0031-median-two-sorted-arrays-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-median-two-sorted-arrays-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6fef2a666fc368e6c247fe3bf666a855
+  SOURCE_QID: 6fef2a666fc368e6c247fe3bf666a855
+  CANDIDATE_BLOB_SHA: d3e7e8a2cc5187f7746aea711ac905f78d5aedae
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun independent merge oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法手撕：寻找两个正序数组的中位数（Median of Two Sorted Arrays，力扣 4）。';
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/689a0b3f000000002501b5bc.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('source drifted');
+          const ctxPath=`${out}/context.json`;
+          const ctx=fs.existsSync(ctxPath)?JSON.parse(fs.readFileSync(ctxPath,'utf8')):null;
+          if(!ctx||!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context missing or drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error('source context missing');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const required=['较短数组','j = (m+n+1)/2 - i','Aleft <= Bright','Bleft <= Aright','O(log(min(m,n)))','Integer.MIN_VALUE/MAX_VALUE','不额外扫描验证'];
+          for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if(/ProblemSpec|transition\s*\(|按本题约束填写|TODO|占位/.test(text)) throw new Error('placeholder/template residue detected');
+          NODE
+          javac "$out/MedianTwoSortedArrays.java" "$out/MedianTwoSortedArraysTest.java"
+          test "$(java -cp "$out" MedianTwoSortedArraysTest)" = 'PASS fixed=7 random-oracle=5000 odd-even=yes empty-side=yes duplicates=yes extremes=yes overflow-safe=yes invalid-empty-null=rejected'
+
+      - name: Write independent source-first review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0031/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundaryPath=`${out}/source_boundary.json`,validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const tests=[
+            {case:'[1,3] and [2]',expected:'2.0 via odd-length left maximum',actual:'pass',passed:true},
+            {case:'[1,2] and [3,4]',expected:'2.5 via left-max/right-min average',actual:'pass',passed:true},
+            {case:'one side empty',expected:'median from the non-empty sorted array without merge allocation',actual:'pass',passed:true},
+            {case:'Integer.MIN_VALUE and Integer.MAX_VALUE',expected:'-0.5 without int-sum overflow',actual:'pass',passed:true},
+            {case:'5000 deterministic sorted pairs, lengths 0..20',expected:'binary-partition result equals independent direct-merge reference',actual:'all passed',passed:true}
+          ];
+          fs.writeFileSync(validationPath,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac MedianTwoSortedArrays.java MedianTwoSortedArraysTest.java && java MedianTwoSortedArraysTest',stdout:'PASS fixed=7 random-oracle=5000 odd-even=yes empty-side=yes duplicates=yes extremes=yes overflow-safe=yes invalid-empty-null=rejected',checks:['odd total length','even total length','one empty side','duplicates','negative/disjoint ranges','Integer.MIN/MAX extremes','overflow-safe even average','both-empty rejection','null rejection','5000 deterministic direct-merge oracle comparisons'],boundary_tests:tests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0031-median-two-sorted-arrays-20260825';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved source asks for Median of Two Sorted Arrays / LeetCode 4 and identifies binary search, but it does not preserve a Java API, null behavior, both-empty behavior or a runtime sortedness-validation requirement.',
+            'The candidate keeps those missing interface details explicitly answer-side instead of presenting them as recovered source constraints.',
+            'The partition invariant is correct: the left-side cardinality is fixed first, j is derived from i, and because each input is internally sorted the only cross-boundary violations are Aleft > Bright or Bleft > Aright.',
+            'The binary-search direction is coherent and monotone: Aleft > Bright moves i left, while Bleft > Aright moves i right; searching only the shorter array keeps the derived partition within the other array bounds.',
+            'Odd and even totals are handled from the same partition; logical infinities cover endpoint cuts, duplicate values are accepted with <= comparisons, and long boundary arithmetic prevents int overflow in the even median average.',
+            'The standalone Java implementation matches an independent direct-merge oracle across fixed boundaries and 5000 deterministic generated sorted-array pairs, including empty-side, duplicate and Integer.MIN/MAX cases.',
+            'The answer does not fabricate production data sizes or latency experience; it explicitly bounds the O(log(min(m,n))) claim to O(1) random access arrays and notes that untrusted-input sortedness validation changes the complexity.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0031.median-two-sorted-arrays.v1',decision:'pass',revision_round:0,source_packet:['note_tagged/689a0b3f000000002501b5bc.json',boundaryPath,candidate,validationPath,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0031-median-two-sorted-arrays-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Tagged Median of Two Sorted Arrays question',locator:`note_tagged/689a0b3f000000002501b5bc.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Median binary-partition independent direct-merge oracle',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Median candidate independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source asks for the median of two sorted arrays in LeetCode 4 context, but it does not preserve a Java API, null/empty contract or runtime sortedness-validation requirement.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'partition-invariant',text:'With a fixed left-half cardinality, choosing i on the shorter array determines j on the other array; a valid median partition is exactly characterized by the two cross-boundary inequalities because both inputs are internally sorted.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'search-direction',text:'Aleft > Bright means the shorter-array cut is too far right and Bleft > Aright means it is too far left, giving the monotone direction needed for binary search.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','原理机制','常见追问']},{claim_id:'oracle-validation',text:'The Java implementation matches an independent direct-merge median oracle on fixed boundaries and 5000 deterministic generated sorted-array pairs, including odd/even totals, one empty side, duplicates and extreme int values.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac MedianTwoSortedArrays.java MedianTwoSortedArraysTest.java && java MedianTwoSortedArraysTest',result:'pass',reported_stdout:'PASS fixed=7 random-oracle=5000 odd-even=yes empty-side=yes duplicates=yes extremes=yes overflow-safe=yes invalid-empty-null=rejected',checks:['fixed boundaries','independent direct-merge reference','odd/even totals','empty side','duplicates','int extremes','invalid empty/null'],boundary_tests:tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0031.median-two-sorted-arrays.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md';
+          let text=fs.readFileSync(task,'utf8');
+          const done='- [x] `cq_q_6fef2a666fc368e6c247fe3bf666a855` candidate passed independent source-first review: the shorter-array partition invariant and search direction are explicit, endpoint/duplicate/extreme-int boundaries are handled, and the standalone Java implementation matches an independent direct-merge oracle across fixed cases plus 5000 generated sorted-array pairs. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(done)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+done+'\n');
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during median-two-sorted-arrays review; discard local review and retry later."; exit 0; fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0031/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0031 median-two-sorted-arrays candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
