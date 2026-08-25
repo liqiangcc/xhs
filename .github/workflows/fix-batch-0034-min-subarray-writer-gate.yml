@@ -27,31 +27,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           p = Path('.github/workflows/build-content-batch-0034-min-subarray-partition-candidate.yml')
           text = p.read_text()
-          old = '''      - name: Verify focused repository gates
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/xhs.js canonical check --noWrite
-          node scripts/xhs.js answer validate --strict --noWrite
-          npm test
-'''
-          new = '''      - name: Verify exact code fence against validated fixture
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const fs=require('fs'),cid=process.env.CANONICAL_ID;
-          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
-          const match=md.match(/```java\\n([\\s\\S]*?)\\n```/);
-          if(!match) throw new Error('Java fence missing');
-          const fixture=fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/MinSubarrayPartition.java`,'utf8').trim();
-          if(match[1].trim()!==fixture) throw new Error('candidate code fence differs from validated fixture');
-          NODE
-'''
+          old = "      - name: Verify focused repository gates\n        shell: bash\n        run: |\n          set -euo pipefail\n          node scripts/xhs.js canonical check --noWrite\n          node scripts/xhs.js answer validate --strict --noWrite\n          npm test\n"
+          new = "      - name: Verify exact code fence against validated fixture\n        shell: bash\n        run: |\n          set -euo pipefail\n          node <<'NODE'\n          const fs=require('fs'),cid=process.env.CANONICAL_ID;\n          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');\n          const match=md.match(/```java\\n([\\s\\S]*?)\\n```/);\n          if(!match) throw new Error('Java fence missing');\n          const fixture=fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/MinSubarrayPartition.java`,'utf8').trim();\n          if(match[1].trim()!==fixture) throw new Error('candidate code fence differs from validated fixture');\n          NODE\n"
           if text.count(old) != 1:
               raise SystemExit(f'expected exactly one old gate, found {text.count(old)}')
           p.write_text(text.replace(old, new))
