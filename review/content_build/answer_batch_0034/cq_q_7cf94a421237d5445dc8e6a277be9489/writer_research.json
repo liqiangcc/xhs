@@ -2,7 +2,7 @@
   "schema_version": "answer_writer_research.v1",
   "canonical_id": "cq_q_7cf94a421237d5445dc8e6a277be9489",
   "checked_at": "2026-08-26",
-  "review_state": "writer_complete_isolated_review_pending",
+  "review_state": "independent_source_first_review_passed",
   "sources": [
     {
       "source_id": "repository-source",
@@ -16,6 +16,13 @@
       "title": "Deterministic JDK 21 signed contiguous-partition fixture",
       "locator": "review/content_build/answer_batch_0034/cq_q_7cf94a421237d5445dc8e6a277be9489/code_validation.json",
       "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Independent source-first min-subarray-partition candidate review",
+      "locator": "review/content_build/answer_batch_0034/cq_q_7cf94a421237d5445dc8e6a277be9489/isolated_review_result.json",
+      "source_type": "repository_structured_source",
       "checked_at": "2026-08-26"
     }
   ],
@@ -56,6 +63,20 @@
         "关键细节",
         "常见追问"
       ]
+    },
+    {
+      "claim_id": "isolated-review-verdict",
+      "text": "Independent source-first review found no hard failures, unsupported claims or uncovered source variants and recompiled the exact candidate Java against an exhaustive small signed-array cut-mask oracle.",
+      "source_ids": [
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
     }
   ],
   "source_question_coverage": [
@@ -72,5 +93,31 @@
       ]
     }
   ],
-  "promotion_blocker": "isolated_independent_review_human_approval_and_real_review_policy_not_yet_satisfied"
+  "promotion_blocker": "required_human_approval_and_real_review_policy_not_yet_satisfied",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0034-min-subarray-20260826-v1",
+    "review_version": "batch-0034.min-subarray-partition.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The preserved source asks only for the minimum number of subarrays whose sums are <= k; it does not preserve non-negativity, explicit bounds, empty/impossible return conventions, or an explicit clarification of contiguous versus arbitrary grouping.",
+      "The candidate makes those missing pieces explicit as answer-side execution policy rather than recovered source: full ordered partition into non-empty contiguous segments, signed int values, empty -> 0 and impossible -> -1.",
+      "Because signed values are allowed by the chosen conservative policy, the prefix-sum last-cut DP is appropriate and does not rely on the monotonicity needed by the usual non-negative greedy shortcut.",
+      "The exact Java fence independently compiles on JDK 21 and matches a separate brute-force cut-mask oracle for every array of lengths 1..6 over values -3..3 and k values -4..6, plus empty/extreme-int cases, with no input mutation.",
+      "The answer scopes the O(n) greedy optimization only to a later non-negative constraint and does not fabricate project experience or source constraints."
+    ]
+  }
 }

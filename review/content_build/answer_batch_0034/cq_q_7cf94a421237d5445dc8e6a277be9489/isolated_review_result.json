@@ -1,0 +1,47 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_7cf94a421237d5445dc8e6a277be9489",
+  "candidate_sha256": "8f1d0e45ee7301da38d80721db3b7cc4de2c5da01ec1d2b80d0dc7d69f5486f4",
+  "reviewed_at": "2026-08-26",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0034-min-subarray-20260826-v1",
+  "review_version": "batch-0034.min-subarray-partition.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "note_tagged/685696fe0000000012033bb6.json",
+    "review/content_build/answer_batch_0034/cq_q_7cf94a421237d5445dc8e6a277be9489/source_mapping.json",
+    "review/content_build/answer_batch_0034/source_boundary_audit.md",
+    "review/candidates/answers/cq_q_7cf94a421237d5445dc8e6a277be9489.md",
+    "config/answer_quality.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The preserved source asks only for the minimum number of subarrays whose sums are <= k; it does not preserve non-negativity, explicit bounds, empty/impossible return conventions, or an explicit clarification of contiguous versus arbitrary grouping.",
+    "The candidate makes those missing pieces explicit as answer-side execution policy rather than recovered source: full ordered partition into non-empty contiguous segments, signed int values, empty -> 0 and impossible -> -1.",
+    "Because signed values are allowed by the chosen conservative policy, the prefix-sum last-cut DP is appropriate and does not rely on the monotonicity needed by the usual non-negative greedy shortcut.",
+    "The exact Java fence independently compiles on JDK 21 and matches a separate brute-force cut-mask oracle for every array of lengths 1..6 over values -3..3 and k values -4..6, plus empty/extreme-int cases, with no input mutation.",
+    "The answer scopes the O(n) greedy optimization only to a later non-negative constraint and does not fabricate project experience or source constraints."
+  ],
+  "validation": {
+    "command": "javac exact candidate fence + independent brute-force cut-mask oracle && java MinSubarrayPartitionReviewTest",
+    "result": "pass",
+    "stdout": "PASS exact-fence exhaustive-signed-length-1..6 k=-4..6 brute-force-cut-oracle empty extreme-int no-mutation"
+  },
+  "promotion_blockers": [
+    "required_human_approval_not_yet_satisfied",
+    "repository_real_review_policy_not_yet_satisfied"
+  ]
+}
