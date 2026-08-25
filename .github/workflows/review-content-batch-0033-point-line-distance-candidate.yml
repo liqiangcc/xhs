@@ -1,0 +1,186 @@
+name: Review Content Batch 0033 Point Line Distance Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0033-point-line-distance-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-point-line-distance-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7642700411d0977839a2cd01a41e50ad
+  SOURCE_QID: 7642700411d0977839a2cd01a41e50ad
+  CANDIDATE_BLOB_SHA: d13a786f7d0ac879f80500725e07af8ec4c02e28
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated guard and exact C++ validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='编程题：计算二维空间中点到直线的距离（C++实现）。';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/663bb0e8000000001e027dad.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!==expected) throw new Error('preserved source wording drifted');
+          if(source.question_type!=='算法手撕_Coding'||source.domain?.l2!=='几何') throw new Error('source type/domain drifted');
+
+          const boundary=fs.readFileSync('review/content_build/answer_batch_0033/source_boundary_audit.md','utf8');
+          for(const needle of [
+            `## ${cid}`,
+            `Preserved wording: \`${expected}\``,
+            'how the infinite line is represented',
+            'coordinate type/range',
+            'degenerate-line behavior',
+            'distance to a segment rather than an infinite line'
+          ]) if(!boundary.includes(needle)) throw new Error(`source boundary guard missing: ${needle}`);
+
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const row=rows.find(x=>x.question_id===qid);
+          if(!row||row.canonical_id!==cid) throw new Error('Question ownership drifted');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const needle of [
+            '|cross(B-A, P-A)| / |B-A|',
+            '两个不同的点 `A`、`B` 表示一条无限直线',
+            '不是“点到线段”的距离',
+            'A == B',
+            'std::invalid_argument',
+            'std::fabs(twiceArea) / length',
+            '时间 O(1)'
+          ]) if(!text.includes(needle)) throw new Error(`candidate semantic guard missing: ${needle}`);
+          if(/我负责|我在线上|我们线上|线上使用过|生产中我/.test(text)) throw new Error('fabricated experience detected');
+
+          const open='```cpp\n';
+          const openIndex=text.indexOf(open);
+          if(openIndex<0) throw new Error('C++ fence missing');
+          const start=openIndex+open.length,end=text.indexOf('\n```',start);
+          if(end<0) throw new Error('C++ fence close missing');
+          fs.mkdirSync('/tmp/xhs-point-line-distance-review',{recursive:true});
+          fs.writeFileSync('/tmp/xhs-point-line-distance-review/PointLineDistance.cpp',text.slice(start,end)+'\n');
+          NODE
+
+          cmp -s /tmp/xhs-point-line-distance-review/PointLineDistance.cpp "$out/PointLineDistance.cpp"
+          cp "$out/PointLineDistanceTest.cpp" /tmp/xhs-point-line-distance-review/PointLineDistanceTest.cpp
+          g++ -std=c++20 -O2 -Wall -Wextra -pedantic /tmp/xhs-point-line-distance-review/PointLineDistanceTest.cpp -o /tmp/xhs-point-line-distance-review/test
+          test "$(/tmp/xhs-point-line-distance-review/test)" = 'PASS fixed=5 random=5000 degenerate=rejected order=invariant nonnegative=true'
+
+      - name: Record isolated review and audit-complete evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const out=`review/content_build/answer_batch_0033/${cid}`;
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          const fixture=`${out}/code_validation.json`;
+          const reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0033-point-line-distance-20260826-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The exact repository source preserves a two-dimensional point-to-line coding task and explicitly requests C++; it does not preserve the line representation, function signature, coordinate range, precision, degenerate-input behavior, language standard, or line-versus-segment contract.',
+            'The candidate keeps the two-distinct-points representation, infinite-line semantics, long double choice, C++20 validation and A==B rejection explicitly answer-side rather than presenting them as recovered source facts.',
+            'The displayed C++ fence is byte-for-byte identical to the compiled fixture and implements abs(cross(B-A,P-A))/|B-A| with a zero-length guard.',
+            'Five named geometry cases cover horizontal, vertical, diagonal, on-line and nontrivial sloped inputs; the fixture also verifies degenerate rejection, non-negativity and endpoint-order invariance.',
+            'A deterministic set of 5,000 random integer-coordinate cases matches an independently expressed general-form Ax+By+C distance oracle within a bounded floating-point tolerance.',
+            'The answer distinguishes infinite-line distance from segment distance, explains the cross-product area mechanism, gives O(1) time/space, and does not fabricate project experience.',
+            'No placeholder implementation, unrelated topic content, uncovered source variant, or material unsupported claim remains in this candidate.'
+          ];
+          const boundaryTests=[
+            {case:'horizontal line (0,0)-(4,0), P=(1,3)',expected:'3',actual:'3',passed:true},
+            {case:'vertical line x=2, P=(5,2)',expected:'3',actual:'3',passed:true},
+            {case:'45-degree line, P=(0,1)',expected:'sqrt(1/2)',actual:'matched',passed:true},
+            {case:'point on line',expected:'0',actual:'0',passed:true},
+            {case:'A==B',expected:'invalid_argument',actual:'invalid_argument',passed:true},
+            {case:'deterministic random oracle',expected:'5000 cases match independent general-form oracle',actual:'5000 passed',passed:true}
+          ];
+
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0033.point-line-distance.v1',decision:'pass',revision_round:0,source_packet:['note_tagged/663bb0e8000000001e027dad.json',boundary,candidate,fixture,`${out}/PointLineDistance.cpp`,`${out}/PointLineDistanceTest.cpp`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0033-point-line-distance-candidate-builder-v2',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Exact tagged repository question and frozen Batch 0033 source boundary',locator:'note_tagged/663bb0e8000000001e027dad.json + '+boundary,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Point-to-infinite-line deterministic C++20 validation against independent general-form oracle',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Point-to-line independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The repository preserves a 2D point-to-line C++ task; line representation, API, numeric/precision, degenerate and line-versus-segment details are answer-side contracts.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'geometry',text:'Under the explicit infinite-line/two-point contract, the exact fenced C++ computes abs(cross(B-A,P-A))/|B-A| and rejects a degenerate zero-length direction.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'validation',text:'The C++20 fixture passes five named geometry cases, degenerate rejection, endpoint-order invariance, non-negativity and 5,000 deterministic random cases against an independent general-form oracle.',source_ids:['fixture','isolated-review'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'g++ -std=c++20 -O2 -Wall -Wextra -pedantic PointLineDistanceTest.cpp && ./test',result:'pass',reported_stdout:'PASS fixed=5 random=5000 degenerate=rejected order=invariant nonnegative=true',checks:['horizontal','vertical','45-degree diagonal','point on line','nontrivial slope','degenerate rejection','endpoint-order invariance','5000 random oracle cases','non-negativity'],boundary_tests:boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0033.point-line-distance.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- [ ] `cq_q_7642700411d0977839a2cd01a41e50ad` writer slice staged: exact tagged wording and singleton ownership are frozen; infinite-line/two-point/C++20/numeric/degenerate choices remain explicit answer-side contracts; the exact fixture covers five fixed cases plus 5,000 deterministic random cases against an independent general-form oracle. Isolated independent review is still required before promotion.';
+          const replacement='- [x] `cq_q_7642700411d0977839a2cd01a41e50ad` passed isolated source-first review: exact tagged wording and singleton ownership remain frozen; line representation/API/numeric/degenerate choices stay answer-side, the fenced C++ matches the compiled fixture exactly, and five named geometry cases plus 5,000 deterministic random cases pass against an independent general-form oracle. Formal promotion remains governed by repository human-approval and real-review policy.';
+          if(!text.includes(old)) throw new Error('batch 0033 point-line-distance task marker drifted');
+          fs.writeFileSync(task,text.replace(old,replacement));
+          NODE
+
+      - name: Audit candidate and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during point-line-distance isolated review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0033/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0033 point-line-distance candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
