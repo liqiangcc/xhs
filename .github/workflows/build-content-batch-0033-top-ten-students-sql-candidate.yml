@@ -1,0 +1,260 @@
+name: Build Content Batch 0033 Top Ten Students SQL Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0033-top-ten-students-sql-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-top-ten-students-sql-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_779e5c61c5f999e26fabf2ab777035b1
+  SOURCE_QID: 779e5c61c5f999e26fabf2ab777035b1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Freeze stronger raw source plus tagged ownership boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const taggedExpected='SQL：找出成绩排名前十的学生？';
+          const rawNeedle='sql题找出成绩前十的学生';
+          const raw=fs.readFileSync('note_img_txt/67ee3c15000000001c0327c9.txt','utf8');
+          if(!raw.includes(rawNeedle)) throw new Error('stronger OCR source wording drifted');
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67ee3c15000000001c0327c9.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!==taggedExpected) throw new Error(`tagged source wording drifted: ${source?.original_question}`);
+          if(source.question_type!=='算法手撕_Coding') throw new Error(`source type drifted: ${source.question_type}`);
+          if(source.domain?.l2!=='MySQL实操') throw new Error(`source domain drifted: ${JSON.stringify(source.domain)}`);
+          if(!source.tech_entities?.includes('sql')||!source.tech_entities?.includes('limit')) throw new Error('SQL/LIMIT source entity drifted');
+
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const row=rows.find(x=>x.question_id===qid);
+          if(!row||row.canonical_id!==cid) throw new Error(`Question -> Canonical ownership drifted: ${row?.canonical_id}`);
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error(`Canonical ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse to overwrite writer artifact');
+
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          let text=fs.readFileSync(boundary,'utf8');
+          const heading=`## ${cid}`;
+          if(!text.includes(heading)) {
+            text += `\n## ${cid}\n\n- Stronger raw OCR source: \`note_img_txt/67ee3c15000000001c0327c9.txt\` preserves \`${rawNeedle}\`.\n- Tagged projection: \`note_tagged/67ee3c15000000001c0327c9.json\` preserves \`${taggedExpected}\`.\n- Source-preserved facts: this is an SQL task asking for the students whose grades/scores are in the top ten; the tagged projection classifies it as MySQL practice and carries SQL/LIMIT entities.\n- Not preserved by either source: table/column names, whether each student has one score or many course-grade rows, the exact ranking metric, whether \"top ten\" means exactly ten rows or top-ten rank levels including ties, tie-break policy, NULL/no-score behavior, output columns, MySQL version, and index/schema constraints.\n- Candidate policy for this slice: use \`students(student_id,name)\` plus exactly one non-NULL final row \`scores(student_id,score)\` per scored student; interpret top ten as at most ten rows, sort by score descending and student_id ascending for deterministic tie breaking, and exclude students without a score via INNER JOIN. The primary query uses portable MySQL LIMIT syntax; window-function and multi-course aggregation variants remain explicit follow-ups rather than recovered requirements.\n- Promotion remains blocked until isolated independent review verifies source boundaries, deterministic tie behavior, exact SQL execution against fixtures, alternatives for ties/multiple grades, evidence, and repository gates.\n`;
+            fs.writeFileSync(boundary,text);
+          }
+          NODE
+
+      - name: Write source-bounded SQL candidate and exact fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0033/$cid"
+          mkdir -p "$out"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_779e5c61c5f999e26fabf2ab777035b1","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # SQL：找出成绩排名前十的学生
+
+          ## 核心结论
+
+          原始 OCR 只保留“sql题找出成绩前十的学生”，没有表结构、成绩口径和并列规则。先把这些变成显式契约：假设 `students(student_id, name)` 保存学生，`scores(student_id, score)` 对每个有成绩的学生恰好一条非 NULL 最终成绩；“前十”表示**最多返回 10 名学生**，成绩降序，分数相同时按 `student_id` 升序稳定打破并列；没有成绩的学生不参与。这个契约下直接连接、排序、`LIMIT 10` 即可。
+
+          ## 1 分钟版
+
+          - 一行结果代表一名学生；当前契约假设一名学生只有一条最终 `score`，所以主查询不需要 `GROUP BY`。
+          - `JOIN` 用 `student_id` 把姓名与成绩关联；INNER JOIN 自然排除没有成绩记录的学生。
+          - `ORDER BY sc.score DESC` 先按成绩从高到低；再加 `s.student_id ASC`，让第 10 名附近有同分时结果仍然确定。
+          - `LIMIT 10` 的语义是最多十**行**，并不等于“前十个名次全部包含并列”。如果面试官要求并列同名次全部返回，应改用窗口函数并先确认 `RANK` 还是 `DENSE_RANK`。
+          - 如果成绩表是一人多门课多行，必须先明确用平均分、总分还是某门成绩，再聚合到“一名学生一行”后排序，不能直接套本查询。
+          - 来源没规定 NULL、无成绩学生、MySQL 版本和索引；这些都应先确认，而不是补成原题事实。
+
+          ## 3 分钟版
+
+          ```sql
+          SELECT
+              s.student_id,
+              s.name,
+              sc.score
+          FROM students AS s
+          JOIN scores AS sc
+            ON sc.student_id = s.student_id
+          ORDER BY sc.score DESC, s.student_id ASC
+          LIMIT 10;
+          ```
+
+          在当前“每人一条最终成绩”的契约下，这个查询返回最多十行。假设第 10、11 名都是 91 分，`student_id` 分别是 10 和 11，那么因为额外的稳定排序键，ID 10 会进入结果、ID 11 不会；这不是把 91 分判成不同排名，而是在“必须只取十行”的契约下定义确定性的截断规则。
+
+          ## 关键细节
+
+          - **先定义排名对象**：如果 `scores` 中一人多行课程成绩，必须先用题目指定的 `AVG`、`SUM`、最高分等口径形成每人一条记录，再谈前十。
+          - **并列语义**：`LIMIT 10` 只保证十行上限。若要求“前十名次且并列都算”，MySQL 8+ 可在每人一条成绩上用 `RANK()` 或 `DENSE_RANK()`；两者在并列后的名次是否跳号不同，必须由业务口径决定。
+          - **确定性**：只写 `ORDER BY score DESC LIMIT 10` 时，同分行内部顺序没有被 SQL 显式定义。加入稳定唯一键可以让重复执行和测试得到一致边界结果。
+          - **NULL / 无成绩**：本契约让 `score` 非 NULL，且 INNER JOIN 排除无成绩学生。如果真实模型允许 NULL 或要求无成绩学生也展示，要显式定义其排序/展示规则。
+          - **索引与性能**：数据量大时可根据真实表结构评估成绩排序键和关联键索引，但能否避免额外排序取决于表结构、过滤条件和执行计划；不能脱离 schema 保证“有索引就一定不排序”。
+          - **复杂度**：逻辑正确性与执行代价分开讨论。没有合适访问路径时可能需要扫描/排序较多行；有可利用的索引时 Top-N 可更早停止。最终以目标 MySQL 的 `EXPLAIN` / `EXPLAIN ANALYZE` 验证。
+
+          ## 原理机制
+
+          主查询的数据流是：先通过 `student_id` 把学生信息与唯一成绩行配对，得到“一名有成绩学生一行”；再按 `score DESC, student_id ASC` 建立全序；最后 `LIMIT 10` 截取这个有序结果的前十行。关键不在 `LIMIT` 本身，而在截取之前必须确保结果粒度和排序规则已经定义完整。
+
+          如果要“前十个分数层级全部包含并列”，可以在 MySQL 8+ 写成：
+
+          ```sql
+          WITH ranked AS (
+              SELECT
+                  s.student_id,
+                  s.name,
+                  sc.score,
+                  DENSE_RANK() OVER (ORDER BY sc.score DESC) AS score_rank
+              FROM students AS s
+              JOIN scores AS sc
+                ON sc.student_id = s.student_id
+          )
+          SELECT student_id, name, score
+          FROM ranked
+          WHERE score_rank <= 10
+          ORDER BY score DESC, student_id ASC;
+          ```
+
+          这个版本可能返回超过十行，而且 `DENSE_RANK` 表示“前十个不同分数层级”。如果业务采用比赛排名并要求并列后跳号，则应使用 `RANK`，不能把两者混为一谈。
+
+          ## 项目经验版
+
+          来源没有真实数据库 schema、数据量或线上执行计划，不能虚构“某表千万级加这个索引就解决”。实际落地会先确认成绩粒度、并列口径、NULL/缺失规则、查询过滤范围和 MySQL 版本，再用样本数据验证边界并查看执行计划；这些是验证步骤，不是来源事实。
+
+          ## 常见追问
+
+          - 问：为什么一定要加 `student_id` 作为第二排序键？答：如果契约要求恰好最多十行，同分边界必须有确定的截断顺序；唯一键是常见稳定 tie-breaker，但真实题目也可以指定其他规则。
+          - 问：并列第十是否应该全部返回？答：来源没说。当前主查询只取十行；若要求按名次包含并列，要改窗口函数并明确使用 `RANK` 还是 `DENSE_RANK`。
+          - 问：一名学生有多门课成绩怎么办？答：先按业务要求聚合到学生粒度，例如平均分或总分，再对聚合结果排名；不能让多门课行直接争夺前十行。
+          - 问：为什么不用 `GROUP BY`？答：当前答案侧契约规定 `scores` 每名学生只有一条最终成绩，因此不需要；真实 schema 一人多行时才应按明确口径聚合。
+          - 问：`LIMIT 10` 很快吗？答：不一定。是否能高效 Top-N 取决于过滤、连接、索引和优化器计划，应看实际 `EXPLAIN`，不能只凭 SQL 形状下结论。
+
+          ## 易错点
+
+          - 没定义一行结果是什么，就直接对课程成绩明细 `LIMIT 10`，得到的是“十条成绩”而不是“十名学生”。
+          - 只按分数排序，在第十名同分时产生不确定截断。
+          - 把“十行”与“前十名次含并列”当成同一个需求。
+          - 一人多条成绩时没有先明确聚合口径。
+          - 题目没给真实表名、字段名、NULL 规则和版本，却把示例 schema 说成来源要求。
+          EOF
+
+          CANDIDATE="review/candidates/answers/$cid.md" OUT="$out" node <<'NODE'
+          const fs=require('fs'); const text=fs.readFileSync(process.env.CANDIDATE,'utf8');
+          const open='```sql\n'; const i=text.indexOf(open); if(i<0) throw new Error('primary SQL fence missing');
+          const start=i+open.length,end=text.indexOf('\n```',start); if(end<0) throw new Error('primary SQL fence close missing');
+          fs.writeFileSync(`${process.env.OUT}/top_ten_students.sql`,text.slice(start,end)+'\n');
+          NODE
+
+          cat > "$out/sql_validation.py" <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          sql = Path(__file__).with_name('top_ten_students.sql').read_text(encoding='utf-8')
+
+          def run_case(students, scores):
+              con = sqlite3.connect(':memory:')
+              con.execute('create table students(student_id integer primary key, name text not null)')
+              con.execute('create table scores(student_id integer primary key, score real not null)')
+              con.executemany('insert into students(student_id,name) values(?,?)', students)
+              con.executemany('insert into scores(student_id,score) values(?,?)', scores)
+              actual = con.execute(sql).fetchall()
+              names = dict(students)
+              expected = [(sid, names[sid], float(score)) for sid, score in sorted(scores, key=lambda r: (-r[1], r[0]))[:10] if sid in names]
+              assert actual == expected, (actual, expected)
+              assert len(actual) <= 10
+              assert len({r[0] for r in actual}) == len(actual)
+              return actual
+
+          assert run_case([], []) == []
+          small_students = [(5,'E'),(1,'A'),(4,'D'),(2,'B'),(3,'C'),(6,'NoScore')]
+          small_scores = [(1,90),(2,95),(3,95),(4,70),(5,88)]
+          assert [r[0] for r in run_case(small_students, small_scores)] == [2,3,1,5,4]
+
+          students = [(i, f'S{i}') for i in range(1,15)]
+          scores = [(1,100),(2,99),(3,98),(4,97),(5,96),(6,95),(7,94),(8,93),(9,92),(10,91),(11,91),(12,90),(13,80)]
+          rows = run_case(students, scores)
+          assert len(rows) == 10
+          assert [r[0] for r in rows] == list(range(1,11)), rows
+          assert all(r[0] != 11 for r in rows), 'tie at cutoff must use student_id ASC and keep id=10 first'
+          assert all(r[0] != 14 for r in rows), 'student without score must be excluded by INNER JOIN'
+          print('PASS empty=0 small=5 top10=10 tie=cutoff-deterministic no-score=excluded')
+          PY
+
+      - name: Execute SQL fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          stdout="$(python3 "$out/sql_validation.py")"
+          test "$stdout" = 'PASS empty=0 small=5 top10=10 tie=cutoff-deterministic no-score=excluded'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0033/${cid}`;
+          fs.writeFileSync(path.join(out,'sql_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'python3 sql_validation.py',stdout:process.env.STDOUT,checks:['empty input tables return no rows','fewer than ten scored students return all scored students in deterministic order','more than ten scored students return exactly ten rows','tie at cutoff is deterministically broken by student_id ASC','student without score is excluded by INNER JOIN','no duplicate student rows under one-score-per-student contract'],exact_fenced_code_matches_fixture:true},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'raw-ocr',title:'Stronger raw OCR interview source',locator:'note_img_txt/67ee3c15000000001c0327c9.txt',source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'tagged-source',title:'Tagged SQL question projection and ownership',locator:'note_tagged/67ee3c15000000001c0327c9.json',source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Top-ten SQL deterministic SQLite fixture',locator:`${out}/sql_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'Raw OCR preserves only an SQL task to find the top-ten students by grade; tagged data adds MySQL/SQL/LIMIT classification but neither source preserves schema, score aggregation, tie, NULL/no-score, output or version rules.',source_ids:['raw-ocr','tagged-source'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'primary-query',text:'Under the explicit one-final-score-per-student / exactly-ten-row contract, the primary query joins by student_id, orders score DESC then student_id ASC and LIMITs 10.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'fixture-behavior',text:'The exact SQL returns correct empty/small/top-ten sets, deterministically resolves a cutoff tie by student_id, and excludes a student without a score under the explicit INNER JOIN contract.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md';
+          let text=fs.readFileSync(task,'utf8');
+          const marker='- [ ] Every candidate passes `answer audit --require-evidence`.';
+          const note='- [ ] `cq_q_779e5c61c5f999e26fabf2ab777035b1` writer slice staged source-first from stronger raw OCR plus tagged ownership: schema/score-granularity/tie/NULL/version choices remain explicit answer-side contracts; exact primary SQL passes empty, small, deterministic cutoff-tie, ten-row and no-score fixtures. Isolated independent review is still required before promotion.';
+          if(!text.includes(note)) {
+            if(!text.includes(marker)) throw new Error('task completion marker missing');
+            text=text.replace(marker,marker+'\n'+note);
+            fs.writeFileSync(task,text);
+          }
+          NODE
+          git diff --check
+
+      - name: Run writer-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit writer slice only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during top-ten SQL writer slice: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0033/$CANONICAL_ID" review/content_build/answer_batch_0033/source_boundary_audit.md tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0033 top-ten-students SQL candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
