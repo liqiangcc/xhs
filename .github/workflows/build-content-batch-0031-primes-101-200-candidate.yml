@@ -1,0 +1,290 @@
+name: Build Content Batch 0031 Primes 101 200 Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0031-primes-101-200-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-primes-101-200-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_701fa4ca7ce982e96b1ac55a7828a80f
+  SOURCE_QID: 701fa4ca7ce982e96b1ac55a7828a80f
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify singleton source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法：打印 101~200 之间所有的素数并统计个数';
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/67e27930000000001c00d918.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('tagged source drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0031/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error('source context missing');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and executable oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_701fa4ca7ce982e96b1ac55a7828a80f","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 打印 101~200 之间所有的素数并统计个数
+
+          ## 核心结论
+
+          这道题的核心只有两步：对区间内每个整数判断“是否为素数”，是素数就输出并把计数加一。素数是大于 1、且除 1 和自身外没有其它正因子的整数。判断一个正整数 `n` 是否为素数时，不需要试除到 `n-1`；如果 `n` 是合数，必然存在一个因子不超过 `sqrt(n)`，所以试除到平方根即可。
+
+          原题只保存了固定范围“101~200”，没有保存语言/API、边界是否按开闭区间描述等额外约束。这里明确采用答案侧契约：扫描闭区间 `[101, 200]`。在这个解释下素数共有 21 个，101 是第一个，199 是最后一个。
+
+          ## 1 分钟版
+
+          - 从 101 循环到 200。
+          - 对每个 `n`，先排除 `<2`；2 单独是素数，偶数大于 2 都不是素数。
+          - 对剩余奇数，只试除奇数因子 `3,5,7,...`，直到 `d*d > n`；代码里可以用 `d <= n/d` 避免 `d*d` 的整数溢出。
+          - 若没有任何因子整除 `n`，它就是素数：打印并 `count++`。
+          - 最后打印总数。闭区间 `[101,200]` 的结果共有 21 个素数。
+
+          ## 3 分钟版
+
+          关键依据是“因子成对出现”。若 `n = a*b` 且 `a>sqrt(n)`、`b>sqrt(n)`，那么 `a*b>n`，矛盾。因此一个合数一定能在 `2..sqrt(n)` 内找到至少一个因子。
+
+          ```java
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public final class PrimeRange {
+              private PrimeRange() {}
+
+              public static boolean isPrime(int n) {
+                  if (n < 2) return false;
+                  if (n == 2) return true;
+                  if ((n & 1) == 0) return false;
+                  for (int d = 3; d <= n / d; d += 2) {
+                      if (n % d == 0) return false;
+                  }
+                  return true;
+              }
+
+              public static List<Integer> primesInclusive(int low, int high) {
+                  List<Integer> result = new ArrayList<>();
+                  for (int n = low; n <= high; n++) {
+                      if (isPrime(n)) result.add(n);
+                  }
+                  return result;
+              }
+
+              public static void main(String[] args) {
+                  List<Integer> primes = primesInclusive(101, 200);
+                  for (int p : primes) System.out.println(p);
+                  System.out.println("count=" + primes.size());
+              }
+          }
+          ```
+
+          这段实现输出：`101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199`，总数是 `21`。
+
+          ## 关键细节
+
+          - **1 不是素数**：素数定义要求整数大于 1。
+          - **平方根边界要包含**：例如 `121 = 11*11`、`169 = 13*13`；如果循环条件错误写成严格小于平方根，就会把完全平方数误判为素数。
+          - **只枚举奇数因子**：2 已单独处理后，偶数因子无需再试。
+          - **避免 `d*d` 溢出**：固定范围 200 不会溢出，但可复用实现用 `d <= n/d` 更稳健；这是实现选择，不是原题附加约束。
+          - **固定范围复杂度**：题目范围只有 100 个整数，实际成本很小。若把区间推广为 `[L,R]`，试除法时间上界约为 `O((R-L+1)*sqrt(R))`，额外空间取决于是否保存结果；边判断边打印可以做到 `O(1)` 辅助空间。
+          - **输出与计数必须来自同一个判断**：不要先写一套打印逻辑、再用另一套统计逻辑，否则容易产生不一致。
+
+          ## 原理机制
+
+          对每个候选数 `n`，算法维持的不变量是：在已经检查过的因子范围内，没有任何因子能整除 `n`。当试除上界超过 `sqrt(n)` 后，如果仍未找到因子，就可以推出不存在更大的“新”因子，因为任何大因子都会与一个不超过平方根的小因子配对；因此 `n` 是素数。
+
+          先排除偶数只是常数优化，不改变正确性。对固定 `[101,200]` 范围，也可以用埃氏筛一次性筛出所有素数；但范围很小且题目只要求完成打印和计数，逐个试除更直接，代码和证明都更短。
+
+          ## 项目经验版
+
+          来源是基础算法题，没有真实业务规模、线上性能或项目实现材料，因此不虚构项目经验。如果工程中需要对很大的连续区间批量求素数，应该根据上界和查询次数评估筛法、分段筛等方案；这属于扩展场景，不是本题来源事实。
+
+          ## 常见追问
+
+          - 问：为什么只检查到平方根？答：合数的因子成对出现，至少一个因子不超过平方根；超过平方根仍没找到因子，就不可能再出现一个全新的因子对。
+          - 问：为什么 121、169 要特别关注？答：它们分别是 `11^2`、`13^2`，最容易暴露“平方根边界没有包含”的 off-by-one 错误。
+          - 问：为什么先判断偶数？答：除 2 外所有偶数都不是素数，先排除后只枚举奇数因子，可以减少大约一半试除次数。
+          - 问：`d*d <= n` 不行吗？答：本题最大只有 200，当然安全；推广到任意 `int` 时 `d*d` 可能溢出，所以示例用 `d <= n/d` 表达同一上界。
+          - 问：能不能用埃氏筛？答：可以。若要一次得到较大连续范围内的全部素数，筛法更合适；但本题只有 101~200，逐个平方根试除已经足够简单清晰。
+          - 问：101~200 一共有多少个？答：按这里声明的闭区间解释，一共 21 个；200 是合数，101 是素数，因此是否包含 101 会影响计数，面试时最好把区间解释说清楚。
+
+          ## 易错点
+
+          - 把 1 当成素数。
+          - 试除条件漏掉 `sqrt(n)` 本身，把 121、169 之类完全平方数误判为素数。
+          - 输出了素数却忘记同步计数，或者计数逻辑与打印逻辑分离。
+          - 把“只试除到平方根”“只试奇数”说成原题给定条件；它们是答案选择的实现策略。
+          - 为了展示复杂算法直接上筛法，却没有先给出最直接、可证明的固定区间解法。
+          EOF
+
+          cat > "$out/PrimeRange.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public final class PrimeRange {
+              private PrimeRange() {}
+
+              public static boolean isPrime(int n) {
+                  if (n < 2) return false;
+                  if (n == 2) return true;
+                  if ((n & 1) == 0) return false;
+                  for (int d = 3; d <= n / d; d += 2) {
+                      if (n % d == 0) return false;
+                  }
+                  return true;
+              }
+
+              public static List<Integer> primesInclusive(int low, int high) {
+                  List<Integer> result = new ArrayList<>();
+                  if (low > high) return result;
+                  for (int n = low; n <= high; n++) {
+                      if (isPrime(n)) result.add(n);
+                      if (n == Integer.MAX_VALUE) break;
+                  }
+                  return result;
+              }
+          }
+          JAVA
+
+          cat > "$out/PrimeRangeTest.java" <<'JAVA'
+          import java.util.Arrays;
+          import java.util.List;
+
+          public final class PrimeRangeTest {
+              private static boolean oracle(int n) {
+                  if (n < 2) return false;
+                  for (int d = 2; d < n; d++) {
+                      if (n % d == 0) return false;
+                  }
+                  return true;
+              }
+
+              private static void require(boolean condition, String message) {
+                  if (!condition) throw new AssertionError(message);
+              }
+
+              public static void main(String[] args) {
+                  List<Integer> expected = Arrays.asList(
+                      101,103,107,109,113,127,131,137,139,149,151,
+                      157,163,167,173,179,181,191,193,197,199
+                  );
+                  List<Integer> actual = PrimeRange.primesInclusive(101, 200);
+                  require(actual.equals(expected), "fixed range mismatch: " + actual);
+                  require(actual.size() == 21, "count mismatch: " + actual.size());
+                  require(!PrimeRange.isPrime(1), "1 is not prime");
+                  require(PrimeRange.isPrime(2), "2 is prime");
+                  require(PrimeRange.isPrime(101), "101 is prime");
+                  require(!PrimeRange.isPrime(121), "121=11^2 is composite");
+                  require(!PrimeRange.isPrime(169), "169=13^2 is composite");
+                  require(!PrimeRange.isPrime(200), "200 is composite");
+                  require(PrimeRange.isPrime(199), "199 is prime");
+                  for (int n = -20; n <= 500; n++) {
+                      require(PrimeRange.isPrime(n) == oracle(n), "oracle mismatch at " + n);
+                  }
+                  require(PrimeRange.primesInclusive(5, 4).isEmpty(), "reversed range must be empty");
+                  System.out.println("PASS fixed-range=21 exact-list=yes oracle=-20..500 boundaries=yes square-composites=yes");
+              }
+          }
+          JAVA
+
+      - name: Execute oracle and freeze writer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          javac "$out/PrimeRange.java" "$out/PrimeRangeTest.java"
+          stdout="$(java -cp "$out" PrimeRangeTest)"
+          test "$stdout" = 'PASS fixed-range=21 exact-list=yes oracle=-20..500 boundaries=yes square-composites=yes'
+          STDOUT="$stdout" node - <<'NODE'
+          const fs=require('fs'),path=require('path'),crypto=require('crypto');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const out=`review/content_build/answer_batch_0031/${cid}`;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          fs.writeFileSync(path.join(out,'source_boundary.json'),JSON.stringify({
+            schema_version:'answer_source_boundary.v1',canonical_id:cid,checked_at:date,
+            source_questions:[{question_id:qid,original_question:'算法：打印 101~200 之间所有的素数并统计个数',source_locator:'note_tagged/67e27930000000001c00d918.json'}],
+            preserved_constraints:['fixed numeric range 101~200','print all prime numbers','report the count'],
+            answer_side_assumptions:['interpret 101~200 as inclusive [101,200]','Java implementation/API shape','trial division through sqrt(n) rather than another prime-generation method']
+          },null,2)+'\n');
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,
+            command:'javac PrimeRange.java PrimeRangeTest.java && java PrimeRangeTest',stdout:process.env.STDOUT,
+            checks:['exact [101,200] prime list','exact count 21','1/2/101/199/200 boundaries','121 and 169 square composites','independent naive oracle for every integer -20..500','reversed helper range behavior']
+          },null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,
+            review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'repository-source',title:'Tagged fixed-range prime-number coding question',locator:`note_tagged/67e27930000000001c00d918.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'fixture',title:'Prime range deterministic Java oracle',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The preserved source asks to print all primes in 101~200 and report the count; language, API and algorithm choice are not preserved source constraints.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},
+              {claim_id:'fixed-result',text:'Under the explicitly declared inclusive interpretation [101,200], the executable fixture verifies the exact 21-number prime list and count.',source_ids:['fixture'],answer_locations:['核心结论','3 分钟版','常见追问']},
+              {claim_id:'sqrt-boundary',text:'The implementation includes the square-root boundary and is cross-checked against an independent naive divisor oracle over -20..500, including square composites 121 and 169.',source_ids:['fixture'],answer_locations:['1 分钟版','关键细节','原理机制']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            promotion_blocker:'isolated_independent_review_not_yet_performed'
+          },null,2)+'\n');
+          NODE
+
+      - name: Commit candidate atomically
+        shell: bash
+        env:
+          BASE_HEAD: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          find "review/content_build/answer_batch_0031/$CANONICAL_ID" -name '*.class' -delete
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0031/$CANONICAL_ID"
+          git commit -m 'content: build batch 0031 primes 101-200 candidate'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_HEAD"
+          git push origin "HEAD:$CONTENT_BRANCH"
