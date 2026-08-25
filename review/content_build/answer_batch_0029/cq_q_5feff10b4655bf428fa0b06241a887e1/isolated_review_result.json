@@ -1,0 +1,42 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_5feff10b4655bf428fa0b06241a887e1",
+  "candidate_sha256": "fc8177e2dd0e00a8259bec2187dbd363b7150ec343fe1531f29dbf953b0f15b7",
+  "reviewed_at": "2026-08-25",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0029-odd-frequency-xor-20260825-v1",
+  "review_version": "batch-0029.odd-frequency-xor.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0029/source_boundary_audit.json",
+    "review/candidates/answers/cq_q_5feff10b4655bf428fa0b06241a887e1.md",
+    "review/content_build/answer_batch_0029/cq_q_5feff10b4655bf428fa0b06241a887e1/code_validation.json",
+    "config/answer_quality.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The preserved source says that most values occur an even number of times and a minority occur an odd number of times, but it does not preserve whether the odd-frequency target count is exactly one, exactly two, or variable. The candidate keeps that ambiguity explicit instead of silently selecting one classic problem statement.",
+    "For an exactly-one target contract, the XOR reduction is correct because equal values occurring an even number of times cancel under associative and commutative XOR, leaving the sole odd-frequency value.",
+    "For an exactly-two-distinct-target contract, the total XOR is a^b and is nonzero; selecting a set bit via xor & -xor separates a and b while every repeated value stays wholly in one partition, so partition-local XOR recovers the two targets.",
+    "The candidate correctly does not claim that aggregate XOR can recover an arbitrary number of odd-frequency values. It explicitly directs an unconstrained multi-target version to a frequency map or additional structure, preserving the information-sufficiency boundary.",
+    "The displayed Java is a complete compilable class matching the separately executed implementation. The deterministic fixture passes positive, negative, zero and Integer.MIN_VALUE bit-pattern cases for one/two-target contracts, plus null rejection and an xor==0 two-target contract-violation case.",
+    "The xor==0 check is only a fail-fast necessary-condition check for the exactly-two contract, not a complete proof that arbitrary input contains exactly two odd-frequency values. The answer does not overstate it as complete validation and separately recommends validating the data contract for untrusted input.",
+    "Mechanism, complexity, boundary discussion and follow-ups are directly tied to the source question; no personal production experience or unpreserved target-count constraint is fabricated. No coding hard failure or semantic blocker remains for the candidate stage."
+  ],
+  "promotion_blockers": [
+    "repository_promotion_and_real_review_policy_not_yet_satisfied"
+  ]
+}

@@ -1,0 +1,176 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_5feff10b4655bf428fa0b06241a887e1",
+  "candidate_sha256": "fc8177e2dd0e00a8259bec2187dbd363b7150ec343fe1531f29dbf953b0f15b7",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0029-odd-frequency-xor-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "source-boundary",
+      "title": "Answer Batch 0029 frozen source-boundary audit",
+      "locator": "review/content_build/answer_batch_0029/source_boundary_audit.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Odd-frequency XOR deterministic Java fixture",
+      "locator": "review/content_build/answer_batch_0029/cq_q_5feff10b4655bf428fa0b06241a887e1/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Odd-frequency XOR independent source-first review",
+      "locator": "review/content_build/answer_batch_0029/cq_q_5feff10b4655bf428fa0b06241a887e1/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source establishes even-versus-odd occurrence structure and XOR relevance but does not preserve an exact count of odd-frequency targets.",
+      "source_ids": [
+        "source-boundary"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "one-two-xor-mechanism",
+      "text": "Under explicit exactly-one or exactly-two target contracts, the candidate XOR cancellation and set-bit partition algorithms recover the target value or values.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "information-boundary",
+      "text": "When the number of odd-frequency values is unconstrained, a single aggregate XOR is insufficient to identify all members; the candidate therefore does not extend the two-target method without additional state or assumptions.",
+      "source_ids": [
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "boundary-validation",
+      "text": "The executable fixture verifies one/two-target behavior across positive and negative ints, Integer.MIN_VALUE and zero bit patterns, plus explicit null rejection and an impossible xor==0 condition under the exactly-two-distinct-target contract.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "5feff10b4655bf428fa0b06241a887e1",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac OddFrequencyNumbers.java OddFrequencyNumbersTest.java && java OddFrequencyNumbersTest",
+    "result": "pass",
+    "reported_stdout": "PASS one-odd=3 two-odd=3 negatives=supported min-value=supported null=rejected bad-two=rejected",
+    "checks": [
+      "one odd-frequency value with positive inputs",
+      "one odd-frequency negative value",
+      "Integer.MIN_VALUE bit pattern",
+      "two odd-frequency values",
+      "two odd-frequency values including negatives",
+      "two odd-frequency values including Integer.MIN_VALUE and zero",
+      "explicit null rejection",
+      "two-target xor==0 contract violation rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "one odd target among paired positives",
+        "expected": 7,
+        "actual": 7,
+        "passed": true
+      },
+      {
+        "case": "one negative odd target",
+        "expected": -5,
+        "actual": -5,
+        "passed": true
+      },
+      {
+        "case": "two odd targets 5 and 9",
+        "expected": "[5,9]",
+        "actual": "[5,9]",
+        "passed": true
+      },
+      {
+        "case": "two odd targets including Integer.MIN_VALUE and zero",
+        "expected": "[-2147483648,0]",
+        "actual": "[-2147483648,0]",
+        "passed": true
+      },
+      {
+        "case": "all-even input passed to exactly-two method",
+        "expected": "IllegalArgumentException",
+        "actual": "IllegalArgumentException",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0029-odd-frequency-xor-20260825-v1",
+    "review_version": "batch-0029.odd-frequency-xor.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source says that most values occur an even number of times and a minority occur an odd number of times, but it does not preserve whether the odd-frequency target count is exactly one, exactly two, or variable. The candidate keeps that ambiguity explicit instead of silently selecting one classic problem statement.",
+      "For an exactly-one target contract, the XOR reduction is correct because equal values occurring an even number of times cancel under associative and commutative XOR, leaving the sole odd-frequency value.",
+      "For an exactly-two-distinct-target contract, the total XOR is a^b and is nonzero; selecting a set bit via xor & -xor separates a and b while every repeated value stays wholly in one partition, so partition-local XOR recovers the two targets.",
+      "The candidate correctly does not claim that aggregate XOR can recover an arbitrary number of odd-frequency values. It explicitly directs an unconstrained multi-target version to a frequency map or additional structure, preserving the information-sufficiency boundary.",
+      "The displayed Java is a complete compilable class matching the separately executed implementation. The deterministic fixture passes positive, negative, zero and Integer.MIN_VALUE bit-pattern cases for one/two-target contracts, plus null rejection and an xor==0 two-target contract-violation case.",
+      "The xor==0 check is only a fail-fast necessary-condition check for the exactly-two contract, not a complete proof that arbitrary input contains exactly two odd-frequency values. The answer does not overstate it as complete validation and separately recommends validating the data contract for untrusted input.",
+      "Mechanism, complexity, boundary discussion and follow-ups are directly tied to the source question; no personal production experience or unpreserved target-count constraint is fabricated. No coding hard failure or semantic blocker remains for the candidate stage."
+    ]
+  }
+}
