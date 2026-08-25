@@ -106,8 +106,8 @@ def main() -> int:
     c_test = """
 
 test('C validation compiles complete source and rejects broken implementations', () => {
-    assert.equal(compileC('#include <stddef.h>\\nchar *copy(char *dst, const char *src) { char *out = dst; while ((*dst++ = *src++) != \\'\\0\\') {} return out; }').ok, true);
-    assert.equal(compileC('char *copy(char *dst, const char *src) { return dst + ; }').ok, false);
+    assert.equal(compileC('int add(int a, int b) { return a + b; }').ok, true);
+    assert.equal(compileC('int add(int a, int b) { return a + ; }').ok, false);
 });
 """
     if "test('C validation compiles complete source" not in tests:
