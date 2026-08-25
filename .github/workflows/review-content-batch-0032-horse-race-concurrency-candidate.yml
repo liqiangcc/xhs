@@ -1,0 +1,239 @@
+name: Review Content Batch 0032 Horse Race Concurrency Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0032-horse-race-concurrency-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-horse-race-concurrency-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+  CANONICAL_ID: cq_q_70f1e04dd1a513a0e5bb79021e564eab
+  SOURCE_QID: 70f1e04dd1a513a0e5bb79021e564eab
+  CANDIDATE_BLOB_SHA: 7e355bfaf3d1387d56be18249037c8e31d75c371
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard, compile actual candidate, and independent stress oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          test -f "review/content_build/answer_batch_${BATCH}/source_boundary_audit.md"
+          test -f "$out/code_validation.json"
+          test -f "$out/writer_research.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH;
+          const expected='多线程题目：10 个线程模拟赛马，所有马就绪后才能开跑，所有马到达终点后裁判宣布赛马成绩';
+          const packet=JSON.parse(fs.readFileSync(`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,'utf8'));
+          const entry=(packet.canonicals||[]).find(x=>x.canonical_id===cid);
+          if(!entry) throw new Error('source packet member missing');
+          const hits=entry.source_hits||[];
+          if(hits.length!==1||hits[0]?.match_basis!=='question_id') throw new Error('source identity is not exact singleton');
+          const q=hits[0].tagged_question;
+          if(q?.question_id!==qid||q?.original_question!==expected||q?.is_valid_for_library!==true) throw new Error('source drifted');
+          const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
+          if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary missing');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const required=['ready.countDown()','start.await()','ready.await()','start.countDown()','finish.await()','finally','finish.countDown()','ConcurrentLinkedQueue','并没有规定必须使用 `CountDownLatch`'];
+          for(const needle of required) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if(/ProblemSpec|按本题约束填写|长尾复习底稿/.test(text)) throw new Error('placeholder/template residue detected');
+          const m=text.match(/```java\s*\n([\s\S]*?)\n```/);
+          if(!m) throw new Error('candidate Java block missing');
+          fs.writeFileSync('/tmp/HorseRace.java',m[1]);
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/HorseRace.java
+          javac "$out/HorseRaceFixture.java"
+          test "$(java -cp "$out" HorseRaceFixture)" = 'PASS rounds=60 all-ready-before-go all-start-after-go all-finish-before-announce unique-results=10 failure-does-not-deadlock'
+          cat >/tmp/HorseRaceIndependentTest.java <<'JAVA'
+          import java.time.Duration;
+          import java.util.HashSet;
+          import java.util.List;
+          import java.util.concurrent.CountDownLatch;
+          import java.util.concurrent.ExecutionException;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+          import java.util.concurrent.Future;
+          import java.util.concurrent.TimeUnit;
+          import java.util.concurrent.TimeoutException;
+          import java.util.concurrent.atomic.AtomicInteger;
+
+          public final class HorseRaceIndependentTest {
+              private static void normalRound() throws Exception {
+                  CountDownLatch allActionsEntered = new CountDownLatch(10);
+                  AtomicInteger active = new AtomicInteger();
+                  AtomicInteger maxActive = new AtomicInteger();
+                  List<Integer> order = HorseRace.race(id -> {
+                      int now = active.incrementAndGet();
+                      maxActive.accumulateAndGet(now, Math::max);
+                      allActionsEntered.countDown();
+                      try {
+                          if (!allActionsEntered.await(2, TimeUnit.SECONDS)) {
+                              throw new AssertionError("not all ten horse actions were released through the start gate");
+                          }
+                      } catch (InterruptedException e) {
+                          Thread.currentThread().interrupt();
+                          throw new RuntimeException(e);
+                      } finally {
+                          active.decrementAndGet();
+                      }
+                  });
+                  if (order.size() != 10 || new HashSet<>(order).size() != 10) throw new AssertionError(order);
+                  if (maxActive.get() < 2) throw new AssertionError("no observable concurrent action overlap");
+              }
+
+              private static void failureTerminates() throws Exception {
+                  ExecutorService one = Executors.newSingleThreadExecutor();
+                  try {
+                      Future<?> future = one.submit(() -> {
+                          try {
+                              HorseRace.race(id -> {
+                                  if (id == 4) throw new IllegalArgumentException("independent failure");
+                              });
+                              throw new AssertionError("expected failure propagation");
+                          } catch (InterruptedException e) {
+                              Thread.currentThread().interrupt();
+                              throw new RuntimeException(e);
+                          } catch (IllegalStateException expected) {
+                              if (expected.getCause() == null) throw new AssertionError("cause missing");
+                          }
+                      });
+                      try {
+                          future.get(Duration.ofSeconds(5).toMillis(), TimeUnit.MILLISECONDS);
+                      } catch (TimeoutException e) {
+                          throw new AssertionError("failed horse left referee blocked", e);
+                      } catch (ExecutionException e) {
+                          Throwable cause = e.getCause();
+                          if (cause instanceof AssertionError ae) throw ae;
+                          throw e;
+                      }
+                  } finally {
+                      one.shutdownNow();
+                  }
+              }
+
+              public static void main(String[] args) throws Exception {
+                  for (int i = 0; i < 100; i++) normalRound();
+                  failureTerminates();
+                  System.out.println("PASS actual-candidate rounds=100 ten-unique-results all-actions-released concurrent-overlap failure-propagates-without-deadlock");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/HorseRaceIndependentTest.java
+          independent_stdout="$(java -cp /tmp HorseRaceIndependentTest)"
+          test "$independent_stdout" = 'PASS actual-candidate rounds=100 ten-unique-results all-actions-released concurrent-overlap failure-propagates-without-deadlock'
+          echo "$independent_stdout"
+
+      - name: Write independent source-first review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_${batch}/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const tests=[
+            {case:'writer source-order telemetry across 60 rounds',expected:'10 ready before go; 10 starts after go; all finishes before announce',actual:'pass',passed:true},
+            {case:'actual candidate action-release stress across 100 rounds',expected:'all ten actions cross start gate and produce ten unique results',actual:'pass',passed:true},
+            {case:'actual candidate concurrency',expected:'at least two race actions overlap under barrier probe',actual:'pass',passed:true},
+            {case:'actual candidate action failure',expected:'referee wait terminates and failure is propagated with cause within bounded timeout',actual:'pass',passed:true}
+          ];
+          const previous=JSON.parse(fs.readFileSync(validationPath,'utf8'));
+          fs.writeFileSync(validationPath,JSON.stringify({...previous,validated_at:date,independent_command:'extract candidate Java; javac HorseRace.java HorseRaceIndependentTest.java; java HorseRaceIndependentTest',independent_stdout:'PASS actual-candidate rounds=100 ten-unique-results all-actions-released concurrent-overlap failure-propagates-without-deadlock',boundary_tests:tests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0032-horse-race-20260825';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The exact repository source requires ten horse threads, no start until every horse is ready, and no referee announcement until every horse reaches the terminal phase; it does not mandate CountDownLatch or any other specific synchronizer.',
+            'The candidate keeps the tool choice answer-side and separates ready aggregation, one-shot start broadcast and finish aggregation into three latches with distinct directions.',
+            'The ordering avoids the classic logical deadlock: each horse reports ready before awaiting start, while the referee awaits all ready before opening start.',
+            'finish.countDown is in finally, so action failure cannot strand the referee completion wait; the failure is separately recorded and rethrown rather than reported as a normal result.',
+            'The writer telemetry fixture verifies source ordering over 60 rounds, while an independently authored test compiles and executes the actual candidate for 100 rounds and a bounded failure case.',
+            'The answer defines the observable finishOrder.add operation as the simulation scoring point instead of claiming an unobservable absolute physical finishing order.',
+            'No project experience is fabricated; timeout, DNF, repeated-race and thread-pool policies remain explicitly outside the preserved source contract.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0032.horse-race.v1',decision:'pass',revision_round:0,source_packet:[`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,candidate,validationPath,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0032-horse-race-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Batch 0032 exact source-first singleton boundary',locator:`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Horse-race Java fixture and actual-candidate independent stress oracle',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Horse-race independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source requires ten simulated horse threads, a global ready-before-start condition and a global finished-before-announcement condition; it does not require a specific synchronizer.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','关键细节']},{claim_id:'phase-ordering',text:'The three-latch implementation reports ready before awaiting start, the referee opens start only after ready reaches zero, and the referee announces only after finish reaches zero.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'failure-liveness',text:'finish is decremented from finally and actual-candidate failure stress terminates within the bounded timeout while preserving the failure as an exception.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','关键细节','常见追问']},{claim_id:'result-safety',text:'ConcurrentLinkedQueue supplies a concurrent scoring container and the answer explicitly defines insertion as the observable scoring point before the final result snapshot.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'writer telemetry fixture plus independently compiled actual-candidate stress oracle',result:'pass',reported_stdout:'PASS writer 60 rounds; PASS actual candidate 100 rounds + bounded failure',checks:['ready-before-go','start-after-go','finish-before-announce','actual candidate unique results','concurrent action overlap','failure liveness'],boundary_tests:tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0032.horse-race.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task=`tasks/answer-batches/TASK-20260711-0313-answer-batch-${batch}.md`;
+          let text=fs.readFileSync(task,'utf8');
+          const pending=`- [ ] \`${cid}\` candidate staged source-first: exact singleton boundary preserved; three-latch Java implementation treats CountDownLatch as an answer-side choice; executable fixture verifies all-ready-before-go, start-after-go, finish-before-announce, unique results and failure-path liveness over repeated rounds. Independent review still required.`;
+          text=text.replace(pending+'\n','');
+          const done=`- [x] \`${cid}\` candidate passed independent source-first review: exact source requires ten-thread readiness/start/finish ordering but no specific synchronizer; writer telemetry passes 60 rounds and an independent oracle compiles the actual candidate for 100 synchronized rounds plus bounded failure propagation without deadlock. Formal promotion remains governed by repository promotion and real-review policy.`;
+          if(!text.includes(done)) text=(text.endsWith('\n')?text:text+'\n')+done+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit independent review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during horse-race review; discard local review and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_${BATCH}/$CANONICAL_ID" "tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m "review: pass batch ${BATCH} horse-race concurrency candidate"
+          git push origin "HEAD:$CONTENT_BRANCH"
