@@ -1,0 +1,139 @@
+name: Remediate Content Batch 0029 Unrecoverable Questions
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0029-unrecoverable.yml
+      - scripts/content/remediate_batch_0029_unrecoverable.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0029-unrecoverable
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply source-first singleton retirement from canonical master script
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/remediate_batch_0029_unrecoverable.py > /tmp/remediate_batch_0029_unrecoverable.py
+          python3 -m py_compile /tmp/remediate_batch_0029_unrecoverable.py
+          python3 /tmp/remediate_batch_0029_unrecoverable.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify exact retired code-output boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.')
+          cid='cq_q_69f2feb994cbec17e8d5e0d1b7f24188'
+          qid='69f2feb994cbec17e8d5e0d1b7f24188'
+          canon={json.loads(x)['canonical_id'] for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()}
+          questions={row['question_id']:row for row in (json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip())}
+          progress_ids={row.get('canonical_id') for row in json.loads((root/'review/progress.json').read_text(encoding='utf-8')).get('items',[])}
+          audit=json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8'))
+          decisions={row.get('question_id'):row for row in audit.get('decisions',[])}
+          if cid in canon: raise SystemExit(f'{cid}: retired Canonical still active')
+          row=questions.get(qid)
+          if not row or row.get('canonical_id') is not None or row.get('is_valid_for_library') is not False or row.get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit(f'{cid}: invalid Question projection missing')
+          if row.get('original_question')!='代码输出：微任务、宏任务打印顺序 (Promise, setTimeout 嵌套)?': raise SystemExit(f'{cid}: source wording drifted after rebuild')
+          if cid in progress_ids: raise SystemExit(f'{cid}: ReviewProgress still active')
+          if (root/'review/answers'/f'{cid}.md').exists() or not (root/'review/archive/answers'/f'{cid}.md').exists(): raise SystemExit(f'{cid}: answer archive state invalid')
+          decision=decisions.get(qid)
+          if not decision or decision.get('decision')!='exclude' or decision.get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit(f'{cid}: validity audit exclusion missing')
+          note=(decision.get('exclusion_note') or '')
+          for token in ('JavaScript','Promise','console.log','唯一答案'):
+              if token not in note: raise SystemExit(f'{cid}: exclusion explanation missing {token}')
+          print('PASS: batch 0029 missing-JavaScript-snippet code-output singleton retired fail-closed')
+          PY
+
+      - name: Verify complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Record bounded remediation progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0029.md')
+          text=path.read_text(encoding='utf-8')
+          line='- [x] Source-unrecoverable singleton `cq_q_69f2feb994cbec17e8d5e0d1b7f24188` is excluded fail-closed because the repository preserves only an event-loop code-output label but not the actual JavaScript snippet/Promise-setTimeout nesting or console.log positions; its Canonical is retired, baseline Answer archived, ReviewProgress removed, and invalid Question projection remains explainable.'
+          if line not in text:
+              if '## Progress' not in text:
+                  text=text.rstrip()+'\n\n## Progress\n\n'
+              text=text.rstrip()+'\n'+line+'\n'
+              path.write_text(text,encoding='utf-8')
+          PY
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during batch 0029 unrecoverable remediation: $base_head -> $remote_head"
+            echo 'Discarding verified local mutation; retry against current state.'
+            exit 0
+          fi
+          git add -A
+          if git diff --cached --quiet; then echo 'No batch 0029 remediation changes to commit.'; exit 0; fi
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: retire unrecoverable batch 0029 event-loop output'
+          git push origin "HEAD:$CONTENT_BRANCH"
