@@ -1,0 +1,319 @@
+name: Build Content Batch 0033 Coin Change 123 Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0033-coin-change-123-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-coin-change-123-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_768f8eb71596f7b6824861aae95d9f08
+  SOURCE_QID: 768f8eb71596f7b6824861aae95d9f08
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary and verify ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法/手撕：N分钱换成1/2/3分硬币的所有组合方式 (动态规划/递归)';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/663b7649000000001e038251.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!==expected) throw new Error(`source wording drifted: ${source?.original_question}`);
+          if(source.question_type!=='算法手撕_Coding') throw new Error(`source type drifted: ${source.question_type}`);
+          if(source.domain?.l2!=='动态规划') throw new Error(`source domain drifted: ${JSON.stringify(source.domain)}`);
+          if(!Array.isArray(source.tech_entities)||!source.tech_entities.includes('coin change')) throw new Error('coin-change entity drifted');
+
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const row=rows.find(x=>x.question_id===qid);
+          if(!row||row.canonical_id!==cid) throw new Error(`Question -> Canonical ownership drifted: ${row?.canonical_id}`);
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error(`Canonical ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse to overwrite writer artifact');
+
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          let text=fs.readFileSync(boundary,'utf8');
+          const heading=`## ${cid}`;
+          if(!text.includes(heading)) {
+            text += `\n## ${cid}\n\n- Exact repository source: \`note_tagged/663b7649000000001e038251.json\`.\n- Preserved wording: \`${expected}\`\n- Source-preserved facts: an amount N cents is to be exchanged using 1/2/3-cent coins; the source asks for all combination ways and explicitly mentions dynamic programming / recursion.\n- Not preserved by the repository source and therefore answer-side contracts only: whether \"all combinations\" means enumerate combinations or return only their count, whether coin supply is unlimited, whether order matters, the programming language/API, N's range, the N=0 convention, negative-input behavior, and output ordering.\n- Candidate policy for this slice: treat coin supply as unlimited and order-insensitive; enumerate each combination as counts of 1/2/3-cent coins, return one empty combination for N=0 and none for N<0; additionally give a combination-count DP because the source explicitly mentions DP. Java 17 syntax is an answer-side implementation choice and the exact displayed code is compiled on JDK 21.\n- Promotion remains blocked until an isolated independent reviewer verifies exact source boundaries, enumeration uniqueness/completeness, DP combination semantics versus permutation overcounting, exact fenced-code execution, evidence, and repository gates.\n`;
+            fs.writeFileSync(boundary,text);
+          }
+          NODE
+
+      - name: Write source-bounded candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0033/$cid"
+          mkdir -p "$out"
+
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_768f8eb71596f7b6824861aae95d9f08","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # N 分钱换成 1/2/3 分硬币的所有组合方式
+
+          ## 核心结论
+
+          仓库来源保留的是“N 分钱换成 1/2/3 分硬币的所有组合方式（动态规划/递归）”，但没有说明“所有组合方式”是要**列出组合**还是只返回**组合数量**。这里把主问题定义为列出：硬币数量不限、组合不考虑拿取顺序，每个结果用 `(1分个数, 2分个数, 3分个数)` 表示，并满足 `one + 2*two + 3*three = N`。递归按固定币种顺序决定每种硬币拿多少，因此天然不会把 `1+2` 和 `2+1` 当成两种组合；如果只需要数量，再用“币种在外、金额在内”的完全背包 DP 计数。
+
+          ## 1 分钟版
+
+          - 先把“组合”和“排列”分开：`1+2` 与 `2+1` 是同一种换法，所以不能按每一步随便选择下一枚硬币来计数。
+          - 枚举时固定处理顺序 `3分 -> 2分 -> 1分`。前两种硬币枚举个数，最后剩余金额只能全部由 1 分硬币补齐；每个非负整数三元组只会出现一次。
+          - 若只问数量，令 `dp[x]` 表示处理到当前币种后凑成金额 `x` 的组合数，初始化 `dp[0]=1`。
+          - 对币种 `1,2,3` 依次执行 `for amount = coin..N: dp[amount] += dp[amount-coin]`。**币种外层**保证同一组硬币不会因顺序不同被重复计数。
+          - 本答案额外约定 `N=0` 有一种“什么都不拿”的空组合，`N<0` 没有组合；这些边界不是来源明确给出的要求。
+          - 枚举必须至少花 O(K) 输出 K 个组合；固定三种硬币时 K 随 N 二次增长量级。只计数的 DP 是 O(N) 时间、O(N) 空间。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public final class CoinChange123 {
+              public record Combination(int oneCent, int twoCent, int threeCent) {}
+
+              private static final int[] ENUM_COINS = {3, 2, 1};
+
+              public static List<Combination> combinations(int n) {
+                  if (n < 0) {
+                      return List.of();
+                  }
+                  List<Combination> result = new ArrayList<>();
+                  collect(n, 0, new int[3], result);
+                  return result;
+              }
+
+              private static void collect(int remaining, int index, int[] counts, List<Combination> out) {
+                  if (index == ENUM_COINS.length - 1) {
+                      counts[index] = remaining; // 最后一种是 1 分硬币
+                      out.add(new Combination(counts[2], counts[1], counts[0]));
+                      return;
+                  }
+
+                  int coin = ENUM_COINS[index];
+                  for (int count = 0; count * coin <= remaining; count++) {
+                      counts[index] = count;
+                      collect(remaining - count * coin, index + 1, counts, out);
+                  }
+                  counts[index] = 0;
+              }
+
+              public static long countWaysDp(int n) {
+                  if (n < 0) {
+                      return 0L;
+                  }
+                  long[] dp = new long[n + 1];
+                  dp[0] = 1L;
+                  for (int coin : new int[] {1, 2, 3}) {
+                      for (int amount = coin; amount <= n; amount++) {
+                          dp[amount] = Math.addExact(dp[amount], dp[amount - coin]);
+                      }
+                  }
+                  return dp[n];
+              }
+          }
+          ```
+
+          例如 `N=4` 时，按 `(1分,2分,3分)` 计数共有四种：`(4,0,0)`、`(2,1,0)`、`(0,2,0)`、`(1,0,1)`。递归只产生这些“数量组合”，不会再产生币种拿取顺序不同的重复结果；`countWaysDp(4)` 也应得到 `4`。
+
+          ## 关键细节
+
+          - **组合还是排列**：完全背包的组合计数要让币种做外层循环。若金额在外层、币种在内层，状态会把不同拿取顺序继续累加，得到的是另一种“有序序列”问题。
+          - **为什么递归不重不漏**：在层 `index` 只决定一种固定币值的个数，然后进入下一币种；任意合法三元组 `(one,two,three)` 都有唯一的一条决策路径。
+          - **最后的 1 分硬币**：因为币值 1 能填满任意非负剩余金额，所以最后一层不必再循环，直接把 `remaining` 设为 1 分硬币数量。
+          - **N=0**：本契约返回 `(0,0,0)` 这一种空组合，对应 DP 的 `dp[0]=1`。这是组合计数常用的单位元约定，但来源没有明确规定。
+          - **负数输入**：本契约返回空列表/计数 0；若真实接口要求抛异常，应按接口契约调整。
+          - **整数溢出**：示例计数用 `long` 并以 `Math.addExact` fail-fast。真实 N 上限若很大，应先估算结果范围，必要时改 `BigInteger`；同时 O(N) DP 数组本身也要求可接受的 N。
+          - **复杂度**：枚举时间至少 O(K)，K 是返回组合数，递归控制栈深度只有固定币种数；保存全部结果还要 O(K)。计数 DP 对 3 个固定币种是 O(N) 时间、O(N) 空间，可进一步按数学关系优化，但没必要牺牲可读性。
+
+          ## 原理机制
+
+          这题的核心是给每种硬币建立**唯一的决策层级**。枚举递归把状态写成 `(remaining, coinIndex)`：当前层只决定当前币种拿几枚，之后再也不会回头选择更早的币种，所以同一个硬币多重集合不会因为排列顺序出现多条路径。
+
+          计数 DP 是同一个思想的压缩。处理完某个币种后，`dp[x]` 表示“只使用已经处理过的币种，凑出 x 的组合数”。当加入币值 `coin` 时，`dp[x-coin]` 中的每个旧组合追加一枚当前币种，就得到一个凑成 `x` 的新组合。金额从小到大遍历允许当前币种被重复使用；币种按外层一次处理，则保证组合的规范顺序。
+
+          ## 项目经验版
+
+          来源没有真实业务背景，不能虚构支付系统经验。工程实现前应确认是要返回所有组合还是只返回数量、N 的范围、硬币是否无限、顺序是否重要以及输出格式；如果组合数量很大，直接物化全部结果可能不可接受，此时应提供迭代器/流式消费或只返回计数。这些是设计边界，不是原题保存下来的事实。
+
+          ## 常见追问
+
+          - 问：为什么 DP 必须币种在外层？答：这样每种组合只在其“当前最大处理币种”阶段被构造一次；金额在外层会让 `1+2`、`2+1` 等不同顺序分别贡献路径。
+          - 问：递归怎么保证没有重复？答：每一层只决定一个固定币种的数量，下一层只处理后续币种，所以一个数量三元组只有一条路径。
+          - 问：如果只想求组合数量还需要保存列表吗？答：不需要，使用一维完全背包 DP；固定三种币值时是 O(N) 时间、O(N) 空间。
+          - 问：如果硬币数量有限怎么办？答：状态和转移要加入每种币的可用上限，不能继续使用当前“无限硬币”的转移。
+          - 问：如果题目其实把拿取顺序算不同方案呢？答：那是排列/有序序列问题，计数循环次序和递归状态都要改；不能把当前组合算法直接沿用。
+          - 问：N 很大、组合太多怎么办？答：列举本身受输出规模 K 限制；应考虑只计数或惰性/流式生成，而不是假装能 O(N) 时间返回 O(K) 个结果。
+
+          ## 易错点
+
+          - 没澄清“所有组合”却把计数结果当成组合列表，或反过来。
+          - DP 循环顺序写反，把组合数算成排列数。
+          - 递归每一步任意选择 1/2/3 分硬币，却不做规范化去重。
+          - 忘记定义 `N=0`、`N<0` 的行为。
+          - 用 `int` 保存方案数却不检查结果范围。
+          - 声称枚举所有结果是 O(N)，忽略输出本身可能有二次规模。
+          EOF
+
+          CANDIDATE="review/candidates/answers/$cid.md" OUT="$out" node <<'NODE'
+          const fs=require('fs');
+          const text=fs.readFileSync(process.env.CANDIDATE,'utf8');
+          const open='```java\n';
+          const startAt=text.indexOf(open);
+          if(startAt<0) throw new Error('Java fence missing');
+          const start=startAt+open.length,end=text.indexOf('\n```',start);
+          if(end<0) throw new Error('Java fence close missing');
+          fs.writeFileSync(`${process.env.OUT}/CoinChange123.java`,text.slice(start,end)+'\n');
+          NODE
+
+          cat > "$out/CoinChange123Test.java" <<'JAVA'
+          import java.util.HashSet;
+          import java.util.List;
+          import java.util.Set;
+
+          public final class CoinChange123Test {
+              private static Set<String> oracle(int n) {
+                  Set<String> out = new HashSet<>();
+                  if (n < 0) return out;
+                  for (int three = 0; 3 * three <= n; three++) {
+                      for (int two = 0; 3 * three + 2 * two <= n; two++) {
+                          int one = n - 3 * three - 2 * two;
+                          out.add(one + "," + two + "," + three);
+                      }
+                  }
+                  return out;
+              }
+
+              private static Set<String> actual(int n) {
+                  List<CoinChange123.Combination> rows = CoinChange123.combinations(n);
+                  Set<String> seen = new HashSet<>();
+                  for (CoinChange123.Combination c : rows) {
+                      if (c.oneCent() < 0 || c.twoCent() < 0 || c.threeCent() < 0) {
+                          throw new AssertionError("negative coin count");
+                      }
+                      if (c.oneCent() + 2 * c.twoCent() + 3 * c.threeCent() != n) {
+                          throw new AssertionError("sum mismatch for n=" + n + ": " + c);
+                      }
+                      String key = c.oneCent() + "," + c.twoCent() + "," + c.threeCent();
+                      if (!seen.add(key)) throw new AssertionError("duplicate combination: " + key);
+                  }
+                  if (seen.size() != rows.size()) throw new AssertionError("duplicate rows");
+                  return seen;
+              }
+
+              private static void check(int n) {
+                  Set<String> expected = oracle(n);
+                  Set<String> got = actual(n);
+                  if (!got.equals(expected)) {
+                      throw new AssertionError("enumeration mismatch n=" + n + " expected=" + expected + " got=" + got);
+                  }
+                  long dp = CoinChange123.countWaysDp(n);
+                  if (dp != expected.size()) {
+                      throw new AssertionError("DP count mismatch n=" + n + " expected=" + expected.size() + " got=" + dp);
+                  }
+              }
+
+              public static void main(String[] args) {
+                  if (!CoinChange123.combinations(-1).isEmpty()) throw new AssertionError("negative enumeration must be empty");
+                  if (CoinChange123.countWaysDp(-1) != 0L) throw new AssertionError("negative DP count must be zero");
+                  check(0);
+                  check(1);
+                  check(2);
+                  check(3);
+                  check(4);
+                  check(5);
+                  for (int n = 0; n <= 200; n++) check(n);
+                  if (CoinChange123.countWaysDp(4) != 4L) throw new AssertionError("n=4 known count");
+                  System.out.println("PASS fixed=0..5 exhaustive=0..200 enumeration=unique-complete dp=count negative=empty");
+              }
+          }
+          JAVA
+
+      - name: Compile exact candidate and validate against independent brute-force oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          mkdir -p /tmp/xhs-coin-change-0033
+          javac -d /tmp/xhs-coin-change-0033 "$out/CoinChange123.java" "$out/CoinChange123Test.java"
+          stdout="$(java -cp /tmp/xhs-coin-change-0033 CoinChange123Test)"
+          test "$stdout" = 'PASS fixed=0..5 exhaustive=0..200 enumeration=unique-complete dp=count negative=empty'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0033/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'javac CoinChange123.java CoinChange123Test.java && java CoinChange123Test',stdout:process.env.STDOUT,checks:['N<0 returns no combinations / zero count by answer contract','N=0 empty combination unit','known fixed N=1..5','every emitted triple has nonnegative counts and sums to N','no duplicate triples','all N=0..200 enumeration sets equal independent triple-loop oracle','DP count equals oracle combination-set size for all N=0..200','N=4 known count is 4'],exact_fenced_code_matches_fixture:true},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Exact tagged repository question and Batch 0033 frozen source boundary',locator:'note_tagged/663b7649000000001e038251.json + review/content_build/answer_batch_0033/source_boundary_audit.md',source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Coin-change enumeration and DP deterministic JDK validation against independent triple-loop oracle',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'The repository source preserves N cents, denominations 1/2/3, all combination ways, and DP/recursion; enumeration-vs-count, unlimited supply, order-insensitivity, Java/API, range and edge conventions are not preserved constraints.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'enumeration',text:'Under the explicit unlimited/order-insensitive contract, fixed-denomination recursion enumerates each nonnegative (one,two,three) triple satisfying one+2*two+3*three=N exactly once.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'dp-count',text:'Coin-outer amount-inner one-dimensional unbounded-knapsack DP counts the same unordered combinations; exhaustive N=0..200 checks match an independent triple-loop oracle and the enumerated set size.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md';
+          let text=fs.readFileSync(task,'utf8');
+          const marker='- [ ] Every candidate passes `answer audit --require-evidence`.';
+          const note='- [ ] `cq_q_768f8eb71596f7b6824861aae95d9f08` writer slice staged: exact tagged wording and singleton ownership are frozen; enumerate-vs-count/unlimited/order/Java/edge choices remain explicit answer-side contracts; exact Java recursion is exhaustive and duplicate-free for N=0..200 against an independent triple-loop oracle, and the coin-outer DP count matches every oracle set size. Isolated independent review is still required before promotion.';
+          if(!text.includes(note)) {
+            if(!text.includes(marker)) throw new Error('task completion marker missing');
+            text=text.replace(marker,marker+'\n'+note);
+            fs.writeFileSync(task,text);
+          }
+          NODE
+          git diff --check
+
+      - name: Run writer-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit writer slice only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during coin-change writer slice: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0033/$CANONICAL_ID" review/content_build/answer_batch_0033/source_boundary_audit.md tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0033 coin-change candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
