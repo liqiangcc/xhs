@@ -1,0 +1,165 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_67ba9bfbae99a725c25a0d4ac0b19f98",
+  "candidate_sha256": "bad230b0c11ac471be719939295f44c4b8fdd0eba4bb7e8391cc25d95d47317d",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0029-good-subarrays-candidate-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "source-boundary",
+      "title": "Answer Batch 0029 frozen source-boundary audit and original tagged note",
+      "locator": "review/content_build/answer_batch_0029/source_boundary_audit.json + note_tagged/68b00074000000001d02aaf6.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Subarray-multiple-of-K deterministic Java fixture",
+      "locator": "review/content_build/answer_batch_0029/cq_q_67ba9bfbae99a725c25a0d4ac0b19f98/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Good-subarrays independent source-first review",
+      "locator": "review/content_build/answer_batch_0029/cq_q_67ba9bfbae99a725c25a0d4ac0b19f98/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-ambiguity",
+      "text": "The preserved source names continuous subarrays whose sum is a multiple of K, prefix-sum/hash optimization, and LeetCode 523/974 together without preserving one exact output contract; the candidate therefore keeps and distinguishes both existence and counting variants.",
+      "source_ids": [
+        "source-boundary"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "remainder-invariant",
+      "text": "Under the explicit k!=0 candidate contract, equal normalized prefix remainders characterize subarrays whose sum is divisible by k; frequency state counts all such pairs while earliest-index state supports the length-at-least-two existence variant.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "boundary-validation",
+      "text": "The executable fixture verifies counting and existence variants, all-zero combinations, negative elements, negative k, minimum-length behavior, and explicit k=0/null boundaries.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "67ba9bfbae99a725c25a0d4ac0b19f98",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac SubarrayMultipleOfK.java SubarrayMultipleOfKTest.java && java SubarrayMultipleOfKTest",
+    "result": "pass",
+    "reported_stdout": "PASS count-standard=7 count-zeros=6 count-negative-elements=3 negative-k=7 exists-standard=true exists-alt=true exists-false=false length-two-zero=true k-zero=rejected null=rejected",
+    "checks": [
+      "counting variant standard prefix-remainder case",
+      "all-zero counting combinations",
+      "negative element remainder normalization",
+      "negative k normalization",
+      "existence variant positive cases",
+      "existence variant negative case",
+      "minimum length two behavior",
+      "explicit k=0 rejection",
+      "explicit null rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "count [4,5,0,-2,-3,1], k=5",
+        "expected": 7,
+        "actual": 7,
+        "passed": true
+      },
+      {
+        "case": "count [0,0,0], k=5",
+        "expected": 6,
+        "actual": 6,
+        "passed": true
+      },
+      {
+        "case": "count negative elements [-1,1,-4,4], k=5",
+        "expected": 3,
+        "actual": 3,
+        "passed": true
+      },
+      {
+        "case": "exists [23,2,4,6,7], k=6",
+        "expected": true,
+        "actual": true,
+        "passed": true
+      },
+      {
+        "case": "exists [23,2,6,4,7], k=13",
+        "expected": false,
+        "actual": false,
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0029-good-subarrays-20260825-v1",
+    "review_version": "batch-0029.good-subarrays.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source explicitly names continuous subarrays whose sum is a multiple of K, prefix-sum/hash optimization, and a combined LeetCode 523/974 business context. Because the exact output contract is not preserved, collapsing it to only existence or only count would fabricate precision.",
+      "The candidate preserves that ambiguity constructively by exposing two methods under the same prefix-remainder invariant: a count method using remainder frequencies and an existence-with-minimum-length method using earliest indices.",
+      "The displayed Java block is a complete compilable class and matches the separately executed fixture implementation.",
+      "The first fixture pass correctly exposed a hand-computed test expectation error for [-1,1,-4,4], k=5: the algorithm returns 3 valid divisible-sum subarrays and direct prefix-remainder enumeration confirms 3. The fixture and frozen validation record were corrected without changing candidate code.",
+      "The corrected deterministic fixture passes the standard counting case, all-zero combinations, negative-element remainder normalization, negative-k normalization, positive and negative existence cases, the minimum length-two case, and explicit k=0/null boundaries.",
+      "The candidate explains the empty-prefix seed, why earliest index is required for the length constraint, normalized modulo for negative values, long counting bounds, and the difference between hash-state semantics for counting versus existence.",
+      "Complexity and data-structure tradeoffs are scoped to the explicit k!=0 candidate contract; no exact 523/974 contract, project history, or k=0 semantics are invented beyond the frozen source.",
+      "No uncovered preserved variant remains because both source-compatible 523/974 interpretations are represented and distinguished. No coding hard failure or unsupported source attribution remains; formal promotion still follows repository promotion and real-review policy."
+    ]
+  }
+}
