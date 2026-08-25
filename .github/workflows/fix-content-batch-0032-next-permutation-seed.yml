@@ -1,0 +1,36 @@
+name: Fix Content Batch 0032 Next Permutation Seed
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/fix-content-batch-0032-next-permutation-seed.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-content-batch-0032-next-permutation-seed
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - name: Correct Java seed literal and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=.github/workflows/build-content-batch-0032-next-permutation-candidate.yml
+          grep -q 'new Random(713ec8L)' "$target"
+          sed -i 's/new Random(713ec8L)/new Random(0x713ec8L)/' "$target"
+          git diff --check
+          git config user.name 'xhs-ci-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$target"
+          git commit -m 'ci: correct next-permutation fixture seed literal'
+          git push origin HEAD:master
