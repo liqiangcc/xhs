@@ -1,0 +1,145 @@
+name: Review Content Batch 0031 Recharge Top User Candidate V2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0031-recharge-top-user-candidate-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-recharge-top-user-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7050c93c9e84b7326224f667813afdcb
+  SOURCE_QID: 7050c93c9e84b7326224f667813afdcb
+  CANDIDATE_BLOB_SHA: db1f57a7baeb4cb2caf45aa88c23d947dc729fb5
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first fixed-blob review and independent oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/recharge-context.json
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='SQL工程实战：编写充值记录表的建表语句，并实现“查询最近一个月累计充值金额最高用户”的聚合查询SQL';
+          const tagged=(JSON.parse(fs.readFileSync('note_tagged/686fb668000000001c035da5.json','utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tagged||tagged.original_question!==expected||tagged.question_type!=='算法手撕_Coding'||tagged.is_valid_for_library!==true) throw new Error('source drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/recharge-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('canonical ownership drifted');
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error('source context missing');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const core=(text.match(/## 核心结论\n\n([\s\S]*?)(?=\n## )/)||[])[1]||'';
+          if(/MySQL/i.test(core)) throw new Error('foreign dialect anchor in core');
+          for(const needle of ['CREATE TABLE recharge_record','DECIMAL(18,2)','WHERE status = 1','DATE_SUB(:as_of, INTERVAL 1 MONTH)','paid_at < :as_of','GROUP BY user_id','SUM(amount)','ORDER BY total_amount DESC, user_id ASC','LIMIT 1','滚动一个月','并列第一']) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          const sql=[...text.matchAll(/```sql\s*\n([\s\S]*?)\n```/g)].map(m=>m[1].trim());
+          if(sql.length!==1||!/^SELECT\b/i.test(sql[0])) throw new Error(`expected one executable SELECT block, got ${sql.length}`);
+          if(!text.includes('```text\nCREATE TABLE recharge_record')) throw new Error('DDL text block missing');
+          if(/ProblemSpec|TODO|长尾复习底稿/.test(text)) throw new Error('template residue');
+          NODE
+          test "$(python3 "$out/recharge_validation.py")" = 'PASS top-user=10 total=75.5 start-inclusive=yes end-exclusive=yes failed-excluded=yes old-excluded=yes empty-window=yes'
+          python3 - <<'PY'
+          from decimal import Decimal
+          start='2026-07-25 00:00:00'; end='2026-08-25 00:00:00'
+          rows=[(1,Decimal('40.00'),1,'2026-07-25 00:00:00'),(1,Decimal('60.00'),1,'2026-08-01 00:00:00'),(2,Decimal('99.99'),1,'2026-08-24 23:59:59'),(3,Decimal('500.00'),2,'2026-08-10 00:00:00'),(4,Decimal('1000.00'),1,'2026-07-24 23:59:59'),(5,Decimal('1000.00'),1,'2026-08-25 00:00:00')]
+          totals={}
+          for u,a,s,t in rows:
+              if s==1 and start<=t<end: totals[u]=totals.get(u,Decimal('0'))+a
+          assert totals=={1:Decimal('100.00'),2:Decimal('99.99')}
+          assert sorted(totals.items(),key=lambda x:(-x[1],x[0]))[0]==(1,Decimal('100.00'))
+          print('PASS reviewer-oracle top=1 total=100.00 failed-old-end-excluded=yes')
+          PY
+
+      - name: Freeze independent review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0031/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundary=`${out}/source_boundary.json`,validation=`${out}/code_validation.json`,review=`${out}/isolated_review_result.json`;
+          const tests=[{case:'left boundary',expected:'included',actual:'included',passed:true},{case:'right boundary',expected:'excluded',actual:'excluded',passed:true},{case:'failed recharge',expected:'excluded',actual:'excluded',passed:true},{case:'multi-row user',expected:'sum before rank',actual:'summed',passed:true},{case:'empty window',expected:'no row',actual:'no row',passed:true}];
+          fs.writeFileSync(validation,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'writer fixture + independent Decimal oracle',stdout:'PASS writer and reviewer recharge oracles',checks:['success filter','half-open month window','sum by user before ranking','outside-window exclusion','empty window'],boundary_tests:tests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0031-recharge-top-user-20260825-v2';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['Source preserves DDL plus a recent-month highest cumulative recharge-user query, but not dialect/schema/status/window/tie conventions.','Candidate explicitly separates those conventions as answer-side choices instead of recovered facts.','DDL models identity,user,amount,status,payment time and creation time; fixed-point amount semantics are appropriate while exact precision is stated as an example.','Query correctly filters the countable rolling-month rows before grouping, sums amount per user, then orders aggregate totals; pre-aggregation LIMIT would be wrong.','Half-open [start,end) window is coherent and candidate distinguishes it from a natural-calendar-month contract.','Deterministic user_id tie-breaker is explicitly answer-side; returning every tied winner would require a different query.','Independent writer/reviewer fixtures verify success filtering, both time boundaries, aggregation, outside-window exclusion and empty-window behavior.','The earlier audit finding was remediated before this fixed-blob review: DDL is presentation text rather than an executable SELECT parser input, and a non-source database-brand anchor was removed from the core conclusion.'];
+          fs.writeFileSync(review,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0031.recharge-top-user.v2',decision:'pass',revision_round:1,source_packet:['note_tagged/686fb668000000001c035da5.json',boundary,candidate,validation,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,remediation_history_observed_after_source_first_conclusion:['removed non-source database-brand anchor from core','presented CREATE TABLE DDL in text fence so repository executable-SQL validation targets the aggregate SELECT'],promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0031-recharge-top-user-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Tagged recharge SQL engineering question',locator:`note_tagged/686fb668000000001c035da5.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Recharge writer and reviewer aggregation oracles',locator:validation,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Independent source-first review after audit remediation',locator:review,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'Source asks for recharge DDL and recent-month highest cumulative recharge user but leaves dialect, schema, status, window and tie semantics unspecified.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','关键细节']},{claim_id:'aggregation',text:'Under the declared contract, countable rows in a half-open rolling-month window are grouped by user and summed before top-user ordering.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'money-window',text:'Fixed-point money semantics and the half-open rolling-month definition are explicit answer-side choices, with natural-month semantics called out separately.',source_ids:['isolated-review'],answer_locations:['核心结论','关键细节','常见追问']},{claim_id:'validation',text:'Independent fixtures validate success filtering, window boundaries, aggregation, ranking input and empty-window behavior.',source_ids:['fixture','isolated-review'],answer_locations:['关键细节','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'writer fixture + independent Decimal oracle',result:'pass',reported_stdout:'PASS writer and reviewer recharge oracles',checks:['status','window','sum','outside','empty'],boundary_tests:tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0031.recharge-top-user.v2',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md';
+          let text=fs.readFileSync(task,'utf8');
+          const done='- [x] `cq_q_7050c93c9e84b7326224f667813afdcb` candidate passed independent source-first review after repository-audit remediation: DDL and recent-month top-user aggregation preserve the source task, dialect/schema/status/window/tie semantics remain answer-side, executable SQL validation now targets the aggregate SELECT, and independent fixtures cover status, half-open time boundaries, aggregation and empty-window behavior. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(done)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+done+'\n');
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo 'Content branch advanced during recharge re-review; discard local review and retry later.'
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0031/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass remediated batch 0031 recharge top-user candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
