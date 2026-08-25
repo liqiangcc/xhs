@@ -1,0 +1,86 @@
+name: Remediate Content Batch 0031 Primes Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0031-primes-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-primes-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_701fa4ca7ce982e96b1ac55a7828a80f
+  CANDIDATE_BLOB_SHA: e1fd6b2dfba487a7564651a1db98db18147c73e2
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Align displayed helper with executable overflow guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          python3 - <<'PY'
+          import pathlib
+          p=pathlib.Path('review/candidates/answers/cq_q_701fa4ca7ce982e96b1ac55a7828a80f.md')
+          text=p.read_text()
+          old='''        for (int n = low; n <= high; n++) {\n            if (isPrime(n)) result.add(n);\n        }\n'''
+          new='''        for (int n = low; n <= high; n++) {\n            if (isPrime(n)) result.add(n);\n            if (n == Integer.MAX_VALUE) break;\n        }\n'''
+          if old not in text:
+              raise SystemExit('expected candidate loop not found')
+          p.write_text(text.replace(old,new,1))
+          PY
+          javac "$out/PrimeRange.java" "$out/PrimeRangeTest.java"
+          test "$(java -cp "$out" PrimeRangeTest)" = 'PASS fixed-range=21 exact-list=yes oracle=-20..500 boundaries=yes square-composites=yes'
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0031/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const path=`${out}/writer_research.json`;
+          const wr=JSON.parse(fs.readFileSync(path,'utf8'));
+          wr.candidate_sha256=sha;
+          wr.checked_at='2026-08-25';
+          wr.review_state='writer_complete_isolated_review_pending';
+          wr.promotion_blocker='isolated_independent_review_not_yet_performed';
+          fs.writeFileSync(path,JSON.stringify(wr,null,2)+'\n');
+          NODE
+
+      - name: Commit remediation atomically
+        shell: bash
+        env:
+          BASE_HEAD: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          find "review/content_build/answer_batch_0031/$CANONICAL_ID" -name '*.class' -delete
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0031/$CANONICAL_ID/writer_research.json"
+          git commit -m 'content: align batch 0031 primes candidate with validated helper'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_HEAD"
+          git push origin "HEAD:$CONTENT_BRANCH"
