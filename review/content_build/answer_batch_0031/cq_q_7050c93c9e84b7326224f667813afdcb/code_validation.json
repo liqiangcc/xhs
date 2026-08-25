@@ -3,14 +3,45 @@
   "canonical_id": "cq_q_7050c93c9e84b7326224f667813afdcb",
   "result": "pass",
   "validated_at": "2026-08-25",
-  "command": "python3 recharge_validation.py",
-  "stdout": "PASS top-user=10 total=75.5 start-inclusive=yes end-exclusive=yes failed-excluded=yes old-excluded=yes empty-window=yes",
+  "command": "writer fixture + independent Decimal oracle",
+  "stdout": "PASS writer and reviewer recharge oracles",
   "checks": [
-    "successful rows aggregate by user",
-    "left boundary included",
-    "right boundary excluded",
-    "failed record excluded",
-    "older record excluded",
-    "empty window yields no top user"
+    "success filter",
+    "half-open month window",
+    "sum by user before ranking",
+    "outside-window exclusion",
+    "empty window"
+  ],
+  "boundary_tests": [
+    {
+      "case": "left boundary",
+      "expected": "included",
+      "actual": "included",
+      "passed": true
+    },
+    {
+      "case": "right boundary",
+      "expected": "excluded",
+      "actual": "excluded",
+      "passed": true
+    },
+    {
+      "case": "failed recharge",
+      "expected": "excluded",
+      "actual": "excluded",
+      "passed": true
+    },
+    {
+      "case": "multi-row user",
+      "expected": "sum before rank",
+      "actual": "summed",
+      "passed": true
+    },
+    {
+      "case": "empty window",
+      "expected": "no row",
+      "actual": "no row",
+      "passed": true
+    }
   ]
 }
