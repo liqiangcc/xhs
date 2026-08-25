@@ -1,0 +1,44 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_6eac192f81a68eadb5b67c48d493f791",
+  "result": "pass",
+  "validated_at": "2026-08-25",
+  "runtime": "javac 21.0.11",
+  "command": "javac BPlusTreeSizing.java BPlusTreeSizingTest.java && java BPlusTreeSizingTest",
+  "stdout": "PASS fixed=7 fanout-oracle=2000 height-oracle=5000 model=f-child-pointers-plus-f-minus-1-keys validation=yes",
+  "checks": [
+    "fixed fanout example: 4000 usable bytes, 16-byte separator key, 8-byte child pointer => 167 children",
+    "computed fanout is independently checked as the maximal integer satisfying f*C + (f-1)*K <= U",
+    "2000 deterministic randomized fanout cases match a BigInteger brute-force oracle",
+    "fixed leaf-capacity and level-boundary cases pass",
+    "5000 deterministic randomized height cases match a BigInteger L*f^(H-1) capacity oracle",
+    "invalid fanout, leaf-capacity and negative-record inputs fail closed"
+  ],
+  "boundary_tests": [
+    {
+      "case": "167 versus 168 children under U=4000,K=16,C=8",
+      "expected": "167 fits and 168 does not",
+      "actual": "pass",
+      "passed": true
+    },
+    {
+      "case": "records=62, fanout=167, leafCapacity=62",
+      "expected": "1 level",
+      "actual": "1",
+      "passed": true
+    },
+    {
+      "case": "records=63, fanout=167, leafCapacity=62",
+      "expected": "2 levels",
+      "actual": "2",
+      "passed": true
+    },
+    {
+      "case": "records=1000000, fanout=167, leafCapacity=62",
+      "expected": "3 levels",
+      "actual": "3",
+      "passed": true
+    }
+  ],
+  "validation_scope": "This validates the explicit simplified sizing model used by the candidate. It does not claim that the source supplied physical page-layout parameters or that every database engine uses this exact node layout."
+}
