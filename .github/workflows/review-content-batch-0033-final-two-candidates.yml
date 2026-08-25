@@ -1,0 +1,200 @@
+name: Review Content Batch 0033 Final Two Candidates
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0033-final-two-candidates.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-final-two-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  THROTTLE_CID: cq_q_7a75022f873e722084923cc7db60e1bb
+  THROTTLE_QID: 7a75022f873e722084923cc7db60e1bb
+  THROTTLE_BLOB_SHA: 67533dda92ac69c69d568a04e1f5d78cba519546
+  DEDUP_CID: cq_q_7b1c9751da7c787b856440f7bc4088c8
+  DEDUP_QID: 7b1c9751da7c787b856440f7bc4088c8
+  DEDUP_BLOB_SHA: 887196373ea86546f2616768251fcfdb0163551c
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated guard and exact-code validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object "review/candidates/answers/$THROTTLE_CID.md")" = "$THROTTLE_BLOB_SHA"
+          test "$(git hash-object "review/candidates/answers/$DEDUP_CID.md")" = "$DEDUP_BLOB_SHA"
+          node <<'NODE'
+          const fs=require('fs');
+          const specs=[
+            {cid:process.env.THROTTLE_CID,qid:process.env.THROTTLE_QID,source:'note_tagged/689455070000000023019aa8.json',expected:'编程：单线程调用一个函数，实现一个限流器，当函数调用频率超过阈值时返回false，否则True。',needles:['滑动时间窗口的准入语义','拒绝记录不入队','单线程条件下用时间戳队列即可','均摊时间 O(1)','固定窗口、令牌桶和漏桶']},
+            {cid:process.env.DEDUP_CID,qid:process.env.DEDUP_QID,source:'note_tagged/67e12cfa000000001d02777a.json',expected:'算法：删除链表所有重复数字（不允许用map或者set）',needles:['链表可以无序','删除这个值的所有节点','不使用 Map/Set','时间 O(n²)','若题目明确链表已排序']}
+          ];
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canons=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const boundary=fs.readFileSync('review/content_build/answer_batch_0033/source_boundary_audit.md','utf8');
+          for(const s of specs){
+            const tagged=JSON.parse(fs.readFileSync(s.source,'utf8'));
+            const source=(tagged.tagged_questions||[]).find(x=>x.question_id===s.qid);
+            if(!source||source.original_question!==s.expected) throw new Error(`${s.qid}: exact source drifted`);
+            const row=rows.find(x=>x.question_id===s.qid); if(!row||row.canonical_id!==s.cid) throw new Error(`${s.qid}: ownership drifted`);
+            const canon=canons.find(x=>x.canonical_id===s.cid); if(!canon||!(canon.question_ids||[]).includes(s.qid)) throw new Error(`${s.cid}: canonical ownership drifted`);
+            if(!boundary.includes(`## ${s.cid}`)||!boundary.includes(`Preserved wording: \`${s.expected}\``)) throw new Error(`${s.cid}: frozen boundary missing`);
+            const text=fs.readFileSync(`review/candidates/answers/${s.cid}.md`,'utf8');
+            for(const needle of s.needles) if(!text.includes(needle)) throw new Error(`${s.cid}: candidate guard missing ${needle}`);
+            if(/我负责|我在线上|我们线上/.test(text)) throw new Error(`${s.cid}: fabricated experience detected`);
+          }
+          function extract(cid,out){const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8'),open='```java\n',i=text.indexOf(open);if(i<0)throw new Error(`${cid}: Java fence missing`);const start=i+open.length,end=text.indexOf('\n```',start);if(end<0)throw new Error(`${cid}: Java fence close missing`);fs.writeFileSync(out,text.slice(start,end)+'\n');}
+          extract(process.env.THROTTLE_CID,'/tmp/SlidingWindowRateLimiter.java');
+          extract(process.env.DEDUP_CID,'/tmp/DeleteAllDuplicateValues.java');
+          const dedupJava=fs.readFileSync('/tmp/DeleteAllDuplicateValues.java','utf8');
+          if(/\b(?:HashMap|HashSet|TreeMap|TreeSet|Map|Set)\b/.test(dedupJava)) throw new Error('linked-list solution violates no Map/Set constraint');
+          NODE
+          cmp -s /tmp/SlidingWindowRateLimiter.java "review/content_build/answer_batch_0033/$THROTTLE_CID/SlidingWindowRateLimiter.java"
+          cmp -s /tmp/DeleteAllDuplicateValues.java "review/content_build/answer_batch_0033/$DEDUP_CID/DeleteAllDuplicateValues.java"
+          cp "review/content_build/answer_batch_0033/$THROTTLE_CID/SlidingWindowRateLimiterTest.java" /tmp/
+          cp "review/content_build/answer_batch_0033/$DEDUP_CID/DeleteAllDuplicateValuesTest.java" /tmp/
+          (cd /tmp && javac SlidingWindowRateLimiter.java SlidingWindowRateLimiterTest.java && test "$(java SlidingWindowRateLimiterTest)" = 'PASS sliding-window accepted-only exact-boundary burst regression invalid-config')
+          (cd /tmp && javac DeleteAllDuplicateValues.java DeleteAllDuplicateValuesTest.java && test "$(java DeleteAllDuplicateValuesTest)" = 'PASS fixed=7 exhaustive=21845 unsorted=true no-map-set-in-solution=true')
+
+      - name: Record isolated source-first reviews and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),path=require('path');
+          const date='2026-08-26', boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const specs=[
+            {
+              cid:process.env.THROTTLE_CID,qid:process.env.THROTTLE_QID,source:'note_tagged/689455070000000023019aa8.json',fixture:'SlidingWindowRateLimiter.java',test:'SlidingWindowRateLimiterTest.java',stdout:'PASS sliding-window accepted-only exact-boundary burst regression invalid-config',reviewer:'source-first-isolated-reviewer-batch-0033-rate-limiter-20260826-v1',version:'batch-0033.rate-limiter.v1',
+              findings:[
+                'The repository source preserves a single-thread true/false rate-limiter coding task but does not preserve the window algorithm, time units, attempt-versus-admission accounting, clock API or exact boundary semantics.',
+                'The candidate labels sliding-window, accepted-only accounting, non-negative non-decreasing injected time, the half-open window and rejected-attempt behavior as answer-side contracts rather than recovered facts.',
+                'The exact fenced Java equals the saved fixture and passes capacity, rejection, exact-boundary expiry, same-timestamp burst, clock-regression and invalid-configuration checks under JDK 21.',
+                'The queue invariant, amortized O(1) argument, O(maxCalls) space bound, single-thread limitation, and fixed-window/token-bucket/leaky-bucket variants are directly tied to this problem without fabricated project claims.'
+              ],
+              boundaryTests:[
+                {case:'calls at 0/100/200/300ms, max=3 window=1000',expected:'true,true,true,false',actual:'true,true,true,false',passed:true},
+                {case:'rejected calls at 300/999ms then call at 1000ms',expected:'rejections consume no capacity; 0ms expires; 1000ms accepted',actual:'1000ms accepted',passed:true},
+                {case:'two calls at same timestamp with max=2 then third call',expected:'true,true,false',actual:'true,true,false',passed:true},
+                {case:'clock regression 5ms -> 4ms',expected:'fail closed with exception',actual:'exception',passed:true}
+              ],
+              claims:[
+                {claim_id:'source-contract',text:'The source preserves only the single-thread true/false rate-limiter task; window/accounting/clock/boundary details are answer-side contracts.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','易错点']},
+                {claim_id:'algorithm',text:'Under the declared sliding-window admission contract, an ordered deque evicts expired successful admissions, rejects at capacity and otherwise appends now.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},
+                {claim_id:'validation',text:'The exact Java implementation passes deterministic capacity, rejection, boundary, burst, clock-regression and invalid-configuration tests.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','常见追问']}
+              ]
+            },
+            {
+              cid:process.env.DEDUP_CID,qid:process.env.DEDUP_QID,source:'note_tagged/67e12cfa000000001d02777a.json',fixture:'DeleteAllDuplicateValues.java',test:'DeleteAllDuplicateValuesTest.java',stdout:'PASS fixed=7 exhaustive=21845 unsorted=true no-map-set-in-solution=true',reviewer:'source-first-isolated-reviewer-batch-0033-linked-list-dedup-20260826-v1',version:'batch-0033.linked-list-dedup.v1',
+              findings:[
+                'The repository source preserves a linked-list duplicate-removal coding task and explicitly forbids Map/Set, but it does not say the list is sorted or whether duplicates should keep one copy versus remove every occurrence.',
+                'The candidate explicitly chooses the unsorted/remove-all-repeated-values interpretation, in-place relinking and acyclic-list assumptions as answer-side contracts, while explaining the keep-one and sorted-list variants.',
+                'The exact fenced Java contains no Map/Set types, equals the saved solution fixture, and passes seven named cases plus all 21,845 arrays of lengths 0..7 over four values against an independent frequency oracle under JDK 21.',
+                'The O(n^2) time/O(1) auxiliary-space tradeoff follows from the no-extra-set and no-sortedness contract; pointer invariants and deletion safety are explained directly.'
+              ],
+              boundaryTests:[
+                {case:'1,2,1,3',expected:'2,3',actual:'2,3',passed:true},
+                {case:'1,2,2,3,3,4',expected:'1,4',actual:'1,4',passed:true},
+                {case:'1,2,3,2,4,1,5,5,6',expected:'3,4,6',actual:'3,4,6',passed:true},
+                {case:'all arrays length 0..7 over values 0..3',expected:'match independent frequency oracle',actual:'21,845/21,845 passed',passed:true}
+              ],
+              claims:[
+                {claim_id:'source-contract',text:'The source requires linked-list duplicate removal without Map/Set but does not preserve sortedness or keep-one-versus-remove-all semantics.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','易错点']},
+                {claim_id:'algorithm',text:'Under the declared unsorted/remove-all contract, forward scans unlink later equal nodes and remove current when any duplicate exists, using constant auxiliary pointers.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},
+                {claim_id:'validation',text:'The exact Java solution uses no Map/Set and passes named cases plus 21,845 exhaustive bounded arrays against an independent frequency oracle.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','常见追问']}
+              ]
+            }
+          ];
+          for(const s of specs){
+            const candidate=`review/candidates/answers/${s.cid}.md`,out=`review/content_build/answer_batch_0033/${s.cid}`,fixturePath=`${out}/${s.fixture}`,testPath=`${out}/${s.test}`,reviewPath=`${out}/isolated_review_result.json`;
+            const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+            const review={schema_version:'isolated_review.v1',canonical_id:s.cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:s.reviewer,review_version:s.version,decision:'pass',revision_round:1,source_packet:[s.source,boundary,candidate,`${out}/code_validation.json`,fixturePath,testPath,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:s.findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']};
+            fs.writeFileSync(reviewPath,JSON.stringify(review,null,2)+'\n');
+            const evidence={schema_version:'answer_evidence.v1',canonical_id:s.cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0033-final-two-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Exact repository interview question and Batch 0033 frozen source boundary',locator:s.source+' + '+boundary,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Deterministic JDK 21 executable validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:s.claims,source_question_coverage:[{question_id:s.qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:`javac ${s.fixture} ${s.test} && java ${s.test.replace('.java','')}`,result:'pass',reported_stdout:s.stdout,checks:s.boundaryTests.map(x=>x.case),boundary_tests:s.boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:s.reviewer,review_version:s.version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:s.findings}};
+            fs.mkdirSync('review/evidence',{recursive:true});
+            fs.writeFileSync(`review/evidence/${s.cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          }
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md';
+          let text=fs.readFileSync(task,'utf8');
+          const replacements=new Map([
+            ['- [ ] `cq_q_7a75022f873e722084923cc7db60e1bb` writer slice staged source-first: single-thread true/false limiter wording is preserved; sliding-window, accepted-only counting, injected clock and exact-boundary semantics remain explicit answer-side contracts; exact fenced Java passes deterministic capacity, rejection, boundary, burst and clock/config fixtures. Isolated independent review is still required before promotion.','- [x] `cq_q_7a75022f873e722084923cc7db60e1bb` passed isolated source-first review: exact single-thread true/false source wording remains bounded; sliding-window, accepted-only accounting, clock and exact-boundary semantics stay explicit answer-side contracts; exact fenced Java passes deterministic capacity, rejection, boundary, burst and clock/config fixtures. Formal promotion remains governed by repository human-approval and real-review policy.'],
+            ['- [ ] `cq_q_7b1c9751da7c787b856440f7bc4088c8` writer slice staged source-first: no sorting or keep-one semantics are invented; the candidate explicitly chooses unsorted/remove-all-repeated-values semantics with no Map/Set in the solution; exact fenced Java passes named cases plus all 21,845 bounded arrays against an independent frequency oracle. Isolated independent review is still required before promotion.','- [x] `cq_q_7b1c9751da7c787b856440f7bc4088c8` passed isolated source-first review: source-preserved no-Map/Set constraint remains explicit without inventing sortedness; unsorted/remove-all-repeated-values semantics stay answer-side; exact fenced Java uses no Map/Set and passes named cases plus all 21,845 bounded arrays against an independent frequency oracle. Formal promotion remains governed by repository human-approval and real-review policy.']
+          ]);
+          for(const [oldValue,newValue] of replacements){if(!text.includes(oldValue))throw new Error(`batch 0033 task marker drifted: ${oldValue.slice(0,80)}`);text=text.replace(oldValue,newValue);}
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Audit reviewed candidates and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$THROTTLE_CID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$DEDUP_CID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during isolated review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add \
+            "review/evidence/$THROTTLE_CID.json" \
+            "review/evidence/$DEDUP_CID.json" \
+            "review/content_build/answer_batch_0033/$THROTTLE_CID/isolated_review_result.json" \
+            "review/content_build/answer_batch_0033/$DEDUP_CID/isolated_review_result.json" \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass final two batch 0033 candidates source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
