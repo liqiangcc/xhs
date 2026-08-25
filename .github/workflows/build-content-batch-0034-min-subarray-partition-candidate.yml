@@ -1,0 +1,222 @@
+name: Build Content Batch 0034 Min Subarray Partition Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0034-min-subarray-partition-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-min-subarray-partition-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7cf94a421237d5445dc8e6a277be9489
+  SOURCE_QID: 7cf94a421237d5445dc8e6a277be9489
+  SOURCE_NOTE: note_tagged/685696fe0000000012033bb6.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source boundary and ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,note=process.env.SOURCE_NOTE;
+          const expected='编程题：如何将数组拆分成和小于等于 k 的最少数量子数组？';
+          const tagged=JSON.parse(fs.readFileSync(note,'utf8')); const src=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected||src.question_type!=='手写代码_Coding') throw new Error('source wording/type drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0034/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding') throw new Error('canonical context/type drifted');
+          const library=(ctx.source_questions||[]).find(x=>x.original_question===expected); if(!library||!ctx.canonical.question_ids.includes(library.question_id)) throw new Error('Question -> Canonical mapping drifted');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse overwrite');
+          fs.writeFileSync(path.join(`review/content_build/answer_batch_0034/${cid}`,'source_mapping.json'),JSON.stringify({schema_version:'answer_source_mapping.v1',canonical_id:cid,library_question_id:library.question_id,note_question_id:qid,note_path:note,original_question:expected,verified_at:'2026-08-26'},null,2)+'\n');
+          const boundary='review/content_build/answer_batch_0034/source_boundary_audit.md'; let text=fs.existsSync(boundary)?fs.readFileSync(boundary,'utf8'):'# Answer Batch 0034 Source Boundary Audit\n'; const heading=`## ${cid}`;
+          if(!text.includes(heading)) text+=`\n${heading}\n\n- Exact repository source: \`${note}\`, question \`${qid}\`.\n- Preserved wording: \`${expected}\`\n- Preserved intent: minimize the number of subarrays whose sums are at most k.\n- Not preserved: whether values are non-negative, explicit bounds, empty-input behavior, impossible-case return value, or whether “子数组” was intended in the standard contiguous sense versus arbitrary grouping.\n- Candidate executable policy: interpret a split into subarrays as a partition of the whole input, in original order, into non-empty contiguous segments; allow signed int values; each segment sum must be <= k; empty input returns 0; return -1 when no valid partition exists.\n- Because non-negativity is not preserved, the main solution uses prefix sums + DP rather than assuming the one-pass greedy optimization; the greedy variant is described only conditionally for non-negative inputs.\n- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.\n`;
+          fs.writeFileSync(boundary,text);
+          NODE
+
+      - name: Write source-bounded DP candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7cf94a421237d5445dc8e6a277be9489","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 数组拆成和不超过 k 的最少连续子数组
+
+          ## 核心结论
+
+          原题只说“拆分成和小于等于 k 的最少数量子数组”，没有保存元素是否非负等约束。这里先把可执行契约说清：把整个数组按原顺序切成若干个**非空连续段**，每个元素恰好属于一个段，每段元素和都 `<= k`；元素允许正负，空数组返回 0，无可行拆分返回 -1。因为允许负数，不能直接假设“当前段能装就一直装”的贪心一定正确；用前缀和 + 动态规划，令 `dp[i]` 表示前 i 个元素的最少段数，枚举最后一段起点即可，时间 O(n²)，空间 O(n)。
+
+          ## 1 分钟版
+
+          - `prefix[i]` 表示前 i 个数的和，因此区间 `[j, i)` 的和是 `prefix[i] - prefix[j]`。
+          - 定义 `dp[0] = 0`，`dp[i]` 是 `nums[0..i)` 的合法最少分段数；最后一段如果从 `j` 开始且区间和 `<= k`，就能从 `dp[j]` 转移到 `dp[i] = min(dp[i], dp[j] + 1)`。
+          - 枚举所有 `0 <= j < i`，因此即使有负数、某个单元素本身大于 k，但和后续负数合起来能满足约束，也不会被错误提前判死。
+          - `dp[n]` 仍不可达时返回 -1；空数组返回 0。
+          - 复杂度 O(n²) / O(n)。只有确认所有元素都非负后，才可以进一步用“尽量延长当前段”的 O(n) 贪心优化。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.Arrays;
+
+          public final class MinSubarrayPartition {
+              public static int minSegments(int[] nums, long k) {
+                  int n = nums.length;
+                  long[] prefix = new long[n + 1];
+                  for (int i = 0; i < n; i++) {
+                      prefix[i + 1] = prefix[i] + nums[i];
+                  }
+
+                  int inf = n + 1;
+                  int[] dp = new int[n + 1];
+                  Arrays.fill(dp, inf);
+                  dp[0] = 0;
+
+                  for (int i = 1; i <= n; i++) {
+                      for (int j = 0; j < i; j++) {
+                          if (dp[j] != inf && prefix[i] - prefix[j] <= k) {
+                              dp[i] = Math.min(dp[i], dp[j] + 1);
+                          }
+                      }
+                  }
+                  return dp[n] == inf ? -1 : dp[n];
+              }
+          }
+          ```
+
+          例如 `nums = [6, -2]，k = 5`。如果擅自按“单个 6 已经大于 k”就判无解，会错过整个区间 `[6, -2]` 的和其实是 4；DP 会枚举 `j = 0, i = 2`，发现整段合法并得到答案 1。这也是为什么在来源没有保存“元素全非负”时，不能直接把正数数组的贪心前提偷偷补进去。
+
+          ## 关键细节
+
+          - **子数组边界**：这里按通常算法语义把“子数组”解释为连续段，并要求这些段完整覆盖输入且不重排；若题目实际允许任意分组，那是不同问题，不能沿用这套状态定义。
+          - **状态不变量**：`dp[i]` 只由已经被完整合法分段的前缀 `dp[j]` 转移；每次附加的 `[j,i)` 又满足和 `<= k`，所以任何有限 `dp[i]` 都对应一个合法完整分割。
+          - **最优性**：任意最优分割都有某个最后切点 `j`；算法枚举所有 `j`，因此不会漏掉最优解。
+          - **负数**：允许负数时，一个中间前缀或单元素超过 k 并不代表包含它的更长段一定超过 k；所以不能用“超了就立刻切”的单调性假设。
+          - **前缀和类型**：输入是 `int[]`，使用 `long` 累加，避免普通 `int` 前缀和溢出。
+          - **不可行**：如果没有任何最后切点能把 `dp[n]` 变为有限值，返回 -1；这是答案侧明确约定，不冒充原题指定返回格式。
+          - **非负优化**：如果后续补充约束 `nums[i] >= 0`，那么延长当前段只会让和不减；此时每次尽量装到再加一个就超过 k，再开新段，可以做到 O(n)。
+
+          ## 原理机制
+
+          这个 DP 的核心是“按最后一段分解最优解”。假设最优方案最后一段是 `[j,n)`，那么它之前的 `[0,j)` 必须自己也是最少段方案，否则换成更少段的前缀方案就能得到更优的整体方案，与最优性矛盾。因此可以把问题拆成 `dp[j] + 1`，只要最后区间合法。前缀和把任意连续区间求和从 O(n) 降为 O(1)，总共 O(n²) 个候选切点，所以整体 O(n²)。
+
+          ## 项目经验版
+
+          来源没有提供真实项目数据、数组规模或业务语义，不能虚构线上案例。实际落地前应先确认“子数组”是否确实要求连续、元素是否可能为负、n 的上限以及无解时接口如何表达；如果 n 很大且存在更多数值约束，再根据这些约束寻找单调队列、数据结构或贪心等进一步优化，而不是在约束未知时先写一个看似更快但不成立的算法。
+
+          ## 常见追问
+
+          - 问：为什么不能直接贪心，当前段只要加下一个不超过 k 就继续加？答：如果元素允许负数，当前和超过 k 后，后面负数仍可能把整段拉回 `<= k`；贪心需要额外的非负单调性前提。
+          - 问：为什么 `dp[i]` 能保证最少？答：任何合法分割都有一个最后切点 j，算法枚举所有可能 j，并在合法区间上取 `dp[j]+1` 的最小值，因此覆盖所有最优候选。
+          - 问：如果所有元素都非负呢？答：可以利用区间和随右端点单调不减的性质，每段尽量向右延伸，超出 k 才切，做到 O(n)；但这不是当前来源已保存的约束。
+          - 问：一个元素本身大于 k 一定无解吗？答：在当前允许负数的契约下不一定，例如 `[6,-2]`、`k=5` 可以作为一整段；若元素全非负，则这样的元素才会直接导致无解。
+          - 问：如果“子数组”其实指任意不连续分组呢？答：那就不是这里的连续分割 DP，需要重新定义问题和约束，不能把当前答案直接套过去。
+
+          ## 易错点
+
+          - 没有确认元素非负，就直接使用正数数组的贪心切段。
+          - 把“子数组”写成可以任意挑元素的子集，破坏连续性和原顺序。
+          - 只判断每个单元素是否 `<= k`，忽略负数可能与较大的正数组成合法区间。
+          - 前缀和继续用 `int`，在大输入上产生整数溢出。
+          - `dp` 不区分不可达状态，导致从一个不存在的前缀方案继续转移。
+          EOF
+
+          cat > "$out/MinSubarrayPartition.java" <<'JAVA'
+          import java.util.Arrays;
+
+          public final class MinSubarrayPartition {
+              public static int minSegments(int[] nums, long k) {
+                  int n = nums.length;
+                  long[] prefix = new long[n + 1];
+                  for (int i = 0; i < n; i++) prefix[i + 1] = prefix[i] + nums[i];
+                  int inf = n + 1;
+                  int[] dp = new int[n + 1];
+                  Arrays.fill(dp, inf);
+                  dp[0] = 0;
+                  for (int i = 1; i <= n; i++) {
+                      for (int j = 0; j < i; j++) {
+                          if (dp[j] != inf && prefix[i] - prefix[j] <= k) dp[i] = Math.min(dp[i], dp[j] + 1);
+                      }
+                  }
+                  return dp[n] == inf ? -1 : dp[n];
+              }
+          }
+          JAVA
+          cat > "$out/MinSubarrayPartitionTest.java" <<'JAVA'
+          public final class MinSubarrayPartitionTest {
+              private static void eq(int actual,int expected,String name){if(actual!=expected)throw new AssertionError(name+" expected="+expected+" actual="+actual);}
+              public static void main(String[] args){
+                  eq(MinSubarrayPartition.minSegments(new int[]{},3),0,"empty");
+                  eq(MinSubarrayPartition.minSegments(new int[]{1,2,3},3),2,"basic");
+                  eq(MinSubarrayPartition.minSegments(new int[]{6,-2},5),1,"positive rescued by negative");
+                  eq(MinSubarrayPartition.minSegments(new int[]{5},4),-1,"impossible singleton");
+                  eq(MinSubarrayPartition.minSegments(new int[]{2,-5,7},4),1,"whole signed segment");
+                  eq(MinSubarrayPartition.minSegments(new int[]{4,4,4},4),3,"exact boundaries");
+                  eq(MinSubarrayPartition.minSegments(new int[]{Integer.MAX_VALUE,Integer.MAX_VALUE},Long.MAX_VALUE),1,"long prefix");
+                  System.out.println("PASS empty basic signed-rescue impossible signed-whole exact-boundary long-prefix");
+              }
+          }
+          JAVA
+
+      - name: Run JDK 21 fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; mkdir -p "$out/classes"
+          javac -d "$out/classes" "$out/MinSubarrayPartition.java" "$out/MinSubarrayPartitionTest.java"
+          stdout="$(java -cp "$out/classes" MinSubarrayPartitionTest)"
+          test "$stdout" = 'PASS empty basic signed-rescue impossible signed-whole exact-boundary long-prefix'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`; const mapping=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'javac MinSubarrayPartition.java MinSubarrayPartitionTest.java && java MinSubarrayPartitionTest',stdout:process.env.STDOUT,checks:['empty input','basic positive partition','signed value can rescue an individually-too-large value','impossible singleton','whole signed segment','exact-k boundaries','long prefix accumulation']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Exact repository min-subarray-partition question and boundary audit',locator:`${mapping.note_path} + ${out}/source_mapping.json + review/content_build/answer_batch_0034/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Deterministic JDK 21 signed contiguous-partition fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'The source asks for the minimum number of subarrays with sums <= k but does not preserve non-negativity, explicit bounds, impossible-return shape, or a clarification of contiguous versus arbitrary grouping.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'dp-correctness',text:'Under the explicitly stated contiguous full-partition contract with signed int elements, prefix-sum DP over the last cut handles negative values and returns the minimum legal segment count or -1.',source_ids:['fixture'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},{claim_id:'validation',text:'The executable fixture covers empty/basic cases, signed rescue, impossible singleton, whole signed segment, exact-k boundaries and long accumulation.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:mapping.library_question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_human_approval_and_real_review_policy_not_yet_satisfied'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md'; let t=fs.readFileSync(task,'utf8'); const p='- Min-subarray-partition canonical `'+cid+'` has a source-bounded signed-input prefix-sum DP candidate, verified mapping, deterministic JDK 21 validation, and writer evidence; isolated review and promotion gates remain pending.'; if(!t.includes(p))t=t.trimEnd()+'\n'+p+'\n'; fs.writeFileSync(task,t);
+          NODE
+
+      - name: Verify focused repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm test
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"; remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced: $base_head -> $remote_head; discard verified local mutation."; exit 0; fi
+          git add review/candidates/answers/"$CANONICAL_ID".md review/content_build/answer_batch_0034 tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md
+          git diff --cached --check
+          git config user.name xhs-content-builder; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: build batch 0034 min-subarray-partition candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
