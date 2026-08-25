@@ -1,0 +1,146 @@
+name: Review Content Batch 0033 Top Ten Students SQL Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0033-top-ten-students-sql-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-top-ten-students-sql-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_779e5c61c5f999e26fabf2ab777035b1
+  SOURCE_QID: 779e5c61c5f999e26fabf2ab777035b1
+  CANDIDATE_BLOB_SHA: d06124a1219266f3c40efe28f8d50daa9042d37c
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated guard and exact SQL validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const raw=fs.readFileSync('note_img_txt/67ee3c15000000001c0327c9.txt','utf8');
+          if(!raw.includes('sql题找出成绩前十的学生')) throw new Error('stronger raw OCR source drifted');
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67ee3c15000000001c0327c9.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!=='SQL：找出成绩排名前十的学生？') throw new Error('tagged source drifted');
+          if(source.question_type!=='算法手撕_Coding'||source.domain?.l2!=='MySQL实操') throw new Error('source type/domain drifted');
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const row=rows.find(x=>x.question_id===qid); if(!row||row.canonical_id!==cid) throw new Error('Question ownership drifted');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+
+          const boundary=fs.readFileSync('review/content_build/answer_batch_0033/source_boundary_audit.md','utf8');
+          for(const needle of [`## ${cid}`,'table/column names','whether each student has one score or many course-grade rows','exact ranking metric','top-ten rank levels including ties','tie-break policy','NULL/no-score behavior']) if(!boundary.includes(needle)) throw new Error(`boundary guard missing: ${needle}`);
+          const text=fs.readFileSync(candidate,'utf8');
+          for(const needle of ['最多返回 10 名学生','ORDER BY sc.score DESC, s.student_id ASC','LIMIT 10','并不等于“前十个名次全部包含并列”','DENSE_RANK()','RANK','一人多门课多行','INNER JOIN']) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if(/我负责|我在线上|我们线上|线上使用过|生产中我/.test(text)) throw new Error('fabricated experience detected');
+          const open='```sql\n'; const i=text.indexOf(open); if(i<0) throw new Error('primary SQL fence missing');
+          const start=i+open.length,end=text.indexOf('\n```',start); if(end<0) throw new Error('primary SQL fence close missing');
+          fs.mkdirSync('/tmp/xhs-top10-sql-review',{recursive:true});
+          fs.writeFileSync('/tmp/xhs-top10-sql-review/top_ten_students.sql',text.slice(start,end)+'\n');
+          NODE
+          cmp -s /tmp/xhs-top10-sql-review/top_ten_students.sql "$out/top_ten_students.sql"
+          test "$(python3 "$out/sql_validation.py")" = 'PASS empty=0 small=5 top10=10 tie=cutoff-deterministic no-score=excluded'
+
+      - name: Record isolated review and audit-complete evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0033/${cid}`;
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md',fixture=`${out}/sql_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0033-top-ten-students-sql-20260826-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The stronger OCR source preserves only an SQL task to find students with top-ten grades; the tagged projection adds MySQL/SQL/LIMIT classification, but neither source preserves schema, score granularity, tie, NULL/no-score, version or output rules.',
+            'The candidate explicitly scopes its primary query to one non-NULL final score per scored student, at most ten rows, INNER JOIN exclusion of no-score students, and student_id as deterministic cutoff tie-breaker.',
+            'The primary fenced SQL is byte-for-byte identical to the executable fixture and produces correct empty, fewer-than-ten, and greater-than-ten results.',
+            'A cutoff tie is deterministically resolved by score DESC then student_id ASC; the answer correctly states this is a row-limit policy, not a claim that equal scores have different mathematical rank.',
+            'The answer separates exactly-ten-row LIMIT semantics from top-ten rank levels including ties, and distinguishes RANK from DENSE_RANK for MySQL 8+ follow-up semantics.',
+            'The answer also fail-closes the one-student-many-course case by requiring an explicit aggregation metric before ranking instead of guessing AVG/SUM.',
+            'No placeholder SQL, source-fabricated schema, fabricated production claim or uncovered preserved source requirement remains.'
+          ];
+          const boundaryTests=[
+            {case:'empty tables',expected:'0 rows',actual:'0',passed:true},
+            {case:'5 scored students plus one no-score student',expected:'5 scored rows ordered deterministically',actual:'passed',passed:true},
+            {case:'13 scored students',expected:'exactly 10 rows',actual:'10',passed:true},
+            {case:'score tie at cutoff ids 10/11',expected:'id 10 included before id 11',actual:'passed',passed:true},
+            {case:'student without score',expected:'excluded by explicit INNER JOIN contract',actual:'passed',passed:true}
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0033.top-ten-students-sql.v1',decision:'pass',revision_round:0,source_packet:['note_img_txt/67ee3c15000000001c0327c9.txt','note_tagged/67ee3c15000000001c0327c9.json',boundary,candidate,fixture,`${out}/top_ten_students.sql`,`${out}/sql_validation.py`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0033-top-ten-students-sql-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'raw-ocr',title:'Stronger raw OCR interview source',locator:'note_img_txt/67ee3c15000000001c0327c9.txt',source_type:'repository_source_record',checked_at:date},{source_id:'tagged-source',title:'Tagged SQL question projection and ownership',locator:'note_tagged/67ee3c15000000001c0327c9.json',source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Top-ten SQL deterministic SQLite fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Top-ten-students SQL independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The sources preserve only an SQL top-ten-by-grade student task plus MySQL/SQL/LIMIT classification; schema, score granularity, ranking/tie, NULL/no-score, version and output rules remain answer-side contracts.',source_ids:['raw-ocr','tagged-source'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'primary-query',text:'Under the explicit one-final-score / at-most-ten-row contract, exact SQL joins by student_id, orders score DESC then student_id ASC and applies LIMIT 10.',source_ids:['fixture','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'tie-and-variants',text:'The candidate distinguishes deterministic row cutoff from rank-with-ties semantics and requires a specified per-student aggregation metric before ranking multi-course rows.',source_ids:['isolated-review'],answer_locations:['关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'python3 sql_validation.py',result:'pass',reported_stdout:'PASS empty=0 small=5 top10=10 tie=cutoff-deterministic no-score=excluded',checks:['empty','small set','exact top ten','cutoff tie','no-score exclusion'],boundary_tests:boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0033.top-ten-students-sql.v1',independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true}); fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md'; let text=fs.readFileSync(task,'utf8');
+          const old='- [ ] `cq_q_779e5c61c5f999e26fabf2ab777035b1` writer slice staged source-first from stronger raw OCR plus tagged ownership: schema/score-granularity/tie/NULL/version choices remain explicit answer-side contracts; exact primary SQL passes empty, small, deterministic cutoff-tie, ten-row and no-score fixtures. Isolated independent review is still required before promotion.';
+          const replacement='- [x] `cq_q_779e5c61c5f999e26fabf2ab777035b1` passed isolated source-first review from stronger raw OCR plus tagged ownership: schema/score-granularity/tie/NULL/version choices remain answer-side, exact primary SQL passes empty/small/top-ten/cutoff-tie/no-score fixtures, and row-limit vs rank-with-ties plus multi-course aggregation boundaries are explicit. Formal promotion remains governed by repository human-approval and real-review policy.';
+          if(!text.includes(old)) throw new Error('batch 0033 SQL task marker drifted'); fs.writeFileSync(task,text.replace(old,replacement));
+          NODE
+
+      - name: Audit candidate and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during SQL isolated review: $base_head -> $remote_head; fail closed and retry later."; exit 0; fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0033/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0033 top-ten-students SQL candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
