@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { compileJava, compileC, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
+const { compileJava, compileC, compileCpp, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
 
 test('Java validation compiles complete classes and rejects broken implementations', () => {
     assert.equal(compileJava('public class Solution { public static int add(int a, int b) { return a + b; } }').ok, true);
@@ -14,6 +14,28 @@ test('Java validation compiles complete classes and rejects broken implementatio
 test('C validation compiles complete source and rejects broken implementations', () => {
     assert.equal(compileC('int add(int a, int b) { return a + b; }').ok, true);
     assert.equal(compileC('int add(int a, int b) { return a + ; }').ok, false);
+});
+
+
+test('C++ validation compiles common fence aliases and rejects broken implementations', () => {
+    assert.equal(compileCpp('#include <vector>\nint size(const std::vector<int>& values) { return static_cast<int>(values.size()); }').ok, true);
+    assert.equal(compileCpp('int add(int a, int b) { return a + ; }').ok, false);
+    const context = { canonical: { canonical_title: '链表中点' }, primary_entities: ['链表'], source_variants: ['链表中点'] };
+    const evidence = { validation: { boundary_tests: [
+        { case: 'empty', expected: 'nullptr', passed: true },
+        { case: 'odd', expected: 'middle', passed: true },
+        { case: 'even', expected: 'second middle', passed: true },
+    ] } };
+    for (const language of ['cpp', 'c++', 'cc', 'cxx']) {
+        const candidate = { metadata: { answer_type: 'coding' }, content: [
+            '## 核心结论', '链表中点用快慢指针。',
+            '## 常见追问', '- 问：空链表？答：空。', '- 问：奇数？答：唯一中点。', '- 问：偶数？答：契约决定。',
+            '## 3 分钟版', `\`\`\`${language}`, 'struct Node { int v; Node* next; };', 'Node* middle(Node* h) { Node* s=h; Node* f=h; while (f && f->next) { s=s->next; f=f->next->next; } return s; }', '\`\`\`',
+        ].join('\n') };
+        const result = validateSpecializedCandidate(candidate, evidence, context);
+        assert.equal(result.errors.some((row) => row.error === 'coding_block_required'), false, language);
+        assert.equal(result.errors.some((row) => row.error.endsWith('_validation_failed')), false, language);
+    }
 });
 
 test('SQL validation checks statement structure balance and placeholders', () => {
