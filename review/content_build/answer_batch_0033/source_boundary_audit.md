@@ -54,3 +54,12 @@
 - Not preserved by the repository source and therefore answer-side contracts only: how the infinite line is represented, the function signature, coordinate type/range, finite-value policy, degenerate-line behavior, required C++ standard, output precision, and whether distance to a segment rather than an infinite line is intended.
 - Candidate policy for this slice: represent the infinite line by two distinct points A and B, use finite `long double` coordinates, reject A==B, return non-negative perpendicular distance to the infinite line, and compile the exact displayed implementation as C++20.
 - Promotion remains blocked until an isolated independent reviewer verifies source boundaries, exact fenced-code execution, numerical/degenerate cases, evidence, and repository gates.
+
+## cq_q_768f8eb71596f7b6824861aae95d9f08
+
+- Exact repository source: `note_tagged/663b7649000000001e038251.json`.
+- Preserved wording: `算法/手撕：N分钱换成1/2/3分硬币的所有组合方式 (动态规划/递归)`
+- Source-preserved facts: an amount N cents is to be exchanged using 1/2/3-cent coins; the source asks for all combination ways and explicitly mentions dynamic programming / recursion.
+- Not preserved by the repository source and therefore answer-side contracts only: whether "all combinations" means enumerate combinations or return only their count, whether coin supply is unlimited, whether order matters, the programming language/API, N's range, the N=0 convention, negative-input behavior, and output ordering.
+- Candidate policy for this slice: treat coin supply as unlimited and order-insensitive; enumerate each combination as counts of 1/2/3-cent coins, return one empty combination for N=0 and none for N<0; additionally give a combination-count DP because the source explicitly mentions DP. Java 17 syntax is an answer-side implementation choice and the exact displayed code is compiled on JDK 21.
+- Promotion remains blocked until an isolated independent reviewer verifies exact source boundaries, enumeration uniqueness/completeness, DP combination semantics versus permutation overcounting, exact fenced-code execution, evidence, and repository gates.
