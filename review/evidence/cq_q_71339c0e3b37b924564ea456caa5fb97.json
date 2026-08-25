@@ -1,0 +1,167 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_71339c0e3b37b924564ea456caa5fb97",
+  "candidate_sha256": "0a06a0c120683f5de921ee2e79e9d0c374f1815ab72bf7d3bd2aa50c26c2a55d",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0032-majority-vote-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0032 exact source-first singleton boundary",
+      "locator": "review/content_build/answer_batch_0032/source_boundary_audit.md",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Majority-vote writer fixture plus actual-candidate exhaustive independent oracle",
+      "locator": "review/content_build/answer_batch_0032/cq_q_71339c0e3b37b924564ea456caa5fb97/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Majority-vote independent source-first review",
+      "locator": "review/content_build/answer_batch_0032/cq_q_71339c0e3b37b924564ea456caa5fb97/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks for a strict-majority number using Boyer-Moore voting, without specifying an API or explicit majority-exists guarantee.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-behavior",
+      "text": "The actual candidate uses Boyer-Moore cancellation to select a candidate and a second linear pass to verify the strict-majority condition when existence is not guaranteed.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "strict-threshold",
+      "text": "Independent exhaustive and boundary checks reject exact-half/no-majority inputs and accept only occurrences strictly greater than n/2.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The implementation performs at most two linear scans while storing only candidate and counters, matching O(n) time and O(1) extra algorithm space.",
+      "source_ids": [
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "71339c0e3b37b924564ea456caa5fb97",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "writer randomized fixture plus independently compiled actual-candidate exhaustive oracle",
+    "result": "pass",
+    "reported_stdout": "PASS writer randomized=20000; PASS actual candidate exhaustive=29524 + boundaries",
+    "checks": [
+      "null/empty",
+      "singleton",
+      "strict-majority",
+      "exact-half rejected",
+      "no-majority rejected",
+      "negative values",
+      "29,524 exhaustive arrays"
+    ],
+    "boundary_tests": [
+      {
+        "case": "actual candidate null/empty/single boundaries",
+        "expected": "empty for null/empty; singleton returned",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "strict-majority threshold",
+        "expected": "exact half and no-majority rejected; > n/2 accepted",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "actual candidate exhaustive small-domain oracle",
+        "expected": "match independent HashMap oracle for every length 0..9 array over {-1,0,1}",
+        "actual": "pass across 29,524 exhaustive arrays",
+        "passed": true
+      },
+      {
+        "case": "negative-value boundary",
+        "expected": "negative majority supported without sentinel collision",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0032-majority-vote-20260825",
+    "review_version": "batch-0032.majority-vote.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The exact repository source asks for a number occurring more than half the time and names Boyer-Moore voting; it does not specify an API or explicitly guarantee that such an element always exists.",
+      "The candidate keeps the missing existence guarantee explicit and therefore separates candidate selection from a second-pass strict-majority verification instead of silently assuming success.",
+      "The explanation correctly uses strict > n/2 semantics; an exact-half case is not accepted.",
+      "The cancellation argument explains why a true strict majority survives pairwise cancellation while also explaining why an unverified survivor is insufficient when no majority exists.",
+      "An independently authored exhaustive oracle compiles and runs the actual candidate over every length 0..9 array on a three-value alphabet, plus null, empty, singleton, exact-half, no-majority and negative-value boundaries.",
+      "The O(n) time and O(1) extra-space claims match the two linear scans and constant algorithm state; the optional return contract is explicitly answer-side.",
+      "No project experience is fabricated; the answer marks production/API choices as implementation policy rather than preserved source facts."
+    ]
+  }
+}
