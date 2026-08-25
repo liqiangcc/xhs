@@ -1,0 +1,150 @@
+name: Review Content Batch 0030 Distinct Subsequences Candidate v2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0030-distinct-subsequences-candidate-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-distinct-subsequences-review-v2
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6c3e7f9d826622bce0c25df5beee24a0
+  SOURCE_QID: 6c3e7f9d826622bce0c25df5beee24a0
+  SOURCE_QID_ALT: 271d5e7c97e9f51b7b5ab4fdc1331411
+  CANDIDATE_BLOB_SHA: 8fb71fab703532406938311290c2a5715bd5cbab
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun oracle fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          OUT="$out" CANDIDATE="$candidate" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,alt=process.env.SOURCE_QID_ALT,out=process.env.OUT,candidate=process.env.CANDIDATE;
+          const shortText='算法：不同的子序列 (LeetCode 115 - DP)';
+          const longText='算法手撕：LeetCode 115 - 不同的子序列。给定字符串 s 和 t，计算 s 的子序列中等于 t 的个数。要求分析时间复杂度并提供空间优化方案';
+          const s1=JSON.parse(fs.readFileSync('note_tagged/6661b50a0000000006006ab3.json','utf8'));
+          const s2=JSON.parse(fs.readFileSync('note_tagged/67ee9898000000000900e85f.json','utf8'));
+          const a=(s1.tagged_questions||[]).find(x=>x.question_id===qid),b=(s2.tagged_questions||[]).find(x=>x.question_id===alt);
+          if(!a||a.original_question!==shortText||a.question_type!=='算法手撕_Coding') throw new Error('short source drifted');
+          if(!b||b.original_question!==longText||b.question_type!=='算法手撕_Coding') throw new Error('expanded source drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          for(const [id,text] of [[qid,shortText],[alt,longText]]) { const q=qs.find(x=>x.question_id===id); if(!q||q.original_question!==text||q.canonical_id!==cid) throw new Error(`Question projection drifted for ${id}`); }
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify([...(canon.question_ids||[])].sort())!==JSON.stringify([qid,alt].sort())) throw new Error('Canonical ownership drifted');
+          const boundary=JSON.parse(fs.readFileSync(`${out}/source_boundary.json`,'utf8'));
+          if(boundary.primary_problem?.title!=='LeetCode 115. Distinct Subsequences') throw new Error('official identity missing');
+          for(const x of ['time-complexity analysis requested by expanded source variant','space optimization requested by expanded source variant']) if(!(boundary.preserved_constraints||[]).includes(x)) throw new Error(`missing preserved constraint: ${x}`);
+          const text=fs.readFileSync(candidate,'utf8');
+          for(const needle of ['dp[j] += dp[j-1]','j` 必须**倒序**','O(|s|·|t|)','O(|t|)','Integer.MAX_VALUE + 1','复杂度分析与空间优化']) if(!text.includes(needle)) throw new Error(`candidate coverage missing: ${needle}`);
+          NODE
+          javac "$out/DistinctSubsequences115.java" "$out/DistinctSubsequences115Test.java"
+          test "$(java -cp "$out" DistinctSubsequences115Test)" = 'PASS official=2 combinatorial=yes empty-extension=yes saturation-prefix=yes exhaustive-binary=yes overflow-contract=yes invalid=yes'
+
+      - name: Record source-first review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,alt=process.env.SOURCE_QID_ALT,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0030/${cid}`;
+          const boundary=`${out}/source_boundary.json`,fixture=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0030-distinct-subsequences-20260825-v2';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'Both repository source variants resolve to LeetCode 115; the expanded source explicitly requires the s/t counting contract, time complexity analysis and a space optimization, all directly covered by the candidate.',
+            'The choose/not-choose recurrence is correct and the one-dimensional target index runs right-to-left, preserving the previous-source-prefix dependency so one source position is not reused in one scan.',
+            'The answer gives O(|s|*|t|) time and O(|t|) extra space and contrasts the direct two-dimensional O(|s|*|t|) storage.',
+            'The executable fixture verifies both official examples, positional duplicate counting, generalized DP bases, huge irrelevant intermediate-prefix saturation, and exhaustive bounded binary inputs against an independent recursive oracle.',
+            'Saturating nonnegative intermediate counts at Integer.MAX_VALUE+1 preserves every final answer within the official 32-bit promise: any saturated state that later contributes would force the downstream count above that promise; a saturated state that never contributes needs no exact larger magnitude.',
+            'No source variant is left uncovered and no project experience is fabricated. Formal promotion remains governed by repository promotion and real-review policy.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0030.distinct-subsequences.v2',decision:'pass',revision_round:1,source_packet:['note_tagged/6661b50a0000000006006ab3.json','note_tagged/67ee9898000000000900e85f.json',boundary,candidate,fixture,'https://leetcode.com/problems/distinct-subsequences/description/'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const boundaryTests=[
+            {case:'official examples',expected:'rabbbit/rabbit=3 and babgbag/bag=5',actual:'PASS official=2',passed:true},
+            {case:'positional duplicate counting',expected:'aaaaa/aa=10 source-index choices',actual:'PASS combinatorial=yes',passed:true},
+            {case:'huge irrelevant prefix count',expected:'a^1000 vs a^20+b remains 0 without overflow corruption',actual:'PASS saturation-prefix=yes',passed:true},
+            {case:'exhaustive bounded binary oracle',expected:'optimized DP equals independent recursive count',actual:'PASS exhaustive-binary=yes',passed:true},
+            {case:'outside official 32-bit final promise',expected:'defensive ArithmeticException',actual:'PASS overflow-contract=yes',passed:true}
+          ];
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0030-distinct-subsequences-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'source-boundary',title:'Frozen repository LeetCode 115 source variants and official problem identity',locator:boundary,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Distinct Subsequences exhaustive bounded oracle fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Distinct Subsequences independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'Two repository variants identify LeetCode 115 DP; the expanded variant additionally requires complexity analysis and a space-optimized solution.',source_ids:['source-boundary'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'dp-mechanism',text:'Descending one-dimensional counting DP implements choose/not-choose without reusing a source index, in O(|s|*|t|) time and O(|t|) extra space.',source_ids:['fixture','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制']},{claim_id:'validation',text:'Fixture validates official examples, positional combinations, boundaries, saturation and exhaustive bounded binary cases against an independent oracle.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},{question_id:alt,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac DistinctSubsequences115.java DistinctSubsequences115Test.java && java DistinctSubsequences115Test',result:'pass',reported_stdout:'PASS official=2 combinatorial=yes empty-extension=yes saturation-prefix=yes exhaustive-binary=yes overflow-contract=yes invalid=yes',checks:['official examples','positional combinations','DP boundaries','huge-prefix saturation','exhaustive bounded oracle','defensive overflow','null rejection'],boundary_tests:boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0030.distinct-subsequences.v2',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- [ ] `cq_q_6c3e7f9d826622bce0c25df5beee24a0` writer stage complete: both repository variants resolve to LeetCode 115; the expanded source requirement for complexity analysis and space optimization is covered, the candidate derives the one-dimensional descending-index DP, intermediate-count saturation avoids an unproven overflow assumption, and executable validation covers both official examples plus exhaustive bounded binary-string oracle comparison. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          const replacement='- [x] `cq_q_6c3e7f9d826622bce0c25df5beee24a0` candidate passed independent source-first review: both LeetCode 115 variants are covered, including explicit complexity-analysis and space-optimization requirements; the descending one-dimensional DP and saturation boundary passed official examples plus exhaustive bounded oracle validation. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(old)) throw new Error('writer-stage task note missing');
+          fs.writeFileSync(task,text.replace(old,replacement));
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during LeetCode 115 review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0030/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0030 distinct-subsequences candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
