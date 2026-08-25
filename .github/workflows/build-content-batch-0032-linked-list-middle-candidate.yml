@@ -1,0 +1,276 @@
+name: Build Content Batch 0032 Linked List Middle Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0032-linked-list-middle-candidate.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-linked-list-middle-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+  CANONICAL_ID: cq_q_70a2325b23352069bfb96a47884bfeed
+  SOURCE_QID: 70a2325b23352069bfb96a47884bfeed
+
+jobs:
+  build-candidate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Guard frozen source-first boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "review/reports/ANSWER_BATCH_${BATCH}_SOURCE_PACKET.json"
+          test -f "review/content_build/answer_batch_${BATCH}/source_boundary_audit.md"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：链表怎么定位中间元素（快慢指针）';
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          const boundary=fs.readFileSync(`review/content_build/answer_batch_${process.env.BATCH}/source_boundary_audit.md`,'utf8');
+          if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary disposition missing');
+          NODE
+
+      - id: state
+        name: Guard writer idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/code_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded candidate and C++ fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          mkdir -p "$out"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_70a2325b23352069bfb96a47884bfeed","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 算法：链表怎么定位中间元素（快慢指针）
+
+          ## 核心结论
+
+          对一个有限、无环的单链表，用两个指针同时从头结点出发：`slow` 每次走 1 步，`fast` 每次走 2 步。当 `fast` 走到链表尾部时，`slow` 正好走了约一半距离，因此停在中间位置。本答案明确采用一个常见但并非原题明示的契约：偶数长度链表返回两个中间节点中的后一个；空链表返回 `nullptr`。
+
+          ## 1 分钟版
+
+          - 初始化 `slow = head`、`fast = head`。
+          - 循环条件是 `fast != nullptr && fast->next != nullptr`。
+          - 每轮 `slow = slow->next`，`fast = fast->next->next`。
+          - `fast` 每走两步，`slow` 只走一步，所以 `fast` 到尾部时 `slow` 到达中点。
+          - 长度为奇数时返回唯一中点；长度为偶数时，这个写法返回后一个中点。
+          - 时间复杂度 `O(n)`，额外空间 `O(1)`，且不修改链表。
+
+          ## 3 分钟版
+
+          ```cpp
+          struct ListNode {
+              int val;
+              ListNode* next;
+          };
+
+          ListNode* middleNode(ListNode* head) {
+              ListNode* slow = head;
+              ListNode* fast = head;
+
+              while (fast != nullptr && fast->next != nullptr) {
+                  slow = slow->next;
+                  fast = fast->next->next;
+              }
+              return slow;
+          }
+          ```
+
+          设链表长度为 `n`。每完成一轮，`slow` 前进 1 个节点，`fast` 前进 2 个节点，因此两者走过的边数始终保持约 `1:2`。当循环退出时，`fast` 已经无法再完整前进两步，`slow` 恰好位于下标 `floor(n/2)` 的节点（从 0 开始计数）。所以奇数长度 `n=2k+1` 时返回下标 `k` 的唯一中点；偶数长度 `n=2k` 时返回下标 `k`，也就是后一个中点。
+
+          ## 关键细节
+
+          - **偶数长度语义必须说清楚**：原题只说“中间元素”，没有说明两个中点选哪个。本实现返回后一个中点；若要求前一个中点，需要调整退出条件。
+          - **空链表**：`head == nullptr` 时两个指针都为空，循环不执行，直接返回 `nullptr`。
+          - **单节点**：`fast->next == nullptr`，循环不执行，返回头结点本身。
+          - **不修改结构**：算法只移动局部指针，不写任何 `next`，所以原链表拓扑保持不变。
+          - **有环链表不在本契约内**：如果存在环，`fast` 不会因为到达尾部而停止；应先定义是否需要判环，而不能把“找线性中点”和“环检测”混成一个未声明的任务。
+          - **复杂度**：`fast` 最多跨过 `n` 条边，整体是 `O(n)` 时间、`O(1)` 额外空间。
+
+          ## 原理机制
+
+          快慢指针利用的是“速度比”而不是额外计数器。若 `fast` 的速度是 `slow` 的两倍，那么在同一段线性路径上，`fast` 走完整段时，`slow` 走了一半。这个不变量让我们不需要先扫描一次得到长度，再扫描第二次走到 `n/2`；一次遍历就能完成定位。
+
+          对偶数长度，退出时 `fast == nullptr`；对奇数长度，退出时 `fast` 指向最后一个节点。两种情况下 `slow` 都处于 `floor(n/2)` 下标，因此行为可以直接由边界样例验证，而不是靠口述记忆。
+
+          ## 项目经验版
+
+          来源只是算法题，没有提供真实项目使用场景，因此不虚构生产经历。实际代码中我会把“空链表如何处理、偶数长度取前中点还是后中点、输入是否保证无环”写进函数契约，并用边界测试固定这些语义；如果调用方可能传入有环链表，应在上层先检测或改变接口约束。
+
+          ## 常见追问
+
+          - 问：为什么快指针走两步、慢指针走一步就能找到中点？答：两者从同一起点出发，移动距离保持约 `2:1`；快指针覆盖完整链表时，慢指针覆盖一半。
+          - 问：偶数长度返回哪个中点？答：当前循环条件返回后一个中点。比如 `1->2->3->4` 返回节点 `3`。这是本答案明确选择的契约，不是原题额外给出的条件。
+          - 问：如何返回前一个中点？答：可以让 `fast` 在还剩至少两条边时才继续，例如根据接口形式改成检查 `fast->next` 与 `fast->next->next`，并单独处理短链表边界。
+          - 问：为什么不用先求长度再走一半？答：两遍扫描同样是 `O(n)`，但快慢指针一遍即可完成，额外空间仍为 `O(1)`。
+          - 问：如果链表有环会怎样？答：本算法的终止条件依赖尾部 `nullptr`；有环时不保证终止，所以必须先确认输入契约或先做环检测。
+
+          ## 易错点
+
+          - 没说明偶数长度有两个中点，却把某一种返回结果说成唯一正确答案。
+          - 写成 `while (fast->next && fast->next->next)` 却没有处理 `fast == nullptr` 或短链表边界。
+          - 快指针移动两步前没有确认 `fast->next` 存在，导致空指针访问。
+          - 为了找中点去修改 `next`，引入完全不必要的结构副作用。
+          - 忽略有环输入会破坏“快指针最终到达 `nullptr`”这一终止前提。
+          EOF
+
+          cat > "$out/middle_node_test.cpp" <<'CPP'
+          #include <cassert>
+          #include <iostream>
+          #include <vector>
+
+          struct ListNode {
+              int val;
+              ListNode* next;
+          };
+
+          ListNode* middleNode(ListNode* head) {
+              ListNode* slow = head;
+              ListNode* fast = head;
+              while (fast != nullptr && fast->next != nullptr) {
+                  slow = slow->next;
+                  fast = fast->next->next;
+              }
+              return slow;
+          }
+
+          static void checkLength(int n) {
+              std::vector<ListNode> nodes;
+              nodes.reserve(n);
+              for (int i = 0; i < n; ++i) nodes.push_back({i, nullptr});
+              for (int i = 0; i + 1 < n; ++i) nodes[i].next = &nodes[i + 1];
+              std::vector<ListNode*> before;
+              for (int i = 0; i < n; ++i) before.push_back(nodes[i].next);
+              ListNode* head = n == 0 ? nullptr : &nodes[0];
+              ListNode* got = middleNode(head);
+              if (n == 0) {
+                  assert(got == nullptr);
+              } else {
+                  assert(got == &nodes[n / 2]);
+                  assert(got->val == n / 2);
+              }
+              for (int i = 0; i < n; ++i) assert(nodes[i].next == before[i]);
+          }
+
+          int main() {
+              for (int n = 0; n <= 20; ++n) checkLength(n);
+              checkLength(999);
+              checkLength(1000);
+              checkLength(1001);
+              std::cout << "PASS lengths=0..20,999,1000,1001 second-middle-even topology-unchanged" << std::endl;
+          }
+          CPP
+
+      - name: Execute fixture and freeze writer evidence
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          g++ -std=c++17 -O2 -Wall -Wextra -pedantic "$out/middle_node_test.cpp" -o "$out/middle_node_test"
+          stdout="$("$out/middle_node_test")"
+          test "$stdout" = 'PASS lengths=0..20,999,1000,1001 second-middle-even topology-unchanged'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const batch=process.env.BATCH,cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const out=`review/content_build/answer_batch_${batch}/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',
+            command:'g++ -std=c++17 -O2 -Wall -Wextra -pedantic middle_node_test.cpp && ./middle_node_test',
+            stdout:process.env.STDOUT,
+            checks:['empty list returns nullptr','odd lengths return unique middle','even lengths return second middle under explicit candidate contract','large odd/even lengths','input next pointers remain unchanged']
+          },null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'repository-source',title:'Batch 0032 frozen source-first boundary',locator:`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:'2026-08-25'},
+              {source_id:'fixture',title:'Linked-list middle deterministic C++ fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The preserved source asks only how to locate a linked-list middle element with fast/slow pointers; empty/even/cycle semantics are not additional source constraints.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},
+              {claim_id:'algorithm-behavior',text:'Under the explicit finite acyclic singly-linked-list contract, the fixture verifies index floor(n/2), including second-middle behavior for even lengths, and verifies the list topology is not mutated.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            promotion_blocker:'isolated_independent_review_not_yet_performed'
+          },null,2)+'\n');
+          NODE
+
+      - name: Record bounded progress in batch task
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          task="tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          python3 - <<'PY'
+          import os, pathlib
+          path=pathlib.Path(f"tasks/answer-batches/TASK-20260711-0313-answer-batch-{os.environ['BATCH']}.md")
+          text=path.read_text(encoding='utf-8')
+          cid=os.environ['CANONICAL_ID']
+          note=f"- [ ] `{cid}` candidate staged source-first: exact singleton boundary preserved; C++ fast/slow implementation uses an explicit finite-acyclic and second-middle-for-even contract; executable fixture covers empty, odd/even, large lengths and non-mutation. Independent review still required.\n"
+          if note not in text:
+              text=text.rstrip()+"\n"+note
+              path.write_text(text,encoding='utf-8')
+          PY
+
+      - name: Commit candidate from one stable content snapshot
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          task="tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          base_head="$(git rev-parse HEAD)"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced: $base_head -> $remote_head; discard mixed-snapshot candidate."
+            exit 0
+          fi
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$candidate" "$out" "$task"
+          git diff --cached --check
+          git commit -m "content: stage batch ${BATCH} linked-list middle candidate"
+          git push origin "HEAD:$CONTENT_BRANCH"
