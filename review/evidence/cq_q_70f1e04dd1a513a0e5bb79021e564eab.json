@@ -1,0 +1,167 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_70f1e04dd1a513a0e5bb79021e564eab",
+  "candidate_sha256": "5392ac0ef1a4b439e94572bee19c713877516ed1784f6543fde7b05da7b03229",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0032-horse-race-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0032 exact source-first singleton boundary",
+      "locator": "review/content_build/answer_batch_0032/source_boundary_audit.md",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Horse-race Java fixture and actual-candidate independent stress oracle",
+      "locator": "review/content_build/answer_batch_0032/cq_q_70f1e04dd1a513a0e5bb79021e564eab/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Horse-race independent source-first review",
+      "locator": "review/content_build/answer_batch_0032/cq_q_70f1e04dd1a513a0e5bb79021e564eab/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source requires ten simulated horse threads, a global ready-before-start condition and a global finished-before-announcement condition; it does not require a specific synchronizer.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "phase-ordering",
+      "text": "The three-latch implementation reports ready before awaiting start, the referee opens start only after ready reaches zero, and the referee announces only after finish reaches zero.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "failure-liveness",
+      "text": "finish is decremented from finally and actual-candidate failure stress terminates within the bounded timeout while preserving the failure as an exception.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "result-safety",
+      "text": "ConcurrentLinkedQueue supplies a concurrent scoring container and the answer explicitly defines insertion as the observable scoring point before the final result snapshot.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "70f1e04dd1a513a0e5bb79021e564eab",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "writer telemetry fixture plus independently compiled actual-candidate stress oracle",
+    "result": "pass",
+    "reported_stdout": "PASS writer 60 rounds; PASS actual candidate 100 rounds + bounded failure",
+    "checks": [
+      "ready-before-go",
+      "start-after-go",
+      "finish-before-announce",
+      "actual candidate unique results",
+      "concurrent action overlap",
+      "failure liveness"
+    ],
+    "boundary_tests": [
+      {
+        "case": "writer source-order telemetry across 60 rounds",
+        "expected": "10 ready before go; 10 starts after go; all finishes before announce",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "actual candidate action-release stress across 100 rounds",
+        "expected": "all ten actions cross start gate and produce ten unique results",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "actual candidate concurrency",
+        "expected": "at least two race actions overlap under barrier probe",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "actual candidate action failure",
+        "expected": "referee wait terminates and failure is propagated with cause within bounded timeout",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0032-horse-race-20260825",
+    "review_version": "batch-0032.horse-race.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The exact repository source requires ten horse threads, no start until every horse is ready, and no referee announcement until every horse reaches the terminal phase; it does not mandate CountDownLatch or any other specific synchronizer.",
+      "The candidate keeps the tool choice answer-side and separates ready aggregation, one-shot start broadcast and finish aggregation into three latches with distinct directions.",
+      "The ordering avoids the classic logical deadlock: each horse reports ready before awaiting start, while the referee awaits all ready before opening start.",
+      "finish.countDown is in finally, so action failure cannot strand the referee completion wait; the failure is separately recorded and rethrown rather than reported as a normal result.",
+      "The writer telemetry fixture verifies source ordering over 60 rounds, while an independently authored test compiles and executes the actual candidate for 100 rounds and a bounded failure case.",
+      "The answer defines the observable finishOrder.add operation as the simulation scoring point instead of claiming an unobservable absolute physical finishing order.",
+      "No project experience is fabricated; timeout, DNF, repeated-race and thread-pool policies remain explicitly outside the preserved source contract."
+    ]
+  }
+}

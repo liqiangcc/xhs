@@ -12,5 +12,33 @@
     "ten unique results per normal round",
     "failure path still releases finish latch and terminates referee wait",
     "60 repeated normal rounds under scheduler variation"
+  ],
+  "independent_command": "extract candidate Java; javac HorseRace.java HorseRaceIndependentTest.java; java HorseRaceIndependentTest",
+  "independent_stdout": "PASS actual-candidate rounds=100 ten-unique-results all-actions-released concurrent-overlap failure-propagates-without-deadlock",
+  "boundary_tests": [
+    {
+      "case": "writer source-order telemetry across 60 rounds",
+      "expected": "10 ready before go; 10 starts after go; all finishes before announce",
+      "actual": "pass",
+      "passed": true
+    },
+    {
+      "case": "actual candidate action-release stress across 100 rounds",
+      "expected": "all ten actions cross start gate and produce ten unique results",
+      "actual": "pass",
+      "passed": true
+    },
+    {
+      "case": "actual candidate concurrency",
+      "expected": "at least two race actions overlap under barrier probe",
+      "actual": "pass",
+      "passed": true
+    },
+    {
+      "case": "actual candidate action failure",
+      "expected": "referee wait terminates and failure is propagated with cause within bounded timeout",
+      "actual": "pass",
+      "passed": true
+    }
   ]
 }
