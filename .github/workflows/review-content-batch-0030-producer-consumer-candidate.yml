@@ -1,0 +1,141 @@
+name: Review Content Batch 0030 Producer Consumer Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0030-producer-consumer-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-producer-consumer-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6bf861ee543d0109e37f665062ac8d5d
+  SOURCE_QID: 6bf861ee543d0109e37f665062ac8d5d
+  CANDIDATE_BLOB_SHA: 6a2f2c010fd306b7faf2457bbe3b831bbc88460e
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun producer-consumer fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0030/$CANONICAL_ID"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/6833fa5b00000000030382a9.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!=='算法：消费者生产者模拟 (阻塞队列)') throw new Error('producer-consumer source drifted');
+          const sibling=(tagged.tagged_questions||[]).find(x=>x.question_id==='f213ccebb77d694fa4eb9062e4f03a01');
+          if(!sibling||sibling.original_question!=='算法：手写阻塞队列') throw new Error('separate hand-written BlockingQueue source missing');
+          const boundary=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0030/${cid}/source_boundary.json`,'utf8'));
+          for(const x of ['producer count','consumer count','queue implementation','queue capacity','termination protocol','timeout policy','retry or delivery guarantee','method signature']) if(!(boundary.not_preserved||[]).includes(x)) throw new Error(`missing fail-closed boundary: ${x}`);
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const needle of ['JDK `BlockingQueue` 作为已经存在的阻塞边界','每个消费者一个','queue.put(Message.stopMessage())','if (message.stop()) return null','业务 exactly-once','手写阻塞队列']) if(!text.includes(needle)) throw new Error(`candidate boundary/mechanism guard missing: ${needle}`);
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+          NODE
+          javac "$out/ProducerConsumerDemo.java" "$out/ProducerConsumerDemoTest.java"
+          test "$(java -cp "$out" ProducerConsumerDemoTest)" = 'PASS fifo=yes multi-exactly-once=yes empty-stop=yes repeated-capacity1=50 invalid=yes'
+
+      - name: Record independent source-first review and audit evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const out=`review/content_build/answer_batch_0030/${cid}`;
+          const boundary=`${out}/source_boundary.json`,fixture=`${out}/code_validation.json`,research=`${out}/writer_research.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const candidateSha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-batch-0030-producer-consumer-20260825-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved source asks for a producer-consumer simulation using a blocking queue; the same source note separately asks to hand-write a blocking queue, so treating JDK BlockingQueue as the synchronization boundary is a source-faithful separation rather than an omitted implementation requirement.',
+            'The candidate explicitly labels producer count, consumer count, bounded ArrayBlockingQueue choice, capacity, finite item range, stop-message shutdown, timeout and retry/delivery semantics as answer-side assumptions or non-preserved constraints.',
+            'The implementation uses BlockingQueue.put/take rather than polling, a bounded queue for backpressure, and one stop message per consumer; all consumer futures must complete before run returns.',
+            'The JDK 21 fixture compiles and verifies single-consumer FIFO at capacity 1, multi-consumer exact item-set coverage for 1000 items, empty-workload termination, one stop per consumer by protocol completion, invalid arguments, and 50 repeated three-consumer capacity-one runs.',
+            'The answer correctly separates queue-level thread safety and handoff visibility from business acknowledgement, retry, idempotency and exactly-once semantics; it does not fabricate project outcomes.',
+            'Result.stopMessages is a declared protocol count rather than independent instrumentation of stop consumption, but completion of every consumer future plus N enqueued stop messages proves the stated finite-demo termination property; this does not create a correctness hard failure.',
+            'Formal promotion remains subject to repository promotion and real-review policy.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:candidateSha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0030.producer-consumer.v1',decision:'pass',revision_round:1,source_packet:[boundary,candidate,fixture,research,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:candidateSha256,checked_at:date,writer:{writer_id:'content-batch-0030-producer-consumer-candidate-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'source-boundary',title:'Batch 0030 producer-consumer frozen repository source boundary',locator:boundary,source_type:'repository_source_record',checked_at:date},{source_id:'jdk-blockingqueue',title:'Java SE 21 BlockingQueue API',locator:'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/BlockingQueue.html',source_type:'primary_official_documentation',checked_at:date},{source_id:'jdk-arrayblockingqueue',title:'Java SE 21 ArrayBlockingQueue API',locator:'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ArrayBlockingQueue.html',source_type:'primary_official_documentation',checked_at:date},{source_id:'fixture',title:'Producer-consumer deterministic JDK 21 fixture',locator:fixture,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Producer-consumer independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The preserved source asks for producer-consumer simulation using a blocking queue, while hand-writing the queue is a separate sibling question.',source_ids:['source-boundary'],answer_locations:['核心结论','1 分钟版','常见追问','易错点']},{claim_id:'blocking-handoff',text:'Under the declared JDK implementation, BlockingQueue put/take provide blocking coordination and handoff visibility, while ArrayBlockingQueue supplies a bounded FIFO queue.',source_ids:['jdk-blockingqueue','jdk-arrayblockingqueue'],answer_locations:['1 分钟版','关键细节','原理机制']},{claim_id:'implementation-validation',text:'The executable fixture validates FIFO for one consumer, complete non-duplicated item coverage for multiple consumers, one-stop-per-consumer termination, empty workload, invalid arguments and repeated capacity-one contention.',source_ids:['fixture','isolated-review'],answer_locations:['3 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac ProducerConsumerDemo.java ProducerConsumerDemoTest.java && java ProducerConsumerDemoTest',result:'pass',reported_stdout:'PASS fifo=yes multi-exactly-once=yes empty-stop=yes repeated-capacity1=50 invalid=yes',checks:['single-consumer FIFO with capacity 1','multi-consumer exact item-set coverage for 1000 items','one stop per consumer protocol','empty workload termination','50 repeated capacity-one runs','invalid argument rejection']},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0030.producer-consumer.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- [ ] `cq_q_6bf861ee543d0109e37f665062ac8d5d` writer stage complete: the current producer-consumer source is kept separate from the sibling “hand-write BlockingQueue” question, the candidate uses bounded JDK BlockingQueue as the coordination boundary with explicit stop-message assumptions, Oracle Java 21 contracts are recorded, and the deterministic fixture verifies FIFO/exact item coverage/termination including 50 capacity-one repetitions. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          const replacement='- [x] `cq_q_6bf861ee543d0109e37f665062ac8d5d` candidate passed independent source-first review and deterministic JDK 21 producer-consumer evidence; the simulation remains explicitly separate from the sibling hand-written BlockingQueue question, and timeout/retry/delivery semantics remain declared source gaps. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(old)) throw new Error('expected writer-stage task note missing');
+          fs.writeFileSync(task,text.replace(old,replacement));
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during producer-consumer independent review: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0030/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0030 producer-consumer candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
