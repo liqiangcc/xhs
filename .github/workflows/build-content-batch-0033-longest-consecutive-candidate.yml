@@ -1,0 +1,341 @@
+name: Build Content Batch 0033 Longest Consecutive Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0033-longest-consecutive-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0033-longest-consecutive-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_74466a9b0dc9f7c95566f1f3641dc7b0
+  SOURCE_QID: 74466a9b0dc9f7c95566f1f3641dc7b0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source boundary and verify ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const expected='算法实现：求最长连续序列（LeetCode 128）。';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67fcfada000000001c00fe70.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!==expected) throw new Error(`source wording drifted: ${source?.original_question}`);
+          if(source.question_type!=='算法手撕_Coding') throw new Error(`source type drifted: ${source.question_type}`);
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const row=rows.find(x=>x.question_id===qid);
+          if(!row||row.canonical_id!==cid) throw new Error('Question -> Canonical ownership drifted');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error(`Canonical ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
+          const candidate=`review/candidates/answers/${cid}.md`;
+          if(fs.existsSync(candidate)) throw new Error('candidate already exists; refuse to overwrite a writer artifact');
+          const boundary='review/content_build/answer_batch_0033/source_boundary_audit.md';
+          let text=fs.readFileSync(boundary,'utf8');
+          const heading=`## ${cid}`;
+          if(!text.includes(heading)) {
+            text += `\n## ${cid}\n\n- Exact repository source: \`note_tagged/67fcfada000000001c00fe70.json\`\n- Preserved wording: \`${expected}\`\n- Source-preserved facts: this is the Longest Consecutive Sequence algorithm task identified as LeetCode 128.\n- Not preserved by the repository source and therefore answer-side contracts only: Java method signature, null-input behavior, whether the input may be mutated, exact integer bounds, and whether the interviewer requires a specific data structure.\n- Candidate policy for this batch slice: use an \`int[]\` Java API, return 0 for empty input, reject null input, do not mutate the input, use a HashSet and expand only from values with no representable predecessor, and guard integer-boundary arithmetic explicitly.\n- Promotion remains blocked until isolated independent review verifies source boundaries, exact fenced-code execution, evidence, and repository gates.\n`;
+            fs.writeFileSync(boundary,text);
+          }
+          NODE
+
+      - name: Write source-bounded candidate and exact Java fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0033/$cid"
+          mkdir -p "$out"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_74466a9b0dc9f7c95566f1f3641dc7b0","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 最长连续序列（LeetCode 128）
+
+          ## 核心结论
+
+          来源只明确这是“最长连续序列（LeetCode 128）”算法题，没有在仓库中保留 Java API、空值行为或是否允许修改输入等细节。这里采用一个可执行契约：输入为 `int[]`，返回数组中按数值连续的最长不同整数序列长度；重复值不增加长度；空数组返回 0，`null` 直接拒绝；实现不修改输入。主解法把所有值放入 `HashSet`，只从“没有前驱 `x-1`”的值开始向后扩展，因此每个连续段只会完整扫描一次，平均时间 O(n)、额外空间 O(n)。
+
+          ## 1 分钟版
+
+          - 先把数组元素放进 `HashSet<Integer>`，自动去重并支持平均 O(1) 查询。
+          - 遍历集合中的每个 `x`；只有 `x` 没有前驱时，`x` 才是某个连续段的起点。
+          - 从起点不断检查 `x+1、x+2...` 是否存在，统计当前连续段长度并更新最大值。
+          - 不从连续段中间再次向后扫描，这是把朴素的重复工作压到平均 O(n) 的关键。
+          - Java `int` 有上下界，所以判断前驱和后继时显式保护 `Integer.MIN_VALUE` / `Integer.MAX_VALUE`，避免整数回绕把不连续的两端错误连接起来。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.HashSet;
+          import java.util.Set;
+
+          public final class LongestConsecutive {
+              public static int solve(int[] nums) {
+                  if (nums == null) {
+                      throw new IllegalArgumentException("nums must not be null");
+                  }
+                  if (nums.length == 0) {
+                      return 0;
+                  }
+
+                  Set<Integer> values = new HashSet<>();
+                  for (int x : nums) {
+                      values.add(x);
+                  }
+
+                  int best = 0;
+                  for (int x : values) {
+                      boolean hasPredecessor =
+                              x != Integer.MIN_VALUE && values.contains(x - 1);
+                      if (hasPredecessor) {
+                          continue;
+                      }
+
+                      int length = 1;
+                      int current = x;
+                      while (current != Integer.MAX_VALUE && values.contains(current + 1)) {
+                          current++;
+                          length++;
+                      }
+                      if (length > best) {
+                          best = length;
+                      }
+                  }
+                  return best;
+              }
+          }
+          ```
+
+          例如 `[100,4,200,1,3,2]` 中，`1` 没有前驱，所以从 `1` 扩展得到 `1,2,3,4`，答案是 4。遍历到 `2、3、4` 时都能发现前驱存在，因此不会再次扫描这个连续段。对于 `[1,2,0,1]`，集合去重后是 `{0,1,2}`，答案是 3，重复的 `1` 不会把长度算成 4。
+
+          ## 关键细节
+
+          - **真正的不变量是“只从段首扩展”**：如果 `x-1` 存在，说明 `x` 属于别人的连续段，跳过即可；只有前驱不存在的值才负责完整扫描自己的段。
+          - **重复值**：题目求的是数值连续长度，不是数组位置上的连续区间；用集合去重后，同一个整数只参与一次成员判断。
+          - **复杂度**：建集合平均 O(n)。每个不同值最多作为外层元素检查一次，并在所属连续段由唯一段首向后命中一次，所以在 HashSet 平均 O(1) 查询假设下总时间平均 O(n)，空间 O(d)，`d` 是不同值个数。
+          - **整数边界**：Java 中 `Integer.MIN_VALUE - 1` 会回绕到 `Integer.MAX_VALUE`，`Integer.MAX_VALUE + 1` 会回绕到 `Integer.MIN_VALUE`。如果不保护边界，同时包含两个极值时可能被误判为连续。
+          - **不修改输入**：本实现另建集合，不排序原数组。若允许修改输入，也可以先排序再线性扫描，时间 O(n log n)、额外空间可更低，但不满足线性时间目标。
+          - **空输入**：本候选返回 0；`null` 抛 `IllegalArgumentException`。这两个行为是答案侧 API 契约，不应说成仓库原题明确规定。
+
+          ## 原理机制
+
+          朴素做法如果从每个数都向前或向后找连续值，同一条长度为 L 的连续段可能被重复扫描很多次。HashSet 解法先用“是否存在前驱”确定唯一段首：一条连续段只有最小值没有前驱，因此只有它会进入内部扩展循环。于是连续段中的每个值只会被段首扫描命中一次，外层再各做一次常数级前驱判断，避免了重复遍历。
+
+          这里说平均 O(n) 依赖 HashSet 常见的平均常数时间成员查询；如果要给严格的确定性最坏界，可以选择排序方案 O(n log n)，或者进一步讨论哈希实现与攻击性碰撞输入，但这已经超出当前来源要求。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构“线上使用过这道算法”。实际工程里如果需要从大量离散编号中找最长连续区间，我会先确认数据量、是否流式、内存上限和输入是否可修改，再选择 HashSet、排序或区间合并方案，并用重复值、断点、极值整数和大规模随机数据做对照测试；这些是落地验证方法，不是原题中的个人经历。
+
+          ## 常见追问
+
+          - 问：为什么只从没有前驱的数开始？答：因为一条连续段只有最小值没有前驱；让唯一段首负责扩展，就不会从段中间反复扫描同一批值。
+          - 问：为什么不能直接排序？答：可以，排序后去重并统计连续长度很简单，但通常是 O(n log n)；HashSet 方法在平均 O(1) 查询假设下可以做到平均 O(n)。
+          - 问：重复数字怎么处理？答：集合先去重，重复值不会增加连续序列长度，例如 `[1,2,2,3]` 的答案仍是 3。
+          - 问：`Integer.MIN_VALUE` 和 `Integer.MAX_VALUE` 同时存在会怎样？答：它们在数学上不连续；Java `int` 算术会回绕，所以代码必须在做 `x-1` 和 `x+1` 前保护边界，不能让两个极值被错误连接。
+          - 问：如果不能使用额外 O(n) 空间呢？答：可以考虑原地排序再扫描，代价是 O(n log n) 时间并修改输入；是否可接受取决于题目约束。
+
+          ## 易错点
+
+          - 从每个元素都向后扩展，导致长连续段被重复扫描，退化到 O(n²) 级重复工作。
+          - 把“最长连续序列”误解成原数组中位置连续的子数组，而不是数值相邻的集合序列。
+          - 忘记去重，让重复值错误增加长度。
+          - 宣称 HashSet 解法“严格最坏 O(n)”而不说明哈希查询的平均复杂度前提。
+          - 对 `Integer.MIN_VALUE` 直接算 `x-1`、对 `Integer.MAX_VALUE` 直接算 `x+1`，造成整数回绕。
+          - 把 `null`、空数组或不修改输入的行为说成仓库来源已明确给出的条件。
+          EOF
+
+          cat > "$out/LongestConsecutive.java" <<'JAVA'
+          import java.util.HashSet;
+          import java.util.Set;
+
+          public final class LongestConsecutive {
+              public static int solve(int[] nums) {
+                  if (nums == null) {
+                      throw new IllegalArgumentException("nums must not be null");
+                  }
+                  if (nums.length == 0) {
+                      return 0;
+                  }
+
+                  Set<Integer> values = new HashSet<>();
+                  for (int x : nums) {
+                      values.add(x);
+                  }
+
+                  int best = 0;
+                  for (int x : values) {
+                      boolean hasPredecessor =
+                              x != Integer.MIN_VALUE && values.contains(x - 1);
+                      if (hasPredecessor) {
+                          continue;
+                      }
+
+                      int length = 1;
+                      int current = x;
+                      while (current != Integer.MAX_VALUE && values.contains(current + 1)) {
+                          current++;
+                          length++;
+                      }
+                      if (length > best) {
+                          best = length;
+                      }
+                  }
+                  return best;
+              }
+          }
+          JAVA
+
+          cat > "$out/LongestConsecutiveTest.java" <<'JAVA'
+          import java.util.Arrays;
+
+          public final class LongestConsecutiveTest {
+              static int oracle(int[] nums) {
+                  if (nums == null) throw new IllegalArgumentException("nums must not be null");
+                  if (nums.length == 0) return 0;
+                  int[] copy = nums.clone();
+                  Arrays.sort(copy);
+                  int best = 1;
+                  int current = 1;
+                  for (int i = 1; i < copy.length; i++) {
+                      if (copy[i] == copy[i - 1]) continue;
+                      if ((long) copy[i] == (long) copy[i - 1] + 1L) {
+                          current++;
+                      } else {
+                          current = 1;
+                      }
+                      if (current > best) best = current;
+                  }
+                  return best;
+              }
+
+              static void check(int[] input, int expected) {
+                  int[] before = input.clone();
+                  int actual = LongestConsecutive.solve(input);
+                  if (actual != expected) {
+                      throw new AssertionError(Arrays.toString(input) + " actual=" + actual + " expected=" + expected);
+                  }
+                  if (!Arrays.equals(input, before)) throw new AssertionError("input mutated");
+              }
+
+              static long exhaustive(int maxLen, int[] alphabet) {
+                  long checked = 0;
+                  for (int n = 0; n <= maxLen; n++) {
+                      int total = 1;
+                      for (int i = 0; i < n; i++) total *= alphabet.length;
+                      for (int mask = 0; mask < total; mask++) {
+                          int t = mask;
+                          int[] a = new int[n];
+                          for (int i = 0; i < n; i++) {
+                              a[i] = alphabet[t % alphabet.length];
+                              t /= alphabet.length;
+                          }
+                          int expected = oracle(a);
+                          int[] before = a.clone();
+                          int actual = LongestConsecutive.solve(a);
+                          if (actual != expected || !Arrays.equals(a, before)) {
+                              throw new AssertionError("exhaustive mismatch " + Arrays.toString(a) + " actual=" + actual + " expected=" + expected);
+                          }
+                          checked++;
+                      }
+                  }
+                  return checked;
+              }
+
+              public static void main(String[] args) {
+                  check(new int[]{100,4,200,1,3,2}, 4);
+                  check(new int[]{0,3,7,2,5,8,4,6,0,1}, 9);
+                  check(new int[]{1,2,0,1}, 3);
+                  check(new int[]{Integer.MIN_VALUE, Integer.MIN_VALUE + 1, Integer.MAX_VALUE}, 2);
+                  check(new int[]{Integer.MAX_VALUE - 1, Integer.MAX_VALUE, Integer.MIN_VALUE}, 2);
+                  check(new int[]{5,5,5}, 1);
+                  long checked = exhaustive(7, new int[]{-2,-1,0,1,2});
+                  if (checked != 97656L) throw new AssertionError("unexpected exhaustive count " + checked);
+                  boolean nullThrown = false;
+                  try { LongestConsecutive.solve(null); } catch (IllegalArgumentException e) { nullThrown = true; }
+                  if (!nullThrown) throw new AssertionError("null input must be rejected");
+                  System.out.println("PASS fixed=6 exhaustive=97656 null=rejected input=unmodified int-boundaries=safe");
+              }
+          }
+          JAVA
+
+      - name: Execute exact fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0033/$CANONICAL_ID"
+          javac "$out/LongestConsecutive.java" "$out/LongestConsecutiveTest.java"
+          stdout="$(java -cp "$out" LongestConsecutiveTest)"
+          test "$stdout" = 'PASS fixed=6 exhaustive=97656 null=rejected input=unmodified int-boundaries=safe'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0033/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'javac LongestConsecutive.java LongestConsecutiveTest.java && java LongestConsecutiveTest',stdout:process.env.STDOUT,checks:['classic example length 4','classic dense example length 9','duplicate values do not inflate length','Integer.MIN_VALUE boundary does not wrap to MAX','Integer.MAX_VALUE boundary does not wrap to MIN','all-equal values length 1','all 97,656 arrays of lengths 0..7 over {-2,-1,0,1,2} against independent sort oracle','null rejection','input non-mutation']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Exact tagged repository question and Batch 0033 frozen boundary',locator:'note_tagged/67fcfada000000001c00fe70.json + review/content_build/answer_batch_0033/source_boundary_audit.md',source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Longest Consecutive deterministic JDK 21 validation against independent sorting oracle',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'The repository source identifies the Longest Consecutive Sequence task as LeetCode 128 but does not preserve a Java signature, null behavior, mutation policy, exact integer bounds, or required data structure.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'algorithm',text:'Under the explicit answer-side contract, the exact Java fixture uses a HashSet and expands only from values with no representable predecessor, while guarding int-boundary arithmetic.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'behavior-validation',text:'The compiled JDK 21 fixture passes six fixed cases, null rejection, non-mutation checks, both int-boundary directions, and all 97,656 arrays of lengths 0..7 over {-2,-1,0,1,2} against an independent sorting oracle.',source_ids:['fixture'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md';
+          let text=fs.readFileSync(task,'utf8');
+          const marker='- [ ] Every candidate passes `answer audit --require-evidence`.';
+          const note='- [ ] `cq_q_74466a9b0dc9f7c95566f1f3641dc7b0` writer slice staged: exact tagged source and Canonical ownership are frozen; the candidate keeps Java/null/mutation/API choices answer-side; its exact JDK 21 HashSet implementation guards integer wraparound and passes six fixed cases plus all 97,656 arrays of lengths 0..7 over {-2,-1,0,1,2} against an independent sorting oracle. Isolated independent review is still required before promotion.';
+          if(!text.includes(note)) {
+            if(!text.includes(marker)) throw new Error('task completion marker missing');
+            text=text.replace(marker,marker+'\n'+note);
+            fs.writeFileSync(task,text);
+          }
+          NODE
+          git diff --check
+
+      - name: Run writer-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit writer slice only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during longest-consecutive writer slice: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0033/$CANONICAL_ID" review/content_build/answer_batch_0033/source_boundary_audit.md tasks/answer-batches/TASK-20260711-0313-answer-batch-0033.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0033 longest-consecutive candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
