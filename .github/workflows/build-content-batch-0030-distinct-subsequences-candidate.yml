@@ -18,6 +18,7 @@ env:
   CONTENT_BRANCH: content/quality-completion
   CANONICAL_ID: cq_q_6c3e7f9d826622bce0c25df5beee24a0
   SOURCE_QID: 6c3e7f9d826622bce0c25df5beee24a0
+  SOURCE_QID_ALT: 271d5e7c97e9f51b7b5ab4fdc1331411
 
 jobs:
   build:
@@ -45,27 +46,37 @@ jobs:
           go-version: '1.23.x'
           cache: false
 
-      - name: Guard LeetCode 115 source boundary and Canonical ownership
+      - name: Guard both LeetCode 115 source variants and Canonical ownership
         shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
-          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,alt=process.env.SOURCE_QID_ALT;
           const expected='算法：不同的子序列 (LeetCode 115 - DP)';
+          const altExpected='算法手撕：LeetCode 115 - 不同的子序列。给定字符串 s 和 t，计算 s 的子序列中等于 t 的个数。要求分析时间复杂度并提供空间优化方案';
           const tagged=JSON.parse(fs.readFileSync('note_tagged/6661b50a0000000006006ab3.json','utf8'));
           const tq=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
           if(!tq||tq.original_question!==expected||tq.question_type!=='算法手撕_Coding'||!(tq.tech_entities||[]).includes('动态规划')) throw new Error('tagged LeetCode 115 source boundary drifted');
+          const taggedAlt=JSON.parse(fs.readFileSync('note_tagged/67ee9898000000000900e85f.json','utf8'));
+          const aq=(taggedAlt.tagged_questions||[]).find(x=>x.question_id===alt);
+          if(!aq||aq.original_question!==altExpected||aq.question_type!=='算法手撕_Coding'||!(aq.tech_entities||[]).includes('动态规划')) throw new Error('expanded LeetCode 115 source boundary drifted');
           const structured=JSON.parse(fs.readFileSync('note_structured/6661b50a0000000006006ab3.json','utf8'));
           if(!(structured.questions||[]).includes(expected)) throw new Error('structured LeetCode 115 source wording drifted');
-          const q=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.question_id===qid);
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const q=questions.find(x=>x.question_id===qid),qa=questions.find(x=>x.question_id===alt);
           if(!q||q.original_question!==expected||q.canonical_id!==cid) throw new Error(`Question projection drifted: ${JSON.stringify(q)}`);
+          if(!qa||qa.original_question!==altExpected||qa.canonical_id!==cid) throw new Error(`Expanded Question projection drifted: ${JSON.stringify(qa)}`);
           const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
-          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error(`Canonical ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
+          const actual=[...(canon?.question_ids||[])].sort(),expectedIds=[alt,qid].sort();
+          if(!canon||JSON.stringify(actual)!==JSON.stringify(expectedIds)) throw new Error(`Canonical ownership drifted: ${JSON.stringify(canon?.question_ids)}`);
           NODE
           node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/distinct-subseq-context.json
           node <<'NODE'
           const fs=require('fs'),ctx=JSON.parse(fs.readFileSync('/tmp/distinct-subseq-context.json','utf8'));
           if(!ctx.ok||ctx.canonical?.canonical_id!==process.env.CANONICAL_ID||ctx.answer_type!=='coding') throw new Error('AnswerContext drifted');
+          const ids=(ctx.canonical?.question_ids||[]).slice().sort();
+          const expected=[process.env.SOURCE_QID,process.env.SOURCE_QID_ALT].sort();
+          if(JSON.stringify(ids)!==JSON.stringify(expected)) throw new Error(`AnswerContext source ownership drifted: ${JSON.stringify(ids)}`);
           NODE
 
       - name: Write source-bounded LeetCode 115 candidate and exhaustive fixture
@@ -82,7 +93,7 @@ jobs:
 
           ## 核心结论
 
-          仓库来源明确保留了“LeetCode 115 - DP”，因此题意可以回到官方问题契约核对：给定字符串 `s` 和 `t`，统计 `s` 的多少个不同**下标选择方案**形成的子序列恰好等于 `t`；官方测试保证最终答案落在 32 位有符号整数范围内。这里的“不同”是选择了不同的源下标，不是把得到的字符串值去重。
+          仓库有两条来源共同归一到这个 Canonical：一条明确保留“LeetCode 115 - DP”，另一条进一步保留“给定字符串 s 和 t，计算 s 的子序列中等于 t 的个数，并分析时间复杂度、提供空间优化方案”。因此题意可以回到官方问题契约核对：给定字符串 `s` 和 `t`，统计 `s` 的多少个不同**下标选择方案**形成的子序列恰好等于 `t`；官方测试保证最终答案落在 32 位有符号整数范围内。这里的“不同”是选择了不同的源下标，不是把得到的字符串值去重。
 
           最直接的状态是 `dp[i][j] = s[0..i) 形成 t[0..j) 的方案数`。如果 `s[i-1] != t[j-1]`，当前字符不能用，只能继承 `dp[i-1][j]`；如果相等，可以不用当前字符，也可以把它作为 `t[j-1]`，所以 `dp[i][j] = dp[i-1][j] + dp[i-1][j-1]`。空间压缩成一维后，`j` 必须从右往左更新，否则同一个 `s[i]` 会在本轮被重复使用。
 
@@ -92,7 +103,7 @@ jobs:
           - `dp[0] = 1`：任何 `s` 前缀形成空串都有一种方法——什么都不选。
           - 扫描一个 `s[i]` 时，如果它等于 `t[j-1]`，新增方案就是此前形成 `t[0..j-1)` 的所有方案，因此 `dp[j] += dp[j-1]`。
           - `j` 必须**倒序**。正序会先修改 `dp[j-1]`，再拿这个“已经用过当前字符”的新值去更新 `dp[j]`，等价于让同一个源字符被选两次。
-          - 时间复杂度 O(|s|·|t|)，空间 O(|t|)。如果 `|t| > |s|` 可以直接返回 0。
+          - 时间复杂度 O(|s|·|t|)，空间 O(|t|)。如果 `|t| > |s|` 可以直接返回 0。这正面覆盖第二条来源要求的复杂度分析与空间优化。
           - 官方只保证最终答案是 32 位整数；为避免未证明的中间计数溢出，下面实现把中间值安全饱和到 `Integer.MAX_VALUE + 1`，最后在官方契约下再转成 `int`。
 
           ## 3 分钟版
@@ -137,7 +148,7 @@ jobs:
           - **为什么可以饱和而不影响官方合法答案**：所有转移都是非负计数的“保留或相加”，没有减法。某个中间状态一旦真实值超过 `Integer.MAX_VALUE`，以后只会保持或增加。如果这个超大状态后来对最终状态有正贡献，最终答案也必然超过官方承诺；若它永远不贡献，保留其精确巨大值也没有意义。因此把中间值截到 `MAX+1` 能防止 `long` 也被组合数撑爆，同时仍精确得到所有官方合法的最终答案。
           - **`t` 比 `s` 长**：不可能通过删除字符让序列变长，直接返回 0。
           - **空串**：官方约束要求 `s/t` 长度至少 1；实现仍自然支持空目标返回 1、空源对非空目标返回 0，这是 DP 边界的泛化，不应反过来冒充官方输入约束。
-          - **复杂度**：双循环最多处理 |s|×|t| 个状态；一维数组长度 |t|+1，所以 O(|s|·|t|) 时间、O(|t|) 额外空间。
+          - **复杂度**：二维原始 DP 是 O(|s|·|t|) 时间和 O(|s|·|t|) 空间；只依赖上一行后，一维倒序滚动把额外空间降到 O(|t|)，时间仍为 O(|s|·|t|)。
 
           ## 原理机制
 
@@ -156,7 +167,7 @@ jobs:
           - 问：和最长公共子序列有什么区别？答：LCS 优化的是长度，状态转移取 `max`；本题固定目标 `t`，统计所有形成它的下标方案，转移做计数相加。
           - 问：能不能用递归 + 记忆化？答：可以，状态仍是 `(i,j)`，每个状态最多计算一次，渐进复杂度也是 O(|s|·|t|)；迭代 DP 更容易做一维空间压缩且没有深递归栈。
           - 问：官方说最终答案不超过 int，为什么还不直接用 int？答：最终状态有上界，不等于所有目标前缀的中间组合数都已经被证明有相同上界。饱和计数只多用 `long`，可以把这个未证明的中间溢出风险显式关掉。
-          - 问：什么时候可以提前返回 0？答：最直接的是 `t.length() > s.length()`；还可以做字符频次等剪枝，但不会改变最坏 O(|s|·|t|) 的核心 DP，也不是本题必要条件。
+          - 问：空间优化为什么必须倒序而不是正序？答：因为二维递推读取的是上一行的 `F(i-1,j-1)`；倒序可在原数组里保留这个旧值直到被使用，正序会提前覆盖它。
 
           ## 易错点
 
@@ -165,7 +176,7 @@ jobs:
           - 忘记 `dp[0]=1`，于是第一个目标字符永远无法获得计数。
           - 匹配时覆盖旧 `dp[j]`，丢掉“不使用当前字符”的方案。
           - 只因为官方最终答案 fits int，就未经证明地宣称所有中间前缀计数也不会溢出。
-          - 把实现支持空串的泛化边界错误说成官方题目约束。
+          - 只给二维 DP，不回答第二条来源明确要求的时间复杂度与空间优化方案。
           EOF
 
           cat > "$out/DistinctSubsequences115.java" <<'JAVA'
@@ -254,11 +265,12 @@ jobs:
             "checked_at":"2026-08-25",
             "repository_sources":[
               {"path":"note_tagged/6661b50a0000000006006ab3.json","question_id":"6c3e7f9d826622bce0c25df5beee24a0","preserved_text":"算法：不同的子序列 (LeetCode 115 - DP)"},
-              {"path":"note_structured/6661b50a0000000006006ab3.json","preserved_text":"算法：不同的子序列 (LeetCode 115 - DP)"}
+              {"path":"note_structured/6661b50a0000000006006ab3.json","preserved_text":"算法：不同的子序列 (LeetCode 115 - DP)"},
+              {"path":"note_tagged/67ee9898000000000900e85f.json","question_id":"271d5e7c97e9f51b7b5ab4fdc1331411","preserved_text":"算法手撕：LeetCode 115 - 不同的子序列。给定字符串 s 和 t，计算 s 的子序列中等于 t 的个数。要求分析时间复杂度并提供空间优化方案"}
             ],
             "primary_problem":{"title":"LeetCode 115. Distinct Subsequences","locator":"https://leetcode.com/problems/distinct-subsequences/description/","verified_contract":"Given strings s and t, count distinct subsequences of s equal to t; generated test answers fit a signed 32-bit integer; lengths are 1..1000 and inputs contain English letters."},
-            "preserved_constraints":["LeetCode problem number 115","Distinct Subsequences problem identity","dynamic programming requested by source"],
-            "not_preserved":["implementation language","method signature in interview","whether interviewer expects 2D or 1D DP explanation","whether empty-string generalization should be discussed"],
+            "preserved_constraints":["LeetCode problem number 115","Distinct Subsequences problem identity","dynamic programming requested by source","time-complexity analysis requested by expanded source variant","space optimization requested by expanded source variant"],
+            "not_preserved":["implementation language","method signature in interview","whether interviewer expects a particular 2D-to-1D derivation style","whether empty-string generalization should be discussed"],
             "candidate_contract_assumptions":["Java implementation for executable validation","official LeetCode 115 semantic contract supplies the recoverable problem statement","one-dimensional DP with descending target index","saturating intermediate counts at Integer.MAX_VALUE+1 while preserving every official-valid final answer"]
           }
           JSON
@@ -267,12 +279,12 @@ jobs:
           stdout="$(java -cp "$out" DistinctSubsequences115Test)"
           test "$stdout" = 'PASS official=2 combinatorial=yes empty-extension=yes saturation-prefix=yes exhaustive-binary=yes overflow-contract=yes invalid=yes'
           STDOUT="$stdout" node <<'NODE'
-          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0030/${process.env.CANONICAL_ID}`;
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,alt=process.env.SOURCE_QID_ALT,out=`review/content_build/answer_batch_0030/${process.env.CANONICAL_ID}`;
           fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac DistinctSubsequences115.java DistinctSubsequences115Test.java && java DistinctSubsequences115Test',stdout:process.env.STDOUT,checks:['official examples rabbbit/rabbit=3 and babgbag/bag=5','equal-character positional combinations aaaaa/aa=10','target-longer and equal-string boundaries','generalized empty-string DP bases','1000-a source with enormous a^20 prefix count but final target ending b equals 0 under saturation','exhaustive binary-string cross-check against recursive oracle for source length <=8 and target length <=5','defensive rejection when final result exceeds official 32-bit promise','null rejection']},null,2)+'\n');
-          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Tagged and structured repository source preserving LeetCode 115 Distinct Subsequences DP identity',locator:'note_tagged/6661b50a0000000006006ab3.json',source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'leetcode-115',title:'LeetCode 115 Distinct Subsequences official problem description',locator:'https://leetcode.com/problems/distinct-subsequences/description/',source_type:'primary_official_documentation',checked_at:'2026-08-25'},{source_id:'fixture',title:'Distinct Subsequences exhaustive bounded oracle and edge fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The repository source preserves the exact LeetCode 115 Distinct Subsequences identity and explicitly marks DP, so the official problem contract is recoverable while implementation language and interview API are not.',source_ids:['repository-source','leetcode-115'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'problem-contract',text:'Official LeetCode 115 asks for the count of subsequences of s equal to t and promises the generated final answer fits a signed 32-bit integer.',source_ids:['leetcode-115'],answer_locations:['核心结论','1 分钟版','3 分钟版']},{claim_id:'implementation-validation',text:'The executable fixture verifies official examples, positional combinatorics, DP boundaries, saturation against enormous irrelevant intermediate prefix counts, exhaustive bounded binary cases against an independent recursive oracle, and defensive overflow handling outside the official final-answer promise.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Two repository source variants preserving LeetCode 115 DP identity, problem statement, complexity analysis and space optimization request',locator:'note_tagged/6661b50a0000000006006ab3.json + note_tagged/67ee9898000000000900e85f.json',source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'leetcode-115',title:'LeetCode 115 Distinct Subsequences official problem description',locator:'https://leetcode.com/problems/distinct-subsequences/description/',source_type:'primary_official_documentation',checked_at:'2026-08-25'},{source_id:'fixture',title:'Distinct Subsequences exhaustive bounded oracle and edge fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The Canonical owns two recoverable variants: both preserve LeetCode 115 and DP, while the expanded variant additionally requires the s/t count contract, time-complexity analysis and a space-optimized solution.',source_ids:['repository-source','leetcode-115'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'problem-contract',text:'Official LeetCode 115 asks for the count of subsequences of s equal to t and promises the generated final answer fits a signed 32-bit integer.',source_ids:['leetcode-115'],answer_locations:['核心结论','1 分钟版','3 分钟版']},{claim_id:'implementation-validation',text:'The executable fixture verifies official examples, positional combinatorics, DP boundaries, saturation against enormous irrelevant intermediate prefix counts, exhaustive bounded binary cases against an independent recursive oracle, and defensive overflow handling outside the official final-answer promise.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},{question_id:alt,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
           const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
           let text=fs.readFileSync(task,'utf8');
-          const note='- [ ] `cq_q_6c3e7f9d826622bce0c25df5beee24a0` writer stage complete: repository identity resolves to official LeetCode 115, the candidate derives and explains the one-dimensional descending-index DP, intermediate-count saturation avoids an unproven overflow assumption, and executable validation covers both official examples plus exhaustive bounded binary-string oracle comparison. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          const note='- [ ] `cq_q_6c3e7f9d826622bce0c25df5beee24a0` writer stage complete: both repository variants resolve to LeetCode 115; the expanded source requirement for complexity analysis and space optimization is covered, the candidate derives the one-dimensional descending-index DP, intermediate-count saturation avoids an unproven overflow assumption, and executable validation covers both official examples plus exhaustive bounded binary-string oracle comparison. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
           if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
           NODE
 
