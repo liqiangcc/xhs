@@ -15,24 +15,36 @@
     "overflow-safe even average",
     "both-empty rejection",
     "null rejection",
-    "5000 deterministic merge-oracle comparisons"
+    "5000 deterministic direct-merge oracle comparisons"
   ],
   "boundary_tests": [
     {
       "case": "[1,3] and [2]",
-      "expected": "2.0",
-      "actual": "2.0",
+      "expected": "2.0 via odd-length left maximum",
+      "actual": "pass",
       "passed": true
     },
     {
-      "case": "[MIN] and [MAX]",
-      "expected": "-0.5 without int overflow",
-      "actual": "-0.5",
+      "case": "[1,2] and [3,4]",
+      "expected": "2.5 via left-max/right-min average",
+      "actual": "pass",
       "passed": true
     },
     {
-      "case": "5000 sorted pairs, lengths 0..20",
-      "expected": "binary-partition result equals direct merge reference",
+      "case": "one side empty",
+      "expected": "median from the non-empty sorted array without merge allocation",
+      "actual": "pass",
+      "passed": true
+    },
+    {
+      "case": "Integer.MIN_VALUE and Integer.MAX_VALUE",
+      "expected": "-0.5 without int-sum overflow",
+      "actual": "pass",
+      "passed": true
+    },
+    {
+      "case": "5000 deterministic sorted pairs, lengths 0..20",
+      "expected": "binary-partition result equals independent direct-merge reference",
       "actual": "all passed",
       "passed": true
     }

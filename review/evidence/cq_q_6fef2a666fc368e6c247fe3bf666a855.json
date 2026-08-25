@@ -1,0 +1,176 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_6fef2a666fc368e6c247fe3bf666a855",
+  "candidate_sha256": "70c6e3557d42b10b2b26bad922208e60e5e10dbfbae19a75172701ba6f892d6a",
+  "checked_at": "2026-08-25",
+  "writer": {
+    "writer_id": "content-batch-0031-median-two-sorted-arrays-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Tagged Median of Two Sorted Arrays question",
+      "locator": "note_tagged/689a0b3f000000002501b5bc.json#question_id=6fef2a666fc368e6c247fe3bf666a855",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Median binary-partition independent direct-merge oracle",
+      "locator": "review/content_build/answer_batch_0031/cq_q_6fef2a666fc368e6c247fe3bf666a855/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-25"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Median candidate independent source-first review",
+      "locator": "review/content_build/answer_batch_0031/cq_q_6fef2a666fc368e6c247fe3bf666a855/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-25"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks for the median of two sorted arrays in LeetCode 4 context, but it does not preserve a Java API, null/empty contract or runtime sortedness-validation requirement.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "partition-invariant",
+      "text": "With a fixed left-half cardinality, choosing i on the shorter array determines j on the other array; a valid median partition is exactly characterized by the two cross-boundary inequalities because both inputs are internally sorted.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "search-direction",
+      "text": "Aleft > Bright means the shorter-array cut is too far right and Bleft > Aright means it is too far left, giving the monotone direction needed for binary search.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "oracle-validation",
+      "text": "The Java implementation matches an independent direct-merge median oracle on fixed boundaries and 5000 deterministic generated sorted-array pairs, including odd/even totals, one empty side, duplicates and extreme int values.",
+      "source_ids": [
+        "fixture",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6fef2a666fc368e6c247fe3bf666a855",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac MedianTwoSortedArrays.java MedianTwoSortedArraysTest.java && java MedianTwoSortedArraysTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=7 random-oracle=5000 odd-even=yes empty-side=yes duplicates=yes extremes=yes overflow-safe=yes invalid-empty-null=rejected",
+    "checks": [
+      "fixed boundaries",
+      "independent direct-merge reference",
+      "odd/even totals",
+      "empty side",
+      "duplicates",
+      "int extremes",
+      "invalid empty/null"
+    ],
+    "boundary_tests": [
+      {
+        "case": "[1,3] and [2]",
+        "expected": "2.0 via odd-length left maximum",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "[1,2] and [3,4]",
+        "expected": "2.5 via left-max/right-min average",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "one side empty",
+        "expected": "median from the non-empty sorted array without merge allocation",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "Integer.MIN_VALUE and Integer.MAX_VALUE",
+        "expected": "-0.5 without int-sum overflow",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic sorted pairs, lengths 0..20",
+        "expected": "binary-partition result equals independent direct-merge reference",
+        "actual": "all passed",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0031-median-two-sorted-arrays-20260825",
+    "review_version": "batch-0031.median-two-sorted-arrays.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source asks for Median of Two Sorted Arrays / LeetCode 4 and identifies binary search, but it does not preserve a Java API, null behavior, both-empty behavior or a runtime sortedness-validation requirement.",
+      "The candidate keeps those missing interface details explicitly answer-side instead of presenting them as recovered source constraints.",
+      "The partition invariant is correct: the left-side cardinality is fixed first, j is derived from i, and because each input is internally sorted the only cross-boundary violations are Aleft > Bright or Bleft > Aright.",
+      "The binary-search direction is coherent and monotone: Aleft > Bright moves i left, while Bleft > Aright moves i right; searching only the shorter array keeps the derived partition within the other array bounds.",
+      "Odd and even totals are handled from the same partition; logical infinities cover endpoint cuts, duplicate values are accepted with <= comparisons, and long boundary arithmetic prevents int overflow in the even median average.",
+      "The standalone Java implementation matches an independent direct-merge oracle across fixed boundaries and 5000 deterministic generated sorted-array pairs, including empty-side, duplicate and Integer.MIN/MAX cases.",
+      "The answer does not fabricate production data sizes or latency experience; it explicitly bounds the O(log(min(m,n))) claim to O(1) random access arrays and notes that untrusted-input sortedness validation changes the complexity."
+    ]
+  }
+}
