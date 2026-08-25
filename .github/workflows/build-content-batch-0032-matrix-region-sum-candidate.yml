@@ -1,0 +1,237 @@
+name: Build Content Batch 0032 Immutable Matrix Region Sum Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0032-matrix-region-sum-candidate.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0032-matrix-region-sum-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  BATCH: '0032'
+  CANONICAL_ID: cq_q_73af437ce6f5e3b9ca7799372632dbaf
+  SOURCE_QID: 73af437ce6f5e3b9ca7799372632dbaf
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,batch=process.env.BATCH;
+          const expected='算法手撕：二维区域和检索 - 矩阵不可变。';
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||ctx.canonical?.canonical_id!==cid) throw new Error('canonical context missing');
+          if(JSON.stringify(ctx.canonical.question_ids)!==JSON.stringify([qid])) throw new Error('ownership drifted');
+          const src=ctx.source_questions.find(x=>x.question_id===qid); if(src?.original_question!==expected) throw new Error('source wording drifted');
+          const packet=JSON.parse(fs.readFileSync(`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,'utf8'));
+          const hit=packet.canonicals.find(x=>x.canonical_id===cid)?.source_hits?.[0];
+          if(hit?.match_basis!=='question_id'||hit?.tagged_question?.question_id!==qid) throw new Error('exact source hit missing');
+          if(!(hit.note_img_txt||'').includes('手撕leetCode 304. 二维区域和检索 - 矩阵不可变')) throw new Error('recovered LeetCode 304 wording missing');
+          const boundary=fs.readFileSync(`review/content_build/answer_batch_${batch}/source_boundary_audit.md`,'utf8');
+          if(!boundary.includes(`| \`${cid}\` | \`${qid}\` | ${expected} |`)) throw new Error('frozen boundary missing');
+          NODE
+
+      - id: state
+        shell: bash
+        run: |
+          candidate="review/candidates/answers/$CANONICAL_ID.md";out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID"
+          if [ -e "$candidate" ];then test -e "$out/code_validation.json";test -e "$out/writer_research.json";echo 'pending=false' >> "$GITHUB_OUTPUT";else echo 'pending=true' >> "$GITHUB_OUTPUT";fi
+
+      - name: Write 2D-prefix candidate and randomized brute-force fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md";out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID";mkdir -p "$out"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_73af437ce6f5e3b9ca7799372632dbaf","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 二维区域和检索：不可变矩阵用二维前缀和
+
+          ## 核心结论
+
+          来源明确是“LeetCode 304：二维区域和检索 - 矩阵不可变”。矩阵不会更新、但会反复查询子矩形和时，最直接的方案是构造二维前缀和：预处理 `O(rows * cols)`，之后每次查询只用四个前缀值做容斥，时间 `O(1)`。
+
+          本答案定义一个明确接口：输入必须是非空、非 `null`、规则矩形；坐标为 0-based 且查询区间两端都包含；构造后不读取原矩阵，因此外部后来修改传入数组也不会影响查询结果。内部前缀和用 `long`，避免把一般整数矩阵的累计和无条件压在 `int` 范围里。
+
+          ## 1 分钟版
+
+          - 定义 `prefix[r+1][c+1]` 为原矩阵左上角 `(0,0)` 到 `(r,c)` 的总和。
+          - 递推：`prefix[r+1][c+1] = matrix[r][c] + prefix[r][c+1] + prefix[r+1][c] - prefix[r][c]`。
+          - 查询 `(row1,col1)` 到 `(row2,col2)`：取大矩形，减掉上方、左方，再把重复减掉的左上角加回来。
+          - 公式：`P[row2+1][col2+1] - P[row1][col2+1] - P[row2+1][col1] + P[row1][col1]`。
+          - 不可变是关键：没有更新操作，所以可以一次预处理，把后续每个查询降到常数时间。
+          - 构造 `O(RC)` 时间、`O(RC)` 空间；每次查询 `O(1)`。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.Objects;
+
+          public final class NumMatrix {
+              private final long[][] prefix;
+              private final int rows;
+              private final int cols;
+
+              public NumMatrix(int[][] matrix) {
+                  Objects.requireNonNull(matrix, "matrix");
+                  if (matrix.length == 0 || matrix[0] == null || matrix[0].length == 0) {
+                      throw new IllegalArgumentException("matrix must be non-empty");
+                  }
+                  rows = matrix.length;
+                  cols = matrix[0].length;
+                  prefix = new long[rows + 1][cols + 1];
+
+                  for (int r = 0; r < rows; r++) {
+                      if (matrix[r] == null || matrix[r].length != cols) {
+                          throw new IllegalArgumentException("matrix must be rectangular");
+                      }
+                      for (int c = 0; c < cols; c++) {
+                          prefix[r + 1][c + 1] = matrix[r][c]
+                                  + prefix[r][c + 1]
+                                  + prefix[r + 1][c]
+                                  - prefix[r][c];
+                      }
+                  }
+              }
+
+              public long sumRegion(int row1, int col1, int row2, int col2) {
+                  if (row1 < 0 || col1 < 0 || row2 < row1 || col2 < col1
+                          || row2 >= rows || col2 >= cols) {
+                      throw new IndexOutOfBoundsException("invalid region");
+                  }
+                  return prefix[row2 + 1][col2 + 1]
+                          - prefix[row1][col2 + 1]
+                          - prefix[row2 + 1][col1]
+                          + prefix[row1][col1];
+              }
+          }
+          ```
+
+          之所以多开一行一列，是为了把“查询从第 0 行/列开始”的边界统一进同一个公式，不需要写 `if (row1 == 0)` 之类分支。
+
+          ## 关键细节
+
+          - **容斥方向**：大矩形减上方、减左方后，左上角公共部分被减了两次，因此必须加回来一次。
+          - **前缀下标整体 +1**：`prefix[0][*]` 和 `prefix[*][0]` 都是 0，边界计算天然成立。
+          - **不可变契约**：前缀数组在构造时冻结矩阵数值；后续如果原 `int[][]` 被调用方改动，本对象查询结果仍保持构造时快照。
+          - **为什么不是逐查询遍历**：若有很多查询，逐次扫描区域最坏 `O(RC)`；二维前缀把重复工作前置一次。
+          - **为什么用 `long`**：来源没有给数值范围；多个 `int` 相加可能超过 `int`。使用 `long` 是答案侧安全选择，不冒充原题约束。
+          - **矩阵必须规则**：Java 二维数组可以是 jagged array，本接口显式拒绝行长度不同，避免前缀定义不完整。
+          - **若矩阵允许更新**：前缀和不再适合频繁更新；可考虑二维 Fenwick Tree/Segment Tree 等，但这是与“矩阵不可变”不同的问题。
+
+          ## 原理机制
+
+          记 `P(r,c)` 为从原点到 `(r-1,c-1)` 的矩形和。任意目标区域可以看成一个右下大前缀矩形，减去目标上方的前缀矩形和左侧前缀矩形。两块被减区域在左上角有交集，这个交集被减了两次，所以再加一次。二维前缀和本质就是把每个查询拆成四个已经预计算的累积量。
+
+          正确性也可以从构造不变量看：完成 `prefix[r+1][c+1]` 后，它恰好覆盖原矩阵 `[0..r] x [0..c]`。递推式用上方和左方两个前缀覆盖目标大矩形，再减去它们重复覆盖的左上部分，最后加入当前单元格。
+
+          ## 项目经验版
+
+          来源只有算法题，没有真实项目背景，因此不虚构线上使用经历。如果工程里是静态热力图、离线统计表等“写一次、读很多次”的矩形聚合，二维前缀是典型思路；若数据持续更新，则要重新评估更新/查询比例和数据规模，而不能机械套用不可变矩阵方案。
+
+          ## 常见追问
+
+          - 问：为什么查询是 O(1)？答：目标矩形只依赖四个已经预计算的前缀值，查询阶段不再遍历区域元素。
+          - 问：为什么多一行一列？答：人为增加全 0 边界，让所有原矩阵坐标都统一使用 `+1` 后的公式，消除首行首列特判。
+          - 问：空间能降吗？答：如果必须支持任意二维区域的 O(1) 查询，通常需要保留二维累积信息；只保留逐行前缀可把查询降到 `O(height)`，是在空间/查询时间之间换取折中。
+          - 问：如果矩阵会修改怎么办？答：当前来源明确“不可变”。有更新时二维前缀一次改动可能影响大量后缀单元，通常改用支持增量更新的数据结构。
+          - 问：为什么返回 long？答：来源没有保留元素与矩阵大小约束，答案侧用 `long` 防止普通 `int` 累加溢出；若目标平台固定要求 `int`，再按平台约束适配签名。
+          - 问：外部修改传入数组会怎样？答：本实现只在构造期读取原数组并保存 prefix，不持有原数组作为查询来源，因此结果保持构造时数据。
+
+          ## 易错点
+
+          - 容斥最后忘记把左上角交集加回来。
+          - `row2/col2` 是包含端点，却漏掉 `+1`。
+          - 只算行前缀却声称任意二维区域都 O(1)。
+          - 矩阵可更新时仍用静态 prefix，却不更新受影响区域。
+          - 用 `int` 存累计和且没有证明不会溢出。
+          - Java jagged array 未校验，导致某行访问越界。
+          EOF
+
+          cat > "$out/NumMatrixFixture.java" <<'JAVA'
+          import java.util.Random;
+
+          public final class NumMatrixFixture {
+              static final class Actual {
+                  final long[][] p;final int rows,cols;
+                  Actual(int[][] m){
+                      if(m==null)throw new NullPointerException();
+                      if(m.length==0||m[0]==null||m[0].length==0)throw new IllegalArgumentException();
+                      rows=m.length;cols=m[0].length;p=new long[rows+1][cols+1];
+                      for(int r=0;r<rows;r++){
+                          if(m[r]==null||m[r].length!=cols)throw new IllegalArgumentException();
+                          for(int c=0;c<cols;c++)p[r+1][c+1]=(long)m[r][c]+p[r][c+1]+p[r+1][c]-p[r][c];
+                      }
+                  }
+                  long sum(int r1,int c1,int r2,int c2){
+                      if(r1<0||c1<0||r2<r1||c2<c1||r2>=rows||c2>=cols)throw new IndexOutOfBoundsException();
+                      return p[r2+1][c2+1]-p[r1][c2+1]-p[r2+1][c1]+p[r1][c1];
+                  }
+              }
+              static long brute(int[][]m,int r1,int c1,int r2,int c2){long s=0;for(int r=r1;r<=r2;r++)for(int c=c1;c<=c2;c++)s+=m[r][c];return s;}
+              static void check(int[][]m){Actual a=new Actual(m);for(int r1=0;r1<m.length;r1++)for(int r2=r1;r2<m.length;r2++)for(int c1=0;c1<m[0].length;c1++)for(int c2=c1;c2<m[0].length;c2++){long x=a.sum(r1,c1,r2,c2),y=brute(m,r1,c1,r2,c2);if(x!=y)throw new AssertionError(x+" != "+y);}}
+              public static void main(String[]args){
+                  check(new int[][]{{3,0,1,4,2},{5,6,3,2,1},{1,2,0,1,5},{4,1,0,1,7},{1,0,3,0,5}});
+                  int[][] overflow={{Integer.MAX_VALUE,Integer.MAX_VALUE}};if(new Actual(overflow).sum(0,0,0,1)!=4294967294L)throw new AssertionError("long overflow boundary");
+                  int[][] snapshot={{1,2},{3,4}};Actual frozen=new Actual(snapshot);snapshot[0][0]=100;if(frozen.sum(0,0,1,1)!=10)throw new AssertionError("not immutable snapshot");
+                  boolean jag=false,bounds=false;try{new Actual(new int[][]{{1},{2,3}});}catch(IllegalArgumentException e){jag=true;}try{new Actual(new int[][]{{1}}).sum(0,0,1,0);}catch(IndexOutOfBoundsException e){bounds=true;}if(!jag||!bounds)throw new AssertionError("boundary contract");
+                  Random r=new Random(304L);int matrices=0,queries=0;
+                  for(int t=0;t<3000;t++){int rows=1+r.nextInt(7),cols=1+r.nextInt(7);int[][]m=new int[rows][cols];for(int i=0;i<rows;i++)for(int j=0;j<cols;j++)m[i][j]=r.nextInt(2001)-1000;Actual a=new Actual(m);matrices++;for(int q=0;q<20;q++){int r1=r.nextInt(rows),r2=r.nextInt(rows),c1=r.nextInt(cols),c2=r.nextInt(cols);if(r1>r2){int x=r1;r1=r2;r2=x;}if(c1>c2){int x=c1;c1=c2;c2=x;}if(a.sum(r1,c1,r2,c2)!=brute(m,r1,c1,r2,c2))throw new AssertionError("random mismatch");queries++;}}
+                  System.out.println("PASS matrices=3000 randomized-queries=60000 brute-force-oracle snapshot-immutable long-overflow jagged-and-bounds");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer evidence
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_${BATCH}/$CANONICAL_ID";javac "$out/NumMatrixFixture.java";stdout="$(java -cp "$out" NumMatrixFixture)"
+          test "$stdout" = 'PASS matrices=3000 randomized-queries=60000 brute-force-oracle snapshot-immutable long-overflow jagged-and-bounds'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');const batch=process.env.BATCH,cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_${batch}/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac NumMatrixFixture.java && java NumMatrixFixture',stdout:process.env.STDOUT,checks:['known matrix','3,000 random matrices / 60,000 brute-force queries','immutable snapshot after caller mutation','long accumulation overflow boundary','jagged rejection','invalid query rejection']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Batch 0032 exact source packet naming LeetCode 304 immutable matrix region sum',locator:`review/reports/ANSWER_BATCH_${batch}_SOURCE_PACKET.json`,source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'fixture',title:'2D prefix sum randomized brute-force fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'Recovered source identifies LeetCode 304, 2D region sum query on an immutable matrix.',source_ids:['repository-source'],answer_locations:['核心结论']},{claim_id:'algorithm',text:'Writer fixture validates 2D prefix inclusion-exclusion against direct rectangle summation over 60,000 deterministic random queries.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'boundaries',text:'Fixture validates frozen-snapshot behavior, long accumulation, jagged matrix rejection and invalid region rejection under explicit answer-side API rules.',source_ids:['fixture'],answer_locations:['核心结论','关键细节']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record and commit from stable content head
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          task="tasks/answer-batches/TASK-20260711-0313-answer-batch-${BATCH}.md"
+          python3 - <<'PY'
+          import os,pathlib
+          cid=os.environ['CANONICAL_ID'];batch=os.environ['BATCH'];p=pathlib.Path(f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{batch}.md');s=p.read_text();note=f"- [ ] `{cid}` candidate staged source-first: exact LeetCode 304 immutable-matrix boundary preserved; 2D-prefix Java candidate passes 3,000 matrices / 60,000 brute-force queries plus snapshot/overflow/jagged/bounds cases. Independent review still required.\n";p.write_text(s if note in s else s.rstrip()+"\n"+note)
+          PY
+          base='${{ steps.base.outputs.head }}';git fetch --depth=1 origin "$CONTENT_BRANCH";remote="$(git rev-parse origin/$CONTENT_BRANCH)";if [ "$remote" != "$base" ];then echo "content advanced: $base -> $remote; discard";exit 0;fi
+          git config user.name 'xhs-content-builder';git config user.email '43640935+liqiangcc@users.noreply.github.com';git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_${BATCH}/$CANONICAL_ID" "$task";git diff --cached --check;git commit -m "content: stage batch ${BATCH} immutable matrix region-sum candidate";git push origin "HEAD:$CONTENT_BRANCH"
