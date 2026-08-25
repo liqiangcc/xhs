@@ -1,0 +1,354 @@
+name: Build Content Batch 0030 Producer Consumer Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0030-producer-consumer-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0030-producer-consumer-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6bf861ee543d0109e37f665062ac8d5d
+  SOURCE_QID: 6bf861ee543d0109e37f665062ac8d5d
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard source and keep simulation separate from hand-written queue question
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/6833fa5b00000000030382a9.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!=='算法：消费者生产者模拟 (阻塞队列)'||source.question_type!=='算法手撕_Coding') throw new Error('producer-consumer source drifted');
+          const handwritten=(tagged.tagged_questions||[]).find(x=>x.question_id==='f213ccebb77d694fa4eb9062e4f03a01');
+          if(!handwritten||handwritten.original_question!=='算法：手写阻塞队列') throw new Error('separate hand-written blocking-queue source disappeared');
+          const q=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.question_id===qid);
+          if(!q||q.original_question!=='算法：消费者生产者模拟 (阻塞队列)'||q.canonical_id!==cid) throw new Error('Question projection drifted');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(x=>x.canonical_id===cid);
+          if(!canon||JSON.stringify(canon.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/pc-context.json
+          node -e "const c=require('/tmp/pc-context.json'); if(!c.ok||c.answer_type!=='coding') throw new Error('answer type drifted')"
+
+      - name: Write BlockingQueue producer-consumer candidate and fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0030/$cid"; candidate="review/candidates/answers/$cid.md"
+          mkdir -p "$out" review/candidates/answers
+          test ! -e "$candidate"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_6bf861ee543d0109e37f665062ac8d5d","version":1,"status":"draft","updated_at":"2026-08-25","answer_type":"coding","quality_tier":"candidate"} -->
+          # 生产者消费者模拟：用 BlockingQueue 建立背压边界
+
+          ## 核心结论
+
+          当前来源只保留“消费者生产者模拟（阻塞队列）”，同一份面试记录里还单独存在另一题“手写阻塞队列”。因此这里不把两题混在一起：本答案选择 **JDK `BlockingQueue` 作为已经存在的阻塞边界，重点实现生产者/消费者协作**，而不是重新实现队列内部锁与条件变量。
+
+          为了让代码可运行，我声明一个候选契约：1 个生产者生成 `1..itemCount`；`consumerCount >= 1` 个消费者共同消费；使用容量为 `capacity >= 1` 的 `ArrayBlockingQueue`；每个业务元素只生产一次；有限演示结束时生产者再放入**每个消费者一个**独立 stop 消息。线程中断、消费者异常后的全局取消、重试与 exactly-once 外部副作用不属于当前来源保存的题意，生产实现需要额外协议。
+
+          ## 1 分钟版
+
+          - 生产者用 `put`，队列满时等待；消费者用 `take`，队列空时等待。这样不用自己写 `while(queue.isEmpty())` 的忙轮询。
+          - 有界队列不仅是线程安全容器，也是**背压边界**：消费者跟不上时，生产者最终会在满队列上阻塞，而不是无限堆积内存。
+          - 多消费者终止不能只放一个 poison pill；一个 stop 只能被一个消费者拿走，所以有限演示要按消费者数量放 stop 消息，或者设计广播式关闭协议。
+          - `BlockingQueue` 负责单次入队/出队同步，但“业务处理成功后是否确认、失败是否重试、重复消费怎么办”是更高一层语义，不能从一个 `take()` 自动推出 exactly-once。
+          - 这题来源是“用阻塞队列模拟生产者消费者”；同记录里的“手写阻塞队列”才需要继续下钻队列内部的 lock/condition 实现。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.concurrent.ArrayBlockingQueue;
+          import java.util.concurrent.BlockingQueue;
+          import java.util.concurrent.ConcurrentLinkedQueue;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+          import java.util.concurrent.Future;
+          import java.util.concurrent.TimeUnit;
+
+          public final class ProducerConsumerDemo {
+              private record Message(int value, boolean stop) {
+                  static Message item(int value) { return new Message(value, false); }
+                  static Message stop() { return new Message(0, true); }
+              }
+
+              public record Result(List<Integer> consumed, int stopMessages) {}
+
+              public static Result run(int itemCount, int consumerCount, int capacity) throws Exception {
+                  if (itemCount < 0 || consumerCount < 1 || capacity < 1) {
+                      throw new IllegalArgumentException("invalid simulation arguments");
+                  }
+
+                  BlockingQueue<Message> queue = new ArrayBlockingQueue<>(capacity);
+                  ConcurrentLinkedQueue<Integer> consumed = new ConcurrentLinkedQueue<>();
+                  ExecutorService pool = Executors.newFixedThreadPool(consumerCount + 1);
+                  List<Future<Void>> consumerFutures = new ArrayList<>();
+
+                  try {
+                      for (int c = 0; c < consumerCount; c++) {
+                          consumerFutures.add(pool.submit(() -> {
+                              while (true) {
+                                  Message message = queue.take();
+                                  if (message.stop()) return null;
+                                  consumed.add(message.value());
+                              }
+                          }));
+                      }
+
+                      Future<Void> producer = pool.submit(() -> {
+                          for (int value = 1; value <= itemCount; value++) {
+                              queue.put(Message.item(value));
+                          }
+                          for (int c = 0; c < consumerCount; c++) {
+                              queue.put(Message.stop());
+                          }
+                          return null;
+                      });
+
+                      producer.get(5, TimeUnit.SECONDS);
+                      for (Future<Void> consumer : consumerFutures) {
+                          consumer.get(5, TimeUnit.SECONDS);
+                      }
+                      return new Result(List.copyOf(consumed), consumerCount);
+                  } finally {
+                      pool.shutdownNow();
+                  }
+              }
+          }
+          ```
+
+          这段代码故意把“队列同步机制”和“业务协作协议”分开：`ArrayBlockingQueue` 负责容量、入队、出队和等待；我们只定义生产什么、消费什么、什么时候结束。有限演示使用 stop 消息，是为了让消费者在所有普通元素之后有一个可观察的退出条件。
+
+          ## 关键细节
+
+          - **为什么用 `put/take`**：`BlockingQueue.put` 在容量不足时等待，`take` 在没有元素时等待；这是阻塞队列提供的核心协作语义。若业务要求超时/降级，则应选择带 timeout 的 `offer/poll`，不能把无限等待当成所有系统的默认策略。
+          - **为什么选有界 `ArrayBlockingQueue`**：来源没指定实现。本候选选择固定容量，是为了把“消费者慢时怎么办”变成显式背压，而不是默认无限排队。
+          - **为什么 stop 要有 N 个**：普通队列元素一次只会被一个消费者删除；有 N 个永久等待的消费者时，一个 stop 只足以终止其中一个。当前有限演示因此放 `consumerCount` 个 stop。
+          - **消息顺序**：单生产者按顺序 `put`，`ArrayBlockingQueue` 是 FIFO 队列；单消费者时可直接观察到 `1..N`。多消费者时元素仍从队头取出，但不同消费者完成后续业务的墙钟顺序不应被误认为全局完成顺序。
+          - **可见性**：`BlockingQueue` 的并发契约包含 memory-consistency guarantee：线程在把对象放入队列前的动作，对另一个线程随后访问/移除该对象后的动作可见。这里无需再给消息字段额外加 `volatile` 来弥补队列交接本身。
+          - **中断**：`put/take` 都可抛 `InterruptedException`。当前示例让 `Future` 暴露任务失败，并在 finally 中关闭线程池；真正的服务需要定义谁触发取消、如何唤醒仍阻塞的参与者、未处理消息如何处置。
+          - **复杂度**：每个普通消息恰好入队一次、出队一次，所以协调操作总量 O(itemCount + consumerCount)；队列额外空间由 `capacity` 限制，业务结果收集是演示需要，不是阻塞队列自身空间。
+
+          ## 原理机制
+
+          生产者消费者模型解决的是**速率解耦 + 交接同步**。生产者和消费者不需要同时到达同一个临界区交换对象，而是通过队列把“已经产生但尚未处理”的工作显式化。
+
+          当队列未满且非空时，两端可以各自推进；当队列满，生产者等待，压力向上游传播；当队列空，消费者等待，不做无意义轮询。这就是有界阻塞队列提供的背压机制。队列保证的是元素交接层面的线程安全和可见性；业务处理是否幂等、失败后是否重新入队、是否允许丢弃或超时，则属于队列之上的协议。
+
+          stop 消息本质上也是普通队列元素，所以它遵循同样的排队和单消费者获取语义。这解释了为什么多消费者终止需要多个 stop，或者改用一个共享关闭状态 + 可唤醒协议，而不能假设一个 poison pill 会“广播”。
+
+          ## 项目经验版
+
+          来源没有真实项目中的队列容量、吞吐、延迟或故障数据，不能虚构。我在真实系统里会先定义生产速率、消费速率、可接受积压、满队列策略和关闭/重试协议，再决定容量以及 `put`、超时 `offer`、丢弃或上游限流。若消费动作有数据库/消息系统副作用，还必须独立处理幂等、确认和失败恢复，而不是把“线程安全队列”误当成“业务 exactly-once”。
+
+          ## 常见追问
+
+          - 问：为什么不直接用 `ConcurrentLinkedQueue`？答：它是非阻塞队列；本题明确保留“阻塞队列”，需要满/空时的等待语义和背压边界。
+          - 问：为什么一个 stop 不够？答：一个队列元素只能被一个 `take` 删除；其他消费者拿不到它，就可能继续阻塞。
+          - 问：多个消费者还能保证顺序吗？答：队列可以保证出队次序，但多个消费者的业务完成时刻可以交错；如果业务要求全局处理完成顺序，就需要额外串行化或序列协议。
+          - 问：队列满了怎么办？答：当前演示用 `put` 阻塞生产者。真实系统可能改为超时 `offer`、限流、降级或持久化，取决于允许的丢失和延迟语义。
+          - 问：为什么这里不手写 lock/condition？答：因为当前来源是“生产者消费者模拟（阻塞队列）”，而同一记录另有独立问题“手写阻塞队列”；把两题合并会扩大当前题的来源边界。
+          - 问：`take` 成功是否等于业务处理成功？答：不是。`take` 只表示元素已从队列交给当前消费者；后续业务失败是否重试、如何避免重复副作用，需要另外设计。
+
+          ## 易错点
+
+          - 用普通队列 + `isEmpty()` 轮询，却声称实现了阻塞语义。
+          - 用无界队列却完全不讨论消费者变慢时的内存增长。
+          - 多消费者只放一个 poison pill，导致剩余消费者永久等待。
+          - 把 FIFO 出队顺序错误地扩大成“多个消费者的业务完成顺序也严格 FIFO”。
+          - 吞掉 `InterruptedException` 后继续假装任务正常运行。
+          - 把 `BlockingQueue` 的线程安全误说成业务层 exactly-once。
+          - 忽略同一来源中“手写阻塞队列”是另一道独立题，导致当前答案越界实现内部锁机制。
+          EOF
+
+          cat > "$out/ProducerConsumerDemo.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.concurrent.ArrayBlockingQueue;
+          import java.util.concurrent.BlockingQueue;
+          import java.util.concurrent.ConcurrentLinkedQueue;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+          import java.util.concurrent.Future;
+          import java.util.concurrent.TimeUnit;
+
+          public final class ProducerConsumerDemo {
+              private record Message(int value, boolean stop) {
+                  static Message item(int value) { return new Message(value, false); }
+                  static Message stop() { return new Message(0, true); }
+              }
+              public record Result(List<Integer> consumed, int stopMessages) {}
+
+              public static Result run(int itemCount, int consumerCount, int capacity) throws Exception {
+                  if (itemCount < 0 || consumerCount < 1 || capacity < 1) throw new IllegalArgumentException("invalid simulation arguments");
+                  BlockingQueue<Message> queue = new ArrayBlockingQueue<>(capacity);
+                  ConcurrentLinkedQueue<Integer> consumed = new ConcurrentLinkedQueue<>();
+                  ExecutorService pool = Executors.newFixedThreadPool(consumerCount + 1);
+                  List<Future<Void>> consumerFutures = new ArrayList<>();
+                  try {
+                      for (int c = 0; c < consumerCount; c++) {
+                          consumerFutures.add(pool.submit(() -> {
+                              while (true) {
+                                  Message message = queue.take();
+                                  if (message.stop()) return null;
+                                  consumed.add(message.value());
+                              }
+                          }));
+                      }
+                      Future<Void> producer = pool.submit(() -> {
+                          for (int value = 1; value <= itemCount; value++) queue.put(Message.item(value));
+                          for (int c = 0; c < consumerCount; c++) queue.put(Message.stop());
+                          return null;
+                      });
+                      producer.get(5, TimeUnit.SECONDS);
+                      for (Future<Void> consumer : consumerFutures) consumer.get(5, TimeUnit.SECONDS);
+                      return new Result(List.copyOf(consumed), consumerCount);
+                  } finally {
+                      pool.shutdownNow();
+                  }
+              }
+          }
+          JAVA
+
+          cat > "$out/ProducerConsumerDemoTest.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.List;
+
+          public final class ProducerConsumerDemoTest {
+              public static void main(String[] args) throws Exception {
+                  singleConsumerFifo();
+                  multiConsumerExactlyOnce();
+                  emptyStillTerminatesAllConsumers();
+                  repeatedSmallCapacity();
+                  invalidArguments();
+                  System.out.println("PASS fifo=yes multi-exactly-once=yes empty-stop=yes repeated-capacity1=50 invalid=yes");
+              }
+              private static void singleConsumerFifo() throws Exception {
+                  var r=ProducerConsumerDemo.run(100,1,1);
+                  eq(range(100),r.consumed(),"single consumer FIFO");
+                  eq(1,r.stopMessages(),"single stop");
+              }
+              private static void multiConsumerExactlyOnce() throws Exception {
+                  var r=ProducerConsumerDemo.run(1000,4,7);
+                  var sorted=new ArrayList<>(r.consumed()); Collections.sort(sorted);
+                  eq(range(1000),sorted,"multi exactly once");
+                  eq(4,r.stopMessages(),"four stops");
+              }
+              private static void emptyStillTerminatesAllConsumers() throws Exception {
+                  var r=ProducerConsumerDemo.run(0,3,2);
+                  eq(List.of(),r.consumed(),"empty values"); eq(3,r.stopMessages(),"empty stops");
+              }
+              private static void repeatedSmallCapacity() throws Exception {
+                  for(int round=0;round<50;round++){
+                      var r=ProducerConsumerDemo.run(40,3,1);
+                      var sorted=new ArrayList<>(r.consumed()); Collections.sort(sorted);
+                      eq(range(40),sorted,"capacity1 round "+round); eq(3,r.stopMessages(),"capacity1 stops");
+                  }
+              }
+              private static void invalidArguments() {
+                  throwsIAE(() -> ProducerConsumerDemo.run(-1,1,1));
+                  throwsIAE(() -> ProducerConsumerDemo.run(1,0,1));
+                  throwsIAE(() -> ProducerConsumerDemo.run(1,1,0));
+              }
+              private static List<Integer> range(int n){var r=new ArrayList<Integer>();for(int i=1;i<=n;i++)r.add(i);return r;}
+              private static void throwsIAE(Throwing r){try{r.run();throw new AssertionError("expected IllegalArgumentException");}catch(IllegalArgumentException expected){}catch(Exception e){throw new AssertionError(e);}}
+              private static void eq(Object e,Object a,String label){if(!e.equals(a))throw new AssertionError(label+" expected="+e+" actual="+a);}
+              @FunctionalInterface private interface Throwing { void run() throws Exception; }
+          }
+          JAVA
+
+          cat > "$out/source_boundary.json" <<'JSON'
+          {
+            "schema_version":"answer_source_boundary.v1",
+            "canonical_id":"cq_q_6bf861ee543d0109e37f665062ac8d5d",
+            "checked_at":"2026-08-25",
+            "repository_sources":[
+              {"path":"note_tagged/6833fa5b00000000030382a9.json","question_id":"6bf861ee543d0109e37f665062ac8d5d","preserved_text":"算法：消费者生产者模拟 (阻塞队列)"},
+              {"path":"note_tagged/6833fa5b00000000030382a9.json","question_id":"f213ccebb77d694fa4eb9062e4f03a01","preserved_text":"算法：手写阻塞队列","relationship":"separate sibling question proving custom queue implementation must not be silently folded into current Canonical"}
+            ],
+            "preserved_constraints":["producer-consumer simulation","blocking queue is the synchronization boundary"],
+            "not_preserved":["producer count","consumer count","queue implementation","queue capacity","item type or value range","termination protocol","timeout policy","retry or delivery guarantee","method signature"],
+            "candidate_contract_assumptions":["one producer","one or more consumers","bounded ArrayBlockingQueue","finite items 1..itemCount","one stop message per consumer","no injected interruption or consumer failure in the finite demonstration"]
+          }
+          JSON
+
+          javac "$out/ProducerConsumerDemo.java" "$out/ProducerConsumerDemoTest.java"
+          stdout="$(java -cp "$out" ProducerConsumerDemoTest)"
+          test "$stdout" = 'PASS fifo=yes multi-exactly-once=yes empty-stop=yes repeated-capacity1=50 invalid=yes'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0030/${process.env.CANONICAL_ID}`;
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-25',command:'javac ProducerConsumerDemo.java ProducerConsumerDemoTest.java && java ProducerConsumerDemoTest',stdout:process.env.STDOUT,checks:['single-consumer FIFO with capacity 1','four-consumer exactly-once set coverage for 1000 items','one stop per consumer','empty workload still terminates every consumer','50 repeated 3-consumer runs with capacity 1','invalid simulation argument rejection']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-25',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Tagged producer-consumer interview source plus separate hand-written BlockingQueue sibling question',locator:'note_tagged/6833fa5b00000000030382a9.json',source_type:'repository_source_record',checked_at:'2026-08-25'},{source_id:'jdk-blockingqueue',title:'Java SE 21 BlockingQueue API: blocking put/take and memory-consistency effects',locator:'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/BlockingQueue.html',source_type:'primary_official_documentation',checked_at:'2026-08-25'},{source_id:'jdk-concurrent-package',title:'Java SE 21 java.util.concurrent package summary: BlockingQueue implementations for producer-consumer designs',locator:'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/package-summary.html',source_type:'primary_official_documentation',checked_at:'2026-08-25'},{source_id:'fixture',title:'Producer-consumer deterministic JDK 21 fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-25'}],claims:[{claim_id:'source-boundary',text:'The source asks for producer-consumer simulation using a blocking queue, while a separate sibling source explicitly asks to hand-write a blocking queue; custom queue internals therefore are not silently folded into this answer.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','常见追问','易错点']},{claim_id:'blockingqueue-contract',text:'BlockingQueue supplies blocking put/take forms and a memory-consistency handoff suitable for producer-consumer coordination.',source_ids:['jdk-blockingqueue','jdk-concurrent-package'],answer_locations:['1 分钟版','关键细节','原理机制']},{claim_id:'implementation-validation',text:'The executable fixture verifies single-consumer FIFO, multi-consumer exactly-once item coverage, one stop per consumer, empty-workload termination and repeated capacity-one runs.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [ ] `cq_q_6bf861ee543d0109e37f665062ac8d5d` writer stage complete: the current producer-consumer source is kept separate from the sibling “hand-write BlockingQueue” question, the candidate uses bounded JDK BlockingQueue as the coordination boundary with explicit stop-message assumptions, Oracle Java 21 contracts are recorded, and the deterministic fixture verifies FIFO/exact item coverage/termination including 50 capacity-one repetitions. Promotion remains blocked on isolated independent review and downstream evidence/strict gates.';
+          if(!text.includes(note)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+note+'\n');
+          NODE
+
+      - name: Run repository gates for writer stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:coverage
+
+      - name: Commit candidate only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during producer-consumer candidate build: $base_head -> $remote_head; fail closed and retry later."
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0030/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0030.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0030 producer-consumer candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
