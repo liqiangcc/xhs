@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Retire batch-0029 singleton coding Questions whose exact contract is unrecoverable.
 
-Source-first and idempotent: never invent a missing code-output fixture. The caller
+Source-first and idempotent: never invent a missing coding/output contract. The caller
 rebuilds generated Question/index projections after the SSOT mutation.
 """
 
@@ -13,12 +13,24 @@ import shutil
 
 ROOT = Path(".")
 TARGETS = {
-    "cq_q_69f2feb994cbec17e8d5e0d1b7f24188": (
-        "原始 tagged note 只保留“代码输出：微任务、宏任务打印顺序 (Promise, setTimeout 嵌套)?”，"
-        "以及 event loop/微任务/宏任务标签；仓库没有保存实际 JavaScript 代码片段、嵌套结构、Promise 链、"
-        "console.log 位置或运行环境。代码输出题的唯一答案取决于这些缺失细节，不能根据一个熟悉的 event-loop 模板"
-        "自行补代码再把打印顺序当作原题答案。在获得更强原始来源前，该 singleton 无法恢复严格编码契约。"
-    ),
+    "cq_q_69f2feb994cbec17e8d5e0d1b7f24188": {
+        "original_question": "代码输出：微任务、宏任务打印顺序 (Promise, setTimeout 嵌套)?",
+        "explanation": (
+            "原始 tagged note 只保留“代码输出：微任务、宏任务打印顺序 (Promise, setTimeout 嵌套)?”，"
+            "以及 event loop/微任务/宏任务标签；仓库没有保存实际 JavaScript 代码片段、嵌套结构、Promise 链、"
+            "console.log 位置或运行环境。代码输出题的唯一答案取决于这些缺失细节，不能根据一个熟悉的 event-loop 模板"
+            "自行补代码再把打印顺序当作原题答案。在获得更强原始来源前，该 singleton 无法恢复严格编码契约。"
+        ),
+    },
+    "cq_q_61854a441767eb044ad35c61e02c7daa": {
+        "original_question": "算法：统计区间用户数量？",
+        "explanation": (
+            "原始 note、structured note 与 tagged note 只保留“手撕统计区间用户数量/算法：统计区间用户数量（手撕题目）？”"
+            "这一题名，没有保存输入结构（用户是点、区间还是事件）、区间端点语义、查询形式、重复用户规则、输出定义、"
+            "样例或约束。不同合理解释会对应前缀和、差分、排序扫描、区间树等不同问题和答案；因此不能根据“interval”标签"
+            "自行补出某一道熟悉题目的 contract。在获得更强原始来源前，该 singleton 无法恢复 strict-valid Coding 答案。"
+        ),
+    },
 }
 
 
@@ -64,8 +76,10 @@ def main() -> int:
     }
     changed = False
 
-    for canonical_id, explanation in TARGETS.items():
+    for canonical_id, target in TARGETS.items():
         qid = canonical_id.removeprefix("cq_q_")
+        expected_question = target["original_question"]
+        explanation = target["explanation"]
         canonical = canonical_by_id.get(canonical_id)
         if canonical is None:
             active_rows = [row for row in question_rows_by_id.get(qid, []) if row.get("canonical_id") == canonical_id]
@@ -91,7 +105,7 @@ def main() -> int:
             raise SystemExit(f"{canonical_id}: Question binding mismatch: {row.get('canonical_id')}")
         if row.get("is_valid_for_library") is not True:
             raise SystemExit(f"{canonical_id}: Question already invalid before remediation")
-        if row.get("original_question") != "代码输出：微任务、宏任务打印顺序 (Promise, setTimeout 嵌套)?":
+        if row.get("original_question") != expected_question:
             raise SystemExit(f"{canonical_id}: source wording drifted: {row.get('original_question')}")
 
         ref = (row["source_note_id"], row["source_question_index"])
@@ -151,7 +165,7 @@ def main() -> int:
     progress["items"] = sorted(progress.get("items", []), key=lambda item: item.get("canonical_id", ""))
     write_json(progress_path, progress)
 
-    print("Retired source-unrecoverable batch 0029 singleton:", ", ".join(sorted(TARGETS)))
+    print("Retired source-unrecoverable batch 0029 singleton(s):", ", ".join(sorted(TARGETS)))
     return 0
 
 
