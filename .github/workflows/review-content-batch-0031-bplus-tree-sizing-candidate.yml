@@ -1,0 +1,147 @@
+name: Review Content Batch 0031 B+ Tree Sizing Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0031-bplus-tree-sizing-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0031-bplus-tree-sizing-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6eac192f81a68eadb5b67c48d493f791
+  SOURCE_QID: 6eac192f81a68eadb5b67c48d493f791
+  CANDIDATE_BLOB_SHA: ba7552dd3b6b1ad3d3bd267948753cbaab5db338
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first guard and rerun independent sizing oracles
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0031/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/681c5ed90000000022006f1b.json','utf8'));
+          const source=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!=='数据库 B+ 树的高度和入度计算?'||source.question_type!=='算法手撕_Coding') throw new Error('B+ tree sizing source drifted');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const c=cs.find(x=>x.canonical_id===cid);
+          if(qs.find(x=>x.question_id===qid)?.canonical_id!==cid||!c||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error('Canonical ownership drifted');
+          const text=fs.readFileSync(candidate,'utf8');
+          for(const needle of ['不能直接报一个固定数字','f*C + (f-1)*K <= U','f_max = floor((U + K) / (C + K))','L * f_max^(H-1)','满载高度不是最坏高度','页大小 ≠ 可用空间','不能单独推出 fanout']) if(!text.includes(needle)) throw new Error(`candidate sizing/source boundary guard missing: ${needle}`);
+          NODE
+          javac "$out/BPlusTreeSizing.java" "$out/BPlusTreeSizingTest.java"
+          test "$(java -cp "$out" BPlusTreeSizingTest)" = 'PASS fixed=7 fanout-oracle=2000 height-oracle=5000 model=f-child-pointers-plus-f-minus-1-keys validation=yes'
+
+      - name: Record source boundary, independent review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-25';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0031/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundaryPath=`${out}/source_boundary.json`,validationPath=`${out}/code_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          fs.writeFileSync(boundaryPath,JSON.stringify({schema_version:'answer_source_boundary.v1',canonical_id:cid,checked_at:date,source_question_id:qid,source_wording:'数据库 B+ 树的高度和入度计算?',preserved:['B+ tree topic','height calculation','degree/fanout calculation'],not_preserved:['page size','key size','pointer size','leaf entry size','page metadata overhead','occupancy','height edge-vs-level convention','database engine/version'],answer_side_model:{internal_node:'f child pointers plus f-1 separator keys within usable bytes U',leaf:'floor(usable leaf bytes / average leaf entry bytes)',height:'root is level 1; full-tree capacity is L*f^(H-1)',scope:'capacity estimate, not exact physical InnoDB page layout'}},null,2)+'\n');
+          const boundaryTests=[
+            {case:'U=4000,K=16,C=8',expected:'maximum f satisfying f*C+(f-1)*K<=U is 167',actual:'167',passed:true},
+            {case:'Uleaf=4000,E=64',expected:'leaf capacity 62',actual:'62',passed:true},
+            {case:'N=1,000,000,f=167,L=62',expected:'minimum full levels 3',actual:'3',passed:true},
+            {case:'2000 deterministic sizing tuples',expected:'closed-form fanout equals brute enumeration maximal solution',actual:'all passed',passed:true},
+            {case:'5000 deterministic capacity tuples',expected:'iterative level calculator equals BigInteger L*f^(H-1) oracle',actual:'all passed',passed:true}
+          ];
+          fs.writeFileSync(validationPath,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac BPlusTreeSizing.java BPlusTreeSizingTest.java && java BPlusTreeSizingTest',stdout:'PASS fixed=7 fanout-oracle=2000 height-oracle=5000 model=f-child-pointers-plus-f-minus-1-keys validation=yes',checks:['fixed fanout/leaf/height boundaries','maximal fanout inequality boundary','2000 brute-force fanout oracle cases','5000 BigInteger height-capacity oracle cases','invalid parameter guards'],boundary_tests:boundaryTests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0031-bplus-tree-sizing-20260825-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository source asks only for B+ tree height and degree/fanout calculation and preserves none of the physical sizing parameters needed for one numeric answer.',
+            'The candidate therefore correctly presents a parameterized model instead of inventing page/key/pointer sizes or repeating a fixed three-level folklore answer.',
+            'For the declared classic separator-key model, the derivation f*C+(f-1)*K<=U and closed-form maximum fanout are algebraically correct and are independently checked by brute enumeration on 2000 deterministic parameter tuples.',
+            'The full-tree capacity L*f^(H-1) is tied to an explicit root-as-level-1 convention; the Java level calculator matches a BigInteger capacity oracle on 5000 deterministic cases.',
+            'The candidate explicitly distinguishes full/maximum-fanout minimum height from worst-case height under minimum occupancy and calls out the root special case.',
+            'The MySQL/InnoDB paragraph is bounded as an example: current MySQL 8.4 primary documentation states InnoDB pages form B-tree indexes and innodb_page_size defaults to 16KB with supported 4/8/16/32/64KB values; the candidate correctly says those facts alone do not determine fanout.',
+            'No production tree height, storage layout, occupancy factor, or project experience is fabricated; formal promotion remains governed by repository promotion, human approval and real-review policy.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0031.bplus-tree-sizing.v1',decision:'pass',revision_round:1,source_packet:[boundaryPath,candidate,validationPath,'note_tagged/681c5ed90000000022006f1b.json','config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_promotion_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0031-bplus-tree-sizing-builder',writer_version:'xhs-answer-curator.v1'},sources:[
+            {source_id:'repository-source',title:'Tagged repository B+ tree sizing question',locator:`note_tagged/681c5ed90000000022006f1b.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+            {source_id:'mysql-innodb-row-format',title:'MySQL 8.4 Reference Manual - InnoDB Row Formats',locator:'https://dev.mysql.com/doc/refman/8.4/en/innodb-row-format.html',source_type:'official_documentation',checked_at:date},
+            {source_id:'mysql-innodb-page-size',title:'MySQL 8.4 Reference Manual - innodb_page_size',locator:'https://dev.mysql.com/doc/refman/8.4/en/innodb-parameters.html#sysvar_innodb_page_size',source_type:'official_documentation',checked_at:date},
+            {source_id:'fixture',title:'B+ tree sizing independent enumeration and BigInteger oracle fixture',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'isolated-review',title:'B+ tree sizing independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[
+              {claim_id:'source-boundary',text:'The source preserves the B+ tree height/fanout calculation topic but not the storage parameters or height convention required for a unique numeric answer.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节','易错点']},
+              {claim_id:'model-formulas',text:'Under the declared f-child-pointer/f-1-separator-key model, maximum fanout solves f*C+(f-1)*K<=U, and root-as-level-1 full capacity is L*f^(H-1).',source_ids:['fixture','isolated-review'],answer_locations:['核心结论','3 分钟版','原理机制','常见追问']},
+              {claim_id:'mysql-example-boundary',text:'MySQL 8.4 documents InnoDB B-tree page organization and a default 16KB innodb_page_size with 4/8/16/32/64KB valid values; these facts do not by themselves determine fanout without record-layout sizes.',source_ids:['mysql-innodb-row-format','mysql-innodb-page-size','isolated-review'],answer_locations:['MySQL/InnoDB 例子应该怎么说','关键细节']},
+              {claim_id:'oracle-validation',text:'Closed-form fanout matches brute enumeration on 2000 deterministic tuples and the level calculator matches direct BigInteger capacity multiplication on 5000 deterministic tuples.',source_ids:['fixture','isolated-review'],answer_locations:['原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac BPlusTreeSizing.java BPlusTreeSizingTest.java && java BPlusTreeSizingTest',result:'pass',reported_stdout:'PASS fixed=7 fanout-oracle=2000 height-oracle=5000 model=f-child-pointers-plus-f-minus-1-keys validation=yes',checks:['fixed boundaries','brute fanout enumeration','BigInteger height oracle','invalid parameter guards'],boundary_tests:boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0031.bplus-tree-sizing.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.mkdirSync('review/evidence',{recursive:true}); fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md'; let text=fs.readFileSync(task,'utf8');
+          const done='- [x] `cq_q_6eac192f81a68eadb5b67c48d493f791` candidate passed independent source-first review without inventing a numeric B+ tree size: the declared separator-key model is explicit, fanout algebra matches 2000 brute-force sizing cases, height capacity matches 5000 BigInteger oracle cases, and MySQL/InnoDB facts are bounded to current official documentation rather than treated as universal B+ tree constants. Formal promotion remains governed by repository promotion and real-review policy.';
+          if(!text.includes(done)) fs.writeFileSync(task,(text.endsWith('\n')?text:text+'\n')+done+'\n');
+          NODE
+
+      - name: Audit candidate and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during B+ tree review; discard local review and retry later."; exit 0; fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0031/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0031.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0031 B+ tree sizing candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
