@@ -1,0 +1,172 @@
+name: Review Content Batch 0035 Linked List Add
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0035-linked-list-add.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0035-linked-list-add-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7fa58cd683123c4fa32eebda17e576d5
+  SOURCE_QID: 7fa58cd683123c4fa32eebda17e576d5
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated review and executable rerun
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0035/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          note='note_tagged/67f39004000000000703615b.json'
+          test -f "$candidate"
+          test -f "$out/LinkedListAddValidation.java"
+          test -f "$out/writer_research.json"
+
+          javac "$out/LinkedListAddValidation.java"
+          stdout="$(java -cp "$out" LinkedListAddValidation)"
+          test "$stdout" = 'PASS examples=6 reverse-order=true unequal-length=true carry-chain=true final-carry=true zero=true'
+
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0035/${cid}`;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const sourceFile='note_tagged/67f39004000000000703615b.json';
+          const note=JSON.parse(fs.readFileSync(sourceFile,'utf8'));
+          const src=(note.tagged_questions||[]).find(q=>q.question_id===qid);
+          const expected='算法手撕：链表相加。给定两个非空链表表示两个非负整数，位数按照逆序方式存储，请返回表示和的链表';
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          if(src.question_type!=='算法手撕_Coding') throw new Error(`source type drifted: ${src.question_type}`);
+
+          const md=fs.readFileSync(candidate,'utf8');
+          const required=['# 链表相加：两个逆序数字链表求和','## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','static ListNode addTwoNumbers'];
+          for(const marker of required) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if(/InnoDB|B\+ 树|EXPLAIN|联合索引/.test(md)) throw new Error('foreign generated-baseline topic leaked into candidate');
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(!md.includes('l1 != null || l2 != null || carry != 0')) throw new Error('final-carry loop invariant not explicit');
+          if(!md.includes('O(max(m,n))')) throw new Error('complexity statement missing');
+
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending') throw new Error('writer state drifted');
+          if(!Array.isArray(writer.source_question_coverage)||!writer.source_question_coverage.some(x=>x.question_id===qid&&x.covered===true)) throw new Error('source coverage missing');
+
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,
+            command:'javac LinkedListAddValidation.java && java LinkedListAddValidation',stdout:process.env.STDOUT,
+            checks:['representative 342 + 465 example','zero plus zero','unequal input lengths','carry chain','final carry node','single digit carry']
+          },null,2)+'\n');
+
+          const reviewer='source-first-isolated-reviewer-linked-list-add-20260826-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository source is a single recoverable Coding question with explicit non-empty inputs, non-negative integers, reverse-order digit storage, and linked-list output.',
+            'The candidate no longer contains the unrelated InnoDB/B+tree baseline contamination.',
+            'The solution processes digits in the same low-to-high order as carry propagation and explicitly preserves the final carry condition.',
+            'The Java validation covers the representative example, zero, unequal lengths, carry chains and a new most-significant carry node.',
+            'The candidate states its concrete ListNode/decimal-digit representation as an implementation assumption rather than falsely attributing that Java schema to the source.',
+            'Complexity O(max(m,n)) time and result-sized output space matches the implementation.',
+            'No fabricated project experience or unsupported production claim is present; formal promotion remains policy-gated.'
+          ];
+          const reviewPath=`${out}/isolated_review_result.json`;
+          fs.writeFileSync(reviewPath,JSON.stringify({
+            schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,
+            review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'linked-list-add.v1',decision:'pass',revision_round:1,
+            source_packet:[sourceFile,candidate,`${out}/code_validation.json`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],
+            scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,
+            promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']
+          },null,2)+'\n');
+
+          const evidence={
+            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,
+            writer:{writer_id:'linked-list-add-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'repository-source',title:'Meituan backend interview note linked-list-add prompt',locator:`${sourceFile}#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'validation',title:'Fresh deterministic linked-list-add Java validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Fresh source-first isolated review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-contract',text:'Two non-empty linked lists represent non-negative integers, digits are stored in reverse order, and the result must be returned as a linked list.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','3 分钟版']},
+              {claim_id:'carry-algorithm',text:'Under the explicit one-decimal-digit-per-node implementation contract, streaming low-to-high addition with one carry state computes the result without materializing a machine integer.',source_ids:['validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},
+              {claim_id:'boundary-validation',text:'The exact Java implementation passes representative, zero, unequal-length, carry-chain and final-carry cases.',source_ids:['validation'],answer_locations:['关键细节','常见追问']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{command:'javac LinkedListAddValidation.java && java LinkedListAddValidation',result:'pass',reported_stdout:process.env.STDOUT,checks:['example','zero','unequal lengths','carry chain','final carry']},
+            review_state:'independent_source_first_review_passed',
+            review:{reviewer_id:reviewer,review_version:'linked-list-add.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}
+          };
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md';
+          let text=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_7fa58cd683123c4fa32eebda17e576d5` linked-list-add source boundary is preserved exactly from the Meituan interview note; a source-bounded Java candidate now replaces the unrelated generated baseline, with deterministic validation covering representative addition, zero, unequal lengths, carry chains and final carry. Writer research/evidence is frozen; isolated independent review remains pending before promotion.';
+          const passed='- [x] `cq_q_7fa58cd683123c4fa32eebda17e576d5` linked-list-add candidate replaces the unrelated generated baseline, preserves the recoverable source contract, passes fresh Java validation for representative/zero/unequal-length/carry-chain/final-carry cases, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!text.includes(pending)) throw new Error('writer-progress marker missing or stale');
+          fs.writeFileSync(task,text.replace(pending,passed));
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passing isolated review from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0035/$CANONICAL_ID"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = '${{ steps.base.outputs.head }}' || { echo 'Content branch advanced during review; fail closed.'; exit 1; }
+          git add "review/evidence/$CANONICAL_ID.json" "$out/code_validation.json" "$out/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0035 linked-list-add candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
