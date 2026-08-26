@@ -1,0 +1,220 @@
+name: Build Content Batch 0037 Preorder Traversal Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0037-preorder-traversal-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-preorder-traversal-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8d38cd370fa94eb8683b012eb6353aab
+  SOURCE_QID: 8d38cd370fa94eb8683b012eb6353aab
+  SOURCE_TAGGED: note_tagged/680a3a20000000001c03319f.json
+  PRIMARY_SOURCE: https://leetcode.com/problems/binary-tree-preorder-traversal/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Guard exact source and long-tail baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法手撕：二叉树的前序遍历（Pre-order Traversal）';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source question drift');
+          const formal=fs.readFileSync(`review/answers/${cid}.md`,'utf8');
+          if(!formal.includes('"status":"needs_update"')||!formal.includes('"quality_tier":"long_tail_baseline"')) throw new Error('formal answer no longer long-tail baseline');
+          if(!formal.includes(expected)) throw new Error('formal source locator drift');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists');
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),c=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!c.ok||c.canonical?.canonical_id!==process.env.CANONICAL_ID||c.answer_type!=='coding') throw new Error('canonical/type drift');
+          const src=c.source_questions||[];
+          if(!src.some(x=>x.question_id===process.env.SOURCE_QID&&(x.original_question||'').includes('前序遍历'))) throw new Error(`canonical source wording drift: ${JSON.stringify(src)}`);
+          NODE
+
+      - name: Write source-bounded candidate and executable writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; mkdir -p "$out" review/candidates/answers
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_8d38cd370fa94eb8683b012eb6353aab","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 二叉树的前序遍历（Pre-order Traversal）
+
+          ## 核心结论
+
+          前序遍历的访问顺序是 **根 → 左子树 → 右子树**。来源只给题名，没有固定语言、节点数量或 API；这里采用常见 Java 契约：`TreeNode` 只有 `int val`、`left`、`right`，`root == null` 返回空列表。面试手撕优先给迭代版：用栈保存待访问节点，弹出节点后先压右孩子、再压左孩子，这样 LIFO 会保证左子树先被处理；同时说明递归版就是按“根、左、右”直接展开。
+
+          ## 1 分钟版
+
+          - 前序的唯一核心顺序是 `root -> left -> right`，访问节点时立即把值加入结果。
+          - 迭代版先把根入栈；每次弹出一个节点并记录，然后 **先压右、后压左**，因为栈后进先出，下一次会先访问左孩子。
+          - 空树直接返回空列表；只有一个节点时结果就是该节点。
+          - 每个节点只进栈、出栈一次，所以时间 O(n)；辅助栈最坏 O(h)，其中 h 是树高，退化树时 O(n)。
+
+          ## 3 分钟版
+
+          推荐的迭代实现：
+
+          ```java
+          import java.util.ArrayDeque;
+          import java.util.ArrayList;
+          import java.util.Deque;
+          import java.util.List;
+
+          public final class Solution {
+              public static final class TreeNode {
+                  int val;
+                  TreeNode left;
+                  TreeNode right;
+                  TreeNode(int val) { this.val = val; }
+              }
+
+              public List<Integer> preorderTraversal(TreeNode root) {
+                  List<Integer> result = new ArrayList<>();
+                  if (root == null) return result;
+
+                  Deque<TreeNode> stack = new ArrayDeque<>();
+                  stack.push(root);
+                  while (!stack.isEmpty()) {
+                      TreeNode node = stack.pop();
+                      result.add(node.val);
+                      if (node.right != null) stack.push(node.right);
+                      if (node.left != null) stack.push(node.left);
+                  }
+                  return result;
+              }
+          }
+          ```
+
+          递归版的语义更直接：对当前节点先记录 `val`，再递归左孩子，最后递归右孩子。它同样访问每个节点一次，但额外使用调用栈；树非常深时，迭代版更不容易遇到调用栈溢出。
+
+          ## 关键细节
+
+          - **为什么先压右再压左**：栈是 LIFO；如果先压左再压右，右孩子会先弹出，顺序就变成根-右-左。
+          - **结果空间与辅助空间分开算**：返回列表本身需要 O(n)；若只讨论算法额外工作空间，显式栈是 O(h)，最坏 O(n)。
+          - **树高决定栈峰值**：平衡树 h≈O(log n)，极端单链树 h=O(n)。
+          - **空树是正常边界**：不应返回 `null`，而是空列表，更符合“遍历结果”的集合语义。
+          - **值是否重复不影响遍历**：遍历由节点结构决定，不依赖 BST 性质，也不需要去重。
+          - **不要误用队列**：普通 FIFO 队列得到的是层序遍历，不是前序 DFS。
+
+          ## 原理机制
+
+          前序遍历可以看成一个 DFS 状态机：栈中的每个元素表示“这个节点的整棵子树还没开始处理”。弹出节点时先完成根节点动作，再把未来要处理的子树按逆序压栈。目标顺序是左后右，所以待办栈要先放右、再放左。这样每一轮都保持不变量：栈顶永远是按照前序顺序下一个应该访问的节点。递归实现只是把这个显式栈交给语言运行时的调用栈管理。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构生产使用案例。工程映射上，前序适合“进入节点时就要做动作”的树结构处理，例如先处理父配置、再处理子配置；但真实场景是否使用递归，要看树深上界。若外部输入可能形成很深的树，显式栈通常更容易控制内存和失败边界。这是方案映射，不是来源事实。
+
+          ## 常见追问
+
+          - 问：递归版怎么写？答：`if (node == null) return; visit(node); dfs(node.left); dfs(node.right);`，顺序本身就是前序定义。
+          - 问：为什么迭代版不是先压左？答：因为栈后进先出；为了让左孩子先弹出，必须让左孩子后入栈，所以先压右、再压左。
+          - 问：空间复杂度为什么有时写 O(h)、有时写 O(n)？答：显式栈与递归调用栈的峰值由树高 h 决定；h 最坏等于 n，所以最坏空间写 O(n)，平衡树则约 O(log n)。
+          - 问：能不能用 Morris 做 O(1) 额外空间？答：可以利用临时线索指针实现 Morris preorder，但会暂时修改树连接并恢复，代码和证明都更复杂；题干没有 O(1) 空间要求时，栈版更清晰。
+          - 问：前序和层序有什么最明显区别？答：前序是深度优先，处理完根后会继续深入左子树；层序用队列按深度从上到下逐层处理。
+
+          ## 易错点
+
+          - 把访问顺序写成左-根-右，那是中序遍历。
+          - 迭代时先压左再压右，导致实际输出根-右-左。
+          - 空树返回 `null`，让调用方还要额外判空。
+          - 把二叉树误当 BST，使用节点值大小决定遍历方向。
+          - 只写递归代码却忽略深度可能接近 n 时的调用栈风险。
+          EOF
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('preorderTraversal(TreeNode root)')) throw new Error('complete Java implementation missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/Solution.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$out/PreorderWriterTest.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.Random;
+
+          public final class PreorderWriterTest {
+              private static int randomCases;
+              public static void main(String[] args) {
+                  Solution s=new Solution();
+                  check(s,null,List.of());
+                  check(s,node(7),List.of(7));
+                  Solution.TreeNode sample=node(1); sample.right=node(2); sample.right.left=node(3);
+                  check(s,sample,List.of(1,2,3));
+                  Solution.TreeNode full=node(1); full.left=node(2); full.right=node(3); full.left.left=node(4); full.left.right=node(5); full.right.left=node(6); full.right.right=node(7);
+                  check(s,full,List.of(1,2,4,5,3,6,7));
+                  Random r=new Random(0x8D38CD37L);
+                  for(int n=0;n<=120;n++) for(int round=0;round<20;round++) { Solution.TreeNode root=randomTree(n,r); check(s,root,reference(root)); randomCases++; }
+                  int depth=50000; Solution.TreeNode skew=node(0),cur=skew; for(int i=1;i<depth;i++){cur.right=node(i);cur=cur.right;}
+                  List<Integer> got=s.preorderTraversal(skew); if(got.size()!=depth||got.get(0)!=0||got.get(depth-1)!=depth-1) throw new AssertionError("deep skew mismatch");
+                  System.out.printf("PASS fixed=4 randomized_trees=%d deep_skew=%d null=pass order=pass%n",randomCases,depth);
+              }
+              static Solution.TreeNode node(int v){return new Solution.TreeNode(v);}
+              static void check(Solution s,Solution.TreeNode root,List<Integer> expected){List<Integer> actual=s.preorderTraversal(root);if(!actual.equals(expected))throw new AssertionError("actual="+actual+" expected="+expected);}
+              static List<Integer> reference(Solution.TreeNode root){List<Integer> out=new ArrayList<>();ref(root,out);return out;}
+              static void ref(Solution.TreeNode n,List<Integer> out){if(n==null)return;out.add(n.val);ref(n.left,out);ref(n.right,out);}
+              static Solution.TreeNode randomTree(int n,Random r){if(n==0)return null;List<Solution.TreeNode> nodes=new ArrayList<>();for(int i=0;i<n;i++)nodes.add(node(r.nextInt(2001)-1000));List<Solution.TreeNode> open=new ArrayList<>();open.add(nodes.get(0));for(int i=1;i<n;i++){Solution.TreeNode child=nodes.get(i);while(true){Solution.TreeNode p=open.get(r.nextInt(open.size()));if(p.left!=null&&p.right!=null){open.remove(p);continue;}if(p.left==null&&p.right==null){if(r.nextBoolean())p.left=child;else p.right=child;}else if(p.left==null)p.left=child;else p.right=child;if(p.left!=null&&p.right!=null)open.remove(p);open.add(child);break;}}return nodes.get(0);}
+          }
+          JAVA
+          (cd "$out" && javac -Xlint:all -Werror Solution.java PreorderWriterTest.java && java PreorderWriterTest > writer_stdout.txt)
+          stdout="$(cat "$out/writer_stdout.txt")"
+          test "$stdout" = 'PASS fixed=4 randomized_trees=2420 deep_skew=50000 null=pass order=pass'
+
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex'); const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:hash,result:'pass',validated_at:date,command:'extract exact candidate Java; javac -Xlint:all -Werror; execute fixed, randomized and 50000-depth skew-tree cases',stdout:process.env.STDOUT,checks:['null tree returns empty list','single/sample/full trees follow root-left-right','2420 seeded randomized trees match recursive reference','50000-node right-skew tree completes iteratively']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Repository tagged binary-tree preorder interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'primary-reference',title:'LeetCode 144 Binary Tree Preorder Traversal',locator:process.env.PRIMARY_SOURCE,source_type:'official_documentation',checked_at:date},{source_id:'writer-validation',title:'Writer preorder executable validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'preorder-semantics',text:'Binary-tree preorder visits root, then left subtree, then right subtree.',source_ids:['repository-source','primary-reference','writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版']},{claim_id:'iterative-ordering',text:'The exact candidate stack implementation pushes right before left so LIFO traversal visits left before right.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'boundary-and-space',text:'The implementation returns an empty list for null, matches a recursive reference on randomized trees, and handles a 50000-node skew tree without recursive-call depth.',source_ids:['writer-validation'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:(ctx.source_questions||[]).map(x=>({question_id:x.question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']})),promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record bounded progress and commit candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';let t=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_8d38cd370fa94eb8683b012eb6353aab` preorder-traversal candidate preserves the exact binary-tree source boundary, gives a complete iterative root-left-right Java solution, explains right-before-left stack ordering and O(n)/O(h) bounds, and passes fixed plus 2420 seeded randomized trees and a 50000-node skew-tree writer validation. Writer evidence is frozen; isolated source-first review remains pending.';
+          if(!t.includes('`cq_q_8d38cd370fa94eb8683b012eb6353aab` preorder-traversal candidate'))t=t.trimEnd()+'\n'+note+'\n';fs.writeFileSync(task,t);
+          NODE
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0037/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'content: stage batch 0037 preorder traversal candidate'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during build'; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
