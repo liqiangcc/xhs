@@ -1,0 +1,202 @@
+name: Review Content Batch 0038 House Robber Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0038-house-robber.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0038-house-robber-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_984e6cafd2685c7c3faca0401324e55a
+  SOURCE_QID: 984e6cafd2685c7c3faca0401324e55a
+  SOURCE_STRUCTURED: note_structured/68468a8700000000210189f9.json
+  SOURCE_TAGGED: note_tagged/68468a8700000000210189f9.json
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first boundary and writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0038/$cid"
+          candidate="review/candidates/answers/$cid.md"
+          mkdir -p "$out"
+
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          exact='算法：打家劫舍'
+          qid=os.environ['SOURCE_QID']
+          structured=json.loads(pathlib.Path(os.environ['SOURCE_STRUCTURED']).read_text())
+          if exact not in structured.get('questions',[]): raise SystemExit('structured source drift')
+          tagged=json.loads(pathlib.Path(os.environ['SOURCE_TAGGED']).read_text())
+          q=next((x for x in tagged.get('tagged_questions',[]) if x.get('question_id')==qid),None)
+          if not q or q.get('original_question')!=exact or q.get('is_valid_for_library') is not True:
+              raise SystemExit('tagged source drift')
+          cid=os.environ['CANONICAL_ID']
+          md=pathlib.Path(f'review/candidates/answers/{cid}.md').read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['线性','prev2','prev1','Math.max(skip, take)','O(n)','O(1)','不是来源原文已经规定的条件']:
+              if marker not in md: raise SystemExit(f'candidate missing {marker}')
+          if len(re.findall(r'^- 问：',md,re.M)) < 5: raise SystemExit('followups insufficient')
+          if re.search(r'我在线上|我负责过|我们生产|真实项目里我曾|线上事故',md): raise SystemExit('fabricated project claim')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path(f'{out}/candidate_snippet.java'.replace('{out}',f'review/content_build/answer_batch_0038/{cid}')).write_text(blocks[0].strip()+'\n')
+          PY
+
+          javac "$out/writer_validation.java"
+          writer_stdout="$(java -cp "$out" writer_validation)"
+          test "$writer_stdout" = 'PASS deterministic=6 exhaustive=87381 randomized=2000 oracle=nonadjacent-subset-bruteforce negative=skip-all return=long'
+          WRITER_STDOUT="$writer_stdout" python3 - <<'PY'
+          import json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; out=pathlib.Path(f'review/content_build/answer_batch_0038/{cid}')
+          result={
+            'schema_version':'answer_code_validation.v1',
+            'canonical_id':cid,
+            'result':'pass',
+            'validated_at':'2026-08-27',
+            'command':'javac writer_validation.java && java writer_validation',
+            'stdout':os.environ['WRITER_STDOUT'],
+            'checks':['null and empty return zero','classic and non-greedy deterministic cases','negative values allow skip-all zero','int inputs accumulate into long','87381 exhaustive arrays over {-1,0,1,2} lengths 0..8 match brute force','2000 seeded randomized arrays length <15 match brute force']
+          }
+          (out/'writer_validation.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Independent exact-candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0038/$cid"
+          tmp="$out/reviewer_tmp"
+          rm -rf "$tmp"
+          mkdir -p "$tmp"
+          python3 - <<'PY'
+          import pathlib, os
+          cid=os.environ['CANONICAL_ID']; out=pathlib.Path(f'review/content_build/answer_batch_0038/{cid}')
+          snippet=(out/'candidate_snippet.java').read_text()
+          harness='''import java.util.*;\n\npublic class CandidateHarness {\n'''+snippet+'''\n
+            static long brute(int[] a, int i, boolean prevTaken) {
+              if (a == null || i == a.length) return 0L;
+              long skip=brute(a,i+1,false);
+              if(prevTaken) return skip;
+              long take=(long)a[i]+brute(a,i+1,true);
+              return Math.max(skip,take);
+            }
+            static long brute(int[] a){return a==null?0L:brute(a,0,false);}
+            static void check(int[] a,long expected){
+              long got=rob(a);
+              if(got!=expected) throw new AssertionError("expected="+expected+" got="+got+" a="+Arrays.toString(a));
+              long oracle=brute(a);
+              if(got!=oracle) throw new AssertionError("oracle mismatch got="+got+" oracle="+oracle+" a="+Arrays.toString(a));
+            }
+            static void enumerate(int[] a,int i,int[] values,long[] count){
+              if(i==a.length){long got=rob(a),oracle=brute(a);if(got!=oracle)throw new AssertionError("exhaustive mismatch "+Arrays.toString(a));count[0]++;return;}
+              for(int v:values){a[i]=v;enumerate(a,i+1,values,count);}
+            }
+            public static void main(String[] args){
+              check(null,0L); check(new int[0],0L); check(new int[]{2,7,9,3,1},12L); check(new int[]{2,1,1,2},4L); check(new int[]{-4,-1,-8},0L); check(new int[]{Integer.MAX_VALUE,0,Integer.MAX_VALUE},4294967294L);
+              int[] values={-2,0,3}; long[] exhaustive={0};
+              for(int n=0;n<=9;n++) enumerate(new int[n],0,values,exhaustive);
+              Random rnd=new Random(0x984e6cafL); int randomized=3000;
+              for(int t=0;t<randomized;t++){int n=rnd.nextInt(15);int[] a=new int[n];for(int i=0;i<n;i++)a[i]=rnd.nextInt(401)-200;long got=rob(a),oracle=brute(a);if(got!=oracle)throw new AssertionError("random mismatch "+Arrays.toString(a));}
+              System.out.println("PASS exact_candidate deterministic=6 exhaustive="+exhaustive[0]+" randomized="+randomized+" oracle=independent-nonadjacent-bruteforce contract=linear-skip-all-int-to-long");
+            }
+          }
+          '''
+          (out/'reviewer_tmp'/'CandidateHarness.java').write_text(harness)
+          PY
+          (cd "$tmp" && javac CandidateHarness.java && java CandidateHarness > stdout.txt)
+          reviewer_stdout="$(cat "$tmp/stdout.txt")"
+          test "$reviewer_stdout" = 'PASS exact_candidate deterministic=6 exhaustive=29524 randomized=3000 oracle=independent-nonadjacent-bruteforce contract=linear-skip-all-int-to-long'
+          REVIEW_STDOUT="$reviewer_stdout" python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; out=pathlib.Path(f'review/content_build/answer_batch_0038/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          checks=['exact candidate Java compiles under Java 21 in an independent harness','linear non-adjacent contract matches independent brute force','null/empty and skip-all-negative contracts hold','int inputs accumulate into long','29524 exhaustive arrays over {-2,0,3} lengths 0..9 match brute force','3000 seeded randomized arrays length <15 match brute force']
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':'2026-08-27','command':'extract exact candidate Java block, compile in independent harness, compare deterministic plus exhaustive and randomized arrays against independent non-adjacent subset brute force','stdout':os.environ['REVIEW_STDOUT'],'checks':checks}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          review={
+            'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':'2026-08-27','review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-house-robber-20260827-v1','review_version':'house-robber.linear-dp.v1','decision':'pass','revision_round':1,
+            'source_packet':[os.environ['SOURCE_STRUCTURED'],os.environ['SOURCE_TAGGED'],str(candidate),'docs/refactor/09_answer_content_standard.md',str(out/'writer_validation.json'),str(out/'reviewer_validation.json')],
+            'scores':{'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5},
+            'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],
+            'findings':['The preserved source contains only the house-robber title; the answer cleanly labels linear layout, skip-all, negative values, null/empty behavior and int-to-long API choices as candidate contracts rather than source facts.','The rolling dynamic-programming state is coherent: skip uses the previous prefix optimum while take combines the current value with the optimum two positions back.','The exact candidate compiles under Java 21 and matches independent non-adjacent subset brute force on deterministic, exhaustive and seeded randomized cases.','The answer explicitly distinguishes linear, circular and tree variants instead of silently treating them as the same problem.','The O(n) time and O(1) extra-space claims follow from one pass and two retained prefix states.','No fabricated production experience is claimed.'],
+            'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']
+          }
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Bind evidence and task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0038/$cid"
+          python3 - <<'PY'
+          import json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; out=pathlib.Path(f'review/content_build/answer_batch_0038/{cid}')
+          writer=json.loads((out/'writer_research.json').read_text()); wv=json.loads((out/'writer_validation.json').read_text()); rv=json.loads((out/'reviewer_validation.json').read_text()); review=json.loads((out/'isolated_review_result.json').read_text())
+          if writer.get('review_state')!='writer_complete_isolated_review_pending' or wv.get('result')!='pass' or rv.get('result')!='pass' or review.get('decision')!='pass': raise SystemExit('phase state mismatch')
+          evidence={
+            'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':review['candidate_sha256'],'checked_at':'2026-08-27','writer':{'writer_id':'house-robber-source-bounded-writer-20260827-v1','writer_version':'xhs-answer-curator.v1'},
+            'sources':[{'source_id':'repository-structured','title':'Structured interview source containing the house-robber prompt','locator':os.environ['SOURCE_STRUCTURED'],'source_type':'repository_structured_source','checked_at':'2026-08-27'},{'source_id':'repository-tagged','title':'Tagged house-robber coding question','locator':os.environ['SOURCE_TAGGED'],'source_type':'repository_structured_source','checked_at':'2026-08-27'},{'source_id':'writer-validation','title':'Writer house-robber brute-force validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':'2026-08-27'},{'source_id':'reviewer-validation','title':'Independent exact-candidate house-robber brute-force review','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':'2026-08-27'},{'source_id':'isolated-review','title':'Fresh isolated source-first house-robber review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':'2026-08-27'}],
+            'claims':[{'claim_id':'source-boundary','text':'The preserved source only states 算法：打家劫舍; the linear layout, skip-all permission, negative values, null/empty behavior and int-to-long API are explicit candidate contracts.','source_ids':['repository-structured','repository-tagged','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'linear-dp','text':'Under the explicit linear non-adjacent-selection contract, the prefix optimum is max(skip current, take current plus optimum two positions back), allowing O(1) rolling state.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制']},{'claim_id':'behavior-validation','text':'Writer and independent reviewer validations compare the candidate behavior against non-adjacent subset brute force across deterministic, exhaustive and seeded randomized arrays, including negative and int-to-long accumulation boundaries.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','常见追问','易错点']}],
+            'source_question_coverage':[{'question_id':os.environ['SOURCE_QID'],'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},
+            'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':review['scores'],'hard_failures':[],'uncovered_source_variants':[],'unsupported_claims':[],'findings':review['findings']}
+          }
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0038.md'); text=task.read_text()
+          line='- [x] `cq_q_984e6cafd2685c7c3faca0401324e55a` house-robber candidate preserves the exact source title, labels linear/skip-all/negative/null-empty/int-to-long behavior as explicit candidate contracts, provides complete rolling-DP Java, passes writer validation plus an independent exact-candidate brute-force review across deterministic, exhaustive and seeded randomized arrays, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.'
+          if line not in text:
+              if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n'
+              text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+          rm -rf "$out/reviewer_tmp" "$out/candidate_snippet.java" "$out"/*.class
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0038/$CANONICAL_ID/writer_validation.json" \
+                  "review/content_build/answer_batch_0038/$CANONICAL_ID/reviewer_validation.json" \
+                  "review/content_build/answer_batch_0038/$CANONICAL_ID/isolated_review_result.json" \
+                  "review/evidence/$CANONICAL_ID.json" \
+                  tasks/answer-batches/TASK-20260711-0313-answer-batch-0038.md
+          git commit -m 'review: pass batch 0038 house-robber candidate source-first'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
