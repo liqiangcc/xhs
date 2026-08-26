@@ -1,0 +1,285 @@
+name: Build Content Batch 0021 Linked List Intersection Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0021-linked-list-intersection-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0021-linked-list-intersection-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_3a314d375a1b0bdf127953e8614906e0
+  SOURCE_QID: 3a314d375a1b0bdf127953e8614906e0
+  SOURCE_TEXT: note_img_txt/66138d03000000001a00e8ca.txt
+  SOURCE_TAGGED: note_tagged/66138d03000000001a00e8ca.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: |
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_text_sha256=$(sha256sum "$SOURCE_TEXT" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source_tagged_sha256=$(sha256sum "$SOURCE_TAGGED" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard source and Canonical boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0021/${process.env.CANONICAL_ID}`;
+          const ctx=JSON.parse(fs.readFileSync(`${out}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('Canonical context missing or type drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：两条相交的单向链表，如何求他们的第一个公共节点?';
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          const raw=fs.readFileSync(process.env.SOURCE_TEXT,'utf8');
+          if(!raw.includes('15. 两条相交的单向链表，如何求他们的第一个公共节点?')) throw new Error('primary OCR source wording drift');
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const tq=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tq||tq.original_question!==expected) throw new Error('tagged source drift');
+          NODE
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          if [ -e "$candidate" ]; then echo 'candidate already exists; fail closed'; exit 1; fi
+
+      - name: Write source-bounded Java candidate and executable fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0021/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_3a314d375a1b0bdf127953e8614906e0","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 两条相交的单向链表：求第一个公共节点
+
+          ## 核心结论
+
+          来源只保留“两条相交的单向链表，如何求第一个公共节点”，没有规定语言、节点类型、是否允许环或“不相交”时的返回方式。这里明确一个答案侧契约：Java、两条**无环**单向链表，以“同一个节点对象”定义公共节点；如果不相交返回 `null`。用两个指针分别从 `headA`、`headB` 出发，走到各自链尾后切换到另一条链表的头部。两个指针最终会在第一个共享节点相遇；若没有共享节点，则会同时到达 `null`。
+
+          ## 1 分钟版
+
+          - 相交指的是节点 identity 相同，不是节点里的 `value` 相等；一旦两个无环单链表共享某个节点，后面的整段后缀都会共享。
+          - 指针 `a` 走 `A`，到尾后改走 `B`；指针 `b` 走 `B`，到尾后改走 `A`。
+          - 两个指针都最多走 `len(A)+len(B)` 条路径，因此自动抵消两条链表不同的前缀长度。
+          - 第一次满足 `a == b` 时，就是第一个公共节点；不相交时两者最终都为 `null`。
+          - 时间 `O(m+n)`，额外空间 `O(1)`。
+
+          ## 3 分钟版
+
+          ```java
+          public final class LinkedListIntersection {
+              private LinkedListIntersection() {}
+
+              public static final class Node {
+                  public final int value;
+                  public Node next;
+
+                  public Node(int value) {
+                      this.value = value;
+                  }
+              }
+
+              public static Node firstCommon(Node headA, Node headB) {
+                  Node a = headA;
+                  Node b = headB;
+                  while (a != b) {
+                      a = (a == null) ? headB : a.next;
+                      b = (b == null) ? headA : b.next;
+                  }
+                  return a;
+              }
+          }
+          ```
+
+          设 A 的独有前缀长度为 `x`，B 的独有前缀长度为 `y`，公共后缀长度为 `c`。切换头结点后，两个指针在相遇前分别走过 `x+c+y` 和 `y+c+x`，总路程相同，所以不同前缀造成的长度差被抵消。若存在公共后缀，它们会在该后缀的起点相遇；如果不存在，则在各走完 A+B 后同时变成 `null`。
+
+          ## 关键细节
+
+          - **公共的含义**：必须比较节点引用 `a == b`。两个不同节点即使 `value` 一样，也不是链表的公共节点。
+          - **为什么相交后不会再分叉**：单向链表节点只有一个 `next`。同一个节点之后的 `next` 链唯一，因此一旦共享一个节点，后续后缀全部共享。
+          - **边界**：任一头结点为 `null` 时算法仍然成立；两条链表头就是同一对象时立即返回该头；不相交时返回 `null`。
+          - **无环前提**：当前证明和终止性基于两条链表无环。若输入可能带环，要先定义“第一个公共节点”的路径语义并结合环入口分类处理，不能直接套用这段循环。
+          - **复杂度**：每个指针最多完整经过 A 和 B 各一次，时间 `O(m+n)`；只用两个节点引用，空间 `O(1)`。
+          - **替代方法**：也可以先计算两条链表长度，让长链先走长度差再同步前进；同样是 `O(m+n)` / `O(1)`。双指针切头只是把对齐过程隐式完成。
+
+          ## 原理机制
+
+          把每条链表分成“独有前缀 + 公共后缀”。如果 A 是 `A-prefix -> C`，B 是 `B-prefix -> C`，两个前缀可能长短不同，直接同步从头走会错位。让 A 指针走完 A 后接着走 B，让 B 指针走完 B 后接着走 A，相当于让两边都经历同样的总前缀长度 `x+y`。进入共享后缀时，它们已经处于同一个相对位置，因此在 `C` 的第一个节点相遇。
+
+          这个机制也解释了“不相交”场景：没有 C 时，两边各走完 A+B 后都到达空指针；`null == null` 结束循环并返回 `null`，不需要额外分支。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构“线上用过这道算法”。工程里如果节点来自持久化记录或反序列化对象，需要先确认“公共”到底是对象 identity、稳定 ID 还是业务 key；这道题的标准链表语义是共享同一个节点对象。若实际数据结构允许环、并发修改或多版本节点，必须先重新定义遍历和一致性契约。
+
+          ## 常见追问
+
+          - 问：为什么不能比较节点值？答：值相等只说明数据相同，两个节点仍可能是不同对象；相交要求两条链真正指向同一个节点。
+          - 问：为什么切换头结点后一定能对齐？答：A 指针走 `A+B`，B 指针走 `B+A`，两边都补上了对方独有前缀的长度差，所以进入公共后缀时位置一致。
+          - 问：不相交会死循环吗？答：无环前提下不会；最多走完两条链表各一次后，两指针同时为 `null`。
+          - 问：先算长度可以吗？答：可以。先让长链走 `|m-n|` 步，再同步比较 identity，也能得到 `O(m+n)` 时间和 `O(1)` 空间。
+          - 问：链表有环怎么办？答：需要先求各自环入口，再按无环/有环组合和环入口是否相同分类；当前来源没有给带环条件，本实现明确限定无环。
+
+          ## 易错点
+
+          - 用 `value` 相等代替节点 identity 相等。
+          - 切头时写成 `a = headB` 但忘记只有 `a == null` 时才切换，导致跳过正常后继。
+          - 用哈希集合却仍宣称额外空间 `O(1)`。
+          - 忽略不相交、空链表、同头结点等边界。
+          - 在可能有环的链表上直接使用当前循环，却没有重新证明终止性。
+          - 把 Java、无环前提、`null` 返回策略说成题源明确规定。
+          EOF
+
+          cat > "$out/LinkedListIntersection.java" <<'JAVA'
+          public final class LinkedListIntersection {
+              private LinkedListIntersection() {}
+              public static final class Node {
+                  public final int value;
+                  public Node next;
+                  public Node(int value) { this.value = value; }
+              }
+              public static Node firstCommon(Node headA, Node headB) {
+                  Node a = headA, b = headB;
+                  while (a != b) {
+                      a = (a == null) ? headB : a.next;
+                      b = (b == null) ? headA : b.next;
+                  }
+                  return a;
+              }
+          }
+          JAVA
+
+          cat > "$out/LinkedListIntersectionWriterTest.java" <<'JAVA'
+          public final class LinkedListIntersectionWriterTest {
+              private static long intersectingCases = 0;
+              private static long disjointCases = 0;
+
+              public static void main(String[] args) {
+                  if (LinkedListIntersection.firstCommon(null, null) != null) throw new AssertionError("empty");
+                  LinkedListIntersection.Node same = chain(3, 9000, null);
+                  if (LinkedListIntersection.firstCommon(same, same) != same) throw new AssertionError("same head");
+                  for (int a = 0; a <= 30; a++) {
+                      for (int b = 0; b <= 30; b++) {
+                          for (int c = 1; c <= 20; c++) {
+                              LinkedListIntersection.Node shared = chain(c, 100000, null);
+                              LinkedListIntersection.Node ha = chain(a, 1000, shared);
+                              LinkedListIntersection.Node hb = chain(b, 2000, shared);
+                              if (LinkedListIntersection.firstCommon(ha, hb) != shared) throw new AssertionError("wrong intersection a="+a+" b="+b+" c="+c);
+                              intersectingCases++;
+                          }
+                          LinkedListIntersection.Node ha = chain(a, 3000, null);
+                          LinkedListIntersection.Node hb = chain(b, 4000, null);
+                          if (LinkedListIntersection.firstCommon(ha, hb) != null) throw new AssertionError("false intersection");
+                          disjointCases++;
+                      }
+                  }
+                  LinkedListIntersection.Node v1 = new LinkedListIntersection.Node(7);
+                  LinkedListIntersection.Node v2 = new LinkedListIntersection.Node(7);
+                  if (LinkedListIntersection.firstCommon(v1, v2) != null) throw new AssertionError("equal values are not shared nodes");
+                  System.out.printf("PASS intersecting_cases=%d disjoint_cases=%d same_head=pass equal_value_distinct=pass empty=pass%n", intersectingCases, disjointCases);
+              }
+
+              private static LinkedListIntersection.Node chain(int n, int base, LinkedListIntersection.Node tail) {
+                  LinkedListIntersection.Node head = tail;
+                  for (int i = n - 1; i >= 0; i--) {
+                      LinkedListIntersection.Node x = new LinkedListIntersection.Node(base + i);
+                      x.next = head;
+                      head = x;
+                  }
+                  return head;
+              }
+          }
+          JAVA
+
+      - name: Execute writer validation and freeze research
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"
+          (cd "$out" && javac -Xlint:all -Werror LinkedListIntersection.java LinkedListIntersectionWriterTest.java && java LinkedListIntersectionWriterTest > writer_stdout.txt)
+          stdout="$(cat "$out/writer_stdout.txt")"
+          test "$stdout" = 'PASS intersecting_cases=19220 disjoint_cases=961 same_head=pass equal_value_distinct=pass empty=pass'
+          WRITER_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26',out=`review/content_build/answer_batch_0021/${process.env.CANONICAL_ID}`;
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac -Xlint:all -Werror LinkedListIntersection.java LinkedListIntersectionWriterTest.java && java LinkedListIntersectionWriterTest',stdout:process.env.WRITER_STDOUT,checks:['all prefix lengths 0..30 paired with shared tails length 1..20 return exact shared node identity','all prefix length pairs 0..30 without shared tail return null','same-head intersection','equal-valued distinct nodes do not count as intersection','empty lists']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'ocr-note',title:'OCR interview note preserving the linked-list intersection wording',locator:process.env.SOURCE_TEXT,source_type:'repository_source_record',checked_at:date},{source_id:'tagged-question',title:'Tagged linked-list intersection question record',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Linked-list identity intersection deterministic Java validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source asks for the first common node of two intersecting singly linked lists; it does not prescribe Java, node representation, cycle handling, or a no-intersection return API.',source_ids:['ocr-note','tagged-question'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'candidate-contract',text:'Java, acyclic singly linked lists, object identity as common-node semantics, and null for no intersection are explicit answer-side choices.',source_ids:['ocr-note','tagged-question'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'implementation-validation',text:'The two-pointer head-switch implementation returns the exact shared node across 19,220 intersecting shapes and null across 961 disjoint prefix pairs, while rejecting value equality as intersection semantics.',source_ids:['writer-validation'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+          rm -f "$out"/*.class "$out/writer_stdout.txt"
+
+      - name: Update batch task writer state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- `cq_q_3a314d375a1b0bdf127953e8614906e0` — coding; risks: long_tail_baseline, placeholder_implementation';
+          const next='- `cq_q_3a314d375a1b0bdf127953e8614906e0` — coding; source-bounded Java acyclic linked-list intersection candidate is staged with identity/no-intersection semantics explicit, writer 19,220-intersection plus 961-disjoint deterministic validation PASS, and source binding recorded. Isolated independent review remains pending; formal promotion remains blocked by repository human approval and real-review policy.';
+          if(text.includes(old)) text=text.replace(old,next); else if(!text.includes(next)) throw new Error('task summary marker drift');
+          const note='- [ ] `cq_q_3a314d375a1b0bdf127953e8614906e0` writer pass is complete: OCR note and tagged question bind the first-common-node request, a source-bounded Java identity candidate plus reproducible fixture are committed, and writer validation is PASS. Next gate is isolated source-first review.';
+          if(!text.includes(note)) text=text.trimEnd()+'\n'+note+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Run pre-review repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Commit candidate without overwriting unrelated progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0021/$CANONICAL_ID" "tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: build linked-list intersection candidate'
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote="$(git rev-parse origin/$CONTENT_BRANCH)"; base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then
+            if git cat-file -e "origin/$CONTENT_BRANCH:review/candidates/answers/$CANONICAL_ID.md" 2>/dev/null; then echo 'candidate appeared concurrently; fail closed'; exit 0; fi
+            remote_text="$(git show "origin/$CONTENT_BRANCH:$SOURCE_TEXT" | sha256sum | awk '{print $1}')"
+            remote_tagged="$(git show "origin/$CONTENT_BRANCH:$SOURCE_TAGGED" | sha256sum | awk '{print $1}')"
+            test "$remote_text" = '${{ steps.base.outputs.source_text_sha256 }}' || { echo 'source text changed; fail closed'; exit 0; }
+            test "$remote_tagged" = '${{ steps.base.outputs.source_tagged_sha256 }}' || { echo 'tagged source changed; fail closed'; exit 0; }
+            git rebase "origin/$CONTENT_BRANCH"
+          fi
+          git push origin "HEAD:$CONTENT_BRANCH"
