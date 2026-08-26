@@ -31,116 +31,117 @@ jobs:
           ref: ${{ env.CONTENT_BRANCH }}
           fetch-depth: 1
 
-      - id: base
-        shell: bash
-        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Phase A source-first isolated review
+      - name: Source-first boundary and exact-candidate validation
         shell: bash
         run: |
           set -euo pipefail
           cid="$CANONICAL_ID"
-          candidate="review/candidates/answers/$cid.md"
           out="review/content_build/answer_batch_0037/$cid"
+          candidate="review/candidates/answers/$cid.md"
           tmp="$out/reviewer_tmp"
           rm -rf "$tmp"
           mkdir -p "$tmp"
 
-          node <<'NODE'
-          const fs=require('fs');
-          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
-          const raw=fs.readFileSync(process.env.SOURCE_RAW,'utf8');
-          const rawExact='3.算法题,子集问题,但不包含空集。';
-          if(!raw.includes(rawExact)) throw new Error('raw subset source drift');
-          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
-          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
-          if(!q||q.original_question!=='算法：子集问题 (不包含空集)'||q.is_valid_for_library!==true) throw new Error('tagged subset source drift');
-
-          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
-          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) {
-            if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']
+          raw=pathlib.Path(os.environ['SOURCE_RAW']).read_text()
+          if '3.算法题,子集问题,但不包含空集。' not in raw:
+              raise SystemExit('raw subset source drift')
+          tagged=json.loads(pathlib.Path(os.environ['SOURCE_TAGGED']).read_text())
+          q=next((x for x in tagged.get('tagged_questions',[]) if x.get('question_id')==qid),None)
+          if not q or q.get('original_question')!='算法：子集问题 (不包含空集)' or q.get('is_valid_for_library') is not True:
+              raise SystemExit('tagged subset source drift')
+          md=pathlib.Path(f'review/candidates/answers/{cid}.md').read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['按位置定义的非空子集','result.add(new ArrayList<>(path))','backtrack(nums, i + 1','path.remove(path.size() - 1)','重复值边界','2^n - 1','O(n * 2^n)']:
+              if marker not in md: raise SystemExit(f'candidate missing {marker}')
+          if len(re.findall(r'^- 问：',md,re.M))<5: raise SystemExit('followups insufficient')
+          if re.search(r'我在线上|我负责过|我们生产|真实项目里我曾|线上事故',md): raise SystemExit('fabricated project claim')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java implementation, got {len(blocks)}')
+          snippet=re.sub(r'^import\s+java\.util\.[^;]+;\s*$', '', blocks[0], flags=re.M).strip()
+          harness='''import java.util.*;\npublic class CandidateHarness {\n'''+snippet+'''\n
+            static List<List<Integer>> oracle(int[] nums) {
+              List<List<Integer>> out=new ArrayList<>();
+              for(int mask=1;mask<(1<<nums.length);mask++){
+                List<Integer> row=new ArrayList<>();
+                for(int i=0;i<nums.length;i++) if((mask&(1<<i))!=0) row.add(nums[i]);
+                out.add(row);
+              }
+              return out;
+            }
+            static Map<List<Integer>,Integer> multiset(List<List<Integer>> rows){
+              Map<List<Integer>,Integer> m=new HashMap<>();
+              for(List<Integer> row:rows)m.merge(List.copyOf(row),1,Integer::sum);
+              return m;
+            }
+            static void check(int[] nums){
+              List<List<Integer>> got=nonEmptySubsets(nums), exp=oracle(nums);
+              if(got.size()!=exp.size()||!multiset(got).equals(multiset(exp))) throw new AssertionError(Arrays.toString(nums));
+              for(List<Integer> row:got) if(row.isEmpty()) throw new AssertionError("empty subset emitted");
+            }
+            public static void main(String[] args){
+              check(new int[]{}); check(new int[]{7}); check(new int[]{1,2,3}); check(new int[]{1,1}); check(new int[]{2,1,2}); check(new int[]{0,-1,2,2});
+              int exhaustive=0;
+              for(int n=0;n<=7;n++) for(int mask=0;mask<(1<<n);mask++){
+                int[] a=new int[n]; for(int i=0;i<n;i++) a[i]=((mask&(1<<i))==0)?0:1; check(a); exhaustive++;
+              }
+              Random r=new Random(0x9351a834L); int randomized=0;
+              for(int t=0;t<5000;t++){int n=r.nextInt(13);int[] a=new int[n];for(int i=0;i<n;i++)a[i]=r.nextInt(9)-4;check(a);randomized++;}
+              int[] twelve=new int[12]; for(int i=0;i<12;i++) twelve[i]=i;
+              if(nonEmptySubsets(twelve).size()!=4095) throw new AssertionError("n12 count");
+              System.out.println("PASS exact_candidate deterministic=6 exhaustive_binary_arrays="+exhaustive+" randomized="+randomized+" n12=4095 duplicate_position_semantics=pass empty_excluded=pass");
+            }
           }
-          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||'';
-          const bullets=(one.match(/^- /gm)||[]).length;
-          if(bullets<3||bullets>6) throw new Error(`one-minute backbone drift ${bullets}`);
-          for(const marker of ['按位置定义的非空子集','result.add(new ArrayList<>(path))','backtrack(nums, i + 1','path.remove(path.size() - 1)','重复值边界','2^n - 1','O(n * 2^n)']) {
-            if(!md.includes(marker)) throw new Error(`candidate missing ${marker}`);
-          }
-          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
-          if(/我在线上|我负责过|我们生产|真实项目里我曾|线上事故/.test(md)) throw new Error('fabricated project claim');
-          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
-          if(blocks.length!==1) throw new Error(`expected one Java implementation, got ${blocks.length}`);
-          fs.writeFileSync(`${tmpPath()}/snippet.java`,blocks[0][1]+'\n');
-          function tmpPath(){return `review/content_build/answer_batch_0037/${cid}/reviewer_tmp`;}
-          NODE
-
-          node <<'NODE'
-          const fs=require('fs');
-          const cid=process.env.CANONICAL_ID;
-          const tmp=`review/content_build/answer_batch_0037/${cid}/reviewer_tmp`;
-          let snippet=fs.readFileSync(`${tmp}/snippet.java`,'utf8');
-          snippet=snippet.replace(/^import\s+java\.util\.[^;]+;\s*$/gm,'').trim();
-          const harness=`import java.util.*;\n\npublic class CandidateHarness {\n${snippet.split('\n').map(x=>'    '+x).join('\n')}\n\n    static List<List<Integer>> oracle(int[] nums) {\n        List<List<Integer>> out = new ArrayList<>();\n        int total = 1 << nums.length;\n        for (int mask = 1; mask < total; mask++) {\n            List<Integer> row = new ArrayList<>();\n            for (int i = 0; i < nums.length; i++) if ((mask & (1 << i)) != 0) row.add(nums[i]);\n            out.add(row);\n        }\n        return out;\n    }\n\n    static Map<List<Integer>, Integer> multiset(List<List<Integer>> rows) {\n        Map<List<Integer>, Integer> m = new HashMap<>();\n        for (List<Integer> row : rows) m.merge(List.copyOf(row), 1, Integer::sum);\n        return m;\n    }\n\n    static void check(int[] nums) {\n        List<List<Integer>> got = nonEmptySubsets(nums);\n        List<List<Integer>> expected = oracle(nums);\n        if (got.size() != expected.size()) throw new AssertionError(\"count \" + Arrays.toString(nums));\n        if (!multiset(got).equals(multiset(expected))) throw new AssertionError(\"content \" + Arrays.toString(nums));\n        for (List<Integer> row : got) if (row.isEmpty()) throw new AssertionError(\"empty subset emitted\");\n    }\n\n    public static void main(String[] args) {\n        check(new int[]{}); check(new int[]{7}); check(new int[]{1,2,3});\n        check(new int[]{1,1}); check(new int[]{2,1,2}); check(new int[]{0,-1,2,2});\n        int exhaustive=0;\n        for (int n=0;n<=7;n++) {\n            int arrays=1<<n;\n            for (int mask=0;mask<arrays;mask++) {\n                int[] a=new int[n];\n                for(int i=0;i<n;i++) a[i]=((mask&(1<<i))==0)?0:1;\n                check(a); exhaustive++;\n            }\n        }\n        Random r=new Random(0x9351a834L); int randomized=0;\n        for(int t=0;t<5000;t++){\n            int n=r.nextInt(13); int[] a=new int[n];\n            for(int i=0;i<n;i++) a[i]=r.nextInt(9)-4;\n            check(a); randomized++;\n        }\n        int[] twelve=new int[12]; for(int i=0;i<12;i++) twelve[i]=i;\n        if(nonEmptySubsets(twelve).size()!=4095) throw new AssertionError(\"n=12 count\");\n        System.out.println(\"PASS exact_candidate deterministic=6 exhaustive_binary_arrays=255 randomized=5000 n12=4095 duplicate_position_semantics=pass empty_excluded=pass\");\n    }\n}\n`;
-          fs.writeFileSync(`${tmp}/CandidateHarness.java`,harness);
-          NODE
+          '''
+          pathlib.Path(f'{tmp_path(cid)}/CandidateHarness.java').write_text(harness)
+          def tmp_path(c): return f'review/content_build/answer_batch_0037/{c}/reviewer_tmp'
+          PY
 
           (cd "$tmp" && javac CandidateHarness.java && java CandidateHarness > stdout.txt)
           stdout="$(cat "$tmp/stdout.txt")"
           test "$stdout" = 'PASS exact_candidate deterministic=6 exhaustive_binary_arrays=255 randomized=5000 n12=4095 duplicate_position_semantics=pass empty_excluded=pass'
 
-          REVIEW_STDOUT="$stdout" node <<'NODE'
-          const fs=require('fs'),crypto=require('crypto');
-          const cid=process.env.CANONICAL_ID,date='2026-08-26';
-          const out=`review/content_build/answer_batch_0037/${cid}`;
-          const candidate=`review/candidates/answers/${cid}.md`;
-          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
-          const validation={
-            schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:hash,result:'pass',validated_at:date,
-            command:'extract exact candidate Java block; compile it inside an independent harness; compare against a bitmask oracle on deterministic, exhaustive binary-valued, and seeded randomized arrays',
-            stdout:process.env.REVIEW_STDOUT,
-            checks:[
-              'exact candidate Java implementation compiles under Java 21',
-              'six deterministic boundary cases match an independent bitmask oracle',
-              'all 255 binary-valued arrays of length 0..7 match as output multisets',
-              '5000 seeded randomized arrays of length 0..12 match as output multisets',
-              'duplicate values preserve position-defined multiplicity',
-              'no empty subset is emitted',
-              'n=12 produces exactly 4095 non-empty subsets'
-            ]
-          };
-          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify(validation,null,2)+'\n');
+          REVIEW_STDOUT="$stdout" python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; date='2026-08-26'
+          out=pathlib.Path(f'review/content_build/answer_batch_0037/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          stdout=os.environ['REVIEW_STDOUT']
+          checks=[
+            'exact candidate Java implementation compiles under Java 21',
+            'six deterministic cases match an independent bitmask oracle',
+            'all 255 binary-valued arrays of length 0..7 match as output multisets',
+            '5000 seeded randomized arrays of length 0..12 match as output multisets',
+            'duplicate values preserve position-defined multiplicity',
+            'no empty subset is emitted',
+            'n=12 produces exactly 4095 non-empty subsets'
+          ]
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'extract exact candidate Java block, compile it in an independent harness, and compare against a bitmask oracle','stdout':stdout,'checks':checks}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=[
+            'The answer stays inside the preserved non-empty-subset source boundary and labels position-based semantics as an explicit executable contract.',
+            'The exact Java implementation records only non-empty paths, advances the start index, copies mutable path state, and restores it after recursion.',
+            'Duplicate-value behavior is explicitly separated from value-level deduplication instead of silently inventing an element-uniqueness requirement.',
+            'The increasing-index-sequence argument supports both completeness and absence of position-level duplicates.',
+            'The complexity discussion includes output-copy cost rather than claiming only O(2^n).',
+            'Independent exact-candidate compilation and differential validation passed.',
+            'No fabricated production experience is claimed.'
+          ]
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-nonempty-subsets-20260826-v2','review_version':'nonempty-subsets.position-contract.v2','decision':'pass','revision_round':1,'source_packet':[os.environ['SOURCE_RAW'],os.environ['SOURCE_TAGGED'],str(candidate),'docs/refactor/09_answer_content_standard.md',str(out/'reviewer_validation.json')],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          PY
 
-          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
-          const findings=[
-            'The candidate is bounded to the preserved non-empty-subset prompt and explicitly labels position-based semantics as the chosen executable contract rather than pretending the source specifies uniqueness or deduplication.',
-            'The Java implementation is complete: selection records only non-empty paths, recursion advances to i+1, path state is copied into the result, and rollback restores the search invariant.',
-            'Duplicate-value behavior is surfaced as a contract boundary; the candidate does not silently apply value-level deduplication when the source does not require it.',
-            'The correctness argument maps each emitted path to one strictly increasing index sequence and explains both coverage and absence of position-level duplicates.',
-            'The complexity discussion accounts for output-copy cost instead of stopping at a bare O(2^n) statement.',
-            'Independent compilation plus deterministic, exhaustive, and randomized differential validation agrees with the exact candidate implementation.',
-            'The project section remains hypothetical and contains no fabricated production claim.'
-          ];
-          const review={
-            schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,
-            review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-nonempty-subsets-20260826-v1',
-            review_version:'nonempty-subsets.position-contract.v1',decision:'pass',revision_round:1,
-            source_packet:[process.env.SOURCE_RAW,process.env.SOURCE_TAGGED,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],
-            scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,
-            promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']
-          };
-          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
-          NODE
-
-      - name: Phase B bind evidence and record task progress
+      - name: Bind evidence and record task progress
         shell: bash
         run: |
           set -euo pipefail
@@ -149,63 +150,56 @@ jobs:
           javac "$out/writer_validation.java"
           java -cp "$out" writer_validation
 
-          node <<'NODE'
-          const fs=require('fs');
-          const cid=process.env.CANONICAL_ID,date='2026-08-26';
-          const out=`review/content_build/answer_batch_0037/${cid}`;
-          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
-          const wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`,'utf8'));
-          const rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
-          const review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
-          if(writer.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||rv.result!=='pass'||review.decision!=='pass') throw new Error('phase state mismatch');
-
-          const evidence={
-            schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:review.candidate_sha256,checked_at:date,
-            writer:{writer_id:'nonempty-subsets-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},
-            sources:[
-              {source_id:'repository-raw-ocr',title:'ByteDance backend interview raw OCR source',locator:process.env.SOURCE_RAW,source_type:'repository_source_record',checked_at:date},
-              {source_id:'repository-tagged',title:'Structured tagged non-empty subset question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},
-              {source_id:'writer-validation',title:'Writer non-empty subset differential validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
-              {source_id:'reviewer-validation',title:'Independent exact-candidate subset differential validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
-              {source_id:'isolated-review',title:'Fresh isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}
+          python3 - <<'PY'
+          import json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; date='2026-08-26'
+          out=pathlib.Path(f'review/content_build/answer_batch_0037/{cid}')
+          writer=json.loads((out/'writer_research.json').read_text())
+          wv=json.loads((out/'writer_validation.json').read_text())
+          rv=json.loads((out/'reviewer_validation.json').read_text())
+          review=json.loads((out/'isolated_review_result.json').read_text())
+          if writer.get('review_state')!='writer_complete_isolated_review_pending' or wv.get('result')!='pass' or rv.get('result')!='pass' or review.get('decision')!='pass':
+              raise SystemExit('phase state mismatch')
+          evidence={
+            'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':review['candidate_sha256'],'checked_at':date,
+            'writer':{'writer_id':'nonempty-subsets-source-bounded-writer-20260826-v1','writer_version':'xhs-answer-curator.v1'},
+            'sources':[
+              {'source_id':'repository-raw-ocr','title':'ByteDance backend interview raw OCR source','locator':os.environ['SOURCE_RAW'],'source_type':'repository_source_record','checked_at':date},
+              {'source_id':'repository-tagged','title':'Structured tagged non-empty subset question','locator':os.environ['SOURCE_TAGGED'],'source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'writer-validation','title':'Writer non-empty subset differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'reviewer-validation','title':'Independent exact-candidate subset differential validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'isolated-review','title':'Fresh isolated source-first review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}
             ],
-            claims:[
-              {claim_id:'source-boundary',text:'The source specifies a subset coding problem with the empty subset excluded, but does not specify input uniqueness, value-level deduplication, output order, or size limits.',source_ids:['repository-raw-ocr','repository-tagged','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节']},
-              {claim_id:'position-contract',text:'The candidate makes position-based subset semantics explicit and treats duplicate-value deduplication as a separate contract that requires clarification.',source_ids:['repository-raw-ocr','repository-tagged','writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','关键细节','常见追问']},
-              {claim_id:'implementation-correctness',text:'The exact Java candidate compiles and matches an independent bitmask oracle across deterministic, exhaustive binary-valued, and seeded randomized cases while never emitting the empty subset.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']},
-              {claim_id:'result-count',text:'The implementation produces 2^n-1 non-empty position subsets, including 4095 results at n=12 in independent validation.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','原理机制']}
+            'claims':[
+              {'claim_id':'source-boundary','text':'The source specifies a subset coding problem with the empty subset excluded, but does not specify input uniqueness, value-level deduplication, output order, or size limits.','source_ids':['repository-raw-ocr','repository-tagged','isolated-review'],'answer_locations':['核心结论','1 分钟版','关键细节']},
+              {'claim_id':'position-contract','text':'The candidate makes position-based subset semantics explicit and treats duplicate-value deduplication as a separate contract requiring clarification.','source_ids':['repository-raw-ocr','repository-tagged','writer-validation','reviewer-validation','isolated-review'],'answer_locations':['核心结论','关键细节','常见追问']},
+              {'claim_id':'implementation-correctness','text':'The exact Java candidate compiles and matches an independent bitmask oracle across deterministic, exhaustive, and seeded randomized cases while never emitting the empty subset.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','原理机制','常见追问']}
             ],
-            source_question_coverage:[{question_id:process.env.SOURCE_QID,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
-            validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks},
-            review_state:'independent_source_first_review_passed',
-            review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings}
-          };
-          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
-
-          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';
-          let text=fs.readFileSync(task,'utf8');
-          const pending='- [ ] `cq_q_9351a8346067d7995b644219ad53ced3` non-empty-subsets candidate now preserves the raw OCR/structured source boundary without inventing element uniqueness, adopts explicit position-based subset semantics with duplicate-value behavior called out, provides complete Java backtracking, and passes five deterministic plus 2000 seeded randomized differential cases against an independent bitmask oracle; isolated source-first review and evidence/code gate are still pending.';
-          const passed='- [x] `cq_q_9351a8346067d7995b644219ad53ced3` non-empty-subsets candidate preserves the raw OCR/structured source boundary without inventing element uniqueness, adopts an explicit position-based contract with duplicate-value behavior called out, contains complete Java backtracking, passes writer validation plus independent exact-candidate compilation and deterministic/exhaustive/randomized differential validation, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
-          if(!text.includes(pending)) throw new Error('pending task marker missing');
-          fs.writeFileSync(task,text.replace(pending,passed));
-          NODE
-
+            'source_question_coverage':[{'question_id':os.environ['SOURCE_QID'],'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},
+            'review_state':'independent_source_first_review_passed',
+            'review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':review['scores'],'hard_failures':[],'uncovered_source_variants':[],'unsupported_claims':[],'findings':review['findings']}
+          }
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md')
+          text=task.read_text()
+          pending='- [ ] `cq_q_9351a8346067d7995b644219ad53ced3` non-empty-subsets candidate now preserves the raw OCR/structured source boundary without inventing element uniqueness, adopts explicit position-based subset semantics with duplicate-value behavior called out, provides complete Java backtracking, and passes five deterministic plus 2000 seeded randomized differential cases against an independent bitmask oracle; isolated source-first review and evidence/code gate are still pending.'
+          passed='- [x] `cq_q_9351a8346067d7995b644219ad53ced3` non-empty-subsets candidate preserves the raw OCR/structured source boundary without inventing element uniqueness, adopts an explicit position-based contract with duplicate-value behavior called out, contains complete Java backtracking, passes writer validation plus independent exact-candidate compilation and deterministic/exhaustive/randomized differential validation, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.'
+          if pending not in text: raise SystemExit('pending task marker missing')
+          task.write_text(text.replace(pending,passed))
+          PY
           rm -rf "$out/reviewer_tmp"
 
       - name: Commit reviewed candidate evidence
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo 'No review output to commit.'
-            exit 0
-          fi
+          if git diff --quiet; then exit 0; fi
           git config user.name 'xhs-review-bot'
           git config user.email '43640935+liqiangcc@users.noreply.github.com'
-          git add \
-            "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" \
-            "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" \
-            "review/evidence/$CANONICAL_ID.json" \
-            tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git add "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" \
+                  "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" \
+                  "review/evidence/$CANONICAL_ID.json" \
+                  tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
           git commit -m 'review: pass batch 0037 non-empty subsets candidate source-first'
           git push origin HEAD:"$CONTENT_BRANCH"
