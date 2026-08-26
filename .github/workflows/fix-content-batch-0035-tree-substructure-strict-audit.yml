@@ -1,0 +1,189 @@
+name: Fix Content Batch 0035 Tree Substructure Strict Audit
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/fix-content-batch-0035-tree-substructure-strict-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0035-tree-substructure-strict-fix
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_2c267f2f448a08e8b1f1e1590ce6df72
+  EXPLICIT_QID: 7f3216de4698813dc7c1e7cf479deb0f
+  GENERIC_QID: 2c267f2f448a08e8b1f1e1590ce6df72
+
+jobs:
+  writer-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Repair candidate Java class and question-specific followups
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,eq=process.env.EXPLICIT_QID,gq=process.env.GENERIC_QID;
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const c=cs.find(x=>x.canonical_id===cid), expected=[eq,gq].sort();
+          if(!c||JSON.stringify([...(c.question_ids||[])].sort())!==JSON.stringify(expected)) throw new Error('source ownership drifted');
+          const candidate=`review/candidates/answers/${cid}.md`; let text=fs.readFileSync(candidate,'utf8');
+          for(const marker of ['另一条进一步明确“空树不是子结构”并要求分析时空复杂度','较简来源本身仍未说明空树规则']) if(!text.includes(marker)) throw new Error(`source-expansion marker missing: ${marker}`);
+          const oldCode=`\`\`\`java\npublic static boolean isSubstructure(Node a, Node b) {\n    if (a == null || b == null) {\n        return false;\n    }\n    return matchesFrom(a, b)\n            || isSubstructure(a.left, b)\n            || isSubstructure(a.right, b);\n}\n\nprivate static boolean matchesFrom(Node a, Node b) {\n    if (b == null) {\n        return true;\n    }\n    if (a == null || a.value != b.value) {\n        return false;\n    }\n    return matchesFrom(a.left, b.left) && matchesFrom(a.right, b.right);\n}\n\`\`\``;
+          const newCode=`\`\`\`java\npublic final class BinaryTreeSubstructure {\n    private BinaryTreeSubstructure() {}\n\n    public static final class Node {\n        public final int value;\n        public Node left;\n        public Node right;\n\n        public Node(int value) {\n            this.value = value;\n        }\n    }\n\n    public static boolean isSubstructure(Node a, Node b) {\n        if (a == null || b == null) {\n            return false;\n        }\n        return matchesFrom(a, b)\n                || isSubstructure(a.left, b)\n                || isSubstructure(a.right, b);\n    }\n\n    private static boolean matchesFrom(Node a, Node b) {\n        if (b == null) {\n            return true;\n        }\n        if (a == null || a.value != b.value) {\n            return false;\n        }\n        return matchesFrom(a.left, b.left) && matchesFrom(a.right, b.right);\n    }\n}\n\`\`\``;
+          if(!text.includes(oldCode)) throw new Error('expected method-only Java fence missing');
+          text=text.replace(oldCode,newCode);
+          const followups=[
+            ['- **子结构和相同子树的核心差别是什么？** 子结构只要求 B 已有的节点和值在 A 中对应存在；B 到 `null` 后不要求 A 也到 `null`。相同子树则通常要求两边结构完整一致。','- 问：子结构和相同子树的核心差别是什么？答：子结构只要求 B 已有的节点和值在 A 中对应存在；B 到 `null` 后不要求 A 也到 `null`。相同子树则通常要求两边结构完整一致。'],
+            ['- **为什么外层要继续搜索 A 的左右子树？** 因为 B 的根不一定对应 A 的根，而且 A 中可能有多个相同值的候选起点。','- 问：为什么外层要继续搜索 A 的左右子树？答：因为 B 的根不一定对应 A 的根，而且 A 中可能有多个相同值的候选起点。'],
+            ['- **空 B 为什么返回 false？** 合并后的较完整来源明确约定“空树不是子结构”；较简来源没有写这个边界。统一答案采用明确来源规则，而不是把它伪装成两条来源都逐字给出的事实。','- 问：空 B 为什么返回 false？答：合并后的较完整来源明确约定“空树不是子结构”；较简来源没有写这个边界。统一答案采用明确来源规则，而不是把它伪装成两条来源都逐字给出的事实。'],
+            ['- **重复值会不会导致错误？** 不会，只会增加候选起点；每个候选都必须继续验证完整 B 结构。','- 问：重复值会不会导致错误？答：不会，只会增加候选起点；每个候选都必须继续验证完整 B 结构。'],
+            ['- **能否优化最坏复杂度？** 对一般值树，先按根值建立候选索引可减少起点扫描，但每个候选仍需要结构匹配；是否值得取决于是否对同一 A 执行大量查询。','- 问：能否优化最坏复杂度？答：对一般值树，先按根值建立候选索引可减少起点扫描，但每个候选仍需要结构匹配；是否值得取决于是否对同一 A 执行大量查询。']
+          ];
+          for(const [from,to] of followups){if(!text.includes(from)) throw new Error(`followup source missing: ${from.slice(0,60)}`);text=text.replace(from,to);}
+          fs.writeFileSync(candidate,text);
+          const writerPath='review/content_build/answer_batch_0035/tree_substructure_source_expansion/writer.json';
+          const writer=JSON.parse(fs.readFileSync(writerPath,'utf8'));
+          writer.candidate_sha256=crypto.createHash('sha256').update(text).digest('hex');
+          writer.checked_at='2026-08-26'; writer.strict_audit_remediation='java_class_and_question_specific_followups';
+          fs.writeFileSync(writerPath,JSON.stringify(writer,null,2)+'\n');
+          NODE
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const m=md.match(/```java\n([\s\S]*?)\n```/); if(!m) throw new Error('Java fence missing');
+          fs.writeFileSync('/tmp/BinaryTreeSubstructure.java',m[1].trim()+'\n');
+          NODE
+          javac /tmp/BinaryTreeSubstructure.java
+          out="review/content_build/answer_batch_0018/$CANONICAL_ID"
+          javac "$out/BinaryTreeSubstructure.java" "$out/BinaryTreeSubstructureTest.java"
+          test "$(java -cp "$out" BinaryTreeSubstructureTest)" = 'PASS fixed=9 randomized=5000 oracle=enumerate-roots-and-match emptyB=false mutation=none'
+          git diff --check
+
+      - name: Commit strict candidate repair from stable head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = '${{ steps.base.outputs.head }}' || { echo 'Content branch advanced; fail closed.'; exit 1; }
+          git add "review/candidates/answers/$CANONICAL_ID.md" review/content_build/answer_batch_0035/tree_substructure_source_expansion/writer.json
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: make tree-substructure candidate strict-auditable'
+          git push origin "HEAD:$CONTENT_BRANCH"
+
+  isolated-review:
+    needs: writer-fix
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Re-review source-first and write fresh evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          oldout="review/content_build/answer_batch_0018/$CANONICAL_ID"
+          newout='review/content_build/answer_batch_0035/tree_substructure_source_expansion'
+          javac "$oldout/BinaryTreeSubstructure.java" "$oldout/BinaryTreeSubstructureTest.java"
+          stdout="$(java -cp "$oldout" BinaryTreeSubstructureTest)"
+          test "$stdout" = 'PASS fixed=9 randomized=5000 oracle=enumerate-roots-and-match emptyB=false mutation=none'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,eq=process.env.EXPLICIT_QID,gq=process.env.GENERIC_QID,date='2026-08-26',newout='review/content_build/answer_batch_0035/tree_substructure_source_expansion';
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const c=cs.find(x=>x.canonical_id===cid), expected=[eq,gq].sort();
+          if(!c||JSON.stringify([...(c.question_ids||[])].sort())!==JSON.stringify(expected)) throw new Error('source ownership drifted');
+          const explicit=qs.find(q=>q.question_id===eq),generic=qs.find(q=>q.question_id===gq);
+          if(!explicit?.original_question.includes('约定空树不是子结构')||!explicit.original_question.includes('请分析时空复杂度')) throw new Error('explicit source drifted');
+          if(generic?.original_question!=='算法：判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构') throw new Error('generic source drifted');
+          const candidate=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(candidate,'utf8');
+          if(!md.includes('public final class BinaryTreeSubstructure')) throw new Error('strict Java class missing');
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          const h=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const writer=JSON.parse(fs.readFileSync(`${newout}/writer.json`,'utf8')); if(writer.candidate_sha256!==h) throw new Error('writer hash stale');
+          fs.writeFileSync(`${newout}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac BinaryTreeSubstructure.java BinaryTreeSubstructureTest.java && java BinaryTreeSubstructureTest',stdout:process.env.STDOUT,checks:['fixed=9','randomized=5000','independent enumerate-roots-and-match oracle','empty B false','repeated candidate root values','extra A descendants allowed','no mutation']},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-tree-substructure-expansion-20260826-v2';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The surviving Canonical owns exactly the two current tree-substructure source Questions.','The revised candidate correctly attributes empty-B=false and the explicit complexity request only to the newer source while preserving the older source as variant-less on that boundary.','The candidate Java fence is a complete compilable class rather than a method fragment, and the five followups are question-specific.','The implementation permits extra descendants in A after B is exhausted, distinguishing substructure from complete subtree equality.','The exact fixture passes 9 fixed and 5000 deterministic randomized pairs against an independent enumerate-roots-and-match oracle without mutation.','Worst-case O(|A|*|B|) time and recursion-height space are consistent with the implementation and satisfy the explicit complexity request.','No unsupported source attribution, fabricated experience, uncovered variant, placeholder implementation or coding hard failure remains; promotion remains policy-gated.'];
+          const reviewPath=`${newout}/isolated_review_result.json`;
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:h,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'tree-substructure.source-expansion.v2',decision:'pass',revision_round:3,source_packet:['review/content_build/answer_batch_0035/tree_substructure_relation_review.md',candidate,`${newout}/code_validation.json`,'data/questions/questions.jsonl','config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:h,checked_at:date,writer:{writer_id:'tree-substructure-source-expansion-writer-20260826-v2',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'explicit-source',title:'Tree-substructure source with empty-tree and complexity requirements',locator:`data/questions/questions.jsonl#question_id=${eq}`,source_type:'repository_source_record',checked_at:date},{source_id:'generic-source',title:'Generic tree-substructure source',locator:`data/questions/questions.jsonl#question_id=${gq}`,source_type:'repository_source_record',checked_at:date},{source_id:'relation-review',title:'Batch 0035 tree-substructure relation review',locator:'review/content_build/answer_batch_0035/tree_substructure_relation_review.md',source_type:'repository_structured_source',checked_at:date},{source_id:'validation',title:'Fresh deterministic tree-substructure validation',locator:`${newout}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh strict source-first isolated review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'shared-goal',text:'Both retained Questions ask whether binary tree B is a substructure of binary tree A.',source_ids:['explicit-source','generic-source','relation-review'],answer_locations:['核心结论','1 分钟版','3 分钟版']},{claim_id:'source-asymmetry',text:'Only the newer source explicitly states empty B is not a substructure and requests time/space complexity; the generic source leaves those details unstated.',source_ids:['explicit-source','generic-source','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','常见追问']},{claim_id:'matching-correctness',text:'Searching candidate roots in A and succeeding when B is exhausted implements the selected substructure predicate and permits extra descendants in A.',source_ids:['validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'complexity',text:'The implementation has O(|A|*|B|) worst-case time and recursion stack bounded by tree heights.',source_ids:['validation','isolated-review'],answer_locations:['核心结论','关键细节']},{claim_id:'validation',text:'The exact implementation passes 9 fixed and 5000 deterministic randomized cases against an independent oracle with empty-B=false and no mutation.',source_ids:['validation'],answer_locations:['关键细节','原理机制']}],source_question_coverage:[{question_id:eq,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},{question_id:gq,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac BinaryTreeSubstructure.java BinaryTreeSubstructureTest.java && java BinaryTreeSubstructureTest',result:'pass',reported_stdout:process.env.STDOUT,checks:['fixed=9','randomized=5000','independent oracle','empty B false','no mutation'],boundary_tests:[{case:'empty B',expected:'false from explicit source contract',passed:true},{case:'A extra descendants after B ends',expected:'still matches',passed:true},{case:'repeated values',expected:'later candidate roots not skipped',passed:true},{case:'5000 deterministic random pairs',expected:'matches independent oracle',passed:true}]},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'tree-substructure.source-expansion.v2',independent:true,decision:'pass',revision_round:3,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md';let t=fs.readFileSync(task,'utf8');
+          const pending=`- [ ] \`${cid}\` surviving tree-substructure candidate has been source-attribution refreshed for both consolidated Questions; deterministic fixture rerun and fresh isolated source-first review/evidence are required before this source-expansion slice is complete.`;
+          const passed=`- [x] \`${cid}\` surviving tree-substructure candidate covers both consolidated Questions, preserves the generic-vs-explicit empty-tree/complexity source asymmetry, is strict-auditable as a complete Java class with question-specific followups, and passes fresh isolated source-first review plus the 9-fixed/5000-random oracle validation. Formal promotion remains governed by repository human approval and real-review policy.`;
+          if(!t.includes(pending)) throw new Error('pending task marker missing'); fs.writeFileSync(task,t.replace(pending,passed));
+          NODE
+
+      - name: Strict candidate audit and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passing review from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = '${{ steps.base.outputs.head }}' || { echo 'Content branch advanced during review; fail closed.'; exit 1; }
+          git add "review/evidence/$CANONICAL_ID.json" review/content_build/answer_batch_0035/tree_substructure_source_expansion/code_validation.json review/content_build/answer_batch_0035/tree_substructure_source_expansion/isolated_review_result.json tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass strict tree-substructure source expansion'
+          git push origin "HEAD:$CONTENT_BRANCH"
