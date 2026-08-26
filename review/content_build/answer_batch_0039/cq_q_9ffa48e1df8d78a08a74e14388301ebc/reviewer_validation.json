@@ -1,0 +1,56 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9ffa48e1df8d78a08a74e14388301ebc",
+  "candidate_sha256": "1f05747dfe71ef39f5bd2d94695bfb141faf07d62c6ed417afbf9e7f9ab8ee90",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "extract the single exact candidate Java block, javac on Java 21, execute independent concurrency/boundary fixture",
+  "stdout": "PASS exact-candidate locked-semantics stale-expected concurrent-retry no-lost-update overflow-fail-closed stamped-aba-detection",
+  "writer_fixture_stdout": "PASS locked-semantic-cas stale-expected concurrent-cas-loop no-lost-update stamped-aba-detection overflow-fail-closed",
+  "checks": [
+    "the single exact candidate Java block compiles directly on Java 21",
+    "synchronized semantic compare-and-set preserves compare-then-write behavior without being mislabeled lock-free",
+    "concurrent AtomicInteger retry loop reaches the exact final count without lost updates",
+    "stale expected values fail without overwriting a competing update",
+    "Math.incrementExact overflow fails before shared state is modified",
+    "AtomicStampedReference rejects a stale stamp after an A-B-A sequence"
+  ],
+  "boundary_tests": [
+    {
+      "case": "semantic CAS expected match",
+      "expected": "update and true",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "semantic CAS stale expected",
+      "expected": "no update and false",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "6 x 15000 concurrent CAS-loop increments",
+      "expected": "90000 exactly",
+      "actual": "90000",
+      "passed": true
+    },
+    {
+      "case": "stale AtomicInteger expected after competing update",
+      "expected": "CAS false and value remains 4",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "Integer.MAX_VALUE increment",
+      "expected": "ArithmeticException and state unchanged",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "A-B-A with stale stamp",
+      "expected": "stale stamped CAS rejected",
+      "actual": "rejected",
+      "passed": true
+    }
+  ]
+}

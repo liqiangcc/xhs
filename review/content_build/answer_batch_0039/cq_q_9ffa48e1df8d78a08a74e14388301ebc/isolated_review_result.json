@@ -1,0 +1,46 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_9ffa48e1df8d78a08a74e14388301ebc",
+  "candidate_sha256": "1f05747dfe71ef39f5bd2d94695bfb141faf07d62c6ed417afbf9e7f9ab8ee90",
+  "reviewed_at": "2026-08-27",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-cas-20260827-v2",
+  "review_version": "cas.v2",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "data/questions/questions.jsonl",
+    "note_tagged/682de771000000002301f55d.json",
+    "review/content_build/answer_batch_0039/source_inventory.json",
+    "review/candidates/answers/cq_q_9ffa48e1df8d78a08a74e14388301ebc.md",
+    "docs/refactor/09_answer_content_standard.md",
+    "Java SE 21 AtomicInteger API",
+    "Java SE 21 java.util.concurrent.atomic package specification",
+    "Java SE 21 AtomicStampedReference API",
+    "Java Language Specification §17.1 Synchronization",
+    "review/content_build/answer_batch_0039/cq_q_9ffa48e1df8d78a08a74e14388301ebc/reviewer_validation.json"
+  ],
+  "scores": {
+    "facts_and_evidence": 24,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The repository source preserves only the short request “CAS了解不？手写一个？” and does not specify whether “hand write” means a hardware/JVM primitive, a semantic simulation, or a CAS-based retry algorithm.",
+    "The candidate handles that ambiguity explicitly: synchronized is labeled only as a mutual-exclusion semantic simulation, while the retry example is built on JDK AtomicInteger.compareAndSet rather than claiming unsynchronized Java can manufacture atomic compare-and-set.",
+    "After the audit-driven revision, the answer contains one complete Java block instead of a method-only fragment; the exact candidate block independently compiles and passes stale-expected, concurrent-retry, no-lost-update and fail-closed overflow tests.",
+    "The ABA discussion is bounded to value-only comparison and the stamped-reference mitigation is independently reproduced with an A-B-A sequence and stale stamp rejection.",
+    "The answer now states retry-dependent time cost and O(1) auxiliary space, plus contention, retry side effects, compound-state and performance boundaries instead of claiming CAS is universally faster than locking.",
+    "No personal production metrics or unverifiable project experience are fabricated."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
