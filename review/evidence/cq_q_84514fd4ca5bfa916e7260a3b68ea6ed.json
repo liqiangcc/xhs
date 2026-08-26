@@ -1,0 +1,154 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_84514fd4ca5bfa916e7260a3b68ea6ed",
+  "candidate_sha256": "d65044b5ce2aca849d48abc73c3858cfae2f32bdc62776e811a0389fde8258e2",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "three-thread-ordered-print-source-bounded-writer-20260826-v2",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Backend interview note exact three-thread ordered-print prompt",
+      "locator": "note_tagged/684acd11000000002001fe99.json#question_id=84514fd4ca5bfa916e7260a3b68ea6ed",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "validation",
+      "title": "Fresh three-thread ordering and cancellation validation",
+      "locator": "review/content_build/answer_batch_0035/cq_q_84514fd4ca5bfa916e7260a3b68ea6ed/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh source-first isolated review after cancellation remediation",
+      "locator": "review/content_build/answer_batch_0035/cq_q_84514fd4ca5bfa916e7260a3b68ea6ed/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks for the coordination idea for the three modulo-3 thread sequences; finite limit, Java/Condition details and cancellation policy are not preserved source constraints.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "ordered-owner-behavior",
+      "text": "Under the explicit finite-limit contract, fixed and 200 randomized-start stress executions emit exactly 1..limit and assign every value to its modulo-3 worker.",
+      "source_ids": [
+        "validation"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "cancellation-behavior",
+      "text": "Shared cancellation plus wake-all prevents missing-owner deadlock when a waiting worker is interrupted or the output callback fails, and bounded joins verify clean termination.",
+      "source_ids": [
+        "validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "84514fd4ca5bfa916e7260a3b68ea6ed",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac ThreeThreadOrderedPrinterValidation.java && java ThreeThreadOrderedPrinterValidation",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=5 stress=200 randomized-start=true exact-order=true owner-partition=true interrupt-cancel=true output-failure-cancel=true timeout-clean=true",
+    "checks": [
+      "zero/one/two/three/nine fixed limits terminate cleanly",
+      "200 stress runs with randomized thread start order preserve exact global ordering",
+      "every value is emitted by the correct modulo-3 owner",
+      "interrupting a waiting worker cancels and wakes the collaboration group",
+      "an output callback failure cancels and wakes the collaboration group",
+      "all worker joins are bounded by timeout and leave no live thread"
+    ],
+    "boundary_tests": [
+      {
+        "case": "limit=0",
+        "expected": "no output and all workers terminate",
+        "passed": true
+      },
+      {
+        "case": "limits 1,2,3,9 plus 200 deterministic stress limits",
+        "expected": "global sequence 1..limit and owner(value)=(value-1)%3 under shuffled starts",
+        "passed": true
+      },
+      {
+        "case": "worker 1 interrupted while awaiting its first turn",
+        "expected": "shared cancellation wakes all workers; no later thread waits for the departed owner",
+        "passed": true
+      },
+      {
+        "case": "output callback throws at value 2",
+        "expected": "original runtime failure is propagated by its worker and the other workers terminate through shared cancellation",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-three-thread-ordered-print-20260826-v1",
+    "review_version": "three-thread-ordered-print.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 2,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The repository source recoverably asks only for the coordination design for three threads owning the 1,4,7... / 2,5,8... / 3,6,9... pattern; it does not preserve a finite limit, language, synchronization API, interruption contract, or callback-failure policy.",
+      "The candidate explicitly labels the finite limit and cancellation behavior as implementation/test contracts rather than source facts.",
+      "The lock-protected next state and modulo-3 owner predicate preserve one global sequence while assigning every value to the correct worker.",
+      "Fresh executable validation covers fixed limits and 200 deterministic randomized-start stress runs with bounded joins and exact sequence/ownership assertions.",
+      "The remediated shared cancelled state closes the missing-owner deadlock that otherwise occurs when a waiting worker is interrupted or the output callback throws.",
+      "The answer explains while-based Condition predicates, termination wakeups, failure semantics, alternatives, and tradeoffs without fabricating project experience.",
+      "No unsupported claim that Condition or the finite limit was mandated by the source remains."
+    ]
+  }
+}
