@@ -1,0 +1,63 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9c94b4e13076cb425b6a321e5124a5d7",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "node --check useFetch.cjs && node useFetch.test.cjs",
+  "stdout": "PASS mount-loading success same-url=no-refetch url-change=refetch cleanup=abort stale-write=blocked http-error=recorded network-error=recorded unmount=abort",
+  "checks": [
+    "mount/loading transition",
+    "success JSON transition",
+    "same-dependency no rerun",
+    "url dependency rerun",
+    "cleanup abort",
+    "stale-write prevention",
+    "HTTP failure normalization",
+    "network failure",
+    "unmount cleanup"
+  ],
+  "boundary_tests": [
+    {
+      "case": "initial request",
+      "expected": "loading=true then successful JSON data",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "same url and fetcher identity",
+      "expected": "no duplicate request",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "url changes",
+      "expected": "cleanup old request and issue new request",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "stale old response",
+      "expected": "cannot overwrite current state after cleanup",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "HTTP 404 Response",
+      "expected": "response.ok false becomes error state",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "network rejection",
+      "expected": ".catch records non-abort error",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "unmount",
+      "expected": "active request aborted",
+      "actual": "verified",
+      "passed": true
+    }
+  ]
+}
