@@ -1,0 +1,395 @@
+name: Build Content Batch 0039 Expression Evaluator Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0039-expression-evaluator-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-expression-evaluator-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9c43dc0f1e5fa93786e94fc1bf818de3
+  SOURCE_QID: 9c43dc0f1e5fa93786e94fc1bf818de3
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0039/$cid"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法/手撕：给定带括号的算术表达式计算结果';
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0039/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('Canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.is_valid_for_library!==true) throw new Error(`source wording/validity drifted: ${src?.original_question}`);
+          const primary=JSON.parse(fs.readFileSync('note_structured/663b7649000000001e038251.json','utf8'));
+          if(!primary.questions?.includes(exact)) throw new Error('primary repository source missing');
+          const inventory=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0039/source_inventory.json','utf8'));
+          const item=inventory.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(q=>q.question_id===qid&&q.original_question===exact)) throw new Error('frozen Batch 0039 source inventory drifted');
+          NODE
+
+      - name: Write source-bounded candidate and deterministic Java fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0039/$cid"
+          candidate="review/candidates/answers/$cid.md"
+          if [ -e "$candidate" ]; then
+            echo "Candidate already exists; fail closed rather than overwrite." >&2
+            exit 1
+          fi
+
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_9c43dc0f1e5fa93786e94fc1bf818de3","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 带括号的算术表达式求值
+
+          ## 核心结论
+
+          来源只保留了“给定带括号的算术表达式计算结果”，没有保留运算符集合、数值类型、除法语义或非法输入规则。下面先声明一个可执行的答案侧契约：Java 21、十进制 `long` 整数、空白可出现、支持二元 `+ - * /`、一元 `+ -` 和任意嵌套圆括号；优先级为一元运算 > `* /` > `+ -`，同级左结合；整数除法按 Java 语义向 0 截断；除零、溢出、括号不匹配和多余字符直接报错。实现用递归下降解析，把语法优先级直接映射为 `expression -> term -> unary -> primary` 四层。
+
+          ## 1 分钟版
+
+          - 先把题目补成明确语法，而不是看到括号就直接套一个通用栈模板；这里支持整数、`+ - * /`、一元正负号和圆括号。
+          - `parseExpression` 只处理 `+/-`，`parseTerm` 只处理 `*/`，`parseUnary` 处理一元正负号，`parsePrimary` 处理数字或括号；函数层级本身就表达了运算符优先级。
+          - 每层消费自己负责的 token，并共享一个当前位置 `pos`；解析完成后必须检查是否读到字符串末尾，否则 `1 2`、`1+2x` 这类输入不能被误判为成功。
+          - 运算使用 `Math.addExact/subtractExact/multiplyExact/negateExact/divideExact`，让 `long` 溢出和除零显式失败，而不是静默环绕。
+          - 时间复杂度 O(n)，每个字符最多被常数次扫描；额外空间 O(d)，`d` 是括号和一元运算形成的递归深度。
+
+          ## 3 分钟版
+
+          我会先声明语法：
+
+          ```text
+          expression := term (('+' | '-') term)*
+          term       := unary (('*' | '/') unary)*
+          unary      := ('+' | '-') unary | primary
+          primary    := number | '(' expression ')'
+          ```
+
+          这样 `1 + 2 * 3` 会先在 `term` 层算出 `2 * 3`，再回到 `expression` 做加法；括号则在 `primary` 里递归进入一个新的 `expression`，自然覆盖默认优先级。Java 实现如下：
+
+          ```java
+          public final class ExpressionEvaluator {
+              private final String input;
+              private int pos;
+
+              private ExpressionEvaluator(String input) {
+                  this.input = input;
+              }
+
+              public static long evaluate(String expression) {
+                  if (expression == null) throw new IllegalArgumentException("expression is null");
+                  ExpressionEvaluator p = new ExpressionEvaluator(expression);
+                  long value = p.parseExpression();
+                  p.skipWhitespace();
+                  if (p.pos != p.input.length()) {
+                      throw new IllegalArgumentException("unexpected token at position " + p.pos);
+                  }
+                  return value;
+              }
+
+              private long parseExpression() {
+                  long value = parseTerm();
+                  while (true) {
+                      if (consume('+')) value = Math.addExact(value, parseTerm());
+                      else if (consume('-')) value = Math.subtractExact(value, parseTerm());
+                      else return value;
+                  }
+              }
+
+              private long parseTerm() {
+                  long value = parseUnary();
+                  while (true) {
+                      if (consume('*')) value = Math.multiplyExact(value, parseUnary());
+                      else if (consume('/')) value = Math.divideExact(value, parseUnary());
+                      else return value;
+                  }
+              }
+
+              private long parseUnary() {
+                  if (consume('+')) return parseUnary();
+                  if (consume('-')) return Math.negateExact(parseUnary());
+                  return parsePrimary();
+              }
+
+              private long parsePrimary() {
+                  skipWhitespace();
+                  if (consume('(')) {
+                      long value = parseExpression();
+                      if (!consume(')')) throw new IllegalArgumentException("missing ')' at position " + pos);
+                      return value;
+                  }
+                  return parseNumber();
+              }
+
+              private long parseNumber() {
+                  skipWhitespace();
+                  int start = pos;
+                  long value = 0;
+                  while (pos < input.length() && Character.isDigit(input.charAt(pos))) {
+                      int digit = input.charAt(pos++) - '0';
+                      value = Math.addExact(Math.multiplyExact(value, 10L), digit);
+                  }
+                  if (pos == start) throw new IllegalArgumentException("number expected at position " + pos);
+                  return value;
+              }
+
+              private boolean consume(char expected) {
+                  skipWhitespace();
+                  if (pos < input.length() && input.charAt(pos) == expected) {
+                      pos++;
+                      return true;
+                  }
+                  return false;
+              }
+
+              private void skipWhitespace() {
+                  while (pos < input.length() && Character.isWhitespace(input.charAt(pos))) pos++;
+              }
+          }
+          ```
+
+          关键不变量是：每个 `parseXxx` 返回时，已经完整消费了自己语法层级能识别的前缀，`pos` 恰好停在上一层应该处理的位置。最后再做一次 EOF 检查，才能保证“算出了一个前缀”不等于“整个表达式合法”。
+
+          ## 关键细节
+
+          - **来源边界**：原题没有给运算符和数值范围；`+ - * /`、一元符号、`long`、Java 21 和异常策略都是本答案显式声明的实现契约，不冒充原题事实。
+          - **优先级**：不靠手工比较优先级数字，而是用不同解析函数表示不同优先级；越靠近 `primary` 的层级绑定越紧。
+          - **左结合**：`expression` 和 `term` 用循环从左向右累计，所以 `8-3-2` 解析为 `(8-3)-2`，`8/4/2` 解析为 `(8/4)/2`。
+          - **一元运算**：`-(2+3)` 和 `1--2` 都由 `parseUnary` 递归处理；这与二元减号的层级分开，避免靠前一个 token 猜语义。
+          - **整数除法**：本答案采用 Java 整数除法语义；负数除法向 0 截断。`Math.divideExact` 还能把除零以及 `Long.MIN_VALUE / -1` 的溢出显式变成 `ArithmeticException`。
+          - **溢出**：数字扫描和四则运算都使用 `Math.*Exact`；超出 `long` 表示范围就失败。若题目要求任意精度，应把数值层替换成 `BigInteger`，解析结构无需改变。
+          - **非法输入**：空串、缺操作数、多余字符、括号不匹配都必须拒绝；不能只要前缀能算出值就返回成功。
+          - **深度边界**：极深括号或连续一元符号会消耗 Java 调用栈；若输入深度不受信任，应改用显式栈或限制最大嵌套深度。
+
+          ## 原理机制
+
+          递归下降的核心是让语法结构和控制流一一对应。`expression` 只看低优先级加减，所以它读取一个完整 `term` 后才有资格处理 `+/-`；而 `term` 在返回前已经把后续 `*/` 吃完。括号通过 `primary -> '(' expression ')'` 把括号内文本重新作为完整表达式解析，因此括号内容先于外层继续计算。整个过程只维护输入串和一个游标，不需要先把表达式转成后缀式。
+
+          ## 项目经验版
+
+          来源没有真实业务、表达式规模或生产故障，不能虚构项目经历。实际落地如果表达式来自配置或用户输入，我会先固定语法和最大长度/嵌套深度，再加超时或资源上限、错误位置报告和属性测试；如果需要小数、函数调用或变量，再扩展 lexer/AST，而不是继续把所有逻辑塞进四则运算分支。这些是落地建议，不是原题已经给出的事实。
+
+          ## 常见追问
+
+          - 问：为什么不用两个栈？答：两个栈或 Shunting-yard 也能做；这里选择递归下降，是因为运算符集合固定且优先级层次少，代码能直接对应语法。若运算符动态可配置或要输出后缀式，栈式方案会更自然。
+          - 问：`1--2` 为什么能算成 3？答：第一个 `-` 在 `expression` 层是二元减号，第二个 `-` 进入 `parseUnary` 后是一元负号，因此等价于 `1 - (-2)`。
+          - 问：为什么解析结束还要检查 EOF？答：否则 `1+2abc` 可能先得到 3 就提前返回，非法尾部被静默忽略；完整消费输入是解析器正确性的组成部分。
+          - 问：为什么用 `Math.*Exact`？答：普通 `long` 算术溢出会按二进制补码静默环绕；本答案契约要求溢出失败，所以用 exact 系列把越界变成异常。
+          - 问：如果要支持小数怎么办？答：先定义精度和舍入规则，再把数值解析/运算抽象出来，例如用 `BigDecimal`；语法层次仍可保留，但 `/` 的结果规则必须重新定义。
+          - 问：递归会不会栈溢出？答：会，空间是 O(d)。如果输入嵌套深度可被外部控制，需要限制深度或改用显式操作符/操作数栈。
+
+          ## 易错点
+
+          - 原题只说“带括号”，却未经声明就假定支持小数、幂运算、函数或特定除法规则。
+          - 只处理括号，不正确处理 `* /` 与 `+ -` 的优先级。
+          - 把一元负号和二元减号混在同一分支，导致 `-(...)`、`1--2` 出错。
+          - 算出合法前缀后直接返回，没有拒绝尾部垃圾字符。
+          - 用普通 `long` 运算却没有说明溢出语义。
+          - 忘记除零、缺右括号、空表达式和极深嵌套这些失败路径。
+          EOF
+
+          cat > "$out/ExpressionEvaluator.java" <<'JAVA'
+          public final class ExpressionEvaluator {
+              private final String input;
+              private int pos;
+
+              private ExpressionEvaluator(String input) {
+                  this.input = input;
+              }
+
+              public static long evaluate(String expression) {
+                  if (expression == null) throw new IllegalArgumentException("expression is null");
+                  ExpressionEvaluator p = new ExpressionEvaluator(expression);
+                  long value = p.parseExpression();
+                  p.skipWhitespace();
+                  if (p.pos != p.input.length()) {
+                      throw new IllegalArgumentException("unexpected token at position " + p.pos);
+                  }
+                  return value;
+              }
+
+              private long parseExpression() {
+                  long value = parseTerm();
+                  while (true) {
+                      if (consume('+')) value = Math.addExact(value, parseTerm());
+                      else if (consume('-')) value = Math.subtractExact(value, parseTerm());
+                      else return value;
+                  }
+              }
+
+              private long parseTerm() {
+                  long value = parseUnary();
+                  while (true) {
+                      if (consume('*')) value = Math.multiplyExact(value, parseUnary());
+                      else if (consume('/')) value = Math.divideExact(value, parseUnary());
+                      else return value;
+                  }
+              }
+
+              private long parseUnary() {
+                  if (consume('+')) return parseUnary();
+                  if (consume('-')) return Math.negateExact(parseUnary());
+                  return parsePrimary();
+              }
+
+              private long parsePrimary() {
+                  skipWhitespace();
+                  if (consume('(')) {
+                      long value = parseExpression();
+                      if (!consume(')')) throw new IllegalArgumentException("missing ')' at position " + pos);
+                      return value;
+                  }
+                  return parseNumber();
+              }
+
+              private long parseNumber() {
+                  skipWhitespace();
+                  int start = pos;
+                  long value = 0;
+                  while (pos < input.length() && Character.isDigit(input.charAt(pos))) {
+                      int digit = input.charAt(pos++) - '0';
+                      value = Math.addExact(Math.multiplyExact(value, 10L), digit);
+                  }
+                  if (pos == start) throw new IllegalArgumentException("number expected at position " + pos);
+                  return value;
+              }
+
+              private boolean consume(char expected) {
+                  skipWhitespace();
+                  if (pos < input.length() && input.charAt(pos) == expected) {
+                      pos++;
+                      return true;
+                  }
+                  return false;
+              }
+
+              private void skipWhitespace() {
+                  while (pos < input.length() && Character.isWhitespace(input.charAt(pos))) pos++;
+              }
+          }
+          JAVA
+
+          cat > "$out/ExpressionEvaluatorTest.java" <<'JAVA'
+          public final class ExpressionEvaluatorTest {
+              private static void eq(long expected, String expression) {
+                  long actual = ExpressionEvaluator.evaluate(expression);
+                  if (actual != expected) throw new AssertionError(expression + ": expected=" + expected + " actual=" + actual);
+              }
+
+              private static void fails(String expression, Class<? extends Throwable> type) {
+                  try {
+                      ExpressionEvaluator.evaluate(expression);
+                      throw new AssertionError("expected failure: " + expression);
+                  } catch (Throwable t) {
+                      if (!type.isInstance(t)) throw new AssertionError("wrong failure for " + expression + ": " + t, t);
+                  }
+              }
+
+              public static void main(String[] args) {
+                  eq(14, "2 + 3 * 4");
+                  eq(20, "(2 + 3) * 4");
+                  eq(46, "2 * (3 + (4 * 5))");
+                  eq(-20, "-(2 + 3) * 4");
+                  eq(3, "1--2");
+                  eq(3, "8-3-2");
+                  eq(1, "8/4/2");
+                  eq(3, "7/2");
+                  eq(-3, "-7/2");
+                  fails("", IllegalArgumentException.class);
+                  fails("1+", IllegalArgumentException.class);
+                  fails("(1+2", IllegalArgumentException.class);
+                  fails("1 2", IllegalArgumentException.class);
+                  fails("1+2x", IllegalArgumentException.class);
+                  fails("1/0", ArithmeticException.class);
+                  fails("9223372036854775807+1", ArithmeticException.class);
+                  System.out.println("PASS precedence parentheses nesting unary left-associativity division invalid-input divide-zero overflow");
+              }
+          }
+          JAVA
+
+          javac "$out/ExpressionEvaluator.java" "$out/ExpressionEvaluatorTest.java"
+          stdout="$(java -cp "$out" ExpressionEvaluatorTest)"
+          test "$stdout" = 'PASS precedence parentheses nesting unary left-associativity division invalid-input divide-zero overflow'
+          find "$out" -name '*.class' -delete
+
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0039/${cid}`;
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-27',
+            command:'javac ExpressionEvaluator.java ExpressionEvaluatorTest.java && java ExpressionEvaluatorTest',stdout:process.env.STDOUT,
+            checks:['operator precedence','nested parentheses','unary plus/minus','left associativity','Java integer division behavior','trailing-garbage rejection','division by zero','long overflow rejection']
+          },null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-27',review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'repository-source',title:'Huawei interview source note plus frozen Batch 0039 source inventory',locator:'note_structured/663b7649000000001e038251.json + review/content_build/answer_batch_0039/source_inventory.json',source_type:'repository_source_record',checked_at:'2026-08-27'},
+              {source_id:'java-jls-division',title:'Java Language Specification SE 21 §15.17.2 Division Operator /',locator:'https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.17.2',source_type:'official_documentation',checked_at:'2026-08-27'},
+              {source_id:'java-math-exact',title:'Java SE 21 Math exact arithmetic API',locator:'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Math.html',source_type:'official_documentation',checked_at:'2026-08-27'},
+              {source_id:'fixture',title:'Expression evaluator deterministic Java fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-27'}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The repository source preserves only a bracketed arithmetic-expression evaluation task; operator set, numeric domain and error policy are not source constraints.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},
+              {claim_id:'java-division',text:'Under the declared Java integer contract, integer division truncates toward zero and divide-by-zero is exceptional.',source_ids:['java-jls-division','fixture'],answer_locations:['核心结论','关键细节']},
+              {claim_id:'exact-arithmetic',text:'Math exact arithmetic APIs are used so overflow and exact-division overflow fail instead of being accepted silently.',source_ids:['java-math-exact','fixture'],answer_locations:['1 分钟版','3 分钟版','关键细节']},
+              {claim_id:'parser-behavior',text:'The executable fixture verifies precedence, nesting, unary operators, left associativity, invalid-input rejection, divide-by-zero and overflow behavior for the exact candidate implementation.',source_ids:['fixture'],answer_locations:['3 分钟版','原理机制','常见追问']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            promotion_blocker:'isolated_independent_review_not_yet_performed'
+          },null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md';
+          let text=fs.readFileSync(task,'utf8');
+          const line='- [x] `cq_q_9c43dc0f1e5fa93786e94fc1bf818de3` now has a source-bounded Java expression-evaluator candidate. The answer explicitly declares its operator/numeric/error contract instead of fabricating missing source details; recursive-descent precedence, nested parentheses, unary signs, left associativity, trailing-garbage rejection, divide-by-zero and overflow are covered by a deterministic Java 21 fixture. Writer research is frozen; formal evidence/promotion remains blocked on isolated independent review.';
+          if(!text.includes(line)) text=text.trimEnd()+`\n${line}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during expression-evaluator candidate slice: $base_head -> $remote_head; fail closed without push."; exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0039/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0039 expression evaluator candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
