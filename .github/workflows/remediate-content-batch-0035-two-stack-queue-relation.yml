@@ -91,27 +91,27 @@ jobs:
             `- nearby but kept distinct: \`${process.env.DISTINCT_API_QID}\`: ${expected.get(process.env.DISTINCT_API_QID)}\n\n`+
             `No historical relation/remediation record was consulted to reach this conclusion. The first three current Questions ask the same coding contract: implement FIFO queue behavior using two stacks. The source singleton adds the restriction that no additional auxiliary data structure may be used; that restriction is compatible with the ordinary two-stack implementation and does not change the abstract input/output objective or require a different data-structure topology. The push/pop/count wording is intentionally not folded into this reviewed group because it preserves an additional count API obligation that the other three source Questions do not state.\n\n`+
             `## Decision\n\n`+
-            `Relation: \`same\` for the three reviewed Questions. Preserve \`${process.env.TARGET_CID}\` as the survivor because it already owns the two generic source variants. Retire singleton \`${process.env.SOURCE_CID}\` through the reviewed Select → Decide → Apply path. Keep \`${process.env.DISTINCT_API_CID}\` separate in this bounded decision. Any survivor Answer invalidated by the expanded audited source set must remain rebuildable and must be independently reviewed before promotion.\n`;
+            `Relation: \`same\` for the three reviewed Questions. Preserve \`${process.env.TARGET_CID}\` as the survivor because it already owns the two generic source variants. Retire singleton \`${process.env.SOURCE_CID}\` through the reviewed Select → Decide → Apply path. The persisted RelationDecision is made on one explicit cross-Canonical pair because the CLI is pair-bounded; the full current target member set was independently source-reviewed above before applying that pair. Keep \`${process.env.DISTINCT_API_CID}\` separate in this bounded decision. Any survivor Answer invalidated by the expanded audited source set must remain rebuildable and must be independently reviewed before promotion.\n`;
           fs.writeFileSync('review/content_build/answer_batch_0035/two_stack_queue_relation_review.md',review);
           NODE
           node scripts/xhs.js canonical check --noWrite
           node scripts/xhs.js review integrity --noWrite
 
-      - name: Select decide and apply exact reviewed group
+      - name: Select decide and apply exact reviewed pair
         shell: bash
         run: |
           set -euo pipefail
           out='review/content_build/answer_batch_0035/two_stack_queue_relation_apply'
           mkdir -p "$out"
-          node scripts/xhs.js canonical suggest --question-ids "$SOURCE_QID,$TARGET_QID,$TARGET_ALIAS_QID" --noManifest > "$out/suggest.json"
+          node scripts/xhs.js canonical suggest --question-ids "$SOURCE_QID,$TARGET_QID" --noManifest > "$out/suggest.json"
           key="$(node - "$out/suggest.json" <<'NODE'
           const fs=require('fs');
           const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
           if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected exactly one RelationCandidate, got ${r.relation_candidates?.length}`);
           const c=r.relation_candidates[0];
           const actual=[...c.question_ids].sort();
-          const expected=[process.env.SOURCE_QID,process.env.TARGET_QID,process.env.TARGET_ALIAS_QID].sort();
-          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected Question set drifted: ${JSON.stringify(actual)}`);
+          const expected=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected Question pair drifted: ${JSON.stringify(actual)}`);
           process.stdout.write(c.relation_candidate_key);
           NODE
           )"
@@ -121,7 +121,7 @@ jobs:
             --actor-type ai \
             --actor-id batch-0035-two-stack-queue-source-first-review \
             --actor-display-name 'Batch 0035 two-stack queue source-first reviewer' \
-            --rationale 'Current source-first review found the singleton no-extra-auxiliary-data-structure wording and the two generic two-stack queue wordings preserve one FIFO-by-two-stacks coding contract; the separate push/pop/count API source remains outside this reviewed relation.' > "$out/decide.json"
+            --rationale 'Current source-first review examined the singleton no-extra-auxiliary-data-structure wording plus the complete existing generic target member set and found one FIFO-by-two-stacks coding contract; the separate push/pop/count API source remains outside this reviewed relation.' > "$out/decide.json"
           node scripts/xhs.js dedup apply \
             --relation-candidate-key "$key" \
             --canonical-id "$TARGET_CID" \
@@ -150,10 +150,11 @@ jobs:
             '# Answer Batch 0035 — Two-Stack Queue Relation Application\n\n'+
             '- Reviewed relation: `same`.\n'+
             `- Survivor: \`${process.env.TARGET_CID}\`.\n`+
-            `- Consolidated Questions: ${reviewed.map(q=>`\`${q}\``).join(', ')}.\n`+
+            `- Consolidated Questions after application: ${reviewed.map(q=>`\`${q}\``).join(', ')}.\n`+
+            `- Persisted explicit relation pair: \`${process.env.SOURCE_QID}\` + \`${process.env.TARGET_QID}\`; the preflight independently reviewed the survivor's complete existing member set before application.\n`+
             `- Retired duplicate Canonical: \`${process.env.SOURCE_CID}\`.\n`+
             `- Explicit push/pop/count Canonical preserved separately: \`${process.env.DISTINCT_API_CID}\`.\n`+
-            '- Mutation path: explicit reviewed group Select → AI Decision → Application dedup apply with current ownership/freshness checks.\n'+
+            '- Mutation path: explicit pair Select → AI Decision → Application dedup apply with current ownership/freshness checks.\n'+
             '- Survivor Answer promotion is intentionally deferred if consolidation invalidated it; the expanded source set must be rebuilt and independently reviewed.\n');
           const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md';
           let text=fs.readFileSync(task,'utf8');
