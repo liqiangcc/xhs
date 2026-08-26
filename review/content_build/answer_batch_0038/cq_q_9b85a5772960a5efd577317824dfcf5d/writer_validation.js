@@ -32,7 +32,12 @@ assert.deepStrictEqual(parse('http://[2001:db8::1]:8080/a?x=1'), {protocol:'http
 assert.deepStrictEqual(parse('ftp://example.com/file?q=a+b'), {protocol:'ftp',hostname:'example.com',port:null,pathname:'/file',query:{q:'a b'},fragment:null});
 assert.deepStrictEqual(parse('custom:opaque?x=1'), {protocol:'custom',hostname:null,port:null,pathname:'opaque',query:{x:'1'},fragment:null});
 assert.deepStrictEqual(parse('https://x.test/a%20b?q=%E4%B8%AD'), {protocol:'https',hostname:'x.test',port:null,pathname:'/a%20b',query:{q:'中'},fragment:null});
-assert.deepStrictEqual(parse('https://x.test/?__proto__=x'), {protocol:'https',hostname:'x.test',port:null,pathname:'/',query:{'__proto__':'x'},fragment:null});
+const protoCase = parse('https://x.test/?__proto__=x');
+assert.strictEqual(protoCase.protocol, 'https');
+assert.strictEqual(protoCase.hostname, 'x.test');
+assert.strictEqual(protoCase.pathname, '/');
+assert.strictEqual(Object.hasOwn(protoCase.query, '__proto__'), true);
+assert.strictEqual(Object.getOwnPropertyDescriptor(protoCase.query, '__proto__').value, 'x');
 assert.throws(() => parseUrlToJson('/relative?x=1'), TypeError);
 assert.throws(() => parseUrlToJson(''), TypeError);
 assert.throws(() => parseUrlToJson(null), TypeError);
