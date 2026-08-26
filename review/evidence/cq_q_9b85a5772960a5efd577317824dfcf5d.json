@@ -1,0 +1,153 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9b85a5772960a5efd577317824dfcf5d",
+  "candidate_sha256": "c09e70c4d6c16d14c4af499ab77ddf64be5b05be08449a96a35c6efe3980e050",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "url-json-source-bounded-writer-20260827-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-structured",
+      "title": "Structured URL parsing source",
+      "locator": "note_structured/67d02741000000000602aa77.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Tagged URL parsing source",
+      "locator": "note_tagged/67d02741000000000602aa77.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "node-url-primary",
+      "title": "Node.js 22 URL API primary-source snapshot",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9b85a5772960a5efd577317824dfcf5d/primary_source_snapshot.json",
+      "source_type": "primary_official_documentation",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer URL parser validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9b85a5772960a5efd577317824dfcf5d/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate URL parser review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9b85a5772960a5efd577317824dfcf5d/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first URL parser review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9b85a5772960a5efd577317824dfcf5d/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks for URL-to-JSON parsing across protocol, domain, path and query special cases; schema and repeated-key policy are candidate contracts.",
+      "source_ids": [
+        "repository-structured",
+        "repository-tagged"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "whatwg-platform",
+      "text": "Node.js 22 exposes WHATWG URL hostname, port, pathname and URLSearchParams APIs used by the implementation.",
+      "source_ids": [
+        "node-url-primary",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "behavior-validation",
+      "text": "Writer and reviewer validations exercise exact behavior over special-case fixtures and thousands of generated absolute URLs.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9b85a5772960a5efd577317824dfcf5d",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate JavaScript block and run independent deterministic plus generated fixtures under Node 22",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate fixtures=6 invalid=3 generated=7000 repeated-query=preserved ipv6=covered opaque=covered proto-keys=covered absolute-only=enforced",
+    "checks": [
+      "exact candidate executes under Node 22",
+      "6 independent fixtures cover default/custom port, IPv6, opaque scheme, encoding and dangerous query keys",
+      "3 invalid/relative inputs rejected",
+      "7000 generated absolute URL fixtures preserve known components and repeated query keys"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-url-json-20260827-v2",
+    "review_version": "url-json.whatwg-node22.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source explicitly asks for URL-to-JSON parsing across protocol, domain, path and query special cases; the exact JSON schema, absolute-only policy and repeated-key array rule are labeled candidate contracts.",
+      "Node.js 22 official URL documentation was fetched source-first and frozen before review for hostname, port, pathname and URLSearchParams accessors.",
+      "The candidate delegates URL syntax and normalization to the platform WHATWG URL parser instead of claiming a hand-written regex covers all schemes, IPv6 and encoding cases.",
+      "The exact candidate executes under Node 22 and passes independent fixtures for IPv6, default and non-default ports, opaque scheme, encoding, repeated/empty query values and prototype-sensitive keys, plus 7000 generated absolute URLs.",
+      "The null-prototype query object and Object.hasOwn avoid treating __proto__ as an inherited setter/key collision.",
+      "The answer clearly separates pathname serialization from URLSearchParams query decoding and avoids implicit business-type coercion.",
+      "No fabricated production experience is claimed."
+    ]
+  }
+}
