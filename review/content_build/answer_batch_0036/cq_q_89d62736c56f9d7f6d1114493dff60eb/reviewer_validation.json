@@ -1,0 +1,38 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_89d62736c56f9d7f6d1114493dff60eb",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract exact candidate Java; javac -Xlint:all -Werror; execute timed exact-order stress and caller-interruption leak check",
+  "stdout": "PASS fixed=7 exact_cases=507 random=500 exact-order=pass no-deadlock=pass negative=reject caller-interrupt=propagated workers=terminated",
+  "checks": [
+    "exact candidate Java compiles with warnings as errors",
+    "rounds 0/1/2/3/10/100/1000 produce exact ABC repetition",
+    "500 seeded randomized round counts produce exact ABC repetition",
+    "every invocation terminates within timeout",
+    "negative rounds reject",
+    "caller interruption propagates and printer workers terminate"
+  ],
+  "boundary_tests": [
+    {
+      "case": "rounds=0",
+      "expected": "empty output and all three threads terminate",
+      "passed": true
+    },
+    {
+      "case": "scheduler variability",
+      "expected": "observable output remains exact ABC repetition",
+      "passed": true
+    },
+    {
+      "case": "large round count",
+      "expected": "1000 rounds exact order without deadlock",
+      "passed": true
+    },
+    {
+      "case": "caller interrupted during join",
+      "expected": "propagate InterruptedException and interrupt all workers",
+      "passed": true
+    }
+  ]
+}

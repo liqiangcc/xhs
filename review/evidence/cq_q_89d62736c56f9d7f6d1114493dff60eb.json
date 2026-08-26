@@ -1,0 +1,174 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_89d62736c56f9d7f6d1114493dff60eb",
+  "candidate_sha256": "c28404875dda64462e3cc70f5ddf4ccf68ae7e99e7b0df792022e0b090182f5d",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "three-thread-abc-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "tagged-source",
+      "title": "Repository tagged three-thread ABC interview question",
+      "locator": "note_tagged/66c75a74000000001f0152ed.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer three-thread ABC executable validation",
+      "locator": "review/content_build/answer_batch_0036/cq_q_89d62736c56f9d7f6d1114493dff60eb/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent timed concurrency stress and cancellation validation",
+      "locator": "review/content_build/answer_batch_0036/cq_q_89d62736c56f9d7f6d1114493dff60eb/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0036/cq_q_89d62736c56f9d7f6d1114493dff60eb/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source requires only three threads taking turns to print A, B and C; rounds, Java API and cancellation policy are not specified.",
+      "source_ids": [
+        "tagged-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "round-robin-correctness",
+      "text": "Under the explicit A-first/equal-round contract, the exact candidate Java fence produces strict ABC repetition and terminates across fixed and randomized concurrent runs.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "blocking-and-space",
+      "text": "The implementation blocks on Semaphore permits instead of busy waiting and maintains constant synchronization state; the test-oriented returned output itself grows with rounds.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "interruption-boundary",
+      "text": "The declared caller-interruption path propagates InterruptedException and interrupts worker threads; richer production failure coordination remains outside the preserved source contract.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "项目经验版"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "89d62736c56f9d7f6d1114493dff60eb",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate Java; javac -Xlint:all -Werror; execute timed exact-order stress and caller-interruption leak check",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=7 exact_cases=507 random=500 exact-order=pass no-deadlock=pass negative=reject caller-interrupt=propagated workers=terminated",
+    "checks": [
+      "exact candidate Java compiles with warnings as errors",
+      "rounds 0/1/2/3/10/100/1000 produce exact ABC repetition",
+      "500 seeded randomized round counts produce exact ABC repetition",
+      "every invocation terminates within timeout",
+      "negative rounds reject",
+      "caller interruption propagates and printer workers terminate"
+    ],
+    "boundary_tests": [
+      {
+        "case": "rounds=0",
+        "expected": "empty output and all three threads terminate",
+        "passed": true
+      },
+      {
+        "case": "scheduler variability",
+        "expected": "observable output remains exact ABC repetition",
+        "passed": true
+      },
+      {
+        "case": "large round count",
+        "expected": "1000 rounds exact order without deadlock",
+        "passed": true
+      },
+      {
+        "case": "caller interrupted during join",
+        "expected": "propagate InterruptedException and interrupt all workers",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-three-thread-abc-20260826-v1",
+    "review_version": "three-thread-abc.semaphore-stress.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved repository source says only “算法：三个线程轮流打印 A、B、C”; it does not specify repetition count, Java API, busy-wait policy, or cancellation/error semantics.",
+      "The candidate preserves that sparse boundary and explicitly labels A-first order, equal rounds, Java, zero/negative-round handling, and caller-interruption behavior as answer-side contracts.",
+      "The three-Semaphore topology correctly implements a single logical token: A starts with one permit, B/C with zero, and every normal print transfers eligibility only to the unique successor A→B→C→A.",
+      "Because a thread must acquire its dedicated permit before appending, scheduler start/run order cannot make B or C observably print ahead of the predecessor on the normal path; no busy spin is used.",
+      "The returned StringBuilder result is read only after joins; the candidate correctly distinguishes O(rounds) returned-output space from O(1) synchronization state rather than claiming total O(1) memory.",
+      "Reviewer-owned validation extracts the exact candidate Java fence and executes 507 timed exact-output cases, including 500 seeded randomized round counts, with no deadlock and exact ABC repetition.",
+      "An independent cancellation probe interrupts the caller during a million-round invocation, confirms InterruptedException propagation, and verifies all named printer worker threads terminate rather than leaking.",
+      "The answer appropriately states that production failure propagation/output-action failure would require an additional contract; no fabricated production experience, placeholder implementation, or uncovered source variant was found."
+    ]
+  }
+}
