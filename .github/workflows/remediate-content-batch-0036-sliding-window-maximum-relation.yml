@@ -1,0 +1,185 @@
+name: Remediate Content Batch 0036 Sliding Window Maximum Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0036-sliding-window-maximum-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-sliding-window-maximum-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SHORTHAND_QID: 86a4c030e736e3eea9fed1f6b739694d
+  SHORTHAND_CID: cq_q_86a4c030e736e3eea9fed1f6b739694d
+  EXPLICIT_QID: b55a6649e9e0b7e2351c5d1f3d5f167c
+  EXPLICIT_CID: cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first neighborhood and relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0036
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q])),byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const expected=new Map([
+            [process.env.SHORTHAND_QID,'算法手撕：滑动窗口的最大值（Sliding Window Maximum）。'],
+            [process.env.EXPLICIT_QID,'算法手撕：滑动窗口最大值（Sliding Window Maximum）。'],
+          ]);
+          const ownership=[
+            [process.env.SHORTHAND_QID,process.env.SHORTHAND_CID],
+            [process.env.EXPLICIT_QID,process.env.EXPLICIT_CID],
+          ];
+          for(const [qid,cid] of ownership){
+            const q=byQ.get(qid);
+            if(!q||q.original_question!==expected.get(qid)) throw new Error(`${qid}: source wording drifted: ${q?.original_question}`);
+            if(q.is_valid_for_library===false||!String(q.question_type||'').includes('Coding')) throw new Error(`${qid}: no longer active Coding source`);
+            if(q.canonical_id!==cid) throw new Error(`${qid}: ownership drifted to ${q.canonical_id}`);
+            const c=byC.get(cid);
+            if(!c||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error(`${cid}: expected singleton before source-first relation review`);
+          }
+          const neighborhood=questions.filter(q=>q.is_valid_for_library!==false && /滑动窗口.*最大值|每个滑动窗口.*最大值/.test(q.original_question||''));
+          const ids=neighborhood.map(q=>q.question_id).sort();
+          const expectedIds=[process.env.SHORTHAND_QID,process.env.EXPLICIT_QID].sort();
+          if(JSON.stringify(ids)!==JSON.stringify(expectedIds)) throw new Error(`sliding-window-maximum neighborhood drifted: ${JSON.stringify(neighborhood.map(q=>({qid:q.question_id,text:q.original_question,cid:q.canonical_id})))}`);
+          const shortRaw=fs.readFileSync('note_desc/68b85518000000001d026c52.txt','utf8');
+          const explicitRaw=fs.readFileSync('note_desc/68b124e8000000001b032114.txt','utf8');
+          if(!shortRaw.includes('算法  滑动窗口的最大值')) throw new Error('shorthand raw source phrase missing');
+          const explicitPhrase='给定一个数组和滑动窗口大小K，返回每个滑动窗口的最大值。';
+          if(!explicitRaw.includes(explicitPhrase)) throw new Error('source-explicit raw contract missing');
+          const review=`# Sliding Window Maximum Source-First Relation Review\n\n`+
+            `## Primary-source facts\n\n`+
+            `- \`${process.env.SHORTHAND_QID}\` preserves only the algorithm title “滑动窗口的最大值”.\n`+
+            `- \`${process.env.EXPLICIT_QID}\` preserves the fuller contract: “${explicitPhrase}”\n`+
+            `- corpus-wide active Question enumeration for sliding-window maximum returns exactly these two source Questions.\n`+
+            `- both refer to the same observable problem contract; neither source preserves exact method signature, k validity rules, null behavior, or complexity requirement.\n\n`+
+            `No historical relation/remediation record was consulted before this conclusion.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\`. Retain source-explicit survivor \`${process.env.EXPLICIT_CID}\` owning both Questions; retire shorthand singleton \`${process.env.SHORTHAND_CID}\`. The survivor Answer remains needs-update until rebuilt and independently reviewed against both source Questions, preserving the explicit array + window-size-K → each-window maximum contract without inventing missing edge conventions.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0036/sliding_window_max_relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select decide and apply exact same pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0036/sliding_window_max_relation_apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$SHORTHAND_QID,$EXPLICIT_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0],actual=[...c.question_ids].sort(),expected=[process.env.SHORTHAND_QID,process.env.EXPLICIT_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected pair drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0036-sliding-window-max-source-first-review \
+            --actor-display-name 'Sliding Window Maximum source-first reviewer' \
+            --rationale 'Two primary raw sources describe the same sliding-window maximum problem. The ByteDance source preserves the fuller array + window-size-K -> each-window maximum contract, so it is the survivor; no source evidence supports a distinct variant.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$EXPLICIT_CID" \
+            --canonical-title '算法手撕：滑动窗口最大值（Sliding Window Maximum）' > "$out/apply.json"
+
+      - name: Verify ownership and record batch progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q])),byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          for(const qid of [process.env.SHORTHAND_QID,process.env.EXPLICIT_QID]) if(byQ.get(qid)?.canonical_id!==process.env.EXPLICIT_CID) throw new Error(`${qid}: survivor ownership missing`);
+          if(byC.has(process.env.SHORTHAND_CID)) throw new Error('retired shorthand Canonical still present');
+          const members=[...(byC.get(process.env.EXPLICIT_CID)?.question_ids||[])].sort(),expected=[process.env.SHORTHAND_QID,process.env.EXPLICIT_QID].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`survivor member set drifted: ${JSON.stringify(members)}`);
+          fs.writeFileSync('review/content_build/answer_batch_0036/sliding_window_max_relation_apply.md',
+            '# Sliding Window Maximum Relation Application\n\n'+
+            '- Reviewed relation: `same`.\n'+
+            '- Survivor: `'+process.env.EXPLICIT_CID+'`, selected because its raw source preserves the fuller array + K -> per-window maximum contract.\n'+
+            '- Retired shorthand Canonical: `'+process.env.SHORTHAND_CID+'`.\n'+
+            '- Both Questions now route to the survivor; no Answer promotion occurs in this normalization slice.\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_86a4c030e736e3eea9fed1f6b739694d` shorthand Sliding Window Maximum singleton is source-first consolidated as `same` into source-explicit survivor `cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c`; corpus-wide source-near enumeration found exactly these two active Questions, and the survivor raw source preserves the fuller array + window-size-K → each-window maximum contract. The survivor Answer remains needs-update until rebuilt and independently reviewed against both sources.';
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Refresh generated audit and run complete gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during sliding-window relation slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: consolidate sliding-window-maximum sources'
+          git push origin "HEAD:$CONTENT_BRANCH"
