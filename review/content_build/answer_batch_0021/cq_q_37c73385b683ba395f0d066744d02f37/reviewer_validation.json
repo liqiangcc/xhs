@@ -1,0 +1,32 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_37c73385b683ba395f0d066744d02f37",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract candidate Java; javac -Xlint:all -Werror; exhaustive small-domain and deterministic stress differential checks versus Arrays.sort",
+  "stdout": "PASS exhaustive_arrays=781 exhaustive_configs=4 stress_shapes=72 stress_configs=5 extremes=pass invalid=reject",
+  "checks": [
+    "candidate Java compiles with warnings-as-errors",
+    "all 781 arrays of length 0..4 over {-2,-1,0,1,2} match Arrays.sort under four reviewer configurations",
+    "72 deterministic larger stress shapes match Arrays.sort under five reviewer configurations",
+    "Integer.MIN_VALUE/Integer.MAX_VALUE and duplicates sort correctly",
+    "declared null and non-positive parameter rejection"
+  ],
+  "boundary_tests": [
+    {
+      "case": "source versus answer-side contract",
+      "expected": "Java/int[]/ascending/in-place/ForkJoin/threshold choices remain explicitly answer-side",
+      "passed": true
+    },
+    {
+      "case": "shared temporary array concurrency",
+      "expected": "parallel siblings write disjoint half-open intervals and parent merge begins only after invokeAll completion",
+      "passed": true
+    },
+    {
+      "case": "small-workload tradeoff",
+      "expected": "candidate does not claim multithreading is always faster and recommends measurement",
+      "passed": true
+    }
+  ]
+}

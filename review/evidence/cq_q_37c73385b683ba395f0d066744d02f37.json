@@ -1,0 +1,164 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_37c73385b683ba395f0d066744d02f37",
+  "candidate_sha256": "49b4d83807efdc0b7460abcc5596cdfbb1a6602e8b1917099d78b03e78611ed2",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "parallel-array-sort-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "raw-note",
+      "title": "Interview note preserving the multithreaded array-sort wording",
+      "locator": "note_desc/68c82557000000001d00fb7c.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "tagged-question",
+      "title": "Tagged question record for the multithreaded array-sort source",
+      "locator": "note_tagged/68c82557000000001d00fb7c.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic Java differential validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37c73385b683ba395f0d066744d02f37/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exhaustive-small-domain and stress differential validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37c73385b683ba395f0d066744d02f37/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh source-first isolated review",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37c73385b683ba395f0d066744d02f37/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recoverable source asks only for a multithreaded implementation of array sorting; it does not prescribe language, element type, ordering direction, stability, thread count or algorithm.",
+      "source_ids": [
+        "raw-note",
+        "tagged-question"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "candidate-contract",
+      "text": "Java int[] ascending in-place sorting with caller-supplied parallelism/threshold and ForkJoin merge sort is an explicit answer-side executable contract.",
+      "source_ids": [
+        "raw-note",
+        "tagged-question",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "implementation-validation",
+      "text": "The implementation matches independent standard-library sorting oracles across writer and reviewer suites; reviewer checks additionally cover exhaustive small arrays, larger deterministic stress shapes, integer extremes and declared argument rejection.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "37c73385b683ba395f0d066744d02f37",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract candidate Java; javac -Xlint:all -Werror; exhaustive small-domain and deterministic stress differential checks versus Arrays.sort",
+    "result": "pass",
+    "reported_stdout": "PASS exhaustive_arrays=781 exhaustive_configs=4 stress_shapes=72 stress_configs=5 extremes=pass invalid=reject",
+    "checks": [
+      "candidate Java compiles with warnings-as-errors",
+      "all 781 arrays of length 0..4 over {-2,-1,0,1,2} match Arrays.sort under four reviewer configurations",
+      "72 deterministic larger stress shapes match Arrays.sort under five reviewer configurations",
+      "Integer.MIN_VALUE/Integer.MAX_VALUE and duplicates sort correctly",
+      "declared null and non-positive parameter rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "source versus answer-side contract",
+        "expected": "Java/int[]/ascending/in-place/ForkJoin/threshold choices remain explicitly answer-side",
+        "passed": true
+      },
+      {
+        "case": "shared temporary array concurrency",
+        "expected": "parallel siblings write disjoint half-open intervals and parent merge begins only after invokeAll completion",
+        "passed": true
+      },
+      {
+        "case": "small-workload tradeoff",
+        "expected": "candidate does not claim multithreading is always faster and recommends measurement",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-parallel-array-sort-20260826-v1",
+    "review_version": "parallel-array-sort.forkjoin-merge.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The primary source preserves only the request to implement array sorting with multiple threads; Java, int element type, ascending order, in-place mutation, parallelism, threshold and merge sort are not recovered source constraints.",
+      "The candidate explicitly labels those language/API/algorithm choices as an answer-side executable contract rather than attributing them to the interview source.",
+      "The concurrency argument is coherent: sibling tasks mutate disjoint half-open array intervals, invokeAll establishes child completion before the parent merge, and the shared temporary array is likewise written only within each task-owned interval while siblings run.",
+      "Reviewer-extracted Java compiles with warnings as errors and matches Arrays.sort for every array of length 0 through 4 over {-2,-1,0,1,2} under four independent parallelism/threshold configurations, plus 72 larger deterministic stress shapes under five configurations and integer-extreme cases.",
+      "Declared null and non-positive parallelism/threshold boundaries are enforced; complexity and serial-merge scalability limits are stated without claiming unmeasured production speedup.",
+      "No fabricated production experience, placeholder implementation, unsupported source expansion, or unresolved source variant was found."
+    ]
+  }
+}
