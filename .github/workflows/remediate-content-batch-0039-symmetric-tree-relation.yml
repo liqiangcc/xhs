@@ -1,0 +1,202 @@
+name: Remediate Content Batch 0039 Symmetric Tree Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0039-symmetric-tree-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-symmetric-tree-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  TARGET_QID: 3e0fe4f12f951128a2a1fb250199dcd6
+  TARGET_CID: cq_q_3e0fe4f12f951128a2a1fb250199dcd6
+  DUP_QID: a0cc0b42edbc94c5d50d6ae1d3d5f03a
+  DUP_CID: cq_q_a0cc0b42edbc94c5d50d6ae1d3d5f03a
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze source-first relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0039
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const expected=new Map([
+            [process.env.TARGET_QID,'算法手撕：对称二叉树（Symmetric Tree）。'],
+            [process.env.DUP_QID,'算法/手撕：判断是否为对称二叉树。'],
+          ]);
+          for(const [qid,text] of expected){
+            const q=byQ.get(qid);
+            if(!q||q.original_question!==text) throw new Error(`${qid}: source wording drifted: ${q?.original_question}`);
+            if(q.is_valid_for_library===false) throw new Error(`${qid}: unexpectedly invalid before relation review`);
+            if(!String(q.question_type||'').includes('Coding')) throw new Error(`${qid}: not Coding: ${q.question_type}`);
+          }
+          if(byQ.get(process.env.TARGET_QID)?.canonical_id!==process.env.TARGET_CID) throw new Error(`target ownership drifted: ${byQ.get(process.env.TARGET_QID)?.canonical_id}`);
+          if(byQ.get(process.env.DUP_QID)?.canonical_id!==process.env.DUP_CID) throw new Error(`duplicate ownership drifted: ${byQ.get(process.env.DUP_QID)?.canonical_id}`);
+          const target=byC.get(process.env.TARGET_CID);
+          if(!target || !(target.question_ids||[]).includes(process.env.TARGET_QID)) throw new Error('target Canonical no longer contains reviewed bridge Question');
+          const dup=byC.get(process.env.DUP_CID);
+          if(!dup || JSON.stringify(dup.question_ids||[])!==JSON.stringify([process.env.DUP_QID])) throw new Error(`duplicate Canonical must remain singleton for bounded consolidation: ${JSON.stringify(dup?.question_ids)}`);
+
+          const targetSource=JSON.parse(fs.readFileSync('note_tagged/68b91ba2000000001c00e8bf.json','utf8'));
+          const dupSource=JSON.parse(fs.readFileSync('note_tagged/68c2f9a8000000001d02803d.json','utf8'));
+          const has=(doc,qid,text)=>doc.tagged_questions?.some(q=>q.question_id===qid&&q.original_question===text&&q.is_valid_for_library===true);
+          if(!has(targetSource,process.env.TARGET_QID,expected.get(process.env.TARGET_QID))) throw new Error('target primary repository source drifted');
+          if(!has(dupSource,process.env.DUP_QID,expected.get(process.env.DUP_QID))) throw new Error('duplicate primary repository source drifted');
+
+          const inventory=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0039/source_inventory.json','utf8'));
+          const item=inventory.items?.find(x=>x.canonical_id===process.env.DUP_CID);
+          if(!item || !item.source_questions?.some(q=>q.question_id===process.env.DUP_QID&&q.original_question===expected.get(process.env.DUP_QID))) throw new Error('Batch 0039 frozen source inventory drifted');
+
+          const review=`# Batch 0039 Symmetric-Tree Source-First Relation Review\n\n`+
+            `## Primary-source facts\n\n`+
+            `- \`${process.env.TARGET_QID}\`: repository primary source preserves “算法手撕：对称二叉树（Symmetric Tree）。”\n`+
+            `- \`${process.env.DUP_QID}\`: an independent repository primary source preserves “算法/手撕：判断是否为对称二叉树。”\n`+
+            `- Both are standalone Coding prompts asking for the same observable operation: decide whether a binary tree is symmetric. Neither source preserves a distinct variant such as returning an axis, counting symmetric nodes, checking a subtree only, or producing a transformed tree.\n\n`+
+            `No historical relation/remediation record was consulted before this conclusion.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\`. “Symmetric Tree” and “判断是否为对称二叉树” are naming/presentation variants of the same Coding contract. Consolidate duplicate singleton \`${process.env.DUP_CID}\` into survivor \`${process.env.TARGET_CID}\`; preserve both reviewed Questions under the survivor.\n\n`+
+            `## Content consequence\n\n`+
+            `The relation slice does not promote the survivor Answer. It remains subject to source-bounded curation, exact-code validation, isolated review, evidence gate, required human approval, and real-review policy.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0039/symmetric_tree_relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select decide and apply reviewed duplicate pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0039/symmetric_tree_relation_apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$TARGET_QID,$DUP_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0];
+          const actual=[...c.question_ids].sort();
+          const expected=[process.env.TARGET_QID,process.env.DUP_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected pair drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0039-symmetric-tree-source-first-review \
+            --actor-display-name 'Symmetric tree source-first reviewer' \
+            --rationale 'Two independent repository sources preserve the same standalone Coding operation: decide whether a binary tree is symmetric. The Symmetric Tree title and Chinese descriptive wording do not preserve distinct output or scope semantics.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$TARGET_CID" \
+            --canonical-title '算法手撕：对称二叉树（Symmetric Tree）' > "$out/apply.json"
+
+      - name: Verify reviewed consolidation and update task
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          for(const qid of [process.env.TARGET_QID,process.env.DUP_QID]){
+            if(byQ.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: survivor ownership missing`);
+          }
+          if(byC.has(process.env.DUP_CID)) throw new Error('duplicate symmetric-tree Canonical survived consolidation');
+          const target=byC.get(process.env.TARGET_CID);
+          if(!target || !(target.question_ids||[]).includes(process.env.TARGET_QID) || !(target.question_ids||[]).includes(process.env.DUP_QID)) throw new Error(`survivor members missing: ${JSON.stringify(target?.question_ids)}`);
+
+          fs.writeFileSync('review/content_build/answer_batch_0039/symmetric_tree_relation_apply.md',
+            '# Batch 0039 Symmetric-Tree Relation Application\n\n'+
+            '- Relation: `same`.\n'+
+            '- Survivor: `'+process.env.TARGET_CID+'`; it now owns both reviewed source Questions.\n'+
+            '- Retired duplicate Canonical: `'+process.env.DUP_CID+'`.\n'+
+            '- The merge does not promote the survivor Answer; source-bounded curation and review remain required.\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_a0cc0b42edbc94c5d50d6ae1d3d5f03a` was reviewed source-first against existing symmetric-tree Canonical `cq_q_3e0fe4f12f951128a2a1fb250199dcd6`: two independent repository sources preserve the same operation—decide whether a binary tree is symmetric—so the relation is `same`. The Batch 0039 duplicate singleton is retired and its Question is consolidated under the survivor. This normalization does not promote content; the survivor still requires source-bounded curation, exact-code validation, isolated review, evidence gate, required human approval, and real-review policy.';
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Refresh generated audits and run full gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during symmetric-tree relation slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: normalize symmetric-tree source relation'
+          git push origin "HEAD:$CONTENT_BRANCH"
