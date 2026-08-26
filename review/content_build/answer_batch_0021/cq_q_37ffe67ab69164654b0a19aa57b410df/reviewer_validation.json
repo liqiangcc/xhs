@@ -1,0 +1,34 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_37ffe67ab69164654b0a19aa57b410df",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract candidate Java; javac -Xlint:all -Werror; independent permutation-existence oracle for all simple directed graphs through V=4 plus seeded DAG validation",
+  "stdout": "PASS exhaustive_graphs=4166 exhaustive_dags=573 exhaustive_cycles=3593 randomized_dags=800 oracle=permutation-validity duplicates=pass invalid=reject",
+  "checks": [
+    "candidate Java compiles with warnings-as-errors",
+    "all 4166 simple directed graphs through four vertices classified by independent permutation oracle",
+    "all 573 exhaustive DAGs return a valid vertex permutation respecting every edge",
+    "all 3593 exhaustive cyclic graphs reject",
+    "800 seeded DAGs up to 40 vertices return valid orders",
+    "duplicate edges remain balanced by indegree/decrement accounting",
+    "empty graph and declared invalid-input boundaries pass"
+  ],
+  "boundary_tests": [
+    {
+      "case": "source versus answer-side contract",
+      "expected": "Java/0..V-1/int[][]/Kahn/arbitrary-valid-order/exception-on-cycle remain explicitly answer-side",
+      "passed": true
+    },
+    {
+      "case": "non-unique topological order",
+      "expected": "review validates edge precedence and vertex uniqueness rather than one fixed array",
+      "passed": true
+    },
+    {
+      "case": "cycle semantics",
+      "expected": "self-cycle and multi-vertex cycles reject under declared API",
+      "passed": true
+    }
+  ]
+}
