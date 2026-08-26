@@ -1,0 +1,180 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9035375af7ddaf17003586327dbb6f2d",
+  "candidate_sha256": "ba2f321c881999d3cf9e2e1661434953c62fb8bbf4dd484bea043188a33b8914",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "useprevious-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Repository ByteDance frontend interview source containing the usePrevious prompt",
+      "locator": "note_desc/68ca70d2000000000e00f5bb.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Structured tagged usePrevious interview question",
+      "locator": "note_tagged/68ca70d2000000000e00f5bb.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "react-useref",
+      "title": "React 19.2 useRef reference",
+      "locator": "https://react.dev/reference/react/useRef",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "react-useeffect",
+      "title": "React 19.2 useEffect reference",
+      "locator": "https://react.dev/reference/react/useEffect",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer usePrevious lifecycle validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9035375af7ddaf17003586327dbb6f2d/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent usePrevious lifecycle validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9035375af7ddaf17003586327dbb6f2d/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9035375af7ddaf17003586327dbb6f2d/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks for a custom usePrevious Hook that records the prior State value; the UI-triggering extension is a separate follow-up prompt.",
+      "source_ids": [
+        "repository-source",
+        "repository-tagged",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "ref-effect-semantics",
+      "text": "The classic interview implementation uses a persistent ref and an Effect that records current value after commit; ref mutation itself does not trigger rendering.",
+      "source_ids": [
+        "react-useref",
+        "react-useeffect",
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "lifecycle-boundaries",
+      "text": "Initial undefined, same-value, and object-reference cases match the documented previous-commit lifecycle model in both writer and independent validation.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "production-caveat",
+      "text": "Current React documentation says ref.current changes do not re-render and cautions against reading/writing refs during render, so the answer explicitly limits the pattern rather than presenting it as universal production best practice.",
+      "source_ids": [
+        "react-useref",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9035375af7ddaf17003586327dbb6f2d",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate JavaScript; independent static contract check plus 4 deterministic and 1000 randomized render/commit lifecycle-model sequences",
+    "result": "pass",
+    "reported_stdout": "PASS exact_hook=useRef+useEffect deterministic=4 randomized=1000 initial=undefined previous_commit_model=pass same_value=pass object_identity=pass",
+    "checks": [
+      "complete usePrevious(value) implementation is present",
+      "ref write occurs inside useEffect with [value]",
+      "initial previous value is undefined",
+      "A -> B -> C yields undefined, A, B",
+      "same-value renders retain the immediately preceding render value",
+      "object identity is preserved by reference",
+      "1000 independent randomized value sequences match the previous-commit model"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-useprevious-20260826-v1",
+    "review_version": "useprevious.react-ref-effect-boundary.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate stays on the preserved usePrevious hand-write prompt and does not silently merge the separate follow-up question that asks for UI-triggering updates.",
+      "The implementation is complete and uses the expected useRef plus post-commit Effect timing: a render consumes the stored value before the Effect records the current value for a later render.",
+      "Initial undefined semantics, same-value renders, and object-reference behavior are stated explicitly instead of being left as hidden assumptions.",
+      "The answer correctly states that changing ref.current does not trigger a React re-render and therefore does not present ref as a replacement for render-driving state.",
+      "The current React documentation caveat against treating ref.current as a general render-time data source is surfaced explicitly, so the classic interview pattern is not overstated as universal production best practice.",
+      "Independent deterministic and randomized lifecycle-model checks agree with the candidate explanation and exact code structure.",
+      "The project section remains hypothetical and contains no fabricated production claim."
+    ]
+  }
+}
