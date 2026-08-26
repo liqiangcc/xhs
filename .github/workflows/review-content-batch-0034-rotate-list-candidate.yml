@@ -48,7 +48,8 @@ jobs:
           const q=(note.tagged_questions||[]).find(x=>x.question_id===mapping.note_question_id);
           const expected='算法：旋转链表 (LeetCode 61)';
           if(!q||q.original_question!==expected||q.question_type!=='算法手撕_Coding') throw new Error('preserved source drifted');
-          const md=fs.readFileSync(candidate,'utf8');
+          const candidatePath=`review/candidates/answers/${cid}.md`;
+          const md=fs.readFileSync(candidatePath,'utf8');
           for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(!md.includes(h)) throw new Error(`missing ${h}`);
           for(const token of ['k % n','tail.next = head','O(n)','O(1)','节点身份','来源没有真实项目']) if(!md.includes(token)) throw new Error(`required content missing ${token}`);
           const f=md.match(/```java\n([\s\S]*?)\n```/); if(!f) throw new Error('Java fence missing'); fs.writeFileSync('/tmp/RotateList.java',f[1].trim()+'\n');
