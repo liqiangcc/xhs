@@ -1,0 +1,38 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_8c97435494ae4e1055f82e1a4710634d",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "execute both exact candidate SQL variants on independent in-memory SQLite boundary and randomized datasets against a Python reference classifier",
+  "stdout": "PASS boundary_cases=3 randomized_datasets=600 min-date=not-exists-equivalent user-day-dedup=pass active-invariant=pass",
+  "checks": [
+    "exact candidate SQL variants execute",
+    "same-day duplicate events deduplicate to one user-day",
+    "first appearance is new and later appearance is old",
+    "MIN(first_date) and NOT EXISTS variants agree",
+    "new+old equals distinct active users each day",
+    "600 randomized datasets match independent classifier"
+  ],
+  "boundary_tests": [
+    {
+      "case": "one user, one first-day login",
+      "expected": "new=1 old=0",
+      "passed": true
+    },
+    {
+      "case": "same user logs twice on first day and returns next day",
+      "expected": "same-day duplicate counts once; next day is old",
+      "passed": true
+    },
+    {
+      "case": "mixed first-time and returning users across three dates",
+      "expected": "new/old partition equals distinct active users",
+      "passed": true
+    },
+    {
+      "case": "600 seeded randomized login datasets",
+      "expected": "MIN(first_date) and NOT EXISTS match reference classifier and active-user invariant",
+      "passed": true
+    }
+  ]
+}

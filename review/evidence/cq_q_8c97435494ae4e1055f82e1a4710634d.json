@@ -1,0 +1,159 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_8c97435494ae4e1055f82e1a4710634d",
+  "candidate_sha256": "0c1f0eb6be3a7de4cc46acdaf8964e0b1d49a136d1f831b068731e7f58c9dfb5",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "daily-new-old-users-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Repository tagged daily new/old login-user SQL question",
+      "locator": "note_tagged/67ffada6000000000d0171d2.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic SQLite validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8c97435494ae4e1055f82e1a4710634d/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent randomized SQLite validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8c97435494ae4e1055f82e1a4710634d/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8c97435494ae4e1055f82e1a4710634d/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks for daily new and old user counts from login logs and points to left join or NOT EXISTS; concrete schema and operational boundaries are unstated.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "classification",
+      "text": "Under the explicit user-day/lifecycle-first-login contract, the exact first-date and NOT EXISTS SQL variants produce the same new/old classification.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "dedup-invariant",
+      "text": "Same-day duplicate login events count once and new_users + old_users equals distinct active users for every validated day.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "8c97435494ae4e1055f82e1a4710634d",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "execute both exact candidate SQL variants on independent in-memory SQLite boundary and randomized datasets against a Python reference classifier",
+    "result": "pass",
+    "reported_stdout": "PASS boundary_cases=3 randomized_datasets=600 min-date=not-exists-equivalent user-day-dedup=pass active-invariant=pass",
+    "checks": [
+      "exact candidate SQL variants execute",
+      "same-day duplicate events deduplicate to one user-day",
+      "first appearance is new and later appearance is old",
+      "MIN(first_date) and NOT EXISTS variants agree",
+      "new+old equals distinct active users each day",
+      "600 randomized datasets match independent classifier"
+    ],
+    "boundary_tests": [
+      {
+        "case": "one user, one first-day login",
+        "expected": "new=1 old=0",
+        "passed": true
+      },
+      {
+        "case": "same user logs twice on first day and returns next day",
+        "expected": "same-day duplicate counts once; next day is old",
+        "passed": true
+      },
+      {
+        "case": "mixed first-time and returning users across three dates",
+        "expected": "new/old partition equals distinct active users",
+        "passed": true
+      },
+      {
+        "case": "600 seeded randomized login datasets",
+        "expected": "MIN(first_date) and NOT EXISTS match reference classifier and active-user invariant",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-daily-new-old-users-20260826-v1",
+    "review_version": "daily-new-old-users.user-day-contract.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate preserves the sparse source boundary and explicitly declares its schema, user-day deduplication and lifecycle-first-login assumptions instead of inventing them as source facts.",
+      "Both SQL variants directly answer daily new/old user counts; the NOT EXISTS variant reflects the source hint while the first-date variant exposes the state model clearly.",
+      "The answer correctly separates event rows from distinct users so repeated logins on one day do not inflate user counts.",
+      "The lifecycle-first-date definition makes new and old mutually exclusive and exhaustive over each day’s distinct active users; independent validation checks that invariant.",
+      "Timezone, anonymous-user, history-availability, late-data and large-table access-path boundaries are explicitly called out rather than hidden.",
+      "Independent reviewer-owned SQLite execution checks three boundary families and 600 randomized datasets against a separate reference classifier; no semantic mismatch was found."
+    ]
+  }
+}
