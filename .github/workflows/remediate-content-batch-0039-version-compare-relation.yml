@@ -1,0 +1,201 @@
+name: Remediate Content Batch 0039 Version Compare Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0039-version-compare-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-version-compare-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  TARGET_QID: 9e22dda08d291f9e651d29d69976d97e
+  TARGET_CID: cq_q_9e22dda08d291f9e651d29d69976d97e
+  DUP_QID: ad3a48d5db87388f867a2f597860d103
+  DUP_CID: cq_q_ad3a48d5db87388f867a2f597860d103
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze source-first relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0039
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const expected=new Map([
+            [process.env.TARGET_QID,'算法：比较版本号大小。'],
+            [process.env.DUP_QID,'算法手撕：比较版本号（Compare Version Numbers）。'],
+          ]);
+          for(const [qid,text] of expected){
+            const q=byQ.get(qid);
+            if(!q||q.original_question!==text) throw new Error(`${qid}: source wording drifted: ${q?.original_question}`);
+            if(q.is_valid_for_library===false) throw new Error(`${qid}: unexpectedly invalid before relation review`);
+            if(!String(q.question_type||'').includes('Coding')) throw new Error(`${qid}: not Coding: ${q.question_type}`);
+          }
+          const ownership=[
+            [process.env.TARGET_QID,process.env.TARGET_CID],
+            [process.env.DUP_QID,process.env.DUP_CID],
+          ];
+          for(const [qid,cid] of ownership){
+            if(byQ.get(qid)?.canonical_id!==cid) throw new Error(`${qid}: ownership drifted to ${byQ.get(qid)?.canonical_id}`);
+            const c=byC.get(cid);
+            if(!c||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error(`${cid}: expected singleton before relation review: ${JSON.stringify(c?.question_ids)}`);
+          }
+
+          const meituan=JSON.parse(fs.readFileSync('note_structured/66a27afa000000000600d084.json','utf8'));
+          const go=JSON.parse(fs.readFileSync('note_structured/6878ac580000000010026c75.json','utf8'));
+          if(!meituan.questions?.includes('算法：比较版本号大小。')) throw new Error('Meituan raw structured source phrase missing');
+          if(!go.questions?.includes('算法手撕：比较版本号（Compare Version Numbers）。')) throw new Error('Go-backend raw structured source phrase missing');
+
+          const review=`# Batch 0039 Version Compare Source-First Relation Review\n\n`+
+            `## Primary-source facts\n\n`+
+            `- \`${process.env.TARGET_QID}\`: repository structured source preserves “算法：比较版本号大小。”.\n`+
+            `- \`${process.env.DUP_QID}\`: an independent repository structured source preserves “算法手撕：比较版本号（Compare Version Numbers）。”\n`+
+            `- Both are standalone Coding prompts asking for the same observable operation: compare two version numbers. Neither source preserves a distinct variant such as semantic-version prerelease precedence, version-list sorting, or maximum-version selection.\n\n`+
+            `No historical relation/remediation record was consulted before this conclusion.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\`. The wording difference (“比较版本号大小” versus “Compare Version Numbers”) is presentation only and does not preserve a distinct contract. Consolidate the duplicate singleton \`${process.env.DUP_CID}\` into survivor \`${process.env.TARGET_CID}\`; preserve both source Questions as members of the survivor.\n\n`+
+            `## Content consequence\n\n`+
+            `The survivor Answer must remain non-curated until it is rebuilt and independently reviewed against both source wordings. The merge itself does not authorize choosing unstated parsing rules for malformed versions, prerelease labels, or arbitrary-length numeric components; any executable candidate must declare its accepted version-string contract.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0039/version_compare_relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select decide and apply reviewed duplicate pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0039/version_compare_relation_apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$TARGET_QID,$DUP_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0];
+          const actual=[...c.question_ids].sort();
+          const expected=[process.env.TARGET_QID,process.env.DUP_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected pair drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0039-version-compare-source-first-review \
+            --actor-display-name 'Version compare source-first reviewer' \
+            --rationale 'Two independent repository sources preserve the same standalone Coding operation: compare version numbers. Neither source preserves a distinct semantic-version, list-sorting, or maximum-version contract, so the wording difference is presentation only.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$TARGET_CID" \
+            --canonical-title '算法：比较版本号（Compare Version Numbers）' > "$out/apply.json"
+
+      - name: Verify reviewed consolidation and update task
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          for(const qid of [process.env.TARGET_QID,process.env.DUP_QID]){
+            if(byQ.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: survivor ownership missing`);
+          }
+          if(byC.has(process.env.DUP_CID)) throw new Error('duplicate version-compare Canonical survived consolidation');
+          const members=[...(byC.get(process.env.TARGET_CID)?.question_ids||[])].sort();
+          const expected=[process.env.TARGET_QID,process.env.DUP_QID].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`survivor members drifted: ${JSON.stringify(members)}`);
+
+          fs.writeFileSync('review/content_build/answer_batch_0039/version_compare_relation_apply.md',
+            '# Batch 0039 Version Compare Relation Application\n\n'+
+            '- Relation: `same`.\n'+
+            '- Survivor: `'+process.env.TARGET_CID+'`; it now owns both reviewed source Questions.\n'+
+            '- Retired duplicate Canonical: `'+process.env.DUP_CID+'`.\n'+
+            '- This normalization does not promote the survivor Answer; source-bounded candidate rebuild and isolated review remain required.\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_9e22dda08d291f9e651d29d69976d97e` was compared source-first with duplicate singleton `cq_q_ad3a48d5db87388f867a2f597860d103`: independent repository sources preserve the same “比较版本号 / Compare Version Numbers” Coding operation, so the relation is `same`. Both Questions are consolidated under `cq_q_9e22dda08d291f9e651d29d69976d97e`; the duplicate Canonical is retired. The survivor still requires a source-bounded executable candidate and isolated review; the relation slice does not promote content.';
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Refresh generated audits and run full gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during version-compare relation slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: normalize version-compare source relation'
+          git push origin "HEAD:$CONTENT_BRANCH"
