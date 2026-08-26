@@ -1,0 +1,53 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_8f04cfa510fe868afcf072c93499a8ea",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract exact candidate Java; javac -Xlint:all -Werror; timed deterministic, 300 randomized and 50 long stress runs for both synchronization variants",
+  "stdout": "PASS semaphore_runs=358 monitor_runs=358 max_pairs=5000 b_started_first=pass exact_ab=pass timeouts=none negative=pass",
+  "checks": [
+    "exact candidate compiles",
+    "strict ab alternation for Semaphore",
+    "strict ab alternation for wait/notify",
+    "B starts first but A still prints first",
+    "large runs complete without timeout",
+    "negative counts rejected"
+  ],
+  "boundary_tests": [
+    {
+      "case": "zero pairs",
+      "expected": "empty output without deadlock",
+      "passed": true
+    },
+    {
+      "case": "one/four pairs",
+      "expected": "exact ab and abababab",
+      "passed": true
+    },
+    {
+      "case": "b thread deliberately started before a",
+      "expected": "still begins with a because protocol, not scheduling, owns order",
+      "passed": true
+    },
+    {
+      "case": "Semaphore permits 1/0",
+      "expected": "strict permit handoff",
+      "passed": true
+    },
+    {
+      "case": "monitor while/wait/notifyAll",
+      "expected": "strict condition handoff with no observed timeout",
+      "passed": true
+    },
+    {
+      "case": "random and long stress runs through 5000 pairs",
+      "expected": "every even index a and odd index b",
+      "passed": true
+    },
+    {
+      "case": "negative pair count",
+      "expected": "IllegalArgumentException in both variants",
+      "passed": true
+    }
+  ]
+}

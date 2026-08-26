@@ -1,0 +1,209 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_8f04cfa510fe868afcf072c93499a8ea",
+  "candidate_sha256": "1a15d2dc68acc444a01110a9359db1cc4cedd631af4c00c50e343f7745b25554",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "alternating-ab-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Repository tagged alternating-ab interview question",
+      "locator": "note_tagged/67d42a3a000000001d00649a.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "object-doc",
+      "title": "Java SE 21 Object wait/notify API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "semaphore-doc",
+      "title": "Java SE 21 Semaphore API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer alternating-ab executable validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8f04cfa510fe868afcf072c93499a8ea/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent alternating-ab stress validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8f04cfa510fe868afcf072c93499a8ea/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8f04cfa510fe868afcf072c93499a8ea/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "semaphore-handoff",
+      "text": "The 1/0 initial permits plus reciprocal acquire/release establish strict A/B handoff independent of thread start order.",
+      "source_ids": [
+        "semaphore-doc",
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "monitor-condition",
+      "text": "The monitor implementation owns the shared condition under synchronized, waits in a while loop, changes the condition before notifyAll, and relies on monitor reacquisition before a waiter proceeds.",
+      "source_ids": [
+        "object-doc",
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "exact-output",
+      "text": "Both exact candidate implementations repeatedly produce strict ab alternation, including large and randomized workloads, with B deliberately started first.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "原理机制",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "27f9476e6f17473bae89a7a3c05db42f",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "question_id": "8f04cfa510fe868afcf072c93499a8ea",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate Java; javac -Xlint:all -Werror; timed deterministic, 300 randomized and 50 long stress runs for both synchronization variants",
+    "result": "pass",
+    "reported_stdout": "PASS semaphore_runs=358 monitor_runs=358 max_pairs=5000 b_started_first=pass exact_ab=pass timeouts=none negative=pass",
+    "checks": [
+      "exact candidate compiles",
+      "strict ab alternation for Semaphore",
+      "strict ab alternation for wait/notify",
+      "B starts first but A still prints first",
+      "large runs complete without timeout",
+      "negative counts rejected"
+    ],
+    "boundary_tests": [
+      {
+        "case": "zero pairs",
+        "expected": "empty output without deadlock",
+        "passed": true
+      },
+      {
+        "case": "one/four pairs",
+        "expected": "exact ab and abababab",
+        "passed": true
+      },
+      {
+        "case": "b thread deliberately started before a",
+        "expected": "still begins with a because protocol, not scheduling, owns order",
+        "passed": true
+      },
+      {
+        "case": "Semaphore permits 1/0",
+        "expected": "strict permit handoff",
+        "passed": true
+      },
+      {
+        "case": "monitor while/wait/notifyAll",
+        "expected": "strict condition handoff with no observed timeout",
+        "passed": true
+      },
+      {
+        "case": "random and long stress runs through 5000 pairs",
+        "expected": "every even index a and odd index b",
+        "passed": true
+      },
+      {
+        "case": "negative pair count",
+        "expected": "IllegalArgumentException in both variants",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-alternating-ab-20260826-v1",
+    "review_version": "alternating-ab.semaphore-monitor-stress.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate directly answers both synchronization choices named in the preserved source instead of drifting into unrelated CAS/AQS material.",
+      "Semaphore ordering is encoded by the initial 1/0 permit state and reciprocal acquire/release handoff, so starting thread B first does not change the first output character.",
+      "The monitor variant guards all condition state under one monitor and correctly uses while around wait, matching the JDK requirement to recheck conditions after wakeup including spurious wakeups.",
+      "The answer correctly distinguishes notify/notifyAll wakeup from monitor reacquisition and states the monitor-ownership requirement for wait/notify calls.",
+      "The interruption limitation is explicit rather than silently claiming production-grade cancellation semantics.",
+      "Independent execution repeatedly verifies exact ab alternation for both implementations, including zero, large and randomized pair counts with bounded timeouts; no hang or order violation was observed.",
+      "The project section stays hypothetical and does not fabricate production experience."
+    ]
+  }
+}
