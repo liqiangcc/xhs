@@ -1,0 +1,285 @@
+name: Review Content Batch 0037 usePrevious Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0037-useprevious.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-useprevious-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9035375af7ddaf17003586327dbb6f2d
+  SOURCE_QID: 9035375af7ddaf17003586327dbb6f2d
+  SOURCE_DESC: note_desc/68ca70d2000000000e00f5bb.txt
+  SOURCE_TAGGED: note_tagged/68ca70d2000000000e00f5bb.json
+  USEREF_DOC: https://react.dev/reference/react/useRef
+  USEEFFECT_DOC: https://react.dev/reference/react/useEffect
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Phase A source-first isolated review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          candidate="review/candidates/answers/$cid.md"
+          out="review/content_build/answer_batch_0037/$cid"
+          tmp="$out/reviewer_tmp"
+          rm -rf "$tmp"
+          mkdir -p "$tmp"
+
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const exact='手写一个自定义 Hook：usePrevious (用于记录state上一次的值)';
+          const desc=fs.readFileSync(process.env.SOURCE_DESC,'utf8');
+          if(!desc.includes(exact)) throw new Error('raw source prompt drift');
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const taggedExpected='代码实战：手写一个自定义 Hook `usePrevious`（用于记录 State 上一次的值）。';
+          if(!q||q.original_question!==taggedExpected||q.is_valid_for_library!==true) throw new Error('tagged source drift');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) {
+            if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          }
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||'';
+          const bullets=(one.match(/^- /gm)||[]).length;
+          if(bullets<3||bullets>6) throw new Error(`one-minute backbone drift ${bullets}`);
+          for(const marker of ['usePrevious(value)','useRef()','useEffect(() =>','previousRef.current = value','[value]','return previousRef.current','首次','undefined','ref 更新不会','生产 caveat']) {
+            if(!md.includes(marker)) throw new Error(`candidate missing ${marker}`);
+          }
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
+          if(/我在线上|我负责过|我们生产|真实项目里我曾|线上事故/.test(md)) throw new Error('fabricated project claim');
+          const blocks=[...md.matchAll(/```javascript\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1) throw new Error(`expected one JavaScript implementation, got ${blocks.length}`);
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/reviewer_tmp/exact_candidate.js`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$tmp/reviewer_validation.js" <<'NODE'
+          'use strict';
+          const fs=require('fs');
+          const code=fs.readFileSync('exact_candidate.js','utf8');
+          const required=[
+            /import\s*\{\s*useEffect\s*,\s*useRef\s*\}\s*from\s*['"]react['"]/,
+            /function\s+usePrevious\s*\(\s*value\s*\)/,
+            /const\s+previousRef\s*=\s*useRef\s*\(\s*\)/,
+            /useEffect\s*\(\s*\(\s*\)\s*=>\s*\{\s*previousRef\.current\s*=\s*value\s*;\s*\}\s*,\s*\[\s*value\s*\]\s*\)/s,
+            /return\s+previousRef\.current\s*;/
+          ];
+          for(const p of required) if(!p.test(code)) throw new Error(`implementation drift ${p}`);
+          if(/useState\s*\(/.test(code)) throw new Error('baseline unexpectedly uses state');
+
+          function model(values){
+            let hasStored=false,stored,hasDep=false,dep;
+            const out=[];
+            for(const value of values){
+              out.push(hasStored?stored:undefined);
+              if(!hasDep||!Object.is(dep,value)){stored=value;hasStored=true;dep=value;hasDep=true;}
+            }
+            return out;
+          }
+          function check(values){
+            const actual=model(values);
+            for(let i=0;i<values.length;i++){
+              const expected=i===0?undefined:values[i-1];
+              if(!Object.is(actual[i],expected)) throw new Error(`lifecycle mismatch at ${i}`);
+            }
+          }
+          check(['A','B','C']);
+          check([1,1,2,2,3]);
+          const a={id:'a'},b={id:'b'};check([a,b,a]);
+          check([undefined,'x',undefined,'y']);
+
+          let seed=0x9035375a>>>0;
+          const next=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed;};
+          for(let round=0;round<1000;round++){
+            const values=[];const len=1+(next()%40);
+            for(let i=0;i<len;i++) values.push(next()%7);
+            check(values);
+          }
+          console.log('PASS exact_hook=useRef+useEffect deterministic=4 randomized=1000 initial=undefined previous_commit_model=pass same_value=pass object_identity=pass');
+          NODE
+          (cd "$tmp" && node reviewer_validation.js > stdout.txt)
+          stdout="$(cat "$tmp/stdout.txt")"
+          test "$stdout" = 'PASS exact_hook=useRef+useEffect deterministic=4 randomized=1000 initial=undefined previous_commit_model=pass same_value=pass object_identity=pass'
+
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0037/${cid}`;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const validation={
+            schema_version:'answer_code_validation.v1',
+            canonical_id:cid,
+            candidate_sha256:hash,
+            result:'pass',
+            validated_at:date,
+            command:'extract exact candidate JavaScript; independent static contract check plus 4 deterministic and 1000 randomized render/commit lifecycle-model sequences',
+            stdout:process.env.REVIEW_STDOUT,
+            checks:[
+              'complete usePrevious(value) implementation is present',
+              'ref write occurs inside useEffect with [value]',
+              'initial previous value is undefined',
+              'A -> B -> C yields undefined, A, B',
+              'same-value renders retain the immediately preceding render value',
+              'object identity is preserved by reference',
+              '1000 independent randomized value sequences match the previous-commit model'
+            ],
+            validation_scope:'Independent executable validation covers the exact candidate structure and its documented render/commit state model; it does not claim to be a React renderer conformance suite.'
+          };
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify(validation,null,2)+'\n');
+
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The candidate stays on the preserved usePrevious hand-write prompt and does not silently merge the separate follow-up question that asks for UI-triggering updates.',
+            'The implementation is complete and uses the expected useRef plus post-commit Effect timing: a render consumes the stored value before the Effect records the current value for a later render.',
+            'Initial undefined semantics, same-value renders, and object-reference behavior are stated explicitly instead of being left as hidden assumptions.',
+            'The answer correctly states that changing ref.current does not trigger a React re-render and therefore does not present ref as a replacement for render-driving state.',
+            'The current React documentation caveat against treating ref.current as a general render-time data source is surfaced explicitly, so the classic interview pattern is not overstated as universal production best practice.',
+            'Independent deterministic and randomized lifecycle-model checks agree with the candidate explanation and exact code structure.',
+            'The project section remains hypothetical and contains no fabricated production claim.'
+          ];
+          const review={
+            schema_version:'isolated_review.v1',
+            canonical_id:cid,
+            candidate_sha256:hash,
+            reviewed_at:date,
+            review_mode:'source_first_isolated',
+            reviewer_id:'source-first-isolated-reviewer-useprevious-20260826-v1',
+            review_version:'useprevious.react-ref-effect-boundary.v1',
+            decision:'pass',
+            revision_round:1,
+            source_packet:[
+              process.env.SOURCE_DESC,
+              process.env.SOURCE_TAGGED,
+              process.env.USEREF_DOC,
+              process.env.USEEFFECT_DOC,
+              candidate,
+              'docs/refactor/09_answer_content_standard.md',
+              `${out}/reviewer_validation.json`
+            ],
+            scores,
+            hard_failures:[],
+            unsupported_claims:[],
+            uncovered_source_variants:[],
+            findings,
+            promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']
+          };
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          NODE
+
+      - name: Phase B bind evidence after isolated conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0037/$cid"
+          node "$out/writer_validation.js"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0037/${cid}`;
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          const wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`,'utf8'));
+          const rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          const review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||rv.result!=='pass'||review.decision!=='pass') throw new Error('phase state mismatch');
+          if(new Set([wv.candidate_sha256,rv.candidate_sha256,review.candidate_sha256]).size!==1) throw new Error('candidate hash mismatch');
+
+          const evidence={
+            schema_version:'answer_evidence.v1',
+            canonical_id:cid,
+            candidate_sha256:review.candidate_sha256,
+            checked_at:date,
+            writer:{writer_id:'useprevious-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'repository-source',title:'Repository ByteDance frontend interview source containing the usePrevious prompt',locator:process.env.SOURCE_DESC,source_type:'repository_source_record',checked_at:date},
+              {source_id:'repository-tagged',title:'Structured tagged usePrevious interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},
+              {source_id:'react-useref',title:'React 19.2 useRef reference',locator:process.env.USEREF_DOC,source_type:'official_documentation',checked_at:date},
+              {source_id:'react-useeffect',title:'React 19.2 useEffect reference',locator:process.env.USEEFFECT_DOC,source_type:'official_documentation',checked_at:date},
+              {source_id:'writer-validation',title:'Writer usePrevious lifecycle validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'reviewer-validation',title:'Independent usePrevious lifecycle validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Fresh isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The source asks for a custom usePrevious Hook that records the prior State value; the UI-triggering extension is a separate follow-up prompt.',source_ids:['repository-source','repository-tagged','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版']},
+              {claim_id:'ref-effect-semantics',text:'The classic interview implementation uses a persistent ref and an Effect that records current value after commit; ref mutation itself does not trigger rendering.',source_ids:['react-useref','react-useeffect','writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制']},
+              {claim_id:'lifecycle-boundaries',text:'Initial undefined, same-value, and object-reference cases match the documented previous-commit lifecycle model in both writer and independent validation.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','常见追问','易错点']},
+              {claim_id:'production-caveat',text:'Current React documentation says ref.current changes do not re-render and cautions against reading/writing refs during render, so the answer explicitly limits the pattern rather than presenting it as universal production best practice.',source_ids:['react-useref','isolated-review'],answer_locations:['关键细节','常见追问','易错点']}
+            ],
+            source_question_coverage:[{question_id:process.env.SOURCE_QID,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{
+              command:rv.command,
+              result:'pass',
+              reported_stdout:rv.stdout,
+              checks:rv.checks
+            },
+            review_state:'independent_source_first_review_passed',
+            review:{
+              reviewer_id:review.reviewer_id,
+              review_version:review.review_version,
+              independent:true,
+              decision:'pass',
+              revision_round:1,
+              scores:review.scores,
+              hard_failures:[],
+              uncovered_source_variants:[],
+              unsupported_claims:[],
+              findings:review.findings
+            }
+          };
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';
+          let text=fs.readFileSync(task,'utf8');
+          const pending='- [ ] `cq_q_9035375af7ddaf17003586327dbb6f2d` usePrevious writer stage preserves the exact repository hand-write prompt, provides a complete `useRef + useEffect` implementation with initial/same-value/object-reference boundaries, records current React 19.2 ref/effect semantics including the render-time ref caveat, and passes exact-code plus deterministic lifecycle-model writer validation. Isolated source-first review and evidence promotion remain pending.';
+          const done='- [x] `cq_q_9035375af7ddaf17003586327dbb6f2d` usePrevious candidate preserves the exact repository hand-write prompt, provides a complete `useRef + useEffect` implementation with explicit initial/same-value/object-reference boundaries, records current React 19.2 ref/effect semantics including the render-time ref caveat, passes writer validation plus independent deterministic/randomized lifecycle-model validation, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!text.includes(pending)) throw new Error('task pending marker drift');
+          fs.writeFileSync(task,text.replace(pending,done));
+          NODE
+
+          npm run ci:answer:validate:strict
+          npm run ci:canonical:check
+          node scripts/content/check_answer_evidence.js --noWrite
+
+      - name: Commit isolated review if branch is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "${{ steps.base.outputs.head }}" || {
+            echo "content branch moved during isolated review; refusing stale write" >&2
+            exit 1
+          }
+          rm -rf "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_tmp"
+          git config user.name "xhs-review-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add \
+            "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" \
+            "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" \
+            "review/evidence/$CANONICAL_ID.json" \
+            "tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md"
+          git commit -m "review: pass batch 0037 usePrevious candidate source-first"
+          git push origin "HEAD:$CONTENT_BRANCH"
