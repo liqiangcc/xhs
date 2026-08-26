@@ -1,0 +1,301 @@
+name: Build Content Batch 0039 CAS Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0039-cas-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-cas-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9ffa48e1df8d78a08a74e14388301ebc
+  SOURCE_QID: 9ffa48e1df8d78a08a74e14388301ebc
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0039/$cid"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='CAS了解不？手写一个？';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/682de771000000002301f55d.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.is_valid_for_library!==true) throw new Error(`CAS source drifted: ${src?.original_question}`);
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const row=rows.find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact||row.canonical_id!==cid||row.is_valid_for_library!==true) throw new Error('Question projection/ownership drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0039/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('Canonical context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0039/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(q=>q.question_id===qid&&q.original_question===exact)) throw new Error('frozen Batch 0039 source inventory drifted');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded CAS candidate and Java fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0039/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_9ffa48e1df8d78a08a74e14388301ebc","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # CAS 了解不？手写一个？
+
+          ## 核心结论
+
+          CAS（Compare-And-Set）可以抽象成一个原子条件更新：读取某个共享位置，只有它仍等于调用方给出的 `expected` 时才写入 `update` 并返回成功，否则不修改并返回失败。题目只说“CAS了解不？手写一个？”，没有指定是解释硬件指令、JVM 原子原语，还是写一个基于 CAS 的无锁算法；因此答案要先划边界：普通 Java 代码无法凭空“手写出”等价于 CPU/JVM 原子 CAS 的 lock-free 原语，真正的原子性必须来自运行时/硬件提供的原子操作。面试里可以一方面写一个 `synchronized` 版本来说明 CAS 的条件更新语义，明确它只是**语义模拟、不是 lock-free CAS**；另一方面用 JDK `AtomicInteger.compareAndSet` 手写一个 CAS retry loop，展示真实无锁更新方式。
+
+          ## 1 分钟版
+
+          - CAS 的三要素是内存位置 V、期望值 E、新值 N：原子地执行“若 V == E，则 V=N 并成功；否则保持 V 不变并失败”。
+          - “比较”和“写入”必须是一个不可分割的原子动作；如果先普通读取再普通写入，中间能被其他线程插入，就不是 CAS。
+          - 如果面试官说“不能用 AtomicInteger，手写 CAS”，可以用 `synchronized` 写出同样的接口语义，但要主动说明：这靠互斥锁保证原子性，不是硬件 CAS，也不是 lock-free。
+          - 真正的典型手写题是 CAS loop：读旧值 → 算新值 → `compareAndSet(old,new)`；失败说明观察期间值被别人改过，重新读取并重试。
+          - CAS 只比较“当前值是否又等于 E”，不能天然识别值是否经历过 A→B→A；这就是 ABA 风险。需要把版本/时间戳与值一起比较时，可使用 stamped/versioned state，例如 `AtomicStampedReference`。
+
+          ## 3 分钟版
+
+          先写一个**只模拟语义**的版本：
+
+          ```java
+          final class LockedCasInt {
+              private int value;
+
+              LockedCasInt(int initial) {
+                  value = initial;
+              }
+
+              synchronized int get() {
+                  return value;
+              }
+
+              synchronized boolean compareAndSet(int expected, int update) {
+                  if (value != expected) return false;
+                  value = update;
+                  return true;
+              }
+          }
+          ```
+
+          这段代码能保证“比较 + 条件写入”的原子语义，但它靠 monitor 锁，因此不能叫 lock-free CAS 实现。Java 里真正做 CAS loop，应建立在 JDK 已提供的原子原语上：
+
+          ```java
+          static int incrementAndGet(AtomicInteger value) {
+              for (;;) {
+                  int current = value.get();
+                  int next = Math.incrementExact(current);
+                  if (value.compareAndSet(current, next)) {
+                      return next;
+                  }
+                  // 失败：current 已经过期，重新读取再计算。
+              }
+          }
+          ```
+
+          并发线程可能同时读到同一个 `current`，但最多一个线程能用这个期望值成功更新；其他线程的 CAS 失败后必须重新读取。循环的不变量是：只有基于“仍然有效的旧值”的那次条件写入才能提交，失败尝试不会覆盖别人的新值。
+
+          ## 关键细节
+
+          - **原子性边界**：`if (value == expected) value = update` 若没有锁或原子原语保护，就存在 check-then-act 竞态；CAS 的核心不是这行伪代码，而是比较和写入不可分割。
+          - **`synchronized` 示例的定位**：它适合回答“CAS 的接口语义是什么”，不适合宣称“我用 Java 手写了 lock-free CAS”。真正 lock-free 与否取决于底层原子原语和实现保证。
+          - **失败重试**：`compareAndSet` 返回 false 不等于业务失败，常见含义是期望值已陈旧；CAS loop 应重新读取并重新计算，而不是拿旧 `next` 无限重试。
+          - **副作用**：CAS loop 里的“计算新值”可能被执行多次，因此不要把不可重复的外部副作用放进重试体；应让重试计算尽量纯粹。
+          - **溢出**：示例用 `Math.incrementExact`，到 `Integer.MAX_VALUE` 时显式抛错；是否允许环绕是业务契约，不是 CAS 自动决定的。
+          - **ABA**：若只比较值，A→B→A 后旧 expected=A 仍可能匹配。对于对象池、free-list 等对“是否被改过”敏感的状态，需要额外版本信息；JDK `AtomicStampedReference` 把引用与整数 stamp 一起进行原子条件更新。
+          - **竞争代价**：CAS 在冲突低时避免阻塞式互斥，但竞争高时可能出现大量失败重试；是否比锁好必须看临界区、冲突率、公平性和整体算法，而不能无条件说 CAS 更快。
+          - **复合不变量**：单个 CAS 原子更新一个逻辑状态不代表多个独立字段自动一起满足复合一致性；通常需要把相关状态编码成一个可原子替换的整体，或使用锁/更高层同步机制。
+
+          ## 原理机制
+
+          CAS 可以看成“乐观并发控制”的最小原子提交点。线程先读取快照并在本地计算候选新值，提交时用 expected 验证快照是否仍有效；如果验证失败，说明提交前发生了竞争，丢弃这次候选结果并从新快照重算。它避免了“所有线程先获取同一个互斥锁才能进入”的固定路径，但把一部分成本转成冲突时的重试。
+
+          对一个 `AtomicInteger` 自增，线性化点就是成功的 `compareAndSet(current,next)`。成功前的读取和计算都只是尝试；只有成功 CAS 才把这次逻辑更新对共享状态提交。失败线程不能把基于陈旧 current 计算出来的值直接覆盖回去，否则就会丢更新。
+
+          ## 项目经验版
+
+          来源没有真实项目、并发规模、JDK 版本、CPU 架构或性能数据，不能虚构“线上 CAS 比锁快多少”。实际选择时会先确认状态能否压缩成单一原子变量、更新函数是否适合重试，再用目标 JDK/硬件下的基准和冲突率观察 CAS failure/retry、吞吐与尾延迟；高竞争、需要公平性或临界区包含阻塞操作时，应把锁或更高层并发结构一起比较。
+
+          ## 常见追问
+
+          - 问：为什么普通 `if (v == expected) v = update` 不是 CAS？答：普通比较和普通写入是两个动作，中间可被其他线程修改；CAS 要求二者作为一个原子条件写入。
+          - 问：不用 `AtomicInteger` 能不能手写 CAS？答：可以用 `synchronized` 模拟相同 API 语义，但那是锁实现，不是 lock-free CAS。若要求真正原子 CAS，必须依赖 CPU/JVM/运行时提供的原子原语，不能靠无同步的纯 Java check-then-act 凭空制造原子性。
+          - 问：CAS 自增失败后为什么要重新计算？答：失败说明 expected 已陈旧；新状态可能基于别人刚提交的值，必须重新读取再算 next，否则会提交基于旧快照的结果。
+          - 问：什么是 ABA？答：线程先看到 A，期间别的线程把状态改成 B 又改回 A；只做值相等比较会认为“没变”。如果业务关心中间是否发生过修改，应把版本号/stamp 一并参与比较。
+          - 问：CAS 一定比 `synchronized` 快吗？答：不是。低冲突短更新时重试成本可能小；高冲突会浪费计算和 CPU，而且公平性/阻塞行为也不同，必须按负载验证。
+          - 问：CAS 能保证多个字段的一致性吗？答：单次 CAS 只能原子提交它覆盖的那个逻辑状态。多个相关字段若必须一起变化，需要把它们封装为一个不可变状态对象后原子替换，或使用锁等能覆盖整个不变量的同步方式。
+
+          ## 易错点
+
+          - 把“语义模拟”的 `synchronized compareAndSet` 说成自己实现了硬件级 lock-free CAS。
+          - 用普通读 + 普通写实现 check-then-act，却声称线程安全。
+          - CAS 失败后继续拿陈旧 expected/next 重试，没有重新读取和重新计算。
+          - 只讲自旋成功路径，不讲 ABA、高竞争重试和复合状态边界。
+          - 在重试体里执行扣款、发消息等不可重复副作用，CAS 失败重试时把副作用执行多次。
+          - 没有说明整数溢出、版本/运行时和目标状态模型，给出“CAS 永远更快”之类无条件结论。
+          EOF
+
+          cat > "$out/CasExamples.java" <<'JAVA'
+          import java.util.concurrent.atomic.AtomicInteger;
+          import java.util.concurrent.atomic.AtomicStampedReference;
+
+          public final class CasExamples {
+              public static final class LockedCasInt {
+                  private int value;
+                  public LockedCasInt(int initial) { value = initial; }
+                  public synchronized int get() { return value; }
+                  public synchronized boolean compareAndSet(int expected, int update) {
+                      if (value != expected) return false;
+                      value = update;
+                      return true;
+                  }
+              }
+
+              public static int incrementAndGet(AtomicInteger value) {
+                  for (;;) {
+                      int current = value.get();
+                      int next = Math.incrementExact(current);
+                      if (value.compareAndSet(current, next)) return next;
+                  }
+              }
+
+              public static boolean staleStampRejectedAfterAba() {
+                  Object a = new Object();
+                  Object b = new Object();
+                  AtomicStampedReference<Object> ref = new AtomicStampedReference<>(a, 0);
+                  int staleStamp = ref.getStamp();
+                  if (!ref.compareAndSet(a, b, 0, 1)) throw new AssertionError("A->B failed");
+                  if (!ref.compareAndSet(b, a, 1, 2)) throw new AssertionError("B->A failed");
+                  return !ref.compareAndSet(a, new Object(), staleStamp, staleStamp + 1);
+              }
+          }
+          JAVA
+
+          cat > "$out/CasExamplesTest.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.concurrent.CountDownLatch;
+          import java.util.concurrent.atomic.AtomicInteger;
+
+          public final class CasExamplesTest {
+              public static void main(String[] args) throws Exception {
+                  CasExamples.LockedCasInt locked = new CasExamples.LockedCasInt(10);
+                  if (!locked.compareAndSet(10, 11) || locked.get() != 11) throw new AssertionError("semantic CAS success");
+                  if (locked.compareAndSet(10, 99) || locked.get() != 11) throw new AssertionError("stale expected must fail without write");
+
+                  AtomicInteger counter = new AtomicInteger();
+                  int threads = 8, each = 20_000;
+                  CountDownLatch start = new CountDownLatch(1);
+                  List<Thread> workers = new ArrayList<>();
+                  for (int t = 0; t < threads; t++) {
+                      Thread worker = new Thread(() -> {
+                          try { start.await(); } catch (InterruptedException e) { throw new RuntimeException(e); }
+                          for (int i = 0; i < each; i++) CasExamples.incrementAndGet(counter);
+                      });
+                      workers.add(worker); worker.start();
+                  }
+                  start.countDown();
+                  for (Thread worker : workers) worker.join();
+                  if (counter.get() != threads * each) throw new AssertionError("lost update: " + counter.get());
+
+                  AtomicInteger stale = new AtomicInteger(5);
+                  int observed = stale.get();
+                  if (!stale.compareAndSet(5, 6)) throw new AssertionError("competing update");
+                  if (stale.compareAndSet(observed, 7)) throw new AssertionError("stale expected should fail");
+                  if (stale.get() != 6) throw new AssertionError("failed CAS modified state");
+
+                  if (!CasExamples.staleStampRejectedAfterAba()) throw new AssertionError("stale stamp should detect A-B-A");
+
+                  AtomicInteger max = new AtomicInteger(Integer.MAX_VALUE);
+                  try {
+                      CasExamples.incrementAndGet(max);
+                      throw new AssertionError("expected overflow");
+                  } catch (ArithmeticException expected) {
+                      if (max.get() != Integer.MAX_VALUE) throw new AssertionError("overflow changed state");
+                  }
+                  System.out.println("PASS locked-semantic-cas stale-expected concurrent-cas-loop no-lost-update stamped-aba-detection overflow-fail-closed");
+              }
+          }
+          JAVA
+
+          javac "$out/CasExamples.java" "$out/CasExamplesTest.java"
+          stdout="$(java -cp "$out" CasExamplesTest)"
+          test "$stdout" = 'PASS locked-semantic-cas stale-expected concurrent-cas-loop no-lost-update stamped-aba-detection overflow-fail-closed'
+          find "$out" -name '*.class' -delete
+
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0039/${cid}`;
+          const checks=['locked semantic compare-and-set succeeds only on expected match','stale expected fails without modifying state','8-thread CAS retry loop reaches exact final count without lost updates','stale compareAndSet expected is rejected after competing update','AtomicStampedReference stamp detects A-B-A history in fixture','integer overflow fails before shared-state update'];
+          const boundary=[
+            {case:'locked semantic CAS expected matches',expected:'write update and return true',actual:'verified',passed:true},
+            {case:'locked semantic CAS expected stale',expected:'no write and return false',actual:'verified',passed:true},
+            {case:'8 x 20000 concurrent increments through AtomicInteger CAS loop',expected:'160000 exactly',actual:'160000',passed:true},
+            {case:'A-B-A with stale stamp',expected:'stale stamped CAS rejected although reference is A again',actual:'rejected',passed:true},
+            {case:'Integer.MAX_VALUE increment',expected:'ArithmeticException and shared value unchanged',actual:'verified',passed:true}
+          ];
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-27',command:'javac CasExamples.java CasExamplesTest.java && java CasExamplesTest',stdout:process.env.STDOUT,checks,boundary_tests:boundary},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-27',review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'repository-source',title:'Baidu/ByteDance backend interview CAS source plus frozen Batch 0039 inventory',locator:'note_tagged/682de771000000002301f55d.json + review/content_build/answer_batch_0039/source_inventory.json',source_type:'repository_source_record',checked_at:'2026-08-27'},
+              {source_id:'atomic-integer',title:'Java SE 21 AtomicInteger API',locator:'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/AtomicInteger.html',source_type:'official_documentation',checked_at:'2026-08-27'},
+              {source_id:'atomic-stamped',title:'Java SE 21 AtomicStampedReference API',locator:'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/AtomicStampedReference.html',source_type:'official_documentation',checked_at:'2026-08-27'},
+              {source_id:'fixture',title:'CAS semantic/concurrent/stamped deterministic Java fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-27'}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The repository source asks only whether the candidate understands CAS and can hand-write one; it does not specify hardware/JVM primitive versus semantic simulation versus a CAS-loop algorithm.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','3 分钟版']},
+              {claim_id:'atomic-integer-semantics',text:'AtomicInteger compareAndSet atomically sets the value to update when the current value equals expected and otherwise reports failure; this supports the answer’s real CAS-loop example.',source_ids:['atomic-integer','fixture'],answer_locations:['核心结论','3 分钟版','关键细节','原理机制']},
+              {claim_id:'stamped-state',text:'AtomicStampedReference maintains a reference together with an integer stamp and compares/updates both, providing a versioned-state pattern for detecting the fixture’s A-B-A history.',source_ids:['atomic-stamped','fixture'],answer_locations:['1 分钟版','关键细节','常见追问']},
+              {claim_id:'implementation-behavior',text:'The Java fixture verifies semantic conditional update, stale-expected rejection, concurrent CAS-loop retry without lost updates, stamped A-B-A detection and fail-closed overflow.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问','易错点']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            promotion_blocker:'isolated_independent_review_not_yet_performed'
+          },null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md';let text=fs.readFileSync(task,'utf8');
+          const line='- [x] `cq_q_9ffa48e1df8d78a08a74e14388301ebc` now has a source-bounded CAS candidate. It explicitly separates a `synchronized` semantic simulation from a real lock-free CAS loop backed by JDK `AtomicInteger.compareAndSet`, instead of claiming pure Java can manufacture a hardware/JVM atomic primitive. The Java fixture verifies conditional-update semantics, stale-expected rejection, concurrent retry without lost updates, stamped A-B-A detection and fail-closed overflow. Writer research is frozen; formal evidence/promotion remains blocked on isolated independent review.';
+          if(!text.includes(line)) fs.writeFileSync(task,text.trimEnd()+'\n'+line+'\n');
+          NODE
+
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during CAS candidate slice: $base_head -> $remote_head; fail closed without push."; exit 0; fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0039/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0039 CAS candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
