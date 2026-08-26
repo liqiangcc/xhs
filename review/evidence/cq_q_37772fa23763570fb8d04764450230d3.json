@@ -1,0 +1,171 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_37772fa23763570fb8d04764450230d3",
+  "candidate_sha256": "aec95175b4add27094dc5285f80f02fa03a6cb916af60c6124c5f5a91e0c7ffe",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "c-system-bitness-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "raw-a",
+      "title": "Primary interview note A",
+      "locator": "note_desc/66e0126e000000002603f658.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "raw-b",
+      "title": "Primary interview note B",
+      "locator": "note_desc/67e9712a000000000b02c3fb.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer strict-C17 validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37772fa23763570fb8d04764450230d3/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent strict-C17 validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37772fa23763570fb8d04764450230d3/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh source-first review",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37772fa23763570fb8d04764450230d3/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The duplicate primary source asks for C code to distinguish 32/64 system wording without defining process ABI, OS kernel, or CPU capability.",
+      "source_ids": [
+        "raw-a",
+        "raw-b"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "portable-boundary",
+      "text": "Candidate scopes sizeof(void*)*CHAR_BIT to compiled-program pointer-object storage and rejects treating it as a portable host-OS/CPU detector.",
+      "source_ids": [
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "code",
+      "text": "Candidate C compiles strictly and agrees with independent runtime oracle; classifier handles 32/64/other widths.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "37772fa23763570fb8d04764450230d3",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "question_id": "8759fdb2629c78e7f847052e43922d24",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract candidate C; strict C17 compile; compare with reviewer sizeof/CHAR_BIT oracle; XHS_NO_MAIN classifier harness",
+    "result": "pass",
+    "reported_stdout": "compiled-program pointer storage: 64 bits (64-bit pointer storage); PASS classify=32,64,16,48,128",
+    "checks": [
+      "candidate compiles",
+      "runtime/oracle agreement",
+      "32 branch",
+      "64 branch",
+      "16/48/128 other branches"
+    ],
+    "boundary_tests": [
+      {
+        "case": "process ABI versus host OS",
+        "expected": "answer does not infer host OS from pointer storage",
+        "passed": true
+      },
+      {
+        "case": "pointer storage versus address width",
+        "expected": "answer does not equate pointer object storage bits with virtual or physical address width",
+        "passed": true
+      },
+      {
+        "case": "non-32/64 implementation",
+        "expected": "sample reports other rather than forcing 32/64",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-c-system-bitness-20260826-v2",
+    "review_version": "c-system-bitness.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Both primary raw notes preserve the identical C system-bitness question and do not define process ABI versus host OS kernel versus CPU capability.",
+      "Candidate correctly scopes sizeof(void*)*CHAR_BIT to current compiled-program pointer-object storage and explicitly rejects treating it as a portable host-OS detector.",
+      "The 64-bit-host/32-bit-process counterexample is explicit, so the key semantic boundary is preserved.",
+      "Candidate C compiles under strict C17 and runtime output agrees with a reviewer-owned sizeof/CHAR_BIT oracle on this runner ABI.",
+      "Independent harness exercises 32-bit, 64-bit, and non-32/64 storage classifications.",
+      "No fabricated production experience or claim equating pointer storage with address, CPU, or OS-kernel width was found."
+    ]
+  }
+}
