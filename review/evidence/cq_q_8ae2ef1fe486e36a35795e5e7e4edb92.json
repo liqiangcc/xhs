@@ -1,0 +1,178 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_8ae2ef1fe486e36a35795e5e7e4edb92",
+  "candidate_sha256": "ae5123534e8b549db414645d0b7b2abd4e5873da1d2d6d98917a7d4a2d269a2f",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "simple-hashmap-source-bounded-writer-20260826-v2",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "tagged-source",
+      "title": "Repository tagged hand-written HashMap interview question",
+      "locator": "note_tagged/662e0912000000000d031ea3.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer SimpleHashMap differential validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8ae2ef1fe486e36a35795e5e7e4edb92/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent SimpleHashMap structure and differential validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8ae2ef1fe486e36a35795e5e7e4edb92/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8ae2ef1fe486e36a35795e5e7e4edb92/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source requires an array-plus-linked-list HashMap with basic put/get and does not specify full JDK behavior, resizing, deletion, null or concurrency semantics.",
+      "source_ids": [
+        "tagged-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "structure-and-collision",
+      "text": "The exact candidate uses a bucket array with linked collision nodes; distinct same-hash keys coexist and equal keys overwrite under the declared contract.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "index-and-lookup",
+      "text": "Bucket indexing remains legal for negative/extreme hashes and lookup/update behavior matches the reference Map across forced and randomized tests under the non-null contract.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "complexity-and-boundaries",
+      "text": "For b buckets, n entries and target-chain length L, the implementation performs O(1+L) bucket-plus-chain work, degrades to O(n) for a single long chain, uses O(b+n) storage, and intentionally omits resize/concurrency semantics.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "8ae2ef1fe486e36a35795e5e7e4edb92",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate Java; javac -Xlint:all -Werror; reflect structure; forced collision/overwrite/hash-boundary tests; 24000 seeded differential operations vs java.util.HashMap under declared contract",
+    "result": "pass",
+    "reported_stdout": "PASS structure=array+linked-list collision-chain=200 overwrite=pass hash-boundaries=pass capacities=6 random_ops=24000 hashmap-oracle=pass null-contract=reject",
+    "checks": [
+      "exact candidate Java compiles with warnings as errors",
+      "bucket field is an array and node contains same-type next link",
+      "200 forced same-hash keys coexist and a middle key overwrites correctly",
+      "Integer.MIN_VALUE/-1/0/MAX_VALUE hashes index safely",
+      "24000 seeded put/get operations across six capacities match reference HashMap under non-null contract",
+      "zero/negative capacity and null key/value boundaries reject",
+      "missing key returns null"
+    ],
+    "boundary_tests": [
+      {
+        "case": "capacity=1 with heavy collisions",
+        "expected": "all keys remain independently retrievable",
+        "passed": true
+      },
+      {
+        "case": "duplicate equal key after long collision chain",
+        "expected": "existing value overwritten without breaking other keys",
+        "passed": true
+      },
+      {
+        "case": "extreme negative and positive hashes",
+        "expected": "all indexes remain legal and values retrievable",
+        "passed": true
+      },
+      {
+        "case": "declared null contract",
+        "expected": "null key/value operations reject and missing get returns null",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-simple-hashmap-20260826-v1",
+    "review_version": "simple-hashmap.array-chain-differential.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved repository source requires only a hand-written HashMap with an array, linked-list collision structure, and basic put/get behavior; it does not require full JDK HashMap compatibility, resizing, deletion, iteration, treeification, null support, or concurrency.",
+      "The candidate preserves that sparse boundary and clearly labels fixed capacity, non-null keys/values, overwrite-on-duplicate, missing-get returns null, no resize, and no thread-safety as answer-side contracts rather than source facts.",
+      "The implementation has the required structure: a bucket array whose component node has a same-type next link, so collisions are represented by separate chaining rather than by an unbounded flat scan or collision overwrite.",
+      "Bucket selection and identity are correctly separated: the mixed hash plus Math.floorMod chooses a legal bucket even for negative/extreme hashes, while equals decides key identity inside the chain, allowing distinct same-hash keys to coexist.",
+      "put updates an existing equal key before inserting a new head node, and get traverses the same bucket chain; reviewer-owned validation covers a 200-node forced collision chain, overwrite of a middle key, and missing-key behavior.",
+      "The remediated answer now states both time and space bounds required by the Coding standard: O(1+L) per operation for target-chain length L, O(n) worst case, and O(b+n) storage for b buckets and n entries.",
+      "Reviewer-owned differential validation runs 24,000 seeded operations across six capacities against java.util.HashMap under the candidate declared non-null/fixed-capacity contract, plus explicit Integer.MIN_VALUE/-1/0/MAX_VALUE hash cases and constructor/null boundaries.",
+      "No fabricated production experience, placeholder implementation, uncovered source variant, or unsupported JDK-version threshold is asserted; expansion topics are kept as follow-up boundaries rather than silently changing the requested minimal implementation."
+    ]
+  }
+}

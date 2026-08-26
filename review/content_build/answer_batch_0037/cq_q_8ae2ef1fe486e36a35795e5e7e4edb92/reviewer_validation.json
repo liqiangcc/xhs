@@ -1,0 +1,39 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_8ae2ef1fe486e36a35795e5e7e4edb92",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract exact candidate Java; javac -Xlint:all -Werror; reflect structure; forced collision/overwrite/hash-boundary tests; 24000 seeded differential operations vs java.util.HashMap under declared contract",
+  "stdout": "PASS structure=array+linked-list collision-chain=200 overwrite=pass hash-boundaries=pass capacities=6 random_ops=24000 hashmap-oracle=pass null-contract=reject",
+  "checks": [
+    "exact candidate Java compiles with warnings as errors",
+    "bucket field is an array and node contains same-type next link",
+    "200 forced same-hash keys coexist and a middle key overwrites correctly",
+    "Integer.MIN_VALUE/-1/0/MAX_VALUE hashes index safely",
+    "24000 seeded put/get operations across six capacities match reference HashMap under non-null contract",
+    "zero/negative capacity and null key/value boundaries reject",
+    "missing key returns null"
+  ],
+  "boundary_tests": [
+    {
+      "case": "capacity=1 with heavy collisions",
+      "expected": "all keys remain independently retrievable",
+      "passed": true
+    },
+    {
+      "case": "duplicate equal key after long collision chain",
+      "expected": "existing value overwritten without breaking other keys",
+      "passed": true
+    },
+    {
+      "case": "extreme negative and positive hashes",
+      "expected": "all indexes remain legal and values retrievable",
+      "passed": true
+    },
+    {
+      "case": "declared null contract",
+      "expected": "null key/value operations reject and missing get returns null",
+      "passed": true
+    }
+  ]
+}
