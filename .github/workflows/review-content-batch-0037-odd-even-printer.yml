@@ -86,7 +86,7 @@ jobs:
               } finally { capture.flush(); System.setOut(original); }
               String text=bytes.toString(StandardCharsets.UTF_8).trim();
               List<Integer> got=new ArrayList<>();
-              if(!text.isEmpty()) for(String line:text.split("\\\\R")) got.add(Integer.parseInt(line.trim()));
+              if(!text.isEmpty()) for(String line:text.split("\\R")) got.add(Integer.parseInt(line.trim()));
               if(got.size()!=max+1) throw new AssertionError("count max="+max+" got="+got.size());
               for(int i=0;i<=max;i++) if(got.get(i)!=i) throw new AssertionError("order max="+max+" i="+i+" got="+got.get(i));
             }
@@ -182,8 +182,10 @@ jobs:
           text=task.read_text()
           pending='- [ ] `cq_q_9407244d0c35fae8f646869ef4a6b77c` odd/even alternating-printer candidate preserves the structured/tagged source boundary without inventing range or starting parity, adopts an explicit 0..maxInclusive even-first contract with a documented 1-based adaptation, provides a complete monitor/wait-notify Java implementation, and passes deterministic plus 1000 seeded randomized two-thread ordering/termination validation under both startup orders; isolated source-first review and evidence/code gate are still pending.'
           passed='- [x] `cq_q_9407244d0c35fae8f646869ef4a6b77c` odd/even alternating-printer candidate preserves the structured/tagged source boundary without inventing range or starting parity, adopts an explicit 0..maxInclusive even-first contract with a documented 1-based adaptation, contains a complete monitor/wait-notify Java implementation, passes writer validation plus independent exact-candidate deterministic/randomized concurrency validation under both startup orders with bounded termination, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.'
-          if pending not in text: raise SystemExit('pending task marker missing')
-          task.write_text(text.replace(pending,passed))
+          if pending in text:
+              task.write_text(text.replace(pending,passed))
+          elif passed not in text:
+              raise SystemExit('task progress marker drift')
           PY
           rm -rf "$out/reviewer_tmp"
 
@@ -199,4 +201,9 @@ jobs:
                   "review/evidence/$CANONICAL_ID.json" \
                   tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
           git commit -m 'review: pass batch 0037 odd-even printer candidate source-first'
-          git push origin HEAD:"$CONTENT_BRANCH"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
