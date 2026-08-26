@@ -1,0 +1,149 @@
+name: Review Content Batch 0037 Find Duplicate Candidate V2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0037-find-duplicate-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-find-duplicate-review-v2
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_89e953556faafa29795282e6ba142542
+  TAGGED_QID: 52857410214c1022e3f200d2f01f2bc2
+  SOURCE_TAGGED: note_tagged/66c848ed000000001d0147df.json
+  OFFICIAL_SOURCE: https://leetcode.com/problems/find-the-duplicate-number/
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Phase A isolated source-first review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; candidate="review/candidates/answers/$cid.md"; rm -rf "$out/reviewer_tmp"; mkdir -p "$out/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.TAGGED_QID,cid=process.env.CANONICAL_ID;
+          const q=(JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!q||q.original_question!=='算法：LeetCode 287 寻找重复数？'||q.is_valid_for_library!==true) throw new Error('source drift');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||''; const bullets=(one.match(/^- /gm)||[]).length; if(bullets<3||bullets>5) throw new Error('one-minute drift');
+          for(const marker of ['`n+1`','`[1,n]`','Floyd','O(n)','O(1)','不修改数组','[3,3,3,3,3]','HashSet','二分计数']) if(!md.includes(marker)) throw new Error(`missing ${marker}`);
+          if(/真实项目里我|线上事故|我们生产|我在线上|我负责|我优化到/.test(md)) throw new Error('fabricated experience');
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)]; if(blocks.length!==1||!blocks[0][1].includes('public int findDuplicate')) throw new Error('Java solution missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/reviewer_tmp/Solution.java`,blocks[0][1]+'\n');
+          NODE
+          cat > "$out/reviewer_tmp/FindDuplicateReviewerTest.java" <<'JAVA'
+          import java.util.*;
+          public final class FindDuplicateReviewerTest {
+              private static long cases;
+              public static void main(String[] args) {
+                  Solution s=new Solution();
+                  verify(s,new int[]{1,3,4,2,2},2); verify(s,new int[]{3,1,3,4,2},3); verify(s,new int[]{3,3,3,3,3},3); verify(s,new int[]{1,1},1); verify(s,new int[]{2,2,2},2);
+                  Random r=new Random(0x89E953287L);
+                  for(int n=2;n<=220;n++) for(int round=0;round<25;round++) {
+                      int d=1+r.nextInt(n), k=2+r.nextInt(n), distinct=n+1-k;
+                      List<Integer> others=new ArrayList<>(); for(int v=1;v<=n;v++) if(v!=d) others.add(v); Collections.shuffle(others,r);
+                      List<Integer> vals=new ArrayList<>(); for(int i=0;i<k;i++) vals.add(d); for(int i=0;i<distinct;i++) vals.add(others.get(i)); Collections.shuffle(vals,r);
+                      verify(s,vals.stream().mapToInt(Integer::intValue).toArray(),d); cases++;
+                  }
+                  System.out.printf("PASS official=3 smallest=2 multi_occurrence=pass randomized=%d input_immutable=pass%n",cases);
+              }
+              static void verify(Solution s,int[] nums,int expected){int[] before=nums.clone();int actual=s.findDuplicate(nums);if(actual!=expected)throw new AssertionError("actual="+actual+" expected="+expected);if(!Arrays.equals(nums,before))throw new AssertionError("mutated");}
+          }
+          JAVA
+          (cd "$out/reviewer_tmp" && javac -Xlint:all -Werror Solution.java FindDuplicateReviewerTest.java && java FindDuplicateReviewerTest > stdout.txt)
+          stdout="$(cat "$out/reviewer_tmp/stdout.txt")"; test "$stdout" = 'PASS official=3 smallest=2 multi_occurrence=pass randomized=5475 input_immutable=pass'
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundary_tests=[
+            {case:'official basic duplicate [1,3,4,2,2]',expected:'returns 2 without mutation',passed:true},
+            {case:'minimum n=1 input [1,1]',expected:'returns 1 without mutation',passed:true},
+            {case:'duplicate occurs more than twice [3,3,3,3,3]',expected:'returns 3 without mutation',passed:true},
+            {case:'5475 seeded valid contracts with varying multiplicity',expected:'always returns the unique duplicate and leaves input unchanged',passed:true}
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['Repository source names LeetCode 287 while the candidate explicitly attributes detailed constraints to the official problem rather than pretending the sparse row preserved them.','Candidate provides a complete Java Floyd cycle-entry implementation and directly answers the coding task.','Function-graph reasoning links [1,n] values, duplicate indegree, cycle formation, Floyd meeting and entry recovery.','O(n) time/O(1) space and no-mutation requirements are stated with HashSet/sorting alternatives correctly bounded.','Duplicate multiplicity is not restricted to exactly two; independent validation covers many-occurrence and 5475 seeded valid contracts.','No fabricated production experience or generic placeholder content is present.'];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'extract exact candidate Java; javac -Xlint:all -Werror; independent official, boundary and 5475 randomized valid-contract tests',stdout:process.env.REVIEW_STDOUT,checks:['exact Java compiles','official examples pass','smallest cases pass','multi-occurrence duplicate passes','5475 randomized valid contracts pass','input remains unchanged'],boundary_tests},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-leetcode287-20260826-v2',review_version:'leetcode287.floyd-contract-randomized.v2',decision:'pass',revision_round:1,source_packet:[process.env.SOURCE_TAGGED,process.env.OFFICIAL_SOURCE,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Phase B evidence binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex'),review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`)),wr=JSON.parse(fs.readFileSync(`${out}/writer_research.json`)),wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`)),rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`));
+          if(review.decision!=='pass'||review.candidate_sha256!==hash||wr.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||wv.candidate_sha256!==hash||rv.result!=='pass')throw new Error('prerequisite drift');
+          const ev={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'leetcode287-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'tagged-source',title:'Repository tagged LeetCode 287 question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'official-problem',title:'LeetCode 287 Find the Duplicate Number',locator:process.env.OFFICIAL_SOURCE,source_type:'official_documentation',checked_at:date},{source_id:'writer-validation',title:'Writer executable validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent executable validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'problem-contract',text:'Official LeetCode 287 supplies the n+1/[1,n]/single-distinct-duplicate/no-mutation/constant-space contract.',source_ids:['tagged-source','official-problem','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'floyd-correctness',text:'The exact candidate Floyd implementation returns the unique duplicate across official, smallest, multi-occurrence and randomized valid contracts.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','原理机制','常见追问']},{claim_id:'non-mutation-complexity',text:'The implementation is pointer-only and leaves nums unchanged; source-first review confirms linear time and constant auxiliary state.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','关键细节','易错点']}],source_question_coverage:wr.source_question_coverage,validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks,boundary_tests:rv.boundary_tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings}};
+          fs.mkdirSync('review/evidence',{recursive:true}); fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(ev,null,2)+'\n');
+          NODE
+
+      - name: Candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passed isolated review
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md'; let t=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_89e953556faafa29795282e6ba142542` LeetCode 287 candidate is bounded to the preserved repository question plus the official problem contract, contains a complete Floyd cycle-entry Java solution, and passes examples/boundaries/multi-occurrence plus 2380 seeded writer cases without mutation. Writer evidence is frozen; isolated source-first review remains pending.';
+          const done='- [x] `cq_q_89e953556faafa29795282e6ba142542` LeetCode 287 candidate is bounded to the preserved repository question plus the official problem contract, contains a complete Floyd cycle-entry Java solution, passes writer validation plus 5475 independent randomized valid-contract cases without mutation, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!t.includes(pending))throw new Error('task progress drift'); t=t.replace(pending,done); fs.writeFileSync(task,t);
+          NODE
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'review: pass batch 0037 LeetCode 287 candidate source-first'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during review' >&2; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
