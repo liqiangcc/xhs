@@ -1,0 +1,66 @@
+name: Audit Content Batch 0036 Linked List Operation Source
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/audit-content-batch-0036-linked-list-operation-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  QUESTION_ID: 863524333cd6488b996a811a4497ebdc
+  CANONICAL_ID: cq_q_863524333cd6488b996a811a4497ebdc
+  SOURCE_NOTE_ID: 6826b6e6000000000303adfd
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Prove preserved source boundary and enumerate source-near rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const qid=process.env.QUESTION_ID,cid=process.env.CANONICAL_ID,nid=process.env.SOURCE_NOTE_ID;
+          const tagged=JSON.parse(fs.readFileSync(`note_tagged/${nid}.json`,'utf8'));
+          const structured=JSON.parse(fs.readFileSync(`note_structured/${nid}.json`,'utf8'));
+          const raw=fs.readFileSync(`note_img_txt/${nid}.txt`,'utf8');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const t=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!t||t.original_question!=='算法：链表操作') throw new Error(`tagged source drifted: ${t?.original_question}`);
+          if(t.question_type!=='算法手撕_Coding') throw new Error(`source type drifted: ${t.question_type}`);
+          const idx=(structured.questions||[]).indexOf('算法：链表操作');
+          if(idx<0) throw new Error('structured source no longer preserves 链表操作');
+          if(!/七、算法题[\s\S]*?3\.\s*链表操作/.test(raw)) throw new Error('raw source algorithm section no longer preserves generic 链表操作 wording');
+          const row=questions.find(x=>x.question_id===qid);
+          if(!row||row.canonical_id!==cid||row.is_valid_for_library!==true||row.source_note_id!==nid) throw new Error('Question projection ownership/validity drifted');
+          const c=canonicals.find(x=>x.canonical_id===cid);
+          if(!c||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])||Number(c.frequency)!==1) throw new Error('expected current singleton Canonical');
+          const near=questions.filter(x=>x.is_valid_for_library!==false && /链表操作/.test(x.original_question||''));
+          console.log('LINKED_LIST_OPERATION_SOURCE_AUDIT_BEGIN');
+          console.log(JSON.stringify({
+            source_question:{question_id:qid,canonical_id:cid,original_question:t.original_question,source_note_id:nid,structured_question_index:idx,tagged:t},
+            raw_algorithm_section:(raw.match(/七、算法题[\s\S]*?(?=--- 图片 3 ---)/)||[''])[0],
+            source_near_count:near.length,
+            source_near:near.map(x=>({question_id:x.question_id,canonical_id:x.canonical_id,original_question:x.original_question,source_note_id:x.source_note_id,source_question_index:x.source_question_index,question_type:x.question_type,tech_entities:x.tech_entities}))
+          },null,2));
+          console.log('LINKED_LIST_OPERATION_SOURCE_AUDIT_END');
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite --noManifest
+          node scripts/xhs.js canonical check --noWrite --noManifest
+          node scripts/xhs.js review integrity --noManifest
