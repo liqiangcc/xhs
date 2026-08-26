@@ -1,0 +1,68 @@
+name: Remediate Content Batch 0039 Expression Evaluator ASCII Digits
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0039-expression-evaluator-ascii-digits.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-expression-evaluator-ascii-digits
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9c43dc0f1e5fa93786e94fc1bf818de3
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Make digit grammar and implementation agree
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          impl="review/content_build/answer_batch_0039/$CANONICAL_ID/ExpressionEvaluator.java"
+          python3 - <<'PY'
+          import os,pathlib
+          cid=os.environ['CANONICAL_ID']
+          files=[pathlib.Path(f'review/candidates/answers/{cid}.md'),pathlib.Path(f'review/content_build/answer_batch_0039/{cid}/ExpressionEvaluator.java')]
+          for p in files:
+              s=p.read_text()
+              old="Character.isDigit(input.charAt(pos))"
+              new="input.charAt(pos) >= '0' && input.charAt(pos) <= '9'"
+              if old not in s: raise SystemExit(f'digit implementation marker missing in {p}')
+              p.write_text(s.replace(old,new,1))
+          p=files[0]; s=p.read_text()
+          old="非负十进制数字字面量必须落在 `0..Long.MAX_VALUE`"
+          new="非负 ASCII 十进制数字字面量必须落在 `0..Long.MAX_VALUE`"
+          if old not in s: raise SystemExit('literal grammar marker missing')
+          p.write_text(s.replace(old,new,1))
+          PY
+          out="review/content_build/answer_batch_0039/$CANONICAL_ID"
+          javac "$out/ExpressionEvaluator.java" "$out/ExpressionEvaluatorTest.java"
+          java -cp "$out" ExpressionEvaluatorTest | grep -Fx 'PASS precedence parentheses nesting unary left-associativity division invalid-input divide-zero overflow'
+          find "$out" -name '*.class' -delete
+          git diff --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$candidate" "$impl"
+          git commit -m 'content: align batch 0039 expression digit grammar'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
