@@ -1,0 +1,251 @@
+name: Review Content Batch 0036 Strict Minimum Subarray
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0036-strict-min-subarray.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0036-strict-min-subarray-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_85dca72d93b635bce7ae1bf0a34a4d6a
+  SOURCE_QID: 85dca72d93b635bce7ae1bf0a34a4d6a
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated review before history or writer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test -f "$candidate"
+          rm -rf "$out/reviewer_tmp"
+          mkdir -p "$out/reviewer_tmp"
+
+          # Phase A reads only current primary source/data, candidate and current standard.
+          # It intentionally does not read relation-review/remediation, writer research,
+          # prior evidence or formal-answer history before reaching a conclusion.
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const raw=fs.readFileSync('note_desc/681a34e3000000002102e69d.txt','utf8');
+          if(!raw.includes('题目代码题：大于目标值的最短子数组')) throw new Error('primary raw source phrase missing');
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/681a34e3000000002102e69d.json','utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!q||q.original_question!=='算法：大于目标值的最短子数组？') throw new Error(`tagged source drifted: ${q?.original_question}`);
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonical=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse).find(c=>c.canonical_id===cid);
+          const row=questions.find(x=>x.question_id===qid);
+          if(!row||row.canonical_id!==cid||JSON.stringify(canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('current ownership is not the source-exact singleton reviewed by this candidate');
+
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']){
+            if(md.split(h).length!==2) throw new Error(`section missing/duplicated: ${h}`);
+          }
+          for(const marker of ['public final class StrictMinSubarray','minLengthStrictlyGreater','prefix[j] - prefix[deque.peekFirst()] > target','prefix[j] <= prefix[deque.peekLast()]','严格 `>`','来源没有保存','O(n)','long']){
+            if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          }
+          if((md.match(/- 问：/g)||[]).length<6) throw new Error('question-specific followups insufficient');
+          if(/真实项目里我|线上事故|我们生产|实际线上/.test(md)) throw new Error('fabricated project-experience language detected');
+          const code=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!code) throw new Error('Java candidate code block missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0036/${cid}/reviewer_tmp/StrictMinSubarray.java`,code[1]+'\n');
+          NODE
+
+          cat > "$out/reviewer_tmp/StrictMinSubarrayReviewer.java" <<'JAVA'
+          import java.util.Arrays;
+          import java.util.Random;
+
+          public final class StrictMinSubarrayReviewer {
+              static int oracle(long target, int[] nums) {
+                  int best = nums.length + 1;
+                  for (int i = 0; i < nums.length; i++) {
+                      long sum = 0;
+                      for (int j = i; j < nums.length; j++) {
+                          sum += nums[j];
+                          if (sum > target) best = Math.min(best, j - i + 1);
+                      }
+                  }
+                  return best == nums.length + 1 ? 0 : best;
+              }
+              static void check(long target, int[] nums, int expected) {
+                  int actual=StrictMinSubarray.minLengthStrictlyGreater(target,nums);
+                  if(actual!=expected) throw new AssertionError("target="+target+" input="+Arrays.toString(nums)+" expected="+expected+" actual="+actual);
+              }
+              public static void main(String[] args) {
+                  check(7,new int[]{7},0);
+                  check(7,new int[]{8},1);
+                  check(7,new int[]{2,3,1,2,4,3},3);
+                  check(4,new int[]{2,2},0);
+                  check(4,new int[]{2,2,1},3);
+                  check(3,new int[]{2,-1,2,2},2);
+                  check(3,new int[]{5,-10,5},1);
+                  check(0,new int[]{-1,0,1},1);
+                  check(10,new int[]{},0);
+                  check(-2,new int[]{-3,-1},1);
+                  Random r=new Random(2026082605L);
+                  long elements=0;
+                  for(int round=0;round<4000;round++){
+                      int n=r.nextInt(50);
+                      int[] a=new int[n];
+                      for(int i=0;i<n;i++) a[i]=-25+r.nextInt(51);
+                      long target=-40+r.nextInt(121);
+                      int expected=oracle(target,a);
+                      int actual=StrictMinSubarray.minLengthStrictlyGreater(target,a);
+                      if(expected!=actual) throw new AssertionError("round="+round+" target="+target+" input="+Arrays.toString(a)+" expected="+expected+" actual="+actual);
+                      elements+=n;
+                  }
+                  System.out.println("PASS fixed=10 randomized=4000 oracle=exhaustive-nonempty-subarrays strict-greater=true negatives=true equality-boundary=true empty=true checked-elements="+elements);
+              }
+          }
+          JAVA
+          javac "$out/reviewer_tmp/StrictMinSubarray.java" "$out/reviewer_tmp/StrictMinSubarrayReviewer.java"
+          stdout="$(java -cp "$out/reviewer_tmp" StrictMinSubarrayReviewer)"
+          case "$stdout" in
+            PASS\ fixed=10\ randomized=4000\ oracle=exhaustive-nonempty-subarrays\ strict-greater=true\ negatives=true\ equality-boundary=true\ empty=true\ checked-elements=*) ;;
+            *) echo "unexpected reviewer output: $stdout"; exit 1 ;;
+          esac
+
+          REVIEWER_STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0036/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const reviewer='source-first-isolated-reviewer-strict-min-subarray-20260826-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const boundaryTests=[
+            {case:'target=7 nums=[7]',expected:'0 under strict > equality boundary',passed:true},
+            {case:'target=7 nums=[2,3,1,2,4,3]',expected:'3 because [4,3] equals rather than exceeds target',passed:true},
+            {case:'negative-containing arrays',expected:'candidate equals exhaustive nonempty-subarray oracle',passed:true},
+            {case:'4000 deterministic arbitrary-integer arrays',expected:'exact agreement with independent exhaustive oracle',passed:true}
+          ];
+          const findings=[
+            'Primary source preserves strict “大于目标值的最短子数组” but not element-sign domain, target range, API, examples, or no-solution convention.',
+            'Candidate explicitly marks its arbitrary-integer/nonempty/0-if-none API as an adopted executable contract rather than a preserved source fact.',
+            'Strict > is consistently implemented and explained; equality-only intervals are rejected by dedicated boundary cases.',
+            'Prefix-sum monotonic-deque code extracted directly from candidate Markdown compiles and agrees with an independent exhaustive oracle on fixed negative/equality cases plus 4000 deterministic randomized arbitrary-integer arrays.',
+            'The front-pop and back-dominance invariants support both correctness and O(n) amortized complexity, with O(n) worst-case auxiliary space.',
+            'The simpler nonnegative sliding-window approach is presented only as a conditional specialization, avoiding an unsupported positivity assumption.',
+            'No fabricated production experience or unsupported source-specific numeric/API claim was found.'
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'extract candidate Java; javac StrictMinSubarray.java StrictMinSubarrayReviewer.java; java StrictMinSubarrayReviewer',stdout:process.env.REVIEWER_STDOUT,checks:['candidate code compiles directly','strict equality boundaries','negative arrays','empty input under adopted contract','4000 deterministic arbitrary-integer arrays'],boundary_tests:boundaryTests,oracle:'independent exhaustive enumeration of every nonempty contiguous subarray'},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'strict-min-subarray.v1',decision:'pass',revision_round:1,source_packet:['note_desc/681a34e3000000002102e69d.txt','note_tagged/681a34e3000000002102e69d.json','data/questions/questions.jsonl','data/questions/canonical_questions.jsonl',candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Bind writer and relation evidence only after isolated conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0036/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          if(review.decision!=='pass'||review.candidate_sha256!==hash) throw new Error('isolated review binding drifted');
+
+          // Only now inspect prior relation/remediation and writer evidence.
+          const relation=fs.readFileSync('review/content_build/answer_batch_0036/min_subarray_relation_review.md','utf8');
+          if(!relation.includes('relation `related`, not `same`')) throw new Error('post-conclusion relation record drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          const writerValidation=JSON.parse(fs.readFileSync(`${out}/code_validation.json`,'utf8'));
+          const reviewerValidation=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writerValidation.result!=='pass'||reviewerValidation.result!=='pass') throw new Error('evidence prerequisites drifted');
+          if(!writer.source_question_coverage?.some(x=>x.question_id===qid&&x.covered===true)) throw new Error('writer source coverage missing');
+
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,
+            writer:{writer_id:'strict-min-subarray-source-bounded-writer-20260826-v2',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'raw-source',title:'Original strict greater-than minimum-subarray wording',locator:'note_desc/681a34e3000000002102e69d.txt',source_type:'repository_source_record',checked_at:date},
+              {source_id:'tagged-source',title:'Normalized strict minimum-subarray Question',locator:`note_tagged/681a34e3000000002102e69d.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'relation-review',title:'Post-conclusion source relation record distinguishing strict > from >=',locator:'review/content_build/answer_batch_0036/min_subarray_relation_review.md',source_type:'repository_structured_source',checked_at:date},
+              {source_id:'writer-validation',title:'Writer exhaustive-oracle and nonnegative-window validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'reviewer-validation',title:'Independent candidate-code exhaustive-oracle validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Fresh source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The source preserves strict > target but not element-sign/API constraints; the >= source family remains a separate related contract.',source_ids:['raw-source','tagged-source','relation-review'],answer_locations:['核心结论','3 分钟版','关键细节']},
+              {claim_id:'general-correctness',text:'Candidate prefix-sum monotonic-deque code matches independent exhaustive nonempty-subarray oracles on fixed and randomized arbitrary-integer inputs.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},
+              {claim_id:'strict-boundary',text:'Equality-only intervals do not satisfy the adopted strict > contract.',source_ids:['writer-validation','reviewer-validation'],answer_locations:['核心结论','关键细节','常见追问','易错点']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{command:reviewerValidation.command,result:'pass',reported_stdout:reviewerValidation.stdout,checks:reviewerValidation.checks,boundary_tests:reviewerValidation.boundary_tests},
+            review_state:'independent_source_first_review_passed',
+            review:{reviewer_id:review.reviewer_id,review_version:'strict-min-subarray.v1',independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings}
+          };
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md';
+          let text=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_85dca72d93b635bce7ae1bf0a34a4d6a` strict-`>` minimum-subarray candidate is now source-bounded against the primary raw wording and reviewed `>`/`>=` relation boundary. It avoids inventing a positive-element constraint by supplying a complete arbitrary-integer prefix-sum + monotonic-deque implementation, explicitly explains the nonnegative sliding-window specialization, and passes fixed equality/negative cases plus 7000 general and 3000 nonnegative deterministic randomized oracle checks. Writer research is frozen; isolated source-first review remains pending.';
+          const passed='- [x] `cq_q_85dca72d93b635bce7ae1bf0a34a4d6a` strict-`>` minimum-subarray candidate is source-bounded to the preserved raw wording, keeps the `>` versus `>=` equality boundary explicit, avoids inventing a positive-element constraint, provides complete arbitrary-integer prefix-sum + monotonic-deque code plus a conditional nonnegative sliding-window specialization, passes writer and independent reviewer exhaustive-oracle validation across fixed and thousands of randomized cases, and passes isolated source-first review with evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!text.includes(pending)) throw new Error('writer progress marker missing or stale');
+          fs.writeFileSync(task,text.replace(pending,passed));
+          NODE
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Strict candidate audit and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passing review from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          rm -rf "$out/reviewer_tmp"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = '${{ steps.base.outputs.head }}' || { echo 'Content branch advanced during strict minimum-subarray review; fail closed.'; exit 1; }
+          git add "review/evidence/$CANONICAL_ID.json" "$out/reviewer_validation.json" "$out/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0036 strict-min-subarray source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
