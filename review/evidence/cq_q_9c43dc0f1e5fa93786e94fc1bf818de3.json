@@ -1,0 +1,223 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9c43dc0f1e5fa93786e94fc1bf818de3",
+  "candidate_sha256": "f546fa6baf9ec0e2b98abf71b86ff58743f44a240f54769b76159aa6b7a3b86b",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "expression-evaluator-source-bounded-writer-20260827-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "primary-source",
+      "title": "Huawei interview structured source note",
+      "locator": "note_structured/663b7649000000001e038251.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "batch-inventory",
+      "title": "Frozen Batch 0039 source inventory",
+      "locator": "review/content_build/answer_batch_0039/source_inventory.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "jls-division",
+      "title": "Java Language Specification SE 21 §15.17.2 Division Operator /",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.17.2",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "java-math",
+      "title": "Java SE 21 Math exact arithmetic API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Math.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic expression-evaluator Java validation",
+      "locator": "review/content_build/answer_batch_0039/cq_q_9c43dc0f1e5fa93786e94fc1bf818de3/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate expression-evaluator Java validation",
+      "locator": "review/content_build/answer_batch_0039/cq_q_9c43dc0f1e5fa93786e94fc1bf818de3/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first expression-evaluator review",
+      "locator": "review/content_build/answer_batch_0039/cq_q_9c43dc0f1e5fa93786e94fc1bf818de3/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The repository source requires evaluation of a bracketed arithmetic expression but does not preserve operators, numeric domain, division/error rules, or a required evaluation algorithm.",
+      "source_ids": [
+        "primary-source",
+        "batch-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "java-division",
+      "text": "For the declared Java integer contract, integer division truncates toward zero and an integer divisor of zero raises ArithmeticException.",
+      "source_ids": [
+        "jls-division",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "exact-arithmetic",
+      "text": "The candidate uses Java Math exact arithmetic operations so representational overflow is reported instead of silently accepted under the declared fail-closed contract.",
+      "source_ids": [
+        "java-math",
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "parser-behavior",
+      "text": "Writer and independent reviewer fixtures verify precedence, nested parentheses, unary signs, left associativity, ASCII digit grammar, the declared literal boundary, malformed-input rejection, divide-by-zero and overflow behavior for the exact candidate implementation.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9c43dc0f1e5fa93786e94fc1bf818de3",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact Java candidate, javac on Java 21, execute independent adversarial reviewer fixture",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate ascii-digits literal-boundary precedence nesting unary left-associativity division invalid-input divide-zero overflow",
+    "checks": [
+      "exact Java code block extracted from candidate compiles on Java 21",
+      "operator precedence and nested parentheses execute correctly",
+      "unary signs compose with binary operators and parentheses",
+      "same-precedence subtraction/division are left associative",
+      "ASCII-only digit grammar matches the documented literal contract",
+      "Long.MAX_VALUE literal succeeds while out-of-range magnitude and direct Long.MIN_VALUE literal fail under the declared lexer contract",
+      "Java integer division behavior, division-by-zero, malformed input and overflow are fail-closed"
+    ],
+    "boundary_tests": [
+      {
+        "case": "ASCII Long.MAX_VALUE literal",
+        "expected": "9223372036854775807 is accepted exactly",
+        "actual": "accepted exactly",
+        "passed": true
+      },
+      {
+        "case": "out-of-range positive magnitude",
+        "expected": "9223372036854775808 is rejected by exact numeric accumulation",
+        "actual": "ArithmeticException",
+        "passed": true
+      },
+      {
+        "case": "direct Long.MIN_VALUE literal",
+        "expected": "-9223372036854775808 is rejected because the declared lexer only accepts nonnegative magnitude through Long.MAX_VALUE",
+        "actual": "ArithmeticException",
+        "passed": true
+      },
+      {
+        "case": "computed Long.MIN_VALUE",
+        "expected": "(-9223372036854775807)-1 succeeds because each parsed literal is in range and the computed result is representable",
+        "actual": "-9223372036854775808",
+        "passed": true
+      },
+      {
+        "case": "Unicode full-width digit",
+        "expected": "rejected because the candidate explicitly declares ASCII decimal digits",
+        "actual": "IllegalArgumentException",
+        "passed": true
+      },
+      {
+        "case": "nested unary and precedence",
+        "expected": "2*-3=-6, +(4)=4, -(1--2)=-3",
+        "actual": "all matched",
+        "passed": true
+      },
+      {
+        "case": "divide by computed zero",
+        "expected": "1/(2-2) fails",
+        "actual": "ArithmeticException",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-expression-evaluator-20260827-v1",
+    "review_version": "expression-evaluator.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "revision_suggestions": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The repository source preserves only a request to evaluate a bracketed arithmetic expression; it does not preserve the operator set, numeric domain, division rules, malformed-input policy, or a required algorithm.",
+      "The candidate therefore labels its Java 21, ASCII integer-literal, + - * /, unary-sign, precedence, left-associativity and fail-closed error rules as answer-side contract rather than source facts.",
+      "The exact candidate Java implementation independently compiles and passes adversarial precedence, nesting, unary, associativity, malformed-input, divide-by-zero and overflow cases.",
+      "The candidate now states the subtle literal boundary precisely: a nonnegative literal magnitude may reach Long.MAX_VALUE, direct -9223372036854775808 is outside this lexer contract, while Long.MIN_VALUE may still be produced by representable arithmetic.",
+      "ASCII digit recognition in the implementation now matches the documented grammar; a full-width Unicode digit is rejected rather than misconverted.",
+      "The answer keeps alternative stack/Shunting-yard handling as a tradeoff and does not fabricate production experience."
+    ]
+  }
+}

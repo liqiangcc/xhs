@@ -1,0 +1,63 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9c43dc0f1e5fa93786e94fc1bf818de3",
+  "candidate_sha256": "f546fa6baf9ec0e2b98abf71b86ff58743f44a240f54769b76159aa6b7a3b86b",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "extract exact Java candidate, javac on Java 21, execute independent adversarial reviewer fixture",
+  "stdout": "PASS exact_candidate ascii-digits literal-boundary precedence nesting unary left-associativity division invalid-input divide-zero overflow",
+  "writer_fixture_stdout": "PASS precedence parentheses nesting unary left-associativity division invalid-input divide-zero overflow",
+  "checks": [
+    "exact Java code block extracted from candidate compiles on Java 21",
+    "operator precedence and nested parentheses execute correctly",
+    "unary signs compose with binary operators and parentheses",
+    "same-precedence subtraction/division are left associative",
+    "ASCII-only digit grammar matches the documented literal contract",
+    "Long.MAX_VALUE literal succeeds while out-of-range magnitude and direct Long.MIN_VALUE literal fail under the declared lexer contract",
+    "Java integer division behavior, division-by-zero, malformed input and overflow are fail-closed"
+  ],
+  "boundary_tests": [
+    {
+      "case": "ASCII Long.MAX_VALUE literal",
+      "expected": "9223372036854775807 is accepted exactly",
+      "actual": "accepted exactly",
+      "passed": true
+    },
+    {
+      "case": "out-of-range positive magnitude",
+      "expected": "9223372036854775808 is rejected by exact numeric accumulation",
+      "actual": "ArithmeticException",
+      "passed": true
+    },
+    {
+      "case": "direct Long.MIN_VALUE literal",
+      "expected": "-9223372036854775808 is rejected because the declared lexer only accepts nonnegative magnitude through Long.MAX_VALUE",
+      "actual": "ArithmeticException",
+      "passed": true
+    },
+    {
+      "case": "computed Long.MIN_VALUE",
+      "expected": "(-9223372036854775807)-1 succeeds because each parsed literal is in range and the computed result is representable",
+      "actual": "-9223372036854775808",
+      "passed": true
+    },
+    {
+      "case": "Unicode full-width digit",
+      "expected": "rejected because the candidate explicitly declares ASCII decimal digits",
+      "actual": "IllegalArgumentException",
+      "passed": true
+    },
+    {
+      "case": "nested unary and precedence",
+      "expected": "2*-3=-6, +(4)=4, -(1--2)=-3",
+      "actual": "all matched",
+      "passed": true
+    },
+    {
+      "case": "divide by computed zero",
+      "expected": "1/(2-2) fails",
+      "actual": "ArithmeticException",
+      "passed": true
+    }
+  ]
+}
