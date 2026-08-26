@@ -1,0 +1,77 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_910472ffdcfb2d2541ca198b952df943",
+  "checked_at": "2026-08-26",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Repository Meituan data-engineering interview source",
+      "locator": "note_desc/6822deb7000000002100178b.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Structured tagged three-day peak/valley SQL question",
+      "locator": "note_tagged/6822deb7000000002100178b.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "sqlite-window",
+      "title": "SQLite Window Functions documentation",
+      "locator": "https://www.sqlite.org/windowfunctions.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "sqlite-date",
+      "title": "SQLite Date And Time Functions documentation",
+      "locator": "https://www.sqlite.org/lang_datefunc.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Deterministic three-day trend SQLite fixture",
+      "locator": "review/content_build/answer_batch_0037/cq_q_910472ffdcfb2d2541ca198b952df943/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The raw source only says 'SQL题：波峰波谷，连续三天'; the structured question expands this to finding records with three consecutive days rising/falling, without schema, dialect, strictness, or output-granularity details.",
+      "source_ids": ["repository-source", "repository-tagged"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+    },
+    {
+      "claim_id": "lag-semantics",
+      "text": "SQLite lag(expr, offset) evaluates expr against the row offset rows before the current row in the ordered window, which supports bringing the previous two dates and metrics onto the current row.",
+      "source_ids": ["sqlite-window", "writer-validation"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "calendar-continuity",
+      "text": "SQLite julianday() yields numeric Julian-day values, so one-day differences in the fixture can explicitly prove calendar adjacency rather than mere row adjacency.",
+      "source_ids": ["sqlite-date", "writer-validation"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "fixture-behavior",
+      "text": "The exact candidate SQL returns two up windows and two down windows, treats equality as a break, emits two windows for a four-day rise, and does not bridge a missing date.",
+      "source_ids": ["writer-validation"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节", "常见追问"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "910472ffdcfb2d2541ca198b952df943",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
