@@ -159,7 +159,7 @@ jobs:
             exit 0
           fi
           receipt="review/content_build/answer_batch_0021/$CID/formal_audit_receipt.json"
-          if git diff --quiet -- "$receipt"; then
+          if git ls-files --error-unmatch "$receipt" >/dev/null 2>&1 && git diff --quiet -- "$receipt"; then
             echo 'Formal audit receipt already matches this audited snapshot.'
             exit 0
           fi
@@ -172,3 +172,4 @@ jobs:
 
 # Re-triggered after source-first re-review rebound the evidence and isolated-review records to the current candidate hash.
 # Re-triggered 2026-08-26 against the latest content head.
+# Persist untracked audit receipts before declaring the audit idempotent.
