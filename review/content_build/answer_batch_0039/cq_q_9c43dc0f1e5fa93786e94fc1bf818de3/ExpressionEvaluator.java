@@ -55,7 +55,7 @@ public final class ExpressionEvaluator {
         skipWhitespace();
         int start = pos;
         long value = 0;
-        while (pos < input.length() && Character.isDigit(input.charAt(pos))) {
+        while (pos < input.length() && input.charAt(pos) >= '0' && input.charAt(pos) <= '9') {
             int digit = input.charAt(pos++) - '0';
             value = Math.addExact(Math.multiplyExact(value, 10L), digit);
         }
