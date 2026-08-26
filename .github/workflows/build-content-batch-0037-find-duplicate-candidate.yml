@@ -1,0 +1,234 @@
+name: Build Content Batch 0037 Find Duplicate Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0037-find-duplicate-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-find-duplicate-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_89e953556faafa29795282e6ba142542
+  SOURCE_QID: 52857410214c1022e3f200d2f01f2bc2
+  SOURCE_TAGGED: note_tagged/66c848ed000000001d0147df.json
+  OFFICIAL_SOURCE: https://leetcode.com/problems/find-the-duplicate-number/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_sha256=$(sha256sum "$SOURCE_TAGGED" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "formal_sha256=$(sha256sum review/answers/$CANONICAL_ID.md | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Guard repository source and canonical boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：LeetCode 287 寻找重复数？';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source question drift');
+          const formal=fs.readFileSync(`review/answers/${cid}.md`,'utf8');
+          if(!formal.includes('"status":"needs_update"')||!formal.includes('"quality_tier":"long_tail_baseline"')) throw new Error('formal answer no longer long-tail baseline');
+          if(!formal.includes(expected)) throw new Error('formal source locator drift');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists');
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),c=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!c.ok||c.canonical?.canonical_id!==process.env.CANONICAL_ID||c.answer_type!=='coding') throw new Error('canonical/type drift');
+          const src=c.source_questions||[];
+          if(!src.some(x=>x.question_id===process.env.SOURCE_QID&&x.original_question==='算法：LeetCode 287 寻找重复数？')) throw new Error('preserved source question missing from canonical context');
+          if(src.length<1) throw new Error('canonical has no source questions');
+          NODE
+
+      - name: Write source-bounded candidate and executable writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; mkdir -p "$out" review/candidates/answers
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_89e953556faafa29795282e6ba142542","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # LeetCode 287：寻找重复数
+
+          ## 核心结论
+
+          仓库来源只保留了题号和题名；按 LeetCode 287 当前官方题面，输入是长度 `n + 1` 的整数数组，元素都在 `[1,n]`，只有一个“重复的数”（它可以出现两次或更多次），要求不修改数组并只用常数额外空间。最适合口述的 O(n) / O(1) 解法是把 `i -> nums[i]` 看成函数图，用 Floyd 快慢指针找到环入口；这个环入口对应重复值。
+
+          ## 1 分钟版
+
+          - 值域是 `[1,n]`，所以把数组下标看作节点、`nums[i]` 看作下一跳，所有下一跳都仍落在合法节点范围内。
+          - `n + 1` 个位置映射到 `n` 个值，重复值会让两个或更多前驱指向同一节点；从 `nums[0]` 出发形成一条“链 + 环”，环入口就是重复数。
+          - 第一阶段 slow 每次走 1 步、fast 每次走 2 步，先在环内相遇；第二阶段把一个指针放回 `nums[0]`，两个都每次走 1 步，再次相遇的位置就是环入口。
+          - 整个过程不改数组，只维护常数个整数指针，时间 O(n)、额外空间 O(1)。
+
+          ## 3 分钟版
+
+          ```java
+          public final class Solution {
+              public int findDuplicate(int[] nums) {
+                  int slow = nums[0];
+                  int fast = nums[0];
+
+                  do {
+                      slow = nums[slow];
+                      fast = nums[nums[fast]];
+                  } while (slow != fast);
+
+                  int finder = nums[0];
+                  while (finder != slow) {
+                      finder = nums[finder];
+                      slow = nums[slow];
+                  }
+                  return finder;
+              }
+          }
+          ```
+
+          为什么能这样做：在官方约束下，数组值永远在 `[1,n]`，因此访问 `nums[slow]` 和 `nums[nums[fast]]` 不会因为算法本身跑出值域。函数图从 `nums[0]` 开始必然进入环；重复值至少有两个数组位置指向它，因此它正是这条可达路径第一次进入环的位置。Floyd 第一阶段只负责得到环内相遇点，第二阶段利用“起点到环入口的距离”和相遇点沿环到入口的距离同余，两个等速指针会在入口汇合。
+
+          ## 关键细节
+
+          - **不要把题目偷换成普通判重**：`HashSet` 很直观，但需要 O(n) 额外空间，不满足官方 constant extra space 要求。
+          - **不要排序**：排序通常会修改数组；即使复制后排序，又会引入 O(n) 额外空间。题面明确要求不修改 `nums`。
+          - **重复值可出现多次**：算法不依赖“恰好出现两次”。例如 `[3,3,3,3,3]` 仍返回 `3`。
+          - **返回的是值，不是某个重复位置**：环入口节点编号就是重复的数。
+          - **前置条件来自题面**：若值不在 `[1,n]`、数组为空，或存在多个不同重复值，就已经超出 LeetCode 287 的输入契约；正式解法不需要为这些非法输入重新定义结果。
+          - **复杂度**：指针只在有限函数图上推进，两个阶段都是线性步数，总时间 O(n)；只保存 `slow/fast/finder`，额外空间 O(1)。
+
+          ## 原理机制
+
+          关键转换是把“找重复值”改写成“找函数图的环入口”。每个数组位置 `i` 有一条边指向 `nums[i]`。由于所有值都在 `1..n`，从 `nums[0]` 开始后不会回到节点 0，而是在 `1..n` 这些节点中不断跳转。重复值 `d` 意味着至少两个不同位置的下一跳都是 `d`，于是从起点可达的函数图出现合流并进入环；在这道题的约束下，入口就是 `d`。Floyd 算法先利用快指针相对慢指针每轮多走一步，保证它们最终在环中相遇；再让一个指针回到路径起点，两者同速前进，利用距离同余关系在环入口相遇。
+
+          ## 项目经验版
+
+          这是一道算法题，仓库来源没有提供真实项目经历，不能虚构“线上使用 Floyd 找重复 ID”。项目映射时可以把它理解为一种“受限状态空间中的环检测”技巧：只有当状态转移是单后继、状态编号可直接索引并且输入契约能保证合法跳转时，才能直接套用这种 O(1) 空间方案；一般业务判重更常见的是集合、唯一索引或排序等方案，应按数据规模和约束选择。
+
+          ## 常见追问
+
+          - 问：为什么重复数一定存在？答：`n + 1` 个数组元素都取自只有 `n` 个可能值的 `[1,n]`，由抽屉原理至少有一个值重复；题面进一步保证只有一个不同的重复值。
+          - 问：为什么环入口一定是重复值？答：把数组看成 `i -> nums[i]` 的函数图，重复值有多个前驱；从 `nums[0]` 出发的可达路径在这里发生合流，并成为进入环的入口。
+          - 问：为什么第二阶段两个指针会在入口相遇？答：设起点到入口距离为 μ、环长为 λ，第一阶段相遇时慢指针已走的距离满足与 μ 在模 λ 下的关系；把另一个指针放回起点后两者同速走 μ 步，就会同时到入口。
+          - 问：二分计数能不能做？答：可以基于值域统计 `<= mid` 的元素数量并用抽屉原理缩小值域，不修改数组且是 O(1) 额外空间，但通常是 O(n log n)；Floyd 达到题目 follow-up 期待的线性时间。
+          - 问：为什么求和差不可靠？答：题目允许同一个重复值出现两次以上，此时可能同时缺少多个值，不能简单用“实际和 - 1..n 的和”唯一推出重复数；而且求和还要额外考虑整数溢出。
+
+          ## 易错点
+
+          - 直接使用 `HashSet` 后仍声称额外空间 O(1)。
+          - 把“重复的数”误读成“只重复一次”，导致对多次出现的合法样例推导错误。
+          - Floyd 第二阶段从下标 `0` 而不是同一函数图路径起点 `nums[0]` 开始，却没有重新证明距离关系。
+          - 只背快慢指针代码，不解释为什么数组能映射成环、为什么入口等于重复值。
+          - 把官方输入契约外的空数组、越界值或多个不同重复值当成算法必须兼容的正常输入。
+          EOF
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('int findDuplicate(int[] nums)')) throw new Error('expected one complete Java implementation');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/Solution.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$out/FindDuplicateWriterTest.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.List;
+          import java.util.Random;
+
+          public final class FindDuplicateWriterTest {
+              public static void main(String[] args) {
+                  Solution s=new Solution();
+                  check(s,new int[]{1,3,4,2,2},2);
+                  check(s,new int[]{3,1,3,4,2},3);
+                  check(s,new int[]{3,3,3,3,3},3);
+                  check(s,new int[]{1,1},1);
+                  check(s,new int[]{2,1,2},2);
+
+                  Random r=new Random(0x287L);
+                  int cases=0;
+                  for(int n=2;n<=120;n++) {
+                      for(int round=0;round<20;round++) {
+                          int duplicate=1+r.nextInt(n);
+                          List<Integer> values=new ArrayList<>();
+                          for(int v=1;v<=n;v++) values.add(v);
+                          values.add(duplicate);
+                          Collections.shuffle(values,r);
+                          int[] nums=values.stream().mapToInt(Integer::intValue).toArray();
+                          int[] before=nums.clone();
+                          check(s,nums,duplicate);
+                          if(!java.util.Arrays.equals(nums,before)) throw new AssertionError("input mutated");
+                          cases++;
+                      }
+                  }
+                  System.out.printf("PASS official_examples=3 boundaries=2 random_valid_cases=%d input_unchanged=pass multi_occurrence=pass%n",cases);
+              }
+
+              private static void check(Solution s,int[] nums,int expected) {
+                  int actual=s.findDuplicate(nums);
+                  if(actual!=expected) throw new AssertionError("actual="+actual+" expected="+expected+" nums="+java.util.Arrays.toString(nums));
+              }
+          }
+          JAVA
+
+          (cd "$out" && javac -Xlint:all -Werror Solution.java FindDuplicateWriterTest.java && java FindDuplicateWriterTest > writer_stdout.txt)
+          stdout="$(cat "$out/writer_stdout.txt")"
+          test "$stdout" = 'PASS official_examples=3 boundaries=2 random_valid_cases=2380 input_unchanged=pass multi_occurrence=pass'
+
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          const sourceIds=(ctx.source_questions||[]).map(x=>x.question_id);
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:hash,result:'pass',validated_at:date,command:'extract candidate Java; javac -Xlint:all -Werror; execute official examples, edge cases and 2380 seeded valid-array cases',stdout:process.env.STDOUT,checks:['official examples return expected duplicate','n=1 and small boundary cases pass','duplicate appearing more than twice passes','2380 seeded valid arrays with one duplicated value pass','input array remains unchanged']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Repository tagged LeetCode 287 interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'leetcode-287',title:'LeetCode 287 Find the Duplicate Number',locator:process.env.OFFICIAL_SOURCE,source_type:'official_documentation',checked_at:date},{source_id:'writer-validation',title:'Writer executable Floyd-cycle validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'official-contract',text:'LeetCode 287 defines n+1 integers in [1,n], one distinct repeated number, no input modification and constant extra space.',source_ids:['repository-source','leetcode-287'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'floyd-correctness',text:'Under that contract, the candidate Floyd implementation returns the repeated value without mutating input across official examples, multi-occurrence and seeded valid cases.',source_ids:['writer-validation'],answer_locations:['3 分钟版','原理机制','关键细节']},{claim_id:'complexity',text:'The implementation uses only a constant number of integer pointers and linear pointer advancement.',source_ids:['writer-validation'],answer_locations:['1 分钟版','关键细节']}],source_question_coverage:sourceIds.map(question_id=>({question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']})),promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record bounded progress and commit candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_89e953556faafa29795282e6ba142542` LeetCode 287 candidate is source-bounded to the preserved repository question plus the current official problem contract, uses a complete Floyd cycle-entry Java implementation, passes official/boundary/multi-occurrence plus 2380 seeded writer cases without mutating input, and has writer evidence frozen. Isolated source-first review remains pending.';
+          if(!text.includes('`cq_q_89e953556faafa29795282e6ba142542` LeetCode 287 candidate')) text=text.trimEnd()+'\n'+note+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0037/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'content: stage batch 0037 LeetCode 287 candidate'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during build'; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
