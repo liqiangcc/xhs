@@ -1,0 +1,166 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_910472ffdcfb2d2541ca198b952df943",
+  "candidate_sha256": "cfab5f85620b68bd7a49ced527166edc560b79e3bd0a3b9b133ba8370ff6727e",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "three-day-trend-sql-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Repository Meituan data-engineering interview source",
+      "locator": "note_desc/6822deb7000000002100178b.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Structured tagged three-day peak/valley SQL question",
+      "locator": "note_tagged/6822deb7000000002100178b.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "sqlite-window",
+      "title": "SQLite Window Functions documentation",
+      "locator": "https://www.sqlite.org/windowfunctions.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "sqlite-date",
+      "title": "SQLite Date And Time Functions documentation",
+      "locator": "https://www.sqlite.org/lang_datefunc.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic SQLite validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_910472ffdcfb2d2541ca198b952df943/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent randomized SQLite/oracle validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_910472ffdcfb2d2541ca198b952df943/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_910472ffdcfb2d2541ca198b952df943/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source preserves only the sparse three-day peak/valley prompt; schema, dialect, strictness, and result grain are explicitly treated as assumptions.",
+      "source_ids": [
+        "repository-source",
+        "repository-tagged",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "lag-and-calendar",
+      "text": "LAG brings the previous two ordered rows into the current row, while explicit Julian-day differences prove calendar-day adjacency in the SQLite fixture.",
+      "source_ids": [
+        "sqlite-window",
+        "sqlite-date",
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "trend-behavior",
+      "text": "The exact SQL detects strict rising/falling three-day windows, rejects equal-value and missing-day sequences, and emits overlapping windows for longer monotonic runs.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "910472ffdcfb2d2541ca198b952df943",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate SQL; deterministic SQLite fixture plus 500 independently generated sparse/equal/random daily-series datasets checked against a Python oracle",
+    "result": "pass",
+    "reported_stdout": "PASS deterministic=1 randomized=500 strict_up_down=pass equality_break=pass missing_day_break=pass four_day_rise_two_windows=pass oracle_match=pass",
+    "checks": [
+      "exact SQL executes",
+      "calendar adjacency required",
+      "strict up/down matches oracle",
+      "equal values break trend",
+      "missing dates break continuity",
+      "four-day rise produces overlapping three-day windows",
+      "500 randomized datasets match independent oracle"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-three-day-trend-sql-20260826-v1",
+    "review_version": "three-day-trend.sqlite-window-oracle.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate keeps the sparse repository source boundary explicit instead of inventing a real schema or pretending the phrase “波峰波谷，连续三天” uniquely defines output granularity.",
+      "It chooses a clear, executable three-calendar-day sliding-window contract and explicitly distinguishes strict monotonic rise/fall from a different local peak/valley interpretation.",
+      "The SQL checks date adjacency as well as row adjacency, preventing a missing calendar day from being misclassified as a continuous three-day trend.",
+      "Strict comparison semantics, one-row-per-day input grain, NULL handling boundary, overlapping windows in a four-day run, and dialect differences are all surfaced.",
+      "The exact SQL agrees with an independent oracle across the deterministic boundary fixture and 500 randomized sparse/equal-valued datasets.",
+      "The answer correctly identifies LAG as the mechanism for projecting the previous two ordered rows and limits julianday to the executable SQLite fixture rather than claiming it is portable SQL.",
+      "The project section remains hypothetical and contains no fabricated production metrics or experience."
+    ]
+  }
+}
