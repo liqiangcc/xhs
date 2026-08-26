@@ -1,0 +1,53 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_8dc7928cdcb10b86101be42a434da27e",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract exact candidate Java; javac -Xlint:all -Werror; fixed semantics, exhaustive 3x3 wall masks/endpoints, and 5000 seeded random mazes against precomputed-stop reference",
+  "stdout": "PASS fixed=5 exhaustive_pairs=11520 randomized=5000 pass-through-not-stop=pass input-unmodified=pass",
+  "checks": [
+    "exact candidate compiles",
+    "destination must be a stopping state",
+    "start equals destination",
+    "all 3x3 masks/endpoints match independent reference",
+    "5000 random mazes match independent reference",
+    "input maze is not mutated"
+  ],
+  "boundary_tests": [
+    {
+      "case": "official-style reachable maze",
+      "expected": "true",
+      "passed": true
+    },
+    {
+      "case": "official-style unreachable destination",
+      "expected": "false",
+      "passed": true
+    },
+    {
+      "case": "open grid where ball passes destination but cannot stop there",
+      "expected": "false",
+      "passed": true
+    },
+    {
+      "case": "start equals destination",
+      "expected": "true",
+      "passed": true
+    },
+    {
+      "case": "turns only at stopping positions",
+      "expected": "true when stop graph contains destination",
+      "passed": true
+    },
+    {
+      "case": "all 3x3 wall masks and all open start/destination pairs",
+      "expected": "exact candidate matches independently precomputed stop graph",
+      "passed": true
+    },
+    {
+      "case": "5000 seeded random mazes",
+      "expected": "exact candidate matches independent reference and preserves input",
+      "passed": true
+    }
+  ]
+}
