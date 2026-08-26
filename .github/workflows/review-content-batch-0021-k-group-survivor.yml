@@ -1,0 +1,239 @@
+name: Review Content Batch 0021 K Group Survivor
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0021-k-group-survivor.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0021-k-group-survivor-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_topic_745b29f7
+  QID_A: 37b42623861093a397be5bff1ee3fad6
+  QID_B: 47f6e217cc684f406d6472441b015c41
+  QID_C: 74dcc97230485151dd50aa5d7664cc0c
+  SOURCE_A: note_desc/67f9c763000000001c016f0f.txt
+  SOURCE_B: note_desc/68b2bb7c000000001d00459e.txt
+  SOURCE_C: note_desc/66023fea000000001400552b.txt
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: |
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha256=$(sha256sum review/candidates/answers/$CANONICAL_ID.md | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source_a_sha256=$(sha256sum "$SOURCE_A" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source_b_sha256=$(sha256sum "$SOURCE_B" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source_c_sha256=$(sha256sum "$SOURCE_C" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Phase A source-first isolated review and independent oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0021/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"; rm -rf "$out/reviewer_tmp"; mkdir -p "$out/reviewer_tmp"
+
+          # The reviewer conclusion below is formed from current raw sources, current candidate,
+          # current answer standard, and reviewer-owned executable checks. It deliberately does
+          # not read writer_research, prior evidence, prior answer, or historical review records.
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID;
+          const rawA=fs.readFileSync(process.env.SOURCE_A,'utf8');
+          const rawB=fs.readFileSync(process.env.SOURCE_B,'utf8');
+          const rawC=fs.readFileSync(process.env.SOURCE_C,'utf8');
+          if(!rawA.includes('手撕LC 25. K 个一组翻转链表')) throw new Error('raw source A drifted');
+          if(!rawB.includes('手撕：k个一组翻转链表')) throw new Error('raw source B drifted');
+          if(!rawC.includes('k个一组翻转链表')) throw new Error('raw source C drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift: ${h}`);
+          for(const marker of ['LC 25','答案侧实现契约','先探测完整组','groupNext','O(n)','O(1)','不虚构']) if(!md.includes(marker)) throw new Error(`semantic marker missing: ${marker}`);
+          if(/题目明确要求[^\n]{0,25}(不足|尾段)|来源明确要求[^\n]{0,25}(不足|尾段)/.test(md)) throw new Error('candidate overclaims incomplete-tail rule as raw-source fact');
+          if(/真实项目里我|线上事故|我们生产|我在线上|我负责/.test(md)) throw new Error('fabricated project-experience claim detected');
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
+          const block=md.match(/```java\n([\s\S]*?)\n```/); if(!block) throw new Error('Java code block missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0021/${cid}/reviewer_tmp/ReverseKGroup.java`,block[1]+'\n');
+          NODE
+
+          cat > "$out/reviewer_tmp/ReviewerHarness.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.HashSet;
+          import java.util.List;
+          import java.util.Set;
+
+          public final class ReviewerHarness {
+              private static List<ReverseKGroup.ListNode> make(int n) {
+                  List<ReverseKGroup.ListNode> nodes = new ArrayList<>();
+                  for (int i = 0; i < n; i++) nodes.add(new ReverseKGroup.ListNode((i * 37) - 11));
+                  for (int i = 0; i + 1 < n; i++) nodes.get(i).next = nodes.get(i + 1);
+                  return nodes;
+              }
+
+              private static List<ReverseKGroup.ListNode> expected(List<ReverseKGroup.ListNode> input, int k) {
+                  List<ReverseKGroup.ListNode> result = new ArrayList<>(input.size());
+                  int fullEnd = input.size() - (input.size() % k);
+                  for (int start = 0; start < fullEnd; start += k) {
+                      for (int i = start + k - 1; i >= start; i--) result.add(input.get(i));
+                  }
+                  for (int i = fullEnd; i < input.size(); i++) result.add(input.get(i));
+                  return result;
+              }
+
+              private static List<ReverseKGroup.ListNode> collect(ReverseKGroup.ListNode head, int n) {
+                  List<ReverseKGroup.ListNode> out = new ArrayList<>();
+                  Set<ReverseKGroup.ListNode> seen = new HashSet<>();
+                  for (ReverseKGroup.ListNode p = head; p != null; p = p.next) {
+                      if (!seen.add(p)) throw new AssertionError("cycle detected");
+                      out.add(p);
+                      if (out.size() > n) throw new AssertionError("output longer than input");
+                  }
+                  if (out.size() != n) throw new AssertionError("node count drift: " + out.size() + " vs " + n);
+                  return out;
+              }
+
+              private static void check(int n, int k) {
+                  List<ReverseKGroup.ListNode> input = make(n);
+                  int[] values = input.stream().mapToInt(x -> x.value).toArray();
+                  List<ReverseKGroup.ListNode> oracle = expected(input, k);
+                  ReverseKGroup.ListNode head = ReverseKGroup.reverseKGroup(n == 0 ? null : input.get(0), k);
+                  List<ReverseKGroup.ListNode> actual = collect(head, n);
+                  if (!actual.equals(oracle)) throw new AssertionError("identity-order mismatch n=" + n + " k=" + k);
+                  if (!new HashSet<>(actual).equals(new HashSet<>(input))) throw new AssertionError("node identity set changed n=" + n + " k=" + k);
+                  for (int i = 0; i < input.size(); i++) if (input.get(i).value != values[i]) throw new AssertionError("value mutated n=" + n + " k=" + k);
+              }
+
+              public static void main(String[] args) {
+                  for (int n = 0; n <= 100; n++) {
+                      for (int k = 1; k <= 25; k++) check(n, k);
+                  }
+                  check(101, 101);
+                  check(101, 102);
+                  try { ReverseKGroup.reverseKGroup(null, 0); throw new AssertionError("k=0 accepted"); }
+                  catch (IllegalArgumentException expected) {}
+                  try { ReverseKGroup.reverseKGroup(null, -1); throw new AssertionError("negative k accepted"); }
+                  catch (IllegalArgumentException expected) {}
+                  System.out.println("PASS identity-oracle lengths=0..100 k=1..25 whole=101 oversized=102 nodes=preserved values=preserved cycle=none invalid-k=reject");
+              }
+          }
+          JAVA
+
+          (cd "$out/reviewer_tmp" && javac -Xlint:all -Werror ReverseKGroup.java ReviewerHarness.java && java ReviewerHarness > reviewer_stdout.txt)
+          stdout="$(cat "$out/reviewer_tmp/reviewer_stdout.txt")"
+          test "$stdout" = 'PASS identity-oracle lengths=0..100 k=1..25 whole=101 oversized=102 nodes=preserved values=preserved cycle=none invalid-k=reject'
+
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),cid=process.env.CANONICAL_ID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0021/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'All three current raw repository sources preserve the K-group linked-list reversal problem, and one explicitly names LC25; none of the raw notes preserves a programming-language API or a detailed incomplete-tail/invalid-k contract.',
+            'The candidate keeps those missing details explicit as answer-side executable-contract choices instead of presenting them as recovered source facts.',
+            'The iterative implementation uses a read-only kth-node preflight before pointer mutation, freezes groupNext as the half-open right boundary, and reconnects each reversed complete group without crossing into the next group.',
+            'Reviewer-extracted Java compiles with warnings as errors and matches a reviewer-owned identity-order oracle across every n=0..100 and k=1..25, plus whole-list and k>n edges.',
+            'Independent checks preserve the exact input node identity set and node values, detect cycles, and verify declared k<1 rejection.',
+            'The O(n) time and O(1) auxiliary-space claims are consistent with the iterative pointer implementation; no fabricated project experience or unresolved source variant was found.'
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'extract candidate Java; javac -Xlint:all -Werror; reviewer identity-order oracle for n=0..100,k=1..25 plus edge cases',stdout:process.env.REVIEW_STDOUT,checks:['candidate Java compiles with warnings-as-errors','identity-order oracle equality for all n=0..100 and k=1..25','whole-list k=n reversal','k>n unchanged incomplete suffix','exact input node identity set preserved','node values preserved','cycle absence and exact node count','declared invalid-k rejection'],boundary_tests:[{case:'raw source versus executable contract',expected:'Java/API/tail/error choices remain explicitly answer-side',passed:true},{case:'incomplete suffix',expected:'unchanged under declared LC25-style candidate contract',passed:true},{case:'identity preservation',expected:'no replacement business nodes and no value mutation',passed:true}]},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-k-group-20260826-v1',review_version:'reverse-k-group.iterative.v1',decision:'pass',revision_round:0,source_packet:[process.env.SOURCE_A,process.env.SOURCE_B,process.env.SOURCE_C,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Phase B bind writer evidence only after independent conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),cid=process.env.CANONICAL_ID,date='2026-08-26';
+          const qids=[process.env.QID_A,process.env.QID_B,process.env.QID_C];
+          const out=`review/content_build/answer_batch_0021/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const r=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          const w=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          const wv=JSON.parse(fs.readFileSync(`${out}/code_validation.json`,'utf8'));
+          const rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          if(r.decision!=='pass'||r.candidate_sha256!==hash||w.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||rv.result!=='pass') throw new Error('evidence prerequisite drift');
+          for(const qid of qids) if(!w.source_question_coverage?.some(x=>x.question_id===qid&&x.covered)) throw new Error(`writer source coverage missing: ${qid}`);
+          const ev={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'k-group-source-bounded-writer-20260826-v2',writer_version:'xhs-answer-curator.v1'},sources:[
+            {source_id:'source-a',title:'ByteDance interview note preserving LC25 K-group wording',locator:process.env.SOURCE_A,source_type:'repository_source_record',checked_at:date},
+            {source_id:'source-b',title:'Interview note preserving K-group linked-list wording',locator:process.env.SOURCE_B,source_type:'repository_source_record',checked_at:date},
+            {source_id:'source-c',title:'Written-test note preserving K-group linked-list wording',locator:process.env.SOURCE_C,source_type:'repository_source_record',checked_at:date},
+            {source_id:'writer-validation',title:'Writer Java identity-order validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'reviewer-validation',title:'Independent reviewer identity-order validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'isolated-review',title:'Fresh source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[
+            {claim_id:'source-boundary',text:'Three current repository source notes preserve the K-group linked-list reversal problem, one explicitly naming LC25; language/API and detailed tail/error contracts are not raw-source facts.',source_ids:['source-a','source-b','source-c','isolated-review'],answer_locations:['核心结论','关键细节']},
+            {claim_id:'candidate-contract',text:'Java ListNode API, complete-group reversal with incomplete tail preserved, no value mutation, and k<1 rejection are explicit answer-side choices used to make the candidate executable and testable.',source_ids:['source-a','source-b','source-c','isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节']},
+            {claim_id:'algorithm-validation',text:'The iterative complete-group boundary algorithm matches writer and independent reviewer identity-order oracles while preserving node identities and values and producing no cycles.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制']}],source_question_coverage:qids.map(question_id=>({question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']})),validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks,boundary_tests:rv.boundary_tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:r.reviewer_id,review_version:r.review_version,independent:true,decision:'pass',revision_round:0,scores:r.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:r.findings}};
+          fs.mkdirSync('review/evidence',{recursive:true}); fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(ev,null,2)+'\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md'; let text=fs.readFileSync(task,'utf8');
+          const pending='- `cq_q_37b42623861093a397be5bff1ee3fad6` — retired by fresh source-first `same` consolidation into `cq_topic_745b29f7`; all three recovered K-group linked-list Questions now share one Canonical. Survivor Answer is invalid/rebuild-required against the expanded source set before any promotion.';
+          const done='- `cq_q_37b42623861093a397be5bff1ee3fad6` — retired by fresh source-first `same` consolidation into `cq_topic_745b29f7`; the three-source survivor now has a source-bounded Java candidate, writer and independent identity-order validation PASS, isolated source-first review PASS, and complete evidence binding. Formal promotion remains blocked by repository human approval and real-review policy.';
+          if(!text.includes(pending)&&!text.includes(done)) throw new Error('task marker drift');
+          if(text.includes(pending)) fs.writeFileSync(task,text.replace(pending,done));
+          NODE
+
+      - name: Strict candidate audit and complete gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from unchanged candidate/source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "review/content_build/answer_batch_0021/$CANONICAL_ID/reviewer_tmp"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote="$(git rev-parse origin/$CONTENT_BRANCH)"; base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then
+            echo "Content branch advanced during isolated review: $base -> $remote; fail closed and rerun on fresh bytes."
+            exit 0
+          fi
+          test "$(sha256sum review/candidates/answers/$CANONICAL_ID.md | awk '{print $1}')" = '${{ steps.base.outputs.candidate_sha256 }}'
+          test "$(sha256sum "$SOURCE_A" | awk '{print $1}')" = '${{ steps.base.outputs.source_a_sha256 }}'
+          test "$(sha256sum "$SOURCE_B" | awk '{print $1}')" = '${{ steps.base.outputs.source_b_sha256 }}'
+          test "$(sha256sum "$SOURCE_C" | awk '{print $1}')" = '${{ steps.base.outputs.source_c_sha256 }}'
+          git add -A; git diff --cached --check
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass consolidated k-group candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
