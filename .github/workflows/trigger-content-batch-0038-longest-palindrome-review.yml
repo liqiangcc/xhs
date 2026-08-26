@@ -1,0 +1,25 @@
+name: Trigger Content Batch 0038 Longest-Palindrome Review
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/trigger-content-batch-0038-longest-palindrome-review.yml
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: trigger-content-batch-0038-longest-palindrome-review
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Dispatch registered isolated review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run review-content-batch-0038-longest-palindrome.yml --ref master
