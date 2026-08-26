@@ -1,0 +1,48 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9ffa48e1df8d78a08a74e14388301ebc",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "javac CasExamples.java CasExamplesTest.java && java CasExamplesTest",
+  "stdout": "PASS locked-semantic-cas stale-expected concurrent-cas-loop no-lost-update stamped-aba-detection overflow-fail-closed",
+  "checks": [
+    "locked semantic compare-and-set succeeds only on expected match",
+    "stale expected fails without modifying state",
+    "8-thread CAS retry loop reaches exact final count without lost updates",
+    "stale compareAndSet expected is rejected after competing update",
+    "AtomicStampedReference stamp detects A-B-A history in fixture",
+    "integer overflow fails before shared-state update"
+  ],
+  "boundary_tests": [
+    {
+      "case": "locked semantic CAS expected matches",
+      "expected": "write update and return true",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "locked semantic CAS expected stale",
+      "expected": "no write and return false",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "8 x 20000 concurrent increments through AtomicInteger CAS loop",
+      "expected": "160000 exactly",
+      "actual": "160000",
+      "passed": true
+    },
+    {
+      "case": "A-B-A with stale stamp",
+      "expected": "stale stamped CAS rejected although reference is A again",
+      "actual": "rejected",
+      "passed": true
+    },
+    {
+      "case": "Integer.MAX_VALUE increment",
+      "expected": "ArithmeticException and shared value unchanged",
+      "actual": "verified",
+      "passed": true
+    }
+  ]
+}
