@@ -1,0 +1,165 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_3a314d375a1b0bdf127953e8614906e0",
+  "candidate_sha256": "a2a90c1cd150999fa7813c4bec1b5d5fc06e291faaf3c12d05169009675f9818",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "linked-list-intersection-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "ocr-note",
+      "title": "OCR interview note preserving the linked-list intersection wording",
+      "locator": "note_img_txt/66138d03000000001a00e8ca.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "tagged-question",
+      "title": "Tagged linked-list intersection question record",
+      "locator": "note_tagged/66138d03000000001a00e8ca.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic Java validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_3a314d375a1b0bdf127953e8614906e0/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent length-alignment oracle validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_3a314d375a1b0bdf127953e8614906e0/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh source-first isolated review",
+      "locator": "review/content_build/answer_batch_0021/cq_q_3a314d375a1b0bdf127953e8614906e0/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The recoverable source asks for the first common node of two intersecting singly linked lists; it does not prescribe Java, node representation, cycle handling, or no-intersection return behavior.",
+      "source_ids": [
+        "ocr-note",
+        "tagged-question"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "candidate-contract",
+      "text": "Java, acyclic singly linked lists, object identity as common-node semantics, and null for no intersection are explicit answer-side choices.",
+      "source_ids": [
+        "ocr-note",
+        "tagged-question",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "implementation-validation",
+      "text": "The head-switch implementation matches an independent length-alignment oracle over deterministic and seeded randomized acyclic-list shapes and preserves identity semantics across edge cases.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "3a314d375a1b0bdf127953e8614906e0",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract candidate Java; javac -Xlint:all -Werror; independent length-alignment oracle over deterministic and seeded randomized acyclic-list shapes",
+    "result": "pass",
+    "reported_stdout": "PASS intersecting=10140 disjoint=676 randomized=5000 oracle=length-align identity=pass same-head=pass empty=pass",
+    "checks": [
+      "candidate Java compiles with warnings-as-errors",
+      "10140 intersecting prefix/tail shapes match an independent length-alignment oracle",
+      "676 disjoint prefix pairs return null",
+      "5000 seeded randomized shapes match the independent oracle",
+      "same-head and empty boundaries pass",
+      "equal-valued distinct nodes are not treated as an intersection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "source versus answer-side contract",
+        "expected": "Java/acyclic/object-identity/null-on-no-intersection choices remain explicitly answer-side",
+        "passed": true
+      },
+      {
+        "case": "intersection semantics",
+        "expected": "common node is reference identity, not equal payload value",
+        "passed": true
+      },
+      {
+        "case": "cycle scope",
+        "expected": "candidate does not claim the acyclic head-switch proof handles cyclic lists",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-linked-list-intersection-20260826-v1",
+    "review_version": "linked-list-intersection.head-switch.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The repository OCR and tagged source preserve only the request for the first common node of two intersecting singly linked lists; Java, acyclic-input scope, node representation and no-intersection return behavior are not source constraints.",
+      "The candidate labels Java, acyclic singly linked lists, object identity and null-on-no-intersection as answer-side executable choices instead of attributing them to the interview source.",
+      "For the declared acyclic contract, the head-switch invariant is sound: each pointer traverses A then B or B then A, equalizing the two unique-prefix lengths before any shared suffix comparison.",
+      "An independent length-alignment oracle agrees with the extracted candidate implementation for 10,140 deterministic intersecting shapes, 676 disjoint shapes and 5,000 seeded randomized shapes; same-head, empty-input and equal-value-distinct-node boundaries also pass.",
+      "The answer correctly distinguishes node identity from value equality, states O(m+n) time and O(1) auxiliary space, and explicitly excludes cyclic-list semantics from the proof.",
+      "No fabricated project experience, placeholder implementation, unsupported source expansion or unresolved source variant was found."
+    ]
+  }
+}
