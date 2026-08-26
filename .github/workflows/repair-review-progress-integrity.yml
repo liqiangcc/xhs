@@ -1,0 +1,138 @@
+name: Repair ReviewProgress Integrity
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/repair-review-progress-integrity.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-review-progress-integrity
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Capture pre-repair integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/integrity
+          node scripts/xhs.js review integrity --noManifest > review/content_build/integrity/review_progress_before.json
+          node <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync('review/content_build/integrity/review_progress_before.json','utf8'));
+          if(!Number.isInteger(r.missing_progress_count)) throw new Error('integrity result missing missing_progress_count');
+          if((r.duplicate_progress_canonical_ids||[]).length) throw new Error('duplicate ReviewProgress IDs require separate remediation');
+          if((r.stale_progress_canonical_ids||[]).length) throw new Error('stale ReviewProgress IDs require separate remediation');
+          if((r.malformed_progress_items||[]).length) throw new Error('malformed ReviewProgress requires separate remediation');
+          console.log(`pre-repair missing_progress_count=${r.missing_progress_count}`);
+          NODE
+
+      - name: Initialize only missing ReviewProgress through application path
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js review today --date 2026-08-26 --limit 1 --noManifest > /tmp/review_today.json
+          node <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync('/tmp/review_today.json','utf8'));
+          if(r.schema_version!=='review_today.v1') throw new Error('review today did not execute through application use case');
+          NODE
+
+      - name: Verify repaired integrity and mutation scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js review integrity --noManifest > review/content_build/integrity/review_progress_after.json
+          node <<'NODE'
+          const fs=require('fs');
+          const before=JSON.parse(fs.readFileSync('review/content_build/integrity/review_progress_before.json','utf8'));
+          const after=JSON.parse(fs.readFileSync('review/content_build/integrity/review_progress_after.json','utf8'));
+          if(after.missing_progress_count!==0) throw new Error(`missing ReviewProgress remains: ${after.missing_progress_count}`);
+          if((after.duplicate_progress_canonical_ids||[]).length) throw new Error('duplicate ReviewProgress introduced');
+          if((after.stale_progress_canonical_ids||[]).length) throw new Error('stale ReviewProgress introduced');
+          if((after.malformed_progress_items||[]).length) throw new Error('malformed ReviewProgress introduced');
+          if(after.progress_item_count!==after.canonical_count) throw new Error(`ReviewProgress reachability incomplete: ${after.progress_item_count}/${after.canonical_count}`);
+          fs.writeFileSync('review/content_build/integrity/review_progress_repair.md',
+            '# ReviewProgress Integrity Repair\n\n'+
+            `- Pre-repair missing progress: ${before.missing_progress_count}.\n`+
+            `- Post-repair canonical count: ${after.canonical_count}.\n`+
+            `- Post-repair progress item count: ${after.progress_item_count}.\n`+
+            '- Repair path: `review today` application use case → ReviewProgressRepository → atomic filesystem transaction; existing items are preserved and only missing Canonicals receive default progress state.\n'+
+            '- Post-repair missing, duplicate, stale and malformed ReviewProgress counts are all zero.\n');
+          NODE
+          status="$(git status --short)"
+          printf '%s\n' "$status"
+          test -n "$status"
+          echo "$status" | awk '{print $2}' | while read -r path; do
+            case "$path" in
+              review/progress.json|review/content_build/integrity/review_progress_before.json|review/content_build/integrity/review_progress_after.json|review/content_build/integrity/review_progress_repair.md) ;;
+              *) echo "unexpected repair mutation: $path"; exit 1 ;;
+            esac
+          done
+
+      - name: Full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite --noManifest
+          node scripts/xhs.js review integrity --noManifest
+          node scripts/xhs.js answer type-audit --check --noWrite --noManifest
+          node scripts/xhs.js answer validate --strict --noWrite --noManifest
+          node scripts/xhs.js validate all --noWrite --noManifest
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during ReviewProgress repair: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add review/progress.json review/content_build/integrity/review_progress_before.json review/content_build/integrity/review_progress_after.json review/content_build/integrity/review_progress_repair.md
+          git diff --cached --check
+          git config user.name 'xhs-integrity-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: repair missing ReviewProgress reachability'
+          git push origin "HEAD:$CONTENT_BRANCH"
