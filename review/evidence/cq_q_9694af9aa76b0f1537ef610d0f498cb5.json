@@ -1,0 +1,179 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9694af9aa76b0f1537ef610d0f498cb5",
+  "candidate_sha256": "fe0352d54e6aa452e7bf20203bdbc1a9a224a440139a00358fce874542cda394",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "randomset-source-bounded-writer-20260827-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-structured",
+      "title": "Structured Pinduoduo interview source containing the RandomSet prompt",
+      "locator": "note_structured/656de8b6000000001502f038.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Tagged RandomSet O(1) coding question",
+      "locator": "note_tagged/656de8b6000000001502f038.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "jdk21-hashmap",
+      "title": "Java SE 21 HashMap API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "jdk21-arraylist",
+      "title": "Java SE 21 ArrayList API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayList.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer RandomSet deterministic and randomized validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9694af9aa76b0f1537ef610d0f498cb5/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate RandomSet differential validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9694af9aa76b0f1537ef610d0f498cb5/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first RandomSet review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9694af9aa76b0f1537ef610d0f498cb5/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks for RandomSet set/remove/contains/randomGet operations described as O(1) without specifying language, duplicate insertion, missing deletion, empty randomGet, concurrency, or whether O(1) means deterministic worst-case versus expected/amortized behavior.",
+      "source_ids": [
+        "repository-structured",
+        "repository-tagged",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "java-collections-complexity",
+      "text": "Java SE 21 documents constant-time basic HashMap operations when the hash function disperses elements properly and constant-time ArrayList positional access with amortized constant-time append; the candidate correctly avoids upgrading those conditions into an unconditional deterministic worst-case O(1) claim.",
+      "source_ids": [
+        "jdk21-hashmap",
+        "jdk21-arraylist",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "swap-delete-invariant",
+      "text": "The exact candidate keeps a dense array plus value-to-index map and repairs the moved element mapping during swap-with-last deletion, preserving size equality and index.get(values.get(i))==i.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "behavior-validation",
+      "text": "Writer and independent reviewer validations cover duplicate insertion, absent removal, middle/last deletion paths, contains, empty randomGet, random-member validity, a HashSet membership oracle and repeated internal bijection checks under seeded randomized operation sequences.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9694af9aa76b0f1537ef610d0f498cb5",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract the exact candidate Java block, compile it in an independent harness, and differentially validate deterministic plus 150000 seeded randomized operations against an independent HashSet oracle while checking the array-index bijection",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate deterministic=swap-delete duplicate=rejected absent-remove=false empty=randomGet-throws randomized=150000 reads=37444 invariant-checks=1180 oracle=HashSet null-random=rejected",
+    "checks": [
+      "exact candidate Java implementation compiles under Java 21 inside an independent harness",
+      "duplicate insertion, absent removal, contains, empty randomGet and constructor null-Random behavior follow the candidate contract/code",
+      "middle removal and later removal of the moved element preserve the dense-array/value-to-index-map bijection",
+      "150000 seeded randomized set/remove/contains/randomGet operations agree with an independent HashSet membership oracle",
+      "the reviewer repeatedly checks values.size()==index.size(), index.get(values.get(i))==i, no duplicate array members and exact oracle membership",
+      "randomGet never returns a removed or otherwise absent member and the fully drained set rejects randomGet"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-randomset-20260827-v1",
+    "review_version": "randomset.array-map-swap-delete.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The answer preserves the exact RandomSet source boundary and labels duplicate insertion, absent removal, empty randomGet, Java generics and the strict-worst-case interpretation as implementation/analysis contracts rather than source facts.",
+      "The dense ArrayList plus value-to-index HashMap invariant is explicit, and swap-with-last deletion updates the moved value mapping before removing the tail.",
+      "The exact candidate Java compiles under Java 21 and independently matches a HashSet membership oracle across deterministic cases and 150000 seeded randomized operations while the internal bijection is repeatedly checked.",
+      "The complexity wording avoids overclaiming: Java SE 21 documents constant-time basic HashMap operations when hashes disperse properly, while ArrayList positional access is constant time and append is amortized constant time; the candidate therefore distinguishes expected/amortized behavior from an unstated deterministic worst-case O(1) guarantee.",
+      "The answer covers duplicate members, missing deletion, empty random access, swap-delete of a middle element, space O(n), random-member validity and the non-thread-safe compound-state boundary.",
+      "The direct ArrayList middle-delete O(n) pitfall and the ghost-index bug when removing the last element are both explained as concrete failure modes.",
+      "No fabricated production experience, business metric or incident is claimed; the project section remains an explicit mapping/verification prompt."
+    ]
+  }
+}
