@@ -1,0 +1,278 @@
+name: Build Content Batch 0037 Alternating AB Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0037-alternating-ab-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-alternating-ab-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8f04cfa510fe868afcf072c93499a8ea
+  SOURCE_QID: 8f04cfa510fe868afcf072c93499a8ea
+  SOURCE_TAGGED: note_tagged/67d42a3a000000001d00649a.json
+  OBJECT_DOC: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html
+  SEMAPHORE_DOC: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Guard exact source and long-tail baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='两个线程交替打印 abababab 如何实现（wait/notify 或 Semaphore）？';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source question drift');
+          const formal=fs.readFileSync(`review/answers/${cid}.md`,'utf8');
+          if(!formal.includes('"status":"needs_update"')||!formal.includes('"quality_tier":"long_tail_baseline"')) throw new Error('formal answer no longer long-tail baseline');
+          if(!formal.includes(expected)) throw new Error('formal source locator drift');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists');
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),c=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!c.ok||c.canonical?.canonical_id!==process.env.CANONICAL_ID||c.answer_type!=='coding') throw new Error('canonical/type drift');
+          const src=c.source_questions||[];
+          if(!src.some(x=>x.question_id===process.env.SOURCE_QID&&(x.original_question||'').includes('交替打印'))) throw new Error(`canonical source wording drift: ${JSON.stringify(src)}`);
+          NODE
+
+      - name: Write source-bounded candidate and executable writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; mkdir -p "$out" review/candidates/answers
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_8f04cfa510fe868afcf072c93499a8ea","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 两个线程交替打印 abababab：wait/notify 与 Semaphore
+
+          ## 核心结论
+
+          这题本质是维护一个只有两个状态的“轮到谁”协议，而不是靠线程调度碰运气。`Semaphore` 版最直观：给打印 `a` 的线程初始 1 个许可、打印 `b` 的线程初始 0 个许可，每打印一次就把许可交给对方；`wait/notify` 版则用同一把 monitor 保护 `aTurn` 条件，线程在 `while` 条件不满足时 `wait()`，打印后切换状态并 `notifyAll()`。下面两种实现都让 `b` 线程先启动，证明顺序来自同步协议而不是启动先后。
+
+          ## 1 分钟版
+
+          - `Semaphore`：`aPermit=1`、`bPermit=0`；A `acquire -> print a -> release b`，B `acquire -> print b -> release a`，许可像接力棒一样来回传递。
+          - `wait/notify`：共享 `aTurn=true`；所有条件读写都放在同一个 `synchronized(lock)` 里，条件不满足必须 `while (...) lock.wait()`，不能用一次 `if`。
+          - `wait()` 会释放当前对象 monitor，返回前会重新竞争并获得它；`notifyAll()` 只是唤醒等待者，真正继续执行仍要等当前线程退出同步块。
+          - 打印 2n 个字符的工作量是 O(n)；同步状态额外 O(1)。示例为了可测试返回字符串，因此结果缓冲本身是 O(n)，真实直接输出时不把输出介质算作同步辅助空间。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.concurrent.Semaphore;
+
+          public final class Solution {
+              public String withSemaphores(int pairs) throws InterruptedException {
+                  if (pairs < 0) throw new IllegalArgumentException("pairs must be >= 0");
+                  StringBuilder out = new StringBuilder(pairs * 2);
+                  Semaphore aPermit = new Semaphore(1);
+                  Semaphore bPermit = new Semaphore(0);
+
+                  Thread a = new Thread(() -> {
+                      try {
+                          for (int i = 0; i < pairs; i++) {
+                              aPermit.acquire();
+                              out.append('a');
+                              bPermit.release();
+                          }
+                      } catch (InterruptedException e) {
+                          Thread.currentThread().interrupt();
+                      }
+                  }, "print-a");
+
+                  Thread b = new Thread(() -> {
+                      try {
+                          for (int i = 0; i < pairs; i++) {
+                              bPermit.acquire();
+                              out.append('b');
+                              aPermit.release();
+                          }
+                      } catch (InterruptedException e) {
+                          Thread.currentThread().interrupt();
+                      }
+                  }, "print-b");
+
+                  b.start();
+                  a.start();
+                  a.join();
+                  b.join();
+                  return out.toString();
+              }
+
+              public String withWaitNotify(int pairs) throws InterruptedException {
+                  if (pairs < 0) throw new IllegalArgumentException("pairs must be >= 0");
+                  Object lock = new Object();
+                  boolean[] aTurn = {true};
+                  StringBuilder out = new StringBuilder(pairs * 2);
+
+                  Thread a = new Thread(() -> runWithMonitor(lock, aTurn, true, 'a', pairs, out), "print-a");
+                  Thread b = new Thread(() -> runWithMonitor(lock, aTurn, false, 'b', pairs, out), "print-b");
+
+                  b.start();
+                  a.start();
+                  a.join();
+                  b.join();
+                  return out.toString();
+              }
+
+              private void runWithMonitor(Object lock, boolean[] aTurn, boolean myTurn,
+                                          char ch, int pairs, StringBuilder out) {
+                  try {
+                      for (int i = 0; i < pairs; i++) {
+                          synchronized (lock) {
+                              while (aTurn[0] != myTurn) {
+                                  lock.wait();
+                              }
+                              out.append(ch);
+                              aTurn[0] = !aTurn[0];
+                              lock.notifyAll();
+                          }
+                      }
+                  } catch (InterruptedException e) {
+                      Thread.currentThread().interrupt();
+                  }
+              }
+          }
+          ```
+
+          两种方案都把“谁能继续”编码成同步状态。Semaphore 把状态放在 permit 数量里；monitor 版把状态放在受锁保护的 `aTurn` 里。两者都不依赖 `sleep`，也不依赖哪个线程先获得 CPU。
+
+          ## 关键细节
+
+          - **Semaphore 初始许可决定首字符**：A 为 1、B 为 0，因此 B 即使先启动也会阻塞，直到 A 打印后释放 B 的许可。
+          - **`wait` 必须放在 `while` 中**：JDK 明确允许 spurious wakeup；被唤醒后也可能需要重新检查条件，所以不能把 `if` 当成等待协议。
+          - **必须持有 monitor 才能 wait/notify**：`wait`、`notify`、`notifyAll` 都要求当前线程拥有该对象 monitor，否则会抛 `IllegalMonitorStateException`。
+          - **notify 不是“立刻交棒”**：被唤醒线程要等通知方释放 monitor 后才能继续；状态修改和通知应放在同一同步块中。
+          - **为什么这里用 `notifyAll`**：当前只有两个工作线程时 `notify` 也能设计正确，但 `notifyAll + while` 更不依赖“恰好唤醒正确等待者”的假设，也更容易在扩展等待者时保持条件协议。
+          - **中断边界**：示例线程在 `InterruptedException` 后恢复中断标记并退出。真实生产代码若要求“即使一方中断也不让另一方永久等待”，需要额外的取消状态和对端唤醒；这属于题目未要求的生命周期协议。
+          - **共享 `StringBuilder` 为什么可用**：Semaphore 版每次只有持有当前许可的线程执行 append，monitor 版 append 在同一 monitor 内；同步交接使两个 append 不并发执行。若改成其他访问模式，应使用线程安全输出策略。
+
+          ## 原理机制
+
+          交替打印可以抽象成状态机 `A_TURN -> B_TURN -> A_TURN ...`。正确性需要两个不变量：第一，任意时刻最多只有当前状态对应的线程能执行打印；第二，一次打印完成后必须原子地把下一执行权交给另一方。Semaphore 用 `acquire/release` 实现许可交接，JUC 还定义了 release 之前的动作对另一线程成功 acquire 之后的动作具有 happens-before 关系。monitor 版则依靠 `synchronized` 保护条件状态，`wait()` 把线程放入该对象等待集并释放 monitor，醒来后重新获取 monitor，再由 `while` 重新验证状态。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构“线上用 wait/notify 做过打印器”。工程里若只是两方轮流执行，Semaphore、Condition、BlockingQueue 等都能表达交接；选择时更重要的是取消、超时、异常传播和可观测性，而不是把面试题写法直接搬进生产代码。这里仅说明同步模型，不声称个人生产实践。
+
+          ## 常见追问
+
+          - 问：为什么 `sleep` 不能保证严格交替？答：`sleep` 只延迟当前线程，不建立“下一次必须轮到谁”的同步关系；调度抖动后仍可能连续打印同一字符。
+          - 问：`wait()` 为什么一定要用 `while`？答：既要防 spurious wakeup，也要在重新拿到 monitor 后重新验证共享条件；JDK API 也推荐围绕条件使用 `while`。
+          - 问：`notify()` 和 `notifyAll()` 有什么区别？答：`notify` 任意唤醒一个等待线程，`notifyAll` 唤醒等待集里的全部线程；它们都不会让被唤醒线程绕过 monitor 竞争。
+          - 问：Semaphore 为什么能从 `a` 开始，即使 B 先启动？答：B 的初始许可是 0，会阻塞在 `acquire()`；A 初始许可是 1，可以先打印并 `release` 给 B。
+          - 问：两个方案怎么选？答：两线程接力时 Semaphore 更直接；若等待条件是多个业务状态且都受同一共享数据保护，monitor/Condition 往往更自然。真实系统还要把超时、中断和取消协议一起设计。
+
+          ## 易错点
+
+          - 用 `sleep` 猜测线程调度顺序，把时间等待误当同步协议。
+          - `wait()` 前没有持有同一个对象的 monitor，直接触发 `IllegalMonitorStateException`。
+          - 用 `if` 包住 `wait()`，忽略虚假唤醒和重新竞争后的条件变化。
+          - Semaphore 两边初始许可都设成 1，导致 `a`、`b` 都能先打印；或都设成 0，直接死锁。
+          - 打印后忘记释放对方许可 / 切换状态并通知，第二轮开始永久阻塞。
+          EOF
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('withSemaphores')||!blocks[0][1].includes('withWaitNotify')) throw new Error('complete Java implementations missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/Solution.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$out/AlternatingWriterTest.java" <<'JAVA'
+          import java.time.Duration;
+          import java.util.concurrent.Callable;
+          import java.util.concurrent.ExecutionException;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+          import java.util.concurrent.Future;
+          import java.util.concurrent.TimeUnit;
+
+          public final class AlternatingWriterTest {
+              private static long runs;
+              public static void main(String[] args) throws Exception {
+                  Solution s=new Solution();
+                  verifyTimed(() -> s.withSemaphores(0), "");
+                  verifyTimed(() -> s.withWaitNotify(0), "");
+                  for(int pairs: new int[]{1,4,1000}) {
+                      String expected="ab".repeat(pairs);
+                      verifyTimed(() -> s.withSemaphores(pairs),expected);
+                      verifyTimed(() -> s.withWaitNotify(pairs),expected);
+                  }
+                  for(int round=0;round<120;round++) {
+                      int pairs=1+(round*37)%401;
+                      String expected="ab".repeat(pairs);
+                      verifyTimed(() -> s.withSemaphores(pairs),expected);
+                      verifyTimed(() -> s.withWaitNotify(pairs),expected);
+                  }
+                  boolean bad1=false,bad2=false;
+                  try{s.withSemaphores(-1);}catch(IllegalArgumentException e){bad1=true;}
+                  try{s.withWaitNotify(-1);}catch(IllegalArgumentException e){bad2=true;}
+                  if(!bad1||!bad2)throw new AssertionError("negative pairs not rejected");
+                  System.out.printf("PASS deterministic=8 stress_runs=%d start_b_first=pass exact_alternation=pass negative=pass%n",runs);
+              }
+              static void verifyTimed(Callable<String> call,String expected)throws Exception{
+                  ExecutorService ex=Executors.newSingleThreadExecutor();
+                  try{Future<String> f=ex.submit(call);String actual=f.get(Duration.ofSeconds(4).toMillis(),TimeUnit.MILLISECONDS);if(!actual.equals(expected))throw new AssertionError("len="+actual.length()+" expectedLen="+expected.length()+" actualPrefix="+actual.substring(0,Math.min(40,actual.length())));runs++;}
+                  finally{ex.shutdownNow();ex.awaitTermination(1,TimeUnit.SECONDS);}
+              }
+          }
+          JAVA
+          (cd "$out" && javac -Xlint:all -Werror Solution.java AlternatingWriterTest.java && java AlternatingWriterTest > writer_stdout.txt)
+          stdout="$(cat "$out/writer_stdout.txt")"
+          [[ "$stdout" == PASS\ deterministic=8\ stress_runs=*\ start_b_first=pass\ exact_alternation=pass\ negative=pass ]]
+
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex'); const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:hash,result:'pass',validated_at:date,command:'extract exact candidate Java; javac -Xlint:all -Werror; timed deterministic and stress checks for Semaphore and wait/notify variants',stdout:process.env.STDOUT,checks:['zero/one/four/1000 pairs exact','120 additional pair counts per implementation under timeout','b thread starts first but output still begins with a','both implementations reject negative pair counts']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Repository tagged alternating-ab interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'object-doc',title:'Java SE 21 Object wait/notify API',locator:process.env.OBJECT_DOC,source_type:'official_documentation',checked_at:date},{source_id:'semaphore-doc',title:'Java SE 21 Semaphore API',locator:process.env.SEMAPHORE_DOC,source_type:'official_documentation',checked_at:date},{source_id:'writer-validation',title:'Writer alternating-ab executable validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'semaphore-handoff',text:'Initializing A with one permit and B with zero permits establishes A-first alternation; each successful print releases the peer permit.',source_ids:['semaphore-doc','writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'monitor-condition',text:'Object wait requires monitor ownership, releases that monitor while waiting, may return after spurious wakeup, and therefore the awaited condition must be rechecked in a while loop.',source_ids:['object-doc','writer-validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','常见追问']},{claim_id:'exact-output',text:'Both exact candidate implementations produce strict ab alternation even when the b thread starts first, across deterministic and stress runs.',source_ids:['writer-validation'],answer_locations:['核心结论','3 分钟版','原理机制']}],source_question_coverage:(ctx.source_questions||[]).map(x=>({question_id:x.question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']})),promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record bounded progress and commit candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';let t=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_8f04cfa510fe868afcf072c93499a8ea` alternating-ab candidate preserves the exact two-thread wait/notify-or-Semaphore source boundary, supplies complete Java implementations for both synchronization strategies, explains permit handoff, monitor ownership, while-guarded wait and interruption boundaries, and passes timed deterministic plus stress validation with B deliberately started first. Writer evidence is frozen; isolated source-first review remains pending.';
+          if(!t.includes('`cq_q_8f04cfa510fe868afcf072c93499a8ea` alternating-ab candidate')) t=t.trimEnd()+'\n'+note+'\n';
+          fs.writeFileSync(task,t);
+          NODE
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0037/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'content: stage batch 0037 alternating ab candidate'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during build'; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
