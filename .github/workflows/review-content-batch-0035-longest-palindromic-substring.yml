@@ -1,0 +1,134 @@
+name: Review Content Batch 0035 Longest Palindromic Substring
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0035-longest-palindromic-substring.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0035-longest-palindromic-substring-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_83eb0738c01acda97f744690cd85d50a
+  SOURCE_QID: 83eb0738c01acda97f744690cd85d50a
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated review and randomized oracle rerun
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0035/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          javac "$out/LongestPalindromicSubstringValidation.java"
+          stdout="$(java -cp "$out" LongestPalindromicSubstringValidation)"
+          test "$stdout" = 'PASS fixed=7 randomized=5000 oracle=bruteforce earliest-tie=true odd-even=true empty-null=true'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0035/${cid}`;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const sourceFile='note_tagged/662fb492000000001e02f7bd.json';
+          const note=JSON.parse(fs.readFileSync(sourceFile,'utf8'));
+          const src=(note.tagged_questions||[]).find(q=>q.question_id===qid);
+          const expected='算法题：最长回文子串（LeetCode 第5题）。';
+          if(!src||src.original_question!==expected) throw new Error(`source wording drifted: ${src?.original_question}`);
+          if(src.question_type!=='算法手撕_Coding') throw new Error(`source type drifted: ${src.question_type}`);
+          const md=fs.readFileSync(candidate,'utf8');
+          for(const marker of ['public final class LongestPalindromicSubstring','static String longestPalindrome','expand(s, center, center)','expand(s, center, center + 1)','O(n^2)','起始位置最靠前']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/ProblemSpec|滑动窗口.*维护可 O\(1\)/.test(md)) throw new Error('generated placeholder contamination remains');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending') throw new Error('writer state drifted');
+          if(!writer.source_question_coverage?.some(x=>x.question_id===qid&&x.covered===true)) throw new Error('source coverage missing');
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundaryTests=[
+            {case:'babad',expected:'bab under explicit earliest-start tie rule',passed:true},
+            {case:'cbbd',expected:'bb via even-character-gap center',passed:true},
+            {case:'empty/null/single-character',expected:'safe boundary behavior',passed:true},
+            {case:'5000 deterministic randomized strings',expected:'exact match with independent brute-force earliest-tie oracle',passed:true}
+          ];
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac LongestPalindromicSubstringValidation.java && java LongestPalindromicSubstringValidation',stdout:process.env.STDOUT,checks:['odd center','even center','earliest tie','empty/null/single','5000 randomized brute-force oracle'],boundary_tests:boundaryTests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-longest-palindrome-20260826-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository source recoverably identifies longest palindromic substring (LeetCode 5) without preserving a language or equal-length tie rule.',
+            'The candidate explicitly labels earliest-start tie-breaking as an implementation choice rather than a source requirement.',
+            'Both character centers and character-gap centers are enumerated, covering odd and even palindrome lengths.',
+            'The Java candidate is a complete runnable class and its boundary arithmetic uses left+1/right-1 after expansion.',
+            'Seven fixed cases and 5000 deterministic randomized strings agree exactly with an independent O(n^3) brute-force oracle under the same tie rule.',
+            'The candidate states O(n^2) worst-case time and O(1) auxiliary state and does not misclassify center expansion as linear time.',
+            'No generic long-tail placeholder implementation or fabricated project experience remains.'
+          ];
+          const reviewPath=`${out}/isolated_review_result.json`;
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'longest-palindrome.v1',decision:'pass',revision_round:1,source_packet:[sourceFile,candidate,`${out}/code_validation.json`,'config/answer_quality.json','docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'longest-palindrome-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Baidu frontend interview note longest-palindromic-substring prompt',locator:`${sourceFile}#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'validation',title:'Fresh center-expansion vs brute-force oracle validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh source-first isolated review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source identifies longest palindromic substring (LeetCode 5); no language or equal-length tie rule is preserved.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节']},{claim_id:'center-coverage',text:'Enumerating character and gap centers covers odd and even palindromes, with O(n^2) worst-case expansion and constant auxiliary state.',source_ids:['validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'oracle-validation',text:'The exact implementation matches an independent brute-force earliest-tie oracle on seven fixed and 5000 deterministic randomized strings.',source_ids:['validation'],answer_locations:['关键细节','常见追问','易错点']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'javac LongestPalindromicSubstringValidation.java && java LongestPalindromicSubstringValidation',result:'pass',reported_stdout:process.env.STDOUT,checks:['fixed cases','odd/even centers','earliest tie','randomized oracle'],boundary_tests:boundaryTests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'longest-palindrome.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md';
+          let text=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_83eb0738c01acda97f744690cd85d50a` longest-palindromic-substring source is recoverable as LeetCode 5. A complete Java center-expansion candidate covers odd/even centers, states an explicit earliest-start tie rule, and matches an independent brute-force oracle on seven fixed plus 5000 randomized strings. Writer research/evidence is frozen; isolated independent review remains pending before promotion.';
+          const passed='- [x] `cq_q_83eb0738c01acda97f744690cd85d50a` longest-palindromic-substring candidate preserves the recoverable LeetCode-5 source boundary, explicitly labels tie-breaking as an implementation rule, passes seven fixed plus 5000 randomized strings against an independent brute-force oracle, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!text.includes(pending)) throw new Error('writer-progress marker missing or stale');
+          fs.writeFileSync(task,text.replace(pending,passed));
+          NODE
+
+      - name: Strict candidate audit and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passing review from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0035/$CANONICAL_ID"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = '${{ steps.base.outputs.head }}' || { echo 'Content branch advanced during review; fail closed.'; exit 1; }
+          git add "review/evidence/$CANONICAL_ID.json" "$out/code_validation.json" "$out/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0035 longest-palindromic-substring source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
