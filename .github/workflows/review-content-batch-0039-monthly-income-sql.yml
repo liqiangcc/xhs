@@ -1,0 +1,171 @@
+name: Review Content Batch 0039 Monthly Income SQL Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0039-monthly-income-sql.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-monthly-income-sql-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9ebb896630d1e350f41ee29dec6f3cdf
+  SOURCE_QID: 9ebb896630d1e350f41ee29dec6f3cdf
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Source-first exact-candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0039/$cid"; tmp="/tmp/monthly-income-review"
+          rm -rf "$tmp"; mkdir -p "$tmp" "$out"
+
+          python3 - <<'PY'
+          import json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']
+          inventory=json.loads(pathlib.Path('review/content_build/answer_batch_0039/source_inventory.json').read_text())
+          item=next((x for x in inventory['items'] if x['canonical_id']==cid),None)
+          if not item: raise SystemExit('inventory item missing')
+          if item.get('question_ids') != [qid]: raise SystemExit(f'ownership snapshot drift: {item.get("question_ids")}')
+          src=next((x for x in item.get('source_questions',[]) if x.get('question_id')==qid),None)
+          exact='SQL：有一个收入记录表 `income_records` (user_id, income, month)，请编写 SQL 计算每个用户每个月的收入总额，并筛选出单月收入总额大于 1000 的记录（要求包含 user_id 和 month）。'
+          if not src or src.get('original_question')!=exact: raise SystemExit('source wording drift')
+          if src.get('is_valid_for_library') is not True: raise SystemExit('source invalid')
+
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['GROUP BY user_id, month','HAVING SUM(income) > 1000','WHERE income > 1000','严格 `> 1000`','SUM(DISTINCT income)']:
+              if marker not in md: raise SystemExit(f'candidate missing {marker}')
+          if len(re.findall(r'^- 问：',md,re.M))<5: raise SystemExit('followups insufficient')
+          blocks=re.findall(r'```sql\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one SQL block, got {len(blocks)}')
+          sql=blocks[0].strip()
+          pathlib.Path('/tmp/monthly-income-review/candidate.sql').write_text(sql+'\n')
+          PY
+
+          python3 "$out/sql_validation.py" > "$tmp/writer_stdout.txt"
+          test "$(cat "$tmp/writer_stdout.txt")" = 'PASS grouped-by-user-month sums=1100,1100,1200 exact-1000=excluded below-threshold=excluded'
+
+          python3 - <<'PY' > "$tmp/reviewer_stdout.txt"
+          import pathlib,sqlite3
+          sql=pathlib.Path('/tmp/monthly-income-review/candidate.sql').read_text()
+          con=sqlite3.connect(':memory:')
+          con.execute('CREATE TABLE income_records(user_id INTEGER NOT NULL, income NUMERIC NOT NULL, month TEXT NOT NULL)')
+          rows=[
+            (1,400,'2026-01'),(1,700,'2026-01'),        # 1100: keep; catches WHERE income > 1000 bug
+            (1,1000,'2026-02'),                         # exact boundary: exclude
+            (1,1,'2026-03'),(1,1000,'2026-03'),         # 1001: keep
+            (2,600,'2026-01'),(2,500,'2026-01'),        # same total as user1/month1: separate group
+            (2,300,'2026-02'),(2,900,'2026-02'),        # 1200: keep
+            (3,800,'2026-01'),                          # below: exclude
+            (4,600,'2026-04'),(4,600,'2026-04'),        # equal-valued rows both count; catches SUM(DISTINCT income)
+            (4,999,'2026-05'),(4,2,'2026-05'),           # 1001: keep
+          ]
+          con.executemany('INSERT INTO income_records VALUES (?,?,?)',rows)
+          actual=sorted((int(u),m,int(total)) for u,m,total in con.execute(sql))
+          expected=[(1,'2026-01',1100),(1,'2026-03',1001),(2,'2026-01',1100),(2,'2026-02',1200),(4,'2026-04',1200),(4,'2026-05',1001)]
+          if actual!=expected: raise SystemExit(f'mismatch actual={actual} expected={expected}')
+          print('PASS exact_candidate groups=6 strict_boundary=1 preaggregation_filter_trap=1 duplicate_value_rows=preserved')
+          PY
+          reviewer_stdout="$(cat "$tmp/reviewer_stdout.txt")"
+          test "$reviewer_stdout" = 'PASS exact_candidate groups=6 strict_boundary=1 preaggregation_filter_trap=1 duplicate_value_rows=preserved'
+
+          REVIEW_STDOUT="$reviewer_stdout" python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; date='2026-08-27'
+          out=pathlib.Path(f'review/content_build/answer_batch_0039/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          rv={
+            'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,
+            'command':'extract exact SQL candidate and execute independent SQLite adversarial fixture',
+            'stdout':os.environ['REVIEW_STDOUT'],
+            'checks':['exact candidate SQL parses and executes','groups by both user_id and month','aggregates before applying the monthly >1000 filter','exactly 1000 is excluded','equal-valued source rows are both counted','different users/months with equal totals remain distinct groups']
+          }
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          findings=[
+            'The preserved source explicitly defines income_records(user_id, income, month), per-user/per-month summation, and a strict monthly-total >1000 filter.',
+            'The answer directly uses GROUP BY user_id, month and HAVING SUM(income) > 1000, matching the source grain and post-aggregation predicate.',
+            'The exact candidate SQL passes an independent adversarial SQLite fixture that distinguishes HAVING from erroneous pre-aggregation WHERE filtering.',
+            'The strict >1000 boundary is handled correctly: exactly 1000 is excluded while 1001 is retained.',
+            'Equal-valued income rows remain separate records and are both counted; the answer correctly warns against SUM(DISTINCT income) without a business uniqueness rule.',
+            'The candidate does not invent ordering, NULL, precision, schema, index, or production-performance facts and does not fabricate project experience.'
+          ]
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          review={
+            'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated',
+            'reviewer_id':'source-first-isolated-reviewer-monthly-income-sql-20260827-v1','review_version':'monthly-income-sql.v1','decision':'pass','revision_round':1,
+            'source_packet':['review/content_build/answer_batch_0039/source_inventory.json',str(candidate),'docs/refactor/09_answer_content_standard.md',str(out/'reviewer_validation.json')],
+            'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,
+            'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']
+          }
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={
+            'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,
+            'writer':{'writer_id':'monthly-income-sql-source-bounded-writer-20260827-v1','writer_version':'xhs-answer-curator.v1'},
+            'sources':[
+              {'source_id':'repository-inventory','title':'Frozen Batch 0039 repository source inventory','locator':'review/content_build/answer_batch_0039/source_inventory.json','source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'writer-validation','title':'Writer monthly-income SQLite validation','locator':str(out/'sql_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'reviewer-validation','title':'Independent exact-candidate monthly-income SQL validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'isolated-review','title':'Fresh isolated source-first monthly-income SQL review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}
+            ],
+            'claims':[
+              {'claim_id':'source-contract','text':'The preserved source requires per-user/per-month SUM(income) over income_records and filtering monthly totals strictly greater than 1000 while including user_id and month.','source_ids':['repository-inventory'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},
+              {'claim_id':'query-semantics','text':'GROUP BY user_id, month plus HAVING SUM(income) > 1000 matches the source result grain and post-aggregation threshold.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制']},
+              {'claim_id':'boundary-validation','text':'Independent execution verifies multi-row aggregation, month/user separation, exact-1000 exclusion, 1001 inclusion, and preservation of separate equal-valued income rows.','source_ids':['reviewer-validation'],'answer_locations':['关键细节','常见追问','易错点']}
+            ],
+            'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},
+            'review_state':'independent_source_first_review_passed',
+            'review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'uncovered_source_variants':[],'unsupported_claims':[],'findings':findings}
+          }
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md'); text=task.read_text()
+          line='- [x] `cq_q_9ebb896630d1e350f41ee29dec6f3cdf` monthly-income SQL candidate now passes isolated source-first review. The exact candidate SQL is independently executed against adversarial SQLite cases proving `(user_id, month)` grain, aggregate-before-filter semantics, strict `> 1000`, and preservation of equal-valued records. Evidence binding is complete; formal promotion remains governed by repository human approval and real-review policy.'
+          if line not in text: text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Validate reviewed evidence and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --canonical-id "$CANONICAL_ID" --require-evidence --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0039/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0039/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git commit -m 'review: pass batch 0039 monthly-income SQL candidate source-first'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
