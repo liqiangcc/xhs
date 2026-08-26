@@ -1,0 +1,251 @@
+name: Build Content Batch 0036 Sorted Array Dedupe Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0036-remove-sorted-duplicates.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0036-sorted-array-dedupe-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8811d675b58dfd8fcb764bec68f3c5ca
+  SOURCE_QID: 8811d675b58dfd8fcb764bec68f3c5ca
+  SOURCE_TAGGED: note_tagged/6864042a000000001203f5b9.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_sha256=$(sha256sum "$SOURCE_TAGGED" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "formal_sha256=$(sha256sum review/answers/$CANONICAL_ID.md | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Guard source boundary and current baseline state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：删除有序数组中的重复项（要求O(1)额外空间复杂度）';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source question drift');
+          const formal=fs.readFileSync(`review/answers/${cid}.md`,'utf8');
+          if(!formal.includes('"status":"needs_update"')||!formal.includes('"quality_tier":"long_tail_baseline"')) throw new Error('formal answer no longer baseline; fail closed');
+          if(!formal.includes(expected)) throw new Error('formal source locator drift');
+          const candidate=`review/candidates/answers/${cid}.md`;
+          if(fs.existsSync(candidate)) throw new Error('candidate already exists; fail closed');
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),c=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!c.ok||c.canonical?.canonical_id!==process.env.CANONICAL_ID) throw new Error('canonical context missing');
+          if(c.answer_type!=='coding') throw new Error(`answer type drift: ${c.answer_type}`);
+          if(!(c.source_questions||[]).some(x=>x.question_id===process.env.SOURCE_QID)) throw new Error('source ownership missing');
+          NODE
+
+      - name: Write source-bounded candidate and writer fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0036/$cid"
+          mkdir -p "$out" review/candidates/answers
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_8811d675b58dfd8fcb764bec68f3c5ca","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 删除有序数组中的重复项：O(1) 额外空间原地压缩
+
+          ## 核心结论
+
+          数组已经有序，因此相同值一定连续出现；不需要额外集合就能去重。维护读指针扫描原数组、写指针指向“下一个唯一值应写入的位置”。每当当前值与已保留的最后一个值不同，就把它写到写指针并推进写指针。题目只明确“删除有序数组中的重复项”和 `O(1)` 额外空间，没有给函数签名或尾部语义；这里采用一个明确的回答契约：原地修改 `int[]`，返回唯一元素个数 `k`，`nums[0..k)` 保存升序唯一值，`k` 之后的内容不作保证。
+
+          ## 1 分钟版
+
+          - 有序性是关键：重复元素相邻，所以只需要比较当前读到的值和最后一个已经保留的值。
+          - 空数组返回 `0`；非空时先保留 `nums[0]`，令 `write=1`，然后 `read` 从 `1` 扫到末尾。
+          - 若 `nums[read] != nums[write-1]`，说明遇到新的唯一值，执行 `nums[write++] = nums[read]`。
+          - 循环结束时 `write` 就是唯一元素个数，且前 `write` 个位置是去重后的有序结果。
+          - 全程只使用常数个变量，因此时间 `O(n)`、额外空间 `O(1)`；尾部旧数据不属于结果。
+
+          ## 3 分钟版
+
+          ```java
+          public final class SortedArrayDeduplicator {
+              private SortedArrayDeduplicator() {}
+
+              public static int deduplicate(int[] nums) {
+                  if (nums == null) {
+                      throw new IllegalArgumentException("nums must not be null");
+                  }
+                  if (nums.length == 0) {
+                      return 0;
+                  }
+
+                  int write = 1;
+                  for (int read = 1; read < nums.length; read++) {
+                      if (nums[read] != nums[write - 1]) {
+                          nums[write] = nums[read];
+                          write++;
+                      }
+                  }
+                  return write;
+              }
+          }
+          ```
+
+          不变量是：进入每次循环时，`nums[0..write)` 恰好等于已经扫描过的前缀中的所有不同值，并且仍然严格递增；`write` 也是这个唯一前缀的长度。由于输入非递减，若 `nums[read]` 等于 `nums[write-1]`，它只能是当前最后一个唯一值的重复项，跳过不会漏值；若不等，则它一定是新的更大值，写入后不变量继续成立。循环覆盖全部元素后，不变量直接给出结果。
+
+          ## 关键细节
+
+          - **输入前提**：来源明确说“有序数组”；这里按非递减整数数组解释。若输入无序，不能使用“只和最后唯一值比较”来证明正确性。
+          - **输出契约**：来源没有规定返回形式。这里返回 `k`，只承诺 `nums[0..k)`；不要把 `k` 之后的残留值解释成结果。
+          - **原地含义**：允许覆盖数组已经扫描过或当前可安全覆盖的位置，但不分配随 `n` 增长的容器；几个整数变量属于 `O(1)` 额外空间。
+          - **重复很多**：例如 `[1,1,1,1]`，`write` 始终为 `1`，结果前缀只有一个 `1`。
+          - **没有重复**：每次都写回相同位置或后续位置，最终 `k=n`，内容保持不变。
+          - **负数与极值**：算法只比较 `int` 是否相等，不做加减运算，因此 `Integer.MIN_VALUE` / `MAX_VALUE` 不引入溢出问题。
+          - **复杂度**：每个元素最多读一次、每个唯一元素最多写一次，时间 `O(n)`；额外变量数量固定，空间 `O(1)`。
+
+          ## 原理机制
+
+          这其实是“稳定原地压缩”。读指针负责发现新类别，写指针维护已经压缩好的有效前缀。有序性把“这个值之前是否出现过”的全局问题降成了“它是否等于当前最后一个唯一值”的局部判断，因此不需要 `HashSet`。同时始终有 `write <= read + 1`，写入位置不会越过尚未读取的数据，所以原地覆盖是安全的。
+
+          ## 项目经验版
+
+          来源没有提供真实项目场景，不能虚构线上经历。工程里若要处理大块已排序数据，我会先确认“原地修改是否允许、后半段是否必须清零、数据类型是否允许比较、结果是否需要保留原索引”等契约；这些条件会决定能否直接使用这种双指针压缩，不能把本题的最小契约外推成所有去重任务的通用接口。
+
+          ## 常见追问
+
+          - 问：为什么不用 `HashSet`？答：有序性让重复项连续，只比较最后一个保留值就能判断是否重复；`HashSet` 会引入 `O(n)` 级额外空间，不符合题目要求。
+          - 问：为什么比较 `nums[write-1]`，而不是固定比较 `nums[read-1]`？答：两者在严格有序扫描中都可构造正确写法，但 `nums[write-1]` 直接表达“最后一个已经保留的唯一值”，与有效前缀不变量一致。
+          - 问：数组尾部需要清零吗？答：来源没有要求；当前契约只保证前 `k` 个位置有效。若调用方要求清零，那是额外的输出契约，可以在得到 `k` 后处理，但不应冒充原题要求。
+          - 问：输入 `[1,1,2,2,3]` 会怎样？答：依次保留 `1、2、3`，返回 `3`，数组前缀变成 `[1,2,3]`，后面的值不保证。
+          - 问：如果数组没有排序呢？答：这个不变量失效；若仍要求保持首次出现顺序，通常需要额外集合，或者接受更高时间复杂度，具体取决于可修改性和空间约束。
+
+          ## 易错点
+
+          - 忽略“有序”前提，把相邻比较方法用于任意无序数组。
+          - 为了去重创建与输入规模相关的 `Set` 或新数组，违反 `O(1)` 额外空间要求。
+          - 忘记空数组，直接把 `write` 初始化为 `1` 后返回错误长度。
+          - 返回新长度后仍把整个原数组当成去重结果，误读尾部残留值。
+          - 在遍历时执行删除/搬移整段数组，导致最坏 `O(n²)`，而双指针只需线性扫描。
+          EOF
+
+          cat > "$out/SortedArrayDeduplicatorWriterTest.java" <<'JAVA'
+          import java.util.Arrays;
+          import java.util.Random;
+
+          public final class SortedArrayDeduplicatorWriterTest {
+              public static void main(String[] args) {
+                  check(new int[] {}, new int[] {});
+                  check(new int[] {1}, new int[] {1});
+                  check(new int[] {1,1,1,1}, new int[] {1});
+                  check(new int[] {1,1,2,2,3}, new int[] {1,2,3});
+                  check(new int[] {-3,-3,-1,0,0,2,2,2,9}, new int[] {-3,-1,0,2,9});
+                  check(new int[] {Integer.MIN_VALUE,Integer.MIN_VALUE,0,Integer.MAX_VALUE,Integer.MAX_VALUE}, new int[] {Integer.MIN_VALUE,0,Integer.MAX_VALUE});
+                  boolean threw=false;
+                  try { SortedArrayDeduplicator.deduplicate(null); } catch (IllegalArgumentException e) { threw=true; }
+                  if(!threw) throw new AssertionError("null must reject");
+
+                  Random r=new Random(0x8811D675L);
+                  for(int c=0;c<5000;c++){
+                      int n=r.nextInt(80);
+                      int[] a=new int[n];
+                      for(int i=0;i<n;i++) a[i]=r.nextInt(21)-10;
+                      Arrays.sort(a);
+                      int[] expected=Arrays.stream(a).distinct().toArray();
+                      check(a,expected);
+                  }
+                  System.out.println("PASS fixed=6 random=5000 null=reject sorted-prefix=exact");
+              }
+
+              private static void check(int[] input,int[] expected){
+                  int[] a=input.clone();
+                  int k=SortedArrayDeduplicator.deduplicate(a);
+                  if(k!=expected.length) throw new AssertionError("length mismatch input="+Arrays.toString(input));
+                  if(!Arrays.equals(Arrays.copyOf(a,k),expected)) throw new AssertionError("prefix mismatch input="+Arrays.toString(input)+" got="+Arrays.toString(Arrays.copyOf(a,k))+" expected="+Arrays.toString(expected));
+              }
+          }
+          JAVA
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const m=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!m) throw new Error('Java block missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0036/${cid}/SortedArrayDeduplicator.java`,m[1]+'\n');
+          NODE
+          (cd "$out" && javac -Xlint:all -Werror SortedArrayDeduplicator.java SortedArrayDeduplicatorWriterTest.java && java SortedArrayDeduplicatorWriterTest > writer_stdout.txt)
+          test "$(cat "$out/writer_stdout.txt")" = 'PASS fixed=6 random=5000 null=reject sorted-prefix=exact'
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0036/$cid"
+          WRITER_STDOUT="$(cat "$out/writer_stdout.txt")" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0036/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const ch=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const ih=crypto.createHash('sha256').update(fs.readFileSync(`${out}/SortedArrayDeduplicator.java`)).digest('hex');
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,candidate_sha256:ch,implementation_sha256:ih,command:'extract candidate Java; javac -Xlint:all -Werror SortedArrayDeduplicator.java SortedArrayDeduplicatorWriterTest.java && java SortedArrayDeduplicatorWriterTest',stdout:process.env.WRITER_STDOUT,checks:['empty/single/all-duplicate/mixed/extreme-value fixed cases','5000 seeded sorted random arrays compared with independent stream-distinct writer oracle','null input rejects','current candidate Java fence is complete and executable']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'tagged-source',title:'Repository tagged interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'writer-fixture',title:'Deterministic sorted-array dedupe writer validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source asks to remove duplicates from a sorted array with O(1) extra space; it does not specify a Java signature, returned value, null behavior, or tail contents.',source_ids:['tagged-source'],answer_locations:['核心结论','关键细节']},{claim_id:'algorithm-behavior',text:'Under the explicit return-length/valid-prefix contract, the candidate Java implementation preserves exactly one copy of each sorted value in order with constant auxiliary variables.',source_ids:['writer-fixture'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+          rm -f "$out/writer_stdout.txt"
+
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Update batch progress and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'); const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md';
+          let t=fs.readFileSync(task,'utf8');
+          const line='- `cq_q_8811d675b58dfd8fcb764bec68f3c5ca` sorted-array dedupe candidate preserves the explicit sorted/O(1)-space source boundary, labels return-length/tail/null behavior as answer-side contracts, contains a complete Java class, and passes fixed plus 5000 seeded writer checks; isolated review and promotion gates remain pending.';
+          if(!t.includes(line)) t=t.trimEnd()+'\n'+line+'\n';
+          fs.writeFileSync(task,t);
+          NODE
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0036/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0036 sorted-array dedupe candidate'
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote="$(git rev-parse origin/$CONTENT_BRANCH)"; base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then
+            remote_source="$(git show "origin/$CONTENT_BRANCH:$SOURCE_TAGGED" | sha256sum | awk '{print $1}')"
+            remote_formal="$(git show "origin/$CONTENT_BRANCH:review/answers/$CANONICAL_ID.md" | sha256sum | awk '{print $1}')"
+            test "$remote_source" = '${{ steps.base.outputs.source_sha256 }}' || { echo 'source changed; fail closed'; exit 0; }
+            test "$remote_formal" = '${{ steps.base.outputs.formal_sha256 }}' || { echo 'formal answer changed; fail closed'; exit 0; }
+            test -z "$(git ls-tree -r --name-only "origin/$CONTENT_BRANCH" -- "review/candidates/answers/$CANONICAL_ID.md")" || { echo 'candidate appeared concurrently; fail closed'; exit 0; }
+            git rebase "origin/$CONTENT_BRANCH"
+          fi
+          git push origin "HEAD:$CONTENT_BRANCH"
