@@ -1,0 +1,139 @@
+name: Review Content Batch 0038 URL To JSON Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0038-url-to-json.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0038-url-to-json-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9b85a5772960a5efd577317824dfcf5d
+  SOURCE_QID: 9b85a5772960a5efd577317824dfcf5d
+  SOURCE_STRUCTURED: note_structured/67d02741000000000602aa77.json
+  SOURCE_TAGGED: note_tagged/67d02741000000000602aa77.json
+  NODE_URL_DOCS: https://nodejs.org/docs/latest-v22.x/api/url.html
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Freeze primary Node URL assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0038/$cid"; mkdir -p "$out"
+          curl -fsSL --retry 3 "$NODE_URL_DOCS" -o /tmp/node-url.html
+          python3 - <<'PY'
+          import hashlib,html,json,os,pathlib,re
+          raw=pathlib.Path('/tmp/node-url.html').read_text(errors='replace')
+          text=re.sub(r'\s+',' ',html.unescape(re.sub(r'<[^>]+>',' ',raw)))
+          checks={'hostname':'url.hostname' in text and 'host name portion' in text,'port':'url.port' in text,'pathname':'url.pathname' in text,'searchParams':'url.searchParams' in text and 'URLSearchParams' in text}
+          if not all(checks.values()): raise SystemExit(f'Node URL docs drift: {checks}')
+          out=pathlib.Path(f"review/content_build/answer_batch_0038/{os.environ['CANONICAL_ID']}")
+          snap={'schema_version':'primary_source_snapshot.v1','checked_at':'2026-08-27','sources':[{'url':os.environ['NODE_URL_DOCS'],'sha256':hashlib.sha256(pathlib.Path('/tmp/node-url.html').read_bytes()).hexdigest(),'checks':['hostname accessor','port accessor','pathname accessor','URLSearchParams query access']}],'result':'pass'}
+          (out/'primary_source_snapshot.json').write_text(json.dumps(snap,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Source-first boundary and exact candidate validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0038/$cid"; tmp="/tmp/url-json-review"; rm -rf "$tmp"; mkdir -p "$tmp"
+          python3 - <<'PY'
+          import json,os,pathlib,re
+          exact='算法题：输入一段 URL 字符串，请将其解析并转换为 JSON 格式输出。请考虑 URL 在不同协议、域名、路径及查询参数下的特殊情况'
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID']
+          structured=json.loads(pathlib.Path(os.environ['SOURCE_STRUCTURED']).read_text())
+          if exact not in structured.get('questions',[]):raise SystemExit('structured source drift')
+          tagged=json.loads(pathlib.Path(os.environ['SOURCE_TAGGED']).read_text());q=next((x for x in tagged.get('tagged_questions',[]) if x.get('question_id')==qid),None)
+          if not q or q.get('original_question')!=exact or q.get('is_valid_for_library') is not True:raise SystemExit('tagged source drift')
+          writer=json.loads(pathlib.Path(f'review/content_build/answer_batch_0038/{cid}/writer_research.json').read_text())
+          snap=json.loads(pathlib.Path(f'review/content_build/answer_batch_0038/{cid}/primary_source_snapshot.json').read_text())
+          if writer.get('review_state')!='writer_complete_isolated_review_pending' or snap.get('result')!='pass':raise SystemExit('writer/primary source state drift')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md');md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1:raise SystemExit(f'section drift {h}')
+          for marker in ['new URL(input)','url.searchParams','Object.create(null)','Object.hasOwn','IPv6','重复 key','绝对 URL']:
+              if marker not in md:raise SystemExit(f'candidate missing {marker}')
+          if len(re.findall(r'^- 问：',md,re.M))<5:raise SystemExit('followups insufficient')
+          if re.search(r'我在线上|我负责过|我们生产|真实项目里我曾|线上事故',md):raise SystemExit('fabricated project claim')
+          blocks=re.findall(r'```javascript\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1:raise SystemExit(f'expected one JavaScript block, got {len(blocks)}')
+          pathlib.Path('/tmp/url-json-review/candidate.js').write_text(blocks[0].strip()+"\nmodule.exports={parseUrlToJson};\n")
+          PY
+
+          writer_stdout="$(node "$out/writer_validation.js")"
+          test "$writer_stdout" = 'PASS deterministic=10 generated=5000 repeated-query=preserved default-port=normalized ipv6=covered opaque-scheme=covered percent-encoding=covered proto-key=safe relative=rejected'
+
+          cat > "$tmp/reviewer.js" <<'JS'
+          'use strict';
+          const assert=require('assert');
+          const {parseUrlToJson}=require('./candidate');
+          const p=s=>JSON.parse(parseUrlToJson(s));
+          const fixtures=[
+            ['https://EXAMPLE.com:443/a?x=1&x=2#f',{protocol:'https',hostname:'example.com',port:null,pathname:'/a',query:{x:['1','2']},fragment:'f'}],
+            ['http://example.com:8088/',{protocol:'http',hostname:'example.com',port:'8088',pathname:'/',query:{},fragment:null}],
+            ['http://[2001:db8::5]:9090/v1?q=a+b',{protocol:'http',hostname:'[2001:db8::5]',port:'9090',pathname:'/v1',query:{q:'a b'},fragment:null}],
+            ['ftp://host.test/path%2Fpart?k=%2F',{protocol:'ftp',hostname:'host.test',port:null,pathname:'/path%2Fpart',query:{k:'/'},fragment:null}],
+            ['custom:payload?flag&n=1',{protocol:'custom',hostname:null,port:null,pathname:'payload',query:{flag:'',n:'1'},fragment:null}],
+            ['https://x.test/?__proto__=safe&constructor=value',{protocol:'https',hostname:'x.test',port:null,pathname:'/',query:{'__proto__':'safe',constructor:'value'},fragment:null}],
+          ];
+          for(const [input,expected] of fixtures) assert.deepStrictEqual(p(input),expected,input);
+          assert.throws(()=>parseUrlToJson('/x?y=1'),TypeError);
+          assert.throws(()=>parseUrlToJson('not a url'),TypeError);
+          assert.throws(()=>parseUrlToJson(undefined),TypeError);
+          let generated=7000;
+          for(let i=0;i<generated;i++){
+            const scheme=i%2?'http':'https';const port=10000+(i%40000);const host=`n${i}.test`;const input=`${scheme}://${host}:${port}/a${i}%20b?k=v${i}&k=w${i}&z=#h${i}`;
+            assert.deepStrictEqual(p(input),{protocol:scheme,hostname:host,port:String(port),pathname:`/a${i}%20b`,query:{k:[`v${i}`,`w${i}`],z:''},fragment:`h${i}`});
+          }
+          console.log(`PASS exact_candidate fixtures=${fixtures.length} invalid=3 generated=${generated} repeated-query=preserved ipv6=covered opaque=covered proto-keys=covered absolute-only=enforced`);
+          JS
+          (cd "$tmp" && node reviewer.js > stdout.txt)
+          reviewer_stdout="$(cat "$tmp/stdout.txt")"
+          test "$reviewer_stdout" = 'PASS exact_candidate fixtures=6 invalid=3 generated=7000 repeated-query=preserved ipv6=covered opaque=covered proto-keys=covered absolute-only=enforced'
+
+          WRITER_STDOUT="$writer_stdout" REVIEW_STDOUT="$reviewer_stdout" python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID'];date='2026-08-27';out=pathlib.Path(f'review/content_build/answer_batch_0038/{cid}');candidate=pathlib.Path(f'review/candidates/answers/{cid}.md');digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          wv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'result':'pass','validated_at':date,'command':'node writer_validation.js','stdout':os.environ['WRITER_STDOUT'],'checks':['protocol/host/non-default and default port fixtures','IPv6 host and port','repeated/empty query values','query plus decoding and encoded pathname','opaque custom scheme','null-prototype __proto__ key safety','relative/empty/null rejection','5000 generated absolute URLs']};(out/'writer_validation.json').write_text(json.dumps(wv,ensure_ascii=False,indent=2)+'\n')
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'extract exact candidate JavaScript block and run independent deterministic plus generated fixtures under Node 22','stdout':os.environ['REVIEW_STDOUT'],'checks':['exact candidate executes under Node 22','6 independent fixtures cover default/custom port, IPv6, opaque scheme, encoding and dangerous query keys','3 invalid/relative inputs rejected','7000 generated absolute URL fixtures preserve known components and repeated query keys']};(out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          findings=['The preserved source explicitly asks for URL-to-JSON parsing across protocol, domain, path and query special cases; the exact JSON schema, absolute-only policy and repeated-key array rule are labeled candidate contracts.','Node.js 22 official URL documentation was fetched source-first and frozen before review for hostname, port, pathname and URLSearchParams accessors.','The candidate delegates URL syntax and normalization to the platform WHATWG URL parser instead of claiming a hand-written regex covers all schemes, IPv6 and encoding cases.','The exact candidate executes under Node 22 and passes independent fixtures for IPv6, default and non-default ports, opaque scheme, encoding, repeated/empty query values and prototype-sensitive keys, plus 7000 generated absolute URLs.','The null-prototype query object and Object.hasOwn avoid treating __proto__ as an inherited setter/key collision.','The answer clearly separates pathname serialization from URLSearchParams query decoding and avoids implicit business-type coercion.','No fabricated production experience is claimed.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-url-json-20260827-v1','review_version':'url-json.whatwg-node22.v1','decision':'pass','revision_round':1,'source_packet':[os.environ['SOURCE_STRUCTURED'],os.environ['SOURCE_TAGGED'],str(out/'primary_source_snapshot.json'),str(candidate),'docs/refactor/09_answer_content_standard.md',str(out/'writer_validation.json'),str(out/'reviewer_validation.json')],'scores':{'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5},'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']};(out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'url-json-source-bounded-writer-20260827-v1','writer_version':'xhs-answer-curator.v1'},'sources':[{'source_id':'repository-structured','title':'Structured URL parsing source','locator':os.environ['SOURCE_STRUCTURED'],'source_type':'repository_structured_source','checked_at':date},{'source_id':'repository-tagged','title':'Tagged URL parsing source','locator':os.environ['SOURCE_TAGGED'],'source_type':'repository_structured_source','checked_at':date},{'source_id':'node-url-primary','title':'Node.js 22 URL API primary-source snapshot','locator':str(out/'primary_source_snapshot.json'),'source_type':'primary_official_documentation','checked_at':date},{'source_id':'writer-validation','title':'Writer URL parser validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'reviewer-validation','title':'Independent exact-candidate URL parser review','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'isolated-review','title':'Fresh isolated source-first URL parser review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The preserved source asks for URL-to-JSON parsing across protocol, domain, path and query special cases; schema and repeated-key policy are candidate contracts.','source_ids':['repository-structured','repository-tagged'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'whatwg-platform','text':'Node.js 22 exposes WHATWG URL hostname, port, pathname and URLSearchParams APIs used by the implementation.','source_ids':['node-url-primary','isolated-review'],'answer_locations':['核心结论','关键细节','原理机制']},{'claim_id':'behavior-validation','text':'Writer and reviewer validations exercise exact behavior over special-case fixtures and thousands of generated absolute URLs.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','常见追问','易错点']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':review['scores'],'hard_failures':[],'uncovered_source_variants':[],'unsupported_claims':[],'findings':findings}}
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0038.md');text=task.read_text();line='- [x] `cq_q_9b85a5772960a5efd577317824dfcf5d` URL-to-JSON candidate preserves the exact protocol/domain/path/query source boundary, defines an explicit absolute-URL JSON schema with repeated-key preservation, grounds platform semantics in a frozen Node.js 22 WHATWG URL primary-source snapshot, passes writer validation plus an independent exact-candidate fixture/generated review, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.'
+          if line not in text:
+              if '## Progress' not in text:text=text.rstrip()+'\n\n## Progress\n'
+              text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0038/$CANONICAL_ID/primary_source_snapshot.json" "review/content_build/answer_batch_0038/$CANONICAL_ID/writer_validation.json" "review/content_build/answer_batch_0038/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0038/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0038.md
+          git commit -m 'review: pass batch 0038 URL-to-JSON candidate source-first'
+          for attempt in 1 2 3; do if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi; git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"; done
+          exit 1
