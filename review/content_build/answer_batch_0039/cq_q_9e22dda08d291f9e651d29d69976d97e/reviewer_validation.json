@@ -1,0 +1,43 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9e22dda08d291f9e651d29d69976d97e",
+  "candidate_sha256": "1690c63b3774ee63ef67ec60a9d33b5b9e3a92eadad8e77fb53fc212c79d4ba1",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "extract exact candidate Java block; javac; execute independent adversarial reviewer harness",
+  "stdout": "PASS exact-candidate trailing-zero leading-zero first-difference arbitrary-length malformed-input contract-boundary",
+  "checks": [
+    "exact candidate Java implementation compiles under Java 21",
+    "missing trailing revisions compare as zero under the explicitly adopted answer-side contract",
+    "leading-zero revisions compare numerically and first differing revision determines ordering",
+    "arbitrary-length decimal revisions compare without finite-width integer overflow",
+    "empty, malformed, signed, prerelease-like and null inputs are explicitly rejected outside the adopted contract"
+  ],
+  "boundary_tests": [
+    {
+      "case": "1 vs 1.0.0.0",
+      "expected": "equal",
+      "passed": true
+    },
+    {
+      "case": "01.002.0003 vs 1.2.3",
+      "expected": "equal",
+      "passed": true
+    },
+    {
+      "case": "1.0.10 vs 1.0.2",
+      "expected": "greater",
+      "passed": true
+    },
+    {
+      "case": "arbitrary-length decimal revision comparison",
+      "expected": "numeric ordering without overflow",
+      "passed": true
+    },
+    {
+      "case": "empty/malformed/signed/prerelease-like/null inputs",
+      "expected": "IllegalArgumentException",
+      "passed": true
+    }
+  ]
+}
