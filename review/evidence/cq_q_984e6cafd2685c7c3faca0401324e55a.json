@@ -1,0 +1,150 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_984e6cafd2685c7c3faca0401324e55a",
+  "candidate_sha256": "fa62f6e7e8c817bd9c0ff8845fbc74ddabb83d759659303e9c8d66a184cb57dd",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "house-robber-source-bounded-writer-20260827-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-structured",
+      "title": "Structured interview source containing the house-robber prompt",
+      "locator": "note_structured/68468a8700000000210189f9.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Tagged house-robber coding question",
+      "locator": "note_tagged/68468a8700000000210189f9.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer house-robber brute-force validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_984e6cafd2685c7c3faca0401324e55a/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate house-robber brute-force review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_984e6cafd2685c7c3faca0401324e55a/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first house-robber review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_984e6cafd2685c7c3faca0401324e55a/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source only states 算法：打家劫舍; the linear layout, skip-all permission, negative values, null/empty behavior and int-to-long API are explicit candidate contracts.",
+      "source_ids": [
+        "repository-structured",
+        "repository-tagged",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "linear-dp",
+      "text": "Under the explicit linear non-adjacent-selection contract, the prefix optimum is max(skip current, take current plus optimum two positions back), allowing O(1) rolling state.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "behavior-validation",
+      "text": "Writer and independent reviewer validations compare the candidate behavior against non-adjacent subset brute force across deterministic, exhaustive and seeded randomized arrays, including negative and int-to-long accumulation boundaries.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "984e6cafd2685c7c3faca0401324e55a",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate Java block, compile in independent harness, compare deterministic plus exhaustive and randomized arrays against independent non-adjacent subset brute force",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate deterministic=6 exhaustive=29524 randomized=3000 oracle=independent-nonadjacent-bruteforce contract=linear-skip-all-int-to-long",
+    "checks": [
+      "exact candidate Java compiles under Java 21 in an independent harness",
+      "linear non-adjacent contract matches independent brute force",
+      "null/empty and skip-all-negative contracts hold",
+      "int inputs accumulate into long",
+      "29524 exhaustive arrays over {-2,0,3} lengths 0..9 match brute force",
+      "3000 seeded randomized arrays length <15 match brute force"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-house-robber-20260827-v1",
+    "review_version": "house-robber.linear-dp.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source contains only the house-robber title; the answer labels linear layout, skip-all, negative values, null/empty behavior and int-to-long API choices as candidate contracts rather than source facts.",
+      "The rolling dynamic-programming state is coherent: skip uses the previous prefix optimum while take combines the current value with the optimum two positions back.",
+      "The exact candidate compiles under Java 21 and matches independent non-adjacent subset brute force on deterministic, exhaustive and seeded randomized cases.",
+      "The answer distinguishes linear, circular and tree variants instead of silently treating them as the same problem.",
+      "The O(n) time and O(1) extra-space claims follow from one pass and two retained prefix states.",
+      "No fabricated production experience is claimed."
+    ]
+  }
+}
