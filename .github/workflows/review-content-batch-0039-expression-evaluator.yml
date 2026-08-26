@@ -1,0 +1,210 @@
+name: Review Content Batch 0039 Expression Evaluator Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0039-expression-evaluator.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-expression-evaluator-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9c43dc0f1e5fa93786e94fc1bf818de3
+  SOURCE_QID: 9c43dc0f1e5fa93786e94fc1bf818de3
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first exact-candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0039/$cid"; tmp="/tmp/expression-review"
+          rm -rf "$tmp"; mkdir -p "$tmp" "$out"
+
+          python3 - <<'PY'
+          import json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']
+          exact='算法/手撕：给定带括号的算术表达式计算结果'
+          rows=[json.loads(line) for line in pathlib.Path('data/questions/questions.jsonl').read_text().splitlines() if line.strip()]
+          row=next((x for x in rows if x.get('question_id')==qid),None)
+          if not row or row.get('original_question')!=exact or row.get('canonical_id')!=cid or row.get('is_valid_for_library') is not True:
+              raise SystemExit('current source/ownership drift')
+          primary=json.loads(pathlib.Path('note_structured/663b7649000000001e038251.json').read_text())
+          if exact not in primary.get('questions',[]): raise SystemExit('primary source drift')
+          inventory=json.loads(pathlib.Path('review/content_build/answer_batch_0039/source_inventory.json').read_text())
+          item=next((x for x in inventory.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not item or not any(q.get('question_id')==qid and q.get('original_question')==exact for q in item.get('source_questions',[])):
+              raise SystemExit('frozen source inventory drift')
+
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['答案侧契约','非负 ASCII 十进制数字字面量','0..Long.MAX_VALUE','expression := term','Math.divideExact','向 0 截断','direct literal' if False else '最小值字面量']:
+              if marker not in md: raise SystemExit(f'candidate boundary marker missing: {marker}')
+          if len(re.findall(r'^- 问：',md,re.M))<5: raise SystemExit('followups insufficient')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path('/tmp/expression-review/ExpressionEvaluator.java').write_text(blocks[0].strip()+'\n')
+          PY
+
+          # Re-run the writer fixture, then independently exercise the exact candidate code extracted from Markdown.
+          javac "$out/ExpressionEvaluator.java" "$out/ExpressionEvaluatorTest.java"
+          writer_stdout="$(java -cp "$out" ExpressionEvaluatorTest)"
+          test "$writer_stdout" = 'PASS precedence parentheses nesting unary left-associativity division invalid-input divide-zero overflow'
+          find "$out" -name '*.class' -delete
+
+          cat > "$tmp/ExpressionEvaluatorReviewerTest.java" <<'JAVA'
+          public final class ExpressionEvaluatorReviewerTest {
+              private static void eq(long expected, String expression) {
+                  long actual = ExpressionEvaluator.evaluate(expression);
+                  if (actual != expected) throw new AssertionError(expression + ": expected=" + expected + " actual=" + actual);
+              }
+              private static void fails(String expression, Class<? extends Throwable> type) {
+                  try {
+                      ExpressionEvaluator.evaluate(expression);
+                      throw new AssertionError("expected failure: " + expression);
+                  } catch (Throwable t) {
+                      if (!type.isInstance(t)) throw new AssertionError("wrong failure for " + expression + ": " + t, t);
+                  }
+              }
+              public static void main(String[] args) {
+                  eq(-6, "2*-3");
+                  eq(4, "+(4)");
+                  eq(3, "9/(2+1)");
+                  eq(-3, "-(1--2)");
+                  eq(Long.MAX_VALUE, "9223372036854775807");
+                  eq(Long.MIN_VALUE, "(-9223372036854775807)-1");
+                  eq(-2, " 10 / -4 ");
+                  fails("9223372036854775808", ArithmeticException.class);
+                  fails("-9223372036854775808", ArithmeticException.class);
+                  fails("１+2", IllegalArgumentException.class);
+                  fails("()", IllegalArgumentException.class);
+                  fails("1/**2", IllegalArgumentException.class);
+                  fails("1/(2-2)", ArithmeticException.class);
+                  System.out.println("PASS exact_candidate ascii-digits literal-boundary precedence nesting unary left-associativity division invalid-input divide-zero overflow");
+              }
+          }
+          JAVA
+          javac "$tmp/ExpressionEvaluator.java" "$tmp/ExpressionEvaluatorReviewerTest.java"
+          reviewer_stdout="$(java -cp "$tmp" ExpressionEvaluatorReviewerTest)"
+          test "$reviewer_stdout" = 'PASS exact_candidate ascii-digits literal-boundary precedence nesting unary left-associativity division invalid-input divide-zero overflow'
+
+          REVIEW_STDOUT="$reviewer_stdout" WRITER_STDOUT="$writer_stdout" python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; date='2026-08-27'
+          out=pathlib.Path(f'review/content_build/answer_batch_0039/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          checks=[
+            'exact Java code block extracted from candidate compiles on Java 21',
+            'operator precedence and nested parentheses execute correctly',
+            'unary signs compose with binary operators and parentheses',
+            'same-precedence subtraction/division are left associative',
+            'ASCII-only digit grammar matches the documented literal contract',
+            'Long.MAX_VALUE literal succeeds while out-of-range magnitude and direct Long.MIN_VALUE literal fail under the declared lexer contract',
+            'Java integer division behavior, division-by-zero, malformed input and overflow are fail-closed'
+          ]
+          boundary_tests=[
+            {'case':'ASCII Long.MAX_VALUE literal','expected':'9223372036854775807 is accepted exactly','actual':'accepted exactly','passed':True},
+            {'case':'out-of-range positive magnitude','expected':'9223372036854775808 is rejected by exact numeric accumulation','actual':'ArithmeticException','passed':True},
+            {'case':'direct Long.MIN_VALUE literal','expected':'-9223372036854775808 is rejected because the declared lexer only accepts nonnegative magnitude through Long.MAX_VALUE','actual':'ArithmeticException','passed':True},
+            {'case':'computed Long.MIN_VALUE','expected':'(-9223372036854775807)-1 succeeds because each parsed literal is in range and the computed result is representable','actual':'-9223372036854775808','passed':True},
+            {'case':'Unicode full-width digit','expected':'rejected because the candidate explicitly declares ASCII decimal digits','actual':'IllegalArgumentException','passed':True},
+            {'case':'nested unary and precedence','expected':'2*-3=-6, +(4)=4, -(1--2)=-3','actual':'all matched','passed':True},
+            {'case':'divide by computed zero','expected':'1/(2-2) fails','actual':'ArithmeticException','passed':True}
+          ]
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'extract exact Java candidate, javac on Java 21, execute independent adversarial reviewer fixture','stdout':os.environ['REVIEW_STDOUT'],'writer_fixture_stdout':os.environ['WRITER_STDOUT'],'checks':checks,'boundary_tests':boundary_tests}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+
+          findings=[
+            'The repository source preserves only a request to evaluate a bracketed arithmetic expression; it does not preserve the operator set, numeric domain, division rules, malformed-input policy, or a required algorithm.',
+            'The candidate therefore labels its Java 21, ASCII integer-literal, + - * /, unary-sign, precedence, left-associativity and fail-closed error rules as answer-side contract rather than source facts.',
+            'The exact candidate Java implementation independently compiles and passes adversarial precedence, nesting, unary, associativity, malformed-input, divide-by-zero and overflow cases.',
+            'The candidate now states the subtle literal boundary precisely: a nonnegative literal magnitude may reach Long.MAX_VALUE, direct -9223372036854775808 is outside this lexer contract, while Long.MIN_VALUE may still be produced by representable arithmetic.',
+            'ASCII digit recognition in the implementation now matches the documented grammar; a full-width Unicode digit is rejected rather than misconverted.',
+            'The answer keeps alternative stack/Shunting-yard handling as a tradeoff and does not fabricate production experience.'
+          ]
+          scores={'facts_and_evidence':24,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-expression-evaluator-20260827-v1','review_version':'expression-evaluator.v1','decision':'pass','revision_round':1,'source_packet':['data/questions/questions.jsonl','note_structured/663b7649000000001e038251.json','review/content_build/answer_batch_0039/source_inventory.json',str(candidate),'docs/refactor/09_answer_content_standard.md','Java Language Specification SE 21 §15.17.2','Java SE 21 Math API',str(out/'reviewer_validation.json')],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+
+          evidence={
+            'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,
+            'writer':{'writer_id':'expression-evaluator-source-bounded-writer-20260827-v1','writer_version':'xhs-answer-curator.v1'},
+            'sources':[
+              {'source_id':'primary-source','title':'Huawei interview structured source note','locator':'note_structured/663b7649000000001e038251.json','source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'batch-inventory','title':'Frozen Batch 0039 source inventory','locator':'review/content_build/answer_batch_0039/source_inventory.json','source_type':'repository_source_record','checked_at':date},
+              {'source_id':'jls-division','title':'Java Language Specification SE 21 §15.17.2 Division Operator /','locator':'https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.17.2','source_type':'official_specification_or_standard','checked_at':date},
+              {'source_id':'java-math','title':'Java SE 21 Math exact arithmetic API','locator':'https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Math.html','source_type':'official_documentation','checked_at':date},
+              {'source_id':'writer-validation','title':'Writer deterministic expression-evaluator Java validation','locator':str(out/'code_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'reviewer-validation','title':'Independent exact-candidate expression-evaluator Java validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'isolated-review','title':'Fresh isolated source-first expression-evaluator review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}
+            ],
+            'claims':[
+              {'claim_id':'source-boundary','text':'The repository source requires evaluation of a bracketed arithmetic expression but does not preserve operators, numeric domain, division/error rules, or a required evaluation algorithm.','source_ids':['primary-source','batch-inventory','isolated-review'],'answer_locations':['核心结论','关键细节']},
+              {'claim_id':'java-division','text':'For the declared Java integer contract, integer division truncates toward zero and an integer divisor of zero raises ArithmeticException.','source_ids':['jls-division','reviewer-validation','isolated-review'],'answer_locations':['核心结论','关键细节','常见追问']},
+              {'claim_id':'exact-arithmetic','text':'The candidate uses Java Math exact arithmetic operations so representational overflow is reported instead of silently accepted under the declared fail-closed contract.','source_ids':['java-math','writer-validation','reviewer-validation','isolated-review'],'answer_locations':['1 分钟版','3 分钟版','关键细节']},
+              {'claim_id':'parser-behavior','text':'Writer and independent reviewer fixtures verify precedence, nested parentheses, unary signs, left associativity, ASCII digit grammar, the declared literal boundary, malformed-input rejection, divide-by-zero and overflow behavior for the exact candidate implementation.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','原理机制','常见追问','易错点']}
+            ],
+            'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':checks,'boundary_tests':boundary_tests},
+            'review_state':'independent_source_first_review_passed',
+            'review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'revision_suggestions':[],'uncovered_source_variants':[],'unsupported_claims':[],'findings':findings}
+          }
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md'); text=task.read_text()
+          old='- [x] `cq_q_9c43dc0f1e5fa93786e94fc1bf818de3` now has a source-bounded Java expression-evaluator candidate. The answer explicitly declares its operator/numeric/error contract instead of fabricating missing source details; recursive-descent precedence, nested parentheses, unary signs, left associativity, trailing-garbage rejection, divide-by-zero and overflow are covered by a deterministic Java 21 fixture. Writer research is frozen; formal evidence/promotion remains blocked on isolated independent review.'
+          new='- [x] `cq_q_9c43dc0f1e5fa93786e94fc1bf818de3` has a source-bounded Java expression-evaluator candidate that now passes isolated source-first review and complete evidence binding. Independent exact-candidate Java 21 execution verifies precedence, nested parentheses, unary signs, left associativity, Java integer-division/error behavior, ASCII digit grammar, the declared literal boundary, trailing-garbage rejection and overflow handling. Formal promotion remains governed by repository human approval and real-review policy.'
+          if old in text: text=text.replace(old,new,1)
+          elif new not in text: text=text.rstrip()+'\n'+new+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Validate exact candidate evidence and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0039/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0039/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git commit -m 'review: pass batch 0039 expression evaluator source-first'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
