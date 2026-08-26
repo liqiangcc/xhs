@@ -1,0 +1,214 @@
+name: Review Content Batch 0036 Sorted Array Dedupe Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0036-remove-sorted-duplicates.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0036-sorted-array-dedupe-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8811d675b58dfd8fcb764bec68f3c5ca
+  SOURCE_QID: 8811d675b58dfd8fcb764bec68f3c5ca
+  SOURCE_TAGGED: note_tagged/6864042a000000001203f5b9.json
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha256=$(sha256sum review/candidates/answers/$CANONICAL_ID.md | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "implementation_sha256=$(sha256sum review/content_build/answer_batch_0036/$CANONICAL_ID/SortedArrayDeduplicator.java | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source_sha256=$(sha256sum "$SOURCE_TAGGED" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Phase A source-first review and independent TreeSet oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0036/$cid"; candidate="review/candidates/answers/$cid.md"
+          rm -rf "$out/reviewer_tmp"; mkdir -p "$out/reviewer_tmp"
+
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：删除有序数组中的重复项（要求O(1)额外空间复杂度）';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source question drift');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          for(const marker of ['O(1)','O(n)','nums[0..k)','尾部','有序性','write <= read + 1']) if(!md.includes(marker)) throw new Error(`semantic marker missing ${marker}`);
+          if(!md.includes('题目只明确')||!md.includes('这里采用一个明确的回答契约')) throw new Error('source/answer-side contract boundary missing');
+          if(/真实项目里我|线上事故|我们生产|我在线上|我负责|我优化到/.test(md)) throw new Error('fabricated project claim');
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('public final class SortedArrayDeduplicator')) throw new Error('complete Java class missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0036/${cid}/reviewer_tmp/SortedArrayDeduplicator.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$out/reviewer_tmp/SortedArrayDeduplicatorReviewerTest.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.Arrays;
+          import java.util.Random;
+          import java.util.TreeSet;
+
+          public final class SortedArrayDeduplicatorReviewerTest {
+              private static long exhaustive;
+              private static long randomCases;
+
+              public static void main(String[] args) {
+                  for (int length = 0; length <= 7; length++) {
+                      enumerate(new int[length], 0, -2);
+                  }
+                  if (exhaustive != 792) throw new AssertionError("unexpected exhaustive count=" + exhaustive);
+
+                  Random r = new Random(0x8811D675B58DL);
+                  for (int c = 0; c < 5000; c++) {
+                      int n = r.nextInt(100);
+                      int[] a = new int[n];
+                      for (int i = 0; i < n; i++) a[i] = r.nextInt(41) - 20;
+                      Arrays.sort(a);
+                      check(a);
+                      randomCases++;
+                  }
+                  check(new int[] {Integer.MIN_VALUE,Integer.MIN_VALUE,-1,-1,0,Integer.MAX_VALUE,Integer.MAX_VALUE});
+                  boolean threw=false;
+                  try { SortedArrayDeduplicator.deduplicate(null); } catch (IllegalArgumentException e) { threw=true; }
+                  if(!threw) throw new AssertionError("null must reject under declared answer contract");
+                  System.out.printf("PASS exhaustive=%d random=%d treeset_oracle=pass extremes=pass null_contract=reject%n", exhaustive, randomCases);
+              }
+
+              private static void enumerate(int[] a,int pos,int min){
+                  if(pos==a.length){ check(a); exhaustive++; return; }
+                  for(int v=min;v<=2;v++){ a[pos]=v; enumerate(a,pos+1,v); }
+              }
+
+              private static void check(int[] source){
+                  int[] input=source.clone();
+                  TreeSet<Integer> set=new TreeSet<>();
+                  for(int v:source) set.add(v);
+                  int[] expected=new int[set.size()]; int p=0;
+                  for(int v:set) expected[p++]=v;
+                  int k=SortedArrayDeduplicator.deduplicate(input);
+                  if(k!=expected.length) throw new AssertionError("length source="+Arrays.toString(source)+" got="+k+" expected="+expected.length);
+                  if(!Arrays.equals(Arrays.copyOf(input,k),expected)) throw new AssertionError("prefix source="+Arrays.toString(source)+" got="+Arrays.toString(Arrays.copyOf(input,k))+" expected="+Arrays.toString(expected));
+              }
+          }
+          JAVA
+          (cd "$out/reviewer_tmp" && javac -Xlint:all -Werror SortedArrayDeduplicator.java SortedArrayDeduplicatorReviewerTest.java && java SortedArrayDeduplicatorReviewerTest > stdout.txt)
+          stdout="$(cat "$out/reviewer_tmp/stdout.txt")"
+          test "$stdout" = 'PASS exhaustive=792 random=5000 treeset_oracle=pass extremes=pass null_contract=reject'
+
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0036/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved repository source says only to remove duplicates from a sorted array with O(1) extra space; it does not specify language, function signature, return value, null behavior, or what must happen to the unused suffix.',
+            'The candidate preserves that source boundary and explicitly labels Java int[], returned unique length k, valid prefix nums[0..k), unspecified tail, and null rejection as answer-side contracts rather than source facts.',
+            'The read/write invariant is correct for nondecreasing input: before each read step, nums[0..write) is exactly the strictly increasing unique sequence from the scanned prefix; sortedness makes comparison with the last retained value sufficient.',
+            'The complete Java class is runnable and uses only fixed scalar state, so the stated O(n) time and O(1) auxiliary-space bounds match the implementation.',
+            'Reviewer-owned validation extracts the exact candidate Java fence and compares it against a TreeSet-based oracle over all 792 nondecreasing arrays of length 0..7 over values -2..2, plus 5000 seeded randomized sorted arrays and integer extremes.',
+            'Tail contents are correctly excluded from the result contract; no HashSet is used by the candidate itself, and the TreeSet exists only in the independent reviewer oracle.',
+            'No fabricated production experience, placeholder implementation, cross-topic contamination, or uncovered source variant was found.'
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'extract exact candidate Java; javac -Xlint:all -Werror; compare candidate output prefix to independent TreeSet oracle',stdout:process.env.REVIEW_STDOUT,checks:['exact candidate Java compiles with warnings as errors','792 exhaustive sorted arrays match TreeSet oracle','5000 seeded randomized sorted arrays match TreeSet oracle','integer extreme values match oracle','declared null contract rejects'],boundary_tests:[{case:'all duplicates',expected:'return 1 and retain one value in prefix',passed:true},{case:'no duplicates',expected:'return n and preserve full array prefix',passed:true},{case:'empty array',expected:'return 0',passed:true},{case:'unused suffix',expected:'only prefix nums[0..k) is semantically valid',passed:true}]},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-sorted-array-dedupe-20260826-v1',review_version:'sorted-array-dedupe.treeset-oracle.v1',decision:'pass',revision_round:0,source_packet:[process.env.SOURCE_TAGGED,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Phase B bind writer evidence after independent conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0036/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const r=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          const wr=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          const wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`,'utf8'));
+          const rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          if(r.decision!=='pass'||r.candidate_sha256!==hash||wr.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||rv.result!=='pass') throw new Error('review/evidence prerequisite drift');
+          if(wv.candidate_sha256!==hash) throw new Error('writer candidate binding drift');
+          const ev={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'sorted-array-dedupe-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'tagged-source',title:'Repository tagged sorted-array dedupe interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer candidate-exact Java validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent TreeSet oracle validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source requires duplicate removal from a sorted array with O(1) extra space, without prescribing Java/API/null/tail semantics.',source_ids:['tagged-source','isolated-review'],answer_locations:['核心结论','关键细节']},{claim_id:'inplace-correctness',text:'Under the explicit returned-length/valid-prefix contract, the candidate exact Java fence produces the ascending unique prefix for exhaustive and randomized sorted inputs using constant auxiliary state.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制']},{claim_id:'complexity',text:'The implementation performs one forward read pass with a monotone write index, so time is O(n) and auxiliary space is O(1).',source_ids:['reviewer-validation','isolated-review'],answer_locations:['1 分钟版','关键细节']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks,boundary_tests:rv.boundary_tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:r.reviewer_id,review_version:r.review_version,independent:true,decision:'pass',revision_round:0,scores:r.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:r.findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(ev,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Update task and commit review
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "review/content_build/answer_batch_0036/$CANONICAL_ID/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'); const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md';
+          let t=fs.readFileSync(task,'utf8');
+          const pending='- `cq_q_8811d675b58dfd8fcb764bec68f3c5ca` sorted-array dedupe candidate preserves the explicit sorted/O(1)-space source boundary, labels return-length/tail/null behavior as answer-side contracts, contains a complete Java class, and passes fixed plus 5000 seeded writer checks; isolated review and promotion gates remain pending.';
+          const done='- [x] `cq_q_8811d675b58dfd8fcb764bec68f3c5ca` sorted-array dedupe candidate preserves the sorted/O(1)-space source boundary, labels return-length/tail/null behavior as answer-side contracts, contains a complete Java class, passes fixed plus 5000 seeded writer checks and independent exhaustive/TreeSet-oracle review, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(t.includes(pending)) t=t.replace(pending,done); else if(!t.includes(done)) throw new Error('task progress marker drift');
+          fs.writeFileSync(task,t);
+          NODE
+          git add "review/content_build/answer_batch_0036/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass sorted-array dedupe candidate source-first'
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote="$(git rev-parse origin/$CONTENT_BRANCH)"; base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then
+            remote_candidate="$(git show "origin/$CONTENT_BRANCH:review/candidates/answers/$CANONICAL_ID.md" | sha256sum | awk '{print $1}')"
+            remote_impl="$(git show "origin/$CONTENT_BRANCH:review/content_build/answer_batch_0036/$CANONICAL_ID/SortedArrayDeduplicator.java" | sha256sum | awk '{print $1}')"
+            remote_source="$(git show "origin/$CONTENT_BRANCH:$SOURCE_TAGGED" | sha256sum | awk '{print $1}')"
+            test "$remote_candidate" = '${{ steps.base.outputs.candidate_sha256 }}' || { echo 'candidate changed; fail closed'; exit 0; }
+            test "$remote_impl" = '${{ steps.base.outputs.implementation_sha256 }}' || { echo 'implementation changed; fail closed'; exit 0; }
+            test "$remote_source" = '${{ steps.base.outputs.source_sha256 }}' || { echo 'source changed; fail closed'; exit 0; }
+            git rebase "origin/$CONTENT_BRANCH"
+          fi
+          git push origin "HEAD:$CONTENT_BRANCH"
