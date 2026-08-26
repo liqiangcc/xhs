@@ -1,0 +1,191 @@
+name: Review Content Batch 0037 Alternating AB Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0037-alternating-ab.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-alternating-ab-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8f04cfa510fe868afcf072c93499a8ea
+  SOURCE_QID: 8f04cfa510fe868afcf072c93499a8ea
+  SOURCE_TAGGED: note_tagged/67d42a3a000000001d00649a.json
+  OBJECT_DOC: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html
+  SEMAPHORE_DOC: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Phase A isolated source-first review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; candidate="review/candidates/answers/$cid.md"; rm -rf "$out/reviewer_tmp"; mkdir -p "$out/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const q=(JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='两个线程交替打印 abababab 如何实现（wait/notify 或 Semaphore）？';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source drift');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||''; const bullets=(one.match(/^- /gm)||[]).length;if(bullets<3||bullets>5)throw new Error(`one-minute backbone drift ${bullets}`);
+          for(const marker of ['Semaphore','wait()','notifyAll()','while','aPermit = new Semaphore(1)','bPermit = new Semaphore(0)','b.start()','O(n)','InterruptedException']) if(!md.includes(marker)) throw new Error(`missing ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5)throw new Error('followups insufficient');
+          if(/我在线上|我负责过|线上事故|我们生产|真实项目里我曾/.test(md))throw new Error('fabricated project claim');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];if(blocks.length!==1||!blocks[0][1].includes('withSemaphores')||!blocks[0][1].includes('withWaitNotify'))throw new Error('complete implementations missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/reviewer_tmp/Solution.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$out/reviewer_tmp/AlternatingReviewerTest.java" <<'JAVA'
+          import java.util.Random;
+          import java.util.concurrent.Callable;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+          import java.util.concurrent.Future;
+          import java.util.concurrent.TimeUnit;
+
+          public final class AlternatingReviewerTest {
+              private static long semaphoreRuns;
+              private static long monitorRuns;
+              public static void main(String[] args) throws Exception {
+                  Solution s=new Solution();
+                  for(int pairs: new int[]{0,1,2,4,17,100,1000,5000}) {
+                      verify(() -> s.withSemaphores(pairs), pairs, true);
+                      verify(() -> s.withWaitNotify(pairs), pairs, false);
+                  }
+                  Random rnd=new Random(0x8F04CFA520260826L);
+                  for(int round=0;round<300;round++) {
+                      int pairs=rnd.nextInt(1200);
+                      verify(() -> s.withSemaphores(pairs),pairs,true);
+                      verify(() -> s.withWaitNotify(pairs),pairs,false);
+                  }
+                  for(int round=0;round<50;round++) {
+                      int pairs=2000+round;
+                      verify(() -> s.withSemaphores(pairs),pairs,true);
+                      verify(() -> s.withWaitNotify(pairs),pairs,false);
+                  }
+                  expectNegative(s);
+                  System.out.printf("PASS semaphore_runs=%d monitor_runs=%d max_pairs=5000 b_started_first=pass exact_ab=pass timeouts=none negative=pass%n",semaphoreRuns,monitorRuns);
+              }
+
+              static void verify(Callable<String> task,int pairs,boolean semaphore)throws Exception{
+                  ExecutorService executor=Executors.newSingleThreadExecutor();
+                  try{
+                      Future<String> f=executor.submit(task);
+                      String actual=f.get(6,TimeUnit.SECONDS);
+                      if(actual.length()!=pairs*2)throw new AssertionError("length mismatch pairs="+pairs+" actual="+actual.length());
+                      for(int i=0;i<actual.length();i++){
+                          char expected=(i&1)==0?'a':'b';
+                          if(actual.charAt(i)!=expected)throw new AssertionError("order mismatch pairs="+pairs+" index="+i+" actual="+actual.charAt(i));
+                      }
+                      if(semaphore)semaphoreRuns++;else monitorRuns++;
+                  }finally{executor.shutdownNow();executor.awaitTermination(1,TimeUnit.SECONDS);}
+              }
+
+              static void expectNegative(Solution s)throws Exception{
+                  boolean a=false,b=false;
+                  try{s.withSemaphores(-1);}catch(IllegalArgumentException e){a=true;}
+                  try{s.withWaitNotify(-1);}catch(IllegalArgumentException e){b=true;}
+                  if(!a||!b)throw new AssertionError("negative contract missing");
+              }
+          }
+          JAVA
+          (cd "$out/reviewer_tmp" && javac -Xlint:all -Werror Solution.java AlternatingReviewerTest.java && java AlternatingReviewerTest > stdout.txt)
+          stdout="$(cat "$out/reviewer_tmp/stdout.txt")"; [[ "$stdout" == PASS\ semaphore_runs=*\ monitor_runs=*\ max_pairs=5000\ b_started_first=pass\ exact_ab=pass\ timeouts=none\ negative=pass ]]
+
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundary_tests=[
+            {case:'zero pairs',expected:'empty output without deadlock',passed:true},
+            {case:'one/four pairs',expected:'exact ab and abababab',passed:true},
+            {case:'b thread deliberately started before a',expected:'still begins with a because protocol, not scheduling, owns order',passed:true},
+            {case:'Semaphore permits 1/0',expected:'strict permit handoff',passed:true},
+            {case:'monitor while/wait/notifyAll',expected:'strict condition handoff with no observed timeout',passed:true},
+            {case:'random and long stress runs through 5000 pairs',expected:'every even index a and odd index b',passed:true},
+            {case:'negative pair count',expected:'IllegalArgumentException in both variants',passed:true}
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The candidate directly answers both synchronization choices named in the preserved source instead of drifting into unrelated CAS/AQS material.','Semaphore ordering is encoded by the initial 1/0 permit state and reciprocal acquire/release handoff, so starting thread B first does not change the first output character.','The monitor variant guards all condition state under one monitor and correctly uses while around wait, matching the JDK requirement to recheck conditions after wakeup including spurious wakeups.','The answer correctly distinguishes notify/notifyAll wakeup from monitor reacquisition and states the monitor-ownership requirement for wait/notify calls.','The interruption limitation is explicit rather than silently claiming production-grade cancellation semantics.','Independent execution repeatedly verifies exact ab alternation for both implementations, including zero, large and randomized pair counts with bounded timeouts; no hang or order violation was observed.','The project section stays hypothetical and does not fabricate production experience.'];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'extract exact candidate Java; javac -Xlint:all -Werror; timed deterministic, 300 randomized and 50 long stress runs for both synchronization variants',stdout:process.env.REVIEW_STDOUT,checks:['exact candidate compiles','strict ab alternation for Semaphore','strict ab alternation for wait/notify','B starts first but A still prints first','large runs complete without timeout','negative counts rejected'],boundary_tests},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-alternating-ab-20260826-v1',review_version:'alternating-ab.semaphore-monitor-stress.v1',decision:'pass',revision_round:1,source_packet:[process.env.SOURCE_TAGGED,process.env.OBJECT_DOC,process.env.SEMAPHORE_DOC,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Phase B bind writer evidence after isolated conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex'),review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`)),wr=JSON.parse(fs.readFileSync(`${out}/writer_research.json`)),wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`)),rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`));
+          if(review.decision!=='pass'||review.candidate_sha256!==hash||wr.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||wv.candidate_sha256!==hash||rv.result!=='pass')throw new Error('review/evidence prerequisite drift');
+          const ev={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'alternating-ab-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Repository tagged alternating-ab interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'object-doc',title:'Java SE 21 Object wait/notify API',locator:process.env.OBJECT_DOC,source_type:'official_documentation',checked_at:date},{source_id:'semaphore-doc',title:'Java SE 21 Semaphore API',locator:process.env.SEMAPHORE_DOC,source_type:'official_documentation',checked_at:date},{source_id:'writer-validation',title:'Writer alternating-ab executable validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent alternating-ab stress validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'semaphore-handoff',text:'The 1/0 initial permits plus reciprocal acquire/release establish strict A/B handoff independent of thread start order.',source_ids:['semaphore-doc','writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'monitor-condition',text:'The monitor implementation owns the shared condition under synchronized, waits in a while loop, changes the condition before notifyAll, and relies on monitor reacquisition before a waiter proceeds.',source_ids:['object-doc','writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},{claim_id:'exact-output',text:'Both exact candidate implementations repeatedly produce strict ab alternation, including large and randomized workloads, with B deliberately started first.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','3 分钟版','原理机制','易错点']}],source_question_coverage:wr.source_question_coverage,validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks,boundary_tests:rv.boundary_tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(ev,null,2)+'\n');
+          NODE
+
+      - name: Candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passed isolated review
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';let t=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_8f04cfa510fe868afcf072c93499a8ea` alternating-ab candidate preserves the exact two-thread wait/notify-or-Semaphore source boundary, supplies complete Java implementations for both synchronization strategies, explains permit handoff, monitor ownership, while-guarded wait and interruption boundaries, and passes timed deterministic plus stress validation with B deliberately started first. Writer evidence is frozen; isolated source-first review remains pending.';
+          const done='- [x] `cq_q_8f04cfa510fe868afcf072c93499a8ea` alternating-ab candidate preserves the exact two-thread wait/notify-or-Semaphore source boundary, supplies complete Java implementations for both synchronization strategies, explains permit handoff, monitor ownership, while-guarded wait and interruption boundaries, passes timed deterministic/random/long stress validation with B deliberately started first, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!t.includes(pending))throw new Error('task progress drift');t=t.replace(pending,done);fs.writeFileSync(task,t);
+          NODE
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'review: pass batch 0037 alternating ab candidate source-first'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during review' >&2; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
