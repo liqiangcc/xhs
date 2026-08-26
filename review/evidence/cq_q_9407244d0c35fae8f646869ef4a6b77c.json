@@ -1,0 +1,116 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9407244d0c35fae8f646869ef4a6b77c",
+  "candidate_sha256": "2e42c6db8a97f56e09e147f0e49a9b9b5637441fdb1e11135f35f74e73a0aa84",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "odd-even-printer-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-structured",
+      "title": "Structured Java interview source",
+      "locator": "note_structured/677deb41000000001a01d349.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Tagged odd/even alternating-print question",
+      "locator": "note_tagged/677deb41000000001a01d349.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer two-thread ordering validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9407244d0c35fae8f646869ef4a6b77c/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate concurrency validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9407244d0c35fae8f646869ef4a6b77c/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9407244d0c35fae8f646869ef4a6b77c/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks for two threads alternating odd/even numbers but does not specify range, first parity, synchronization primitive, or interruption policy.",
+      "source_ids": ["repository-structured", "repository-tagged", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "state-machine",
+      "text": "The candidate uses a single monitor-protected next counter; parity is a guard, wait is rechecked in a while loop, state advancement and output are serialized, and termination wakes any remaining waiter.",
+      "source_ids": ["writer-validation", "reviewer-validation", "isolated-review"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "concurrency-behavior",
+      "text": "The exact candidate compiles and emits exactly 0..maxInclusive under both startup orders across deterministic and seeded randomized executions with bounded termination.",
+      "source_ids": ["writer-validation", "reviewer-validation", "isolated-review"],
+      "answer_locations": ["3 分钟版", "关键细节", "常见追问"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9407244d0c35fae8f646869ef4a6b77c",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "validation": {
+    "command": "extract the exact candidate Java block, compile in an independent harness, execute deterministic and randomized two-thread schedules with bounded termination checks",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate negative=rejected deterministic=20 randomized=3000 exact_order=0..max termination=pass odd_first=pass even_first=pass",
+    "checks": [
+      "exact candidate Java implementation compiles under Java 21",
+      "negative max contract is rejected",
+      "20 deterministic runs cover ten ranges under both thread startup orders",
+      "3000 seeded randomized range/start-order runs terminate within the bounded join window",
+      "captured output is exactly 0..maxInclusive with no duplicates, gaps, or reordering",
+      "maxInclusive=0 and odd-first startup terminate without deadlock"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-odd-even-printer-20260826-v1",
+    "review_version": "odd-even.monitor-state-machine.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The answer keeps the source boundary narrow and explicitly labels 0..maxInclusive/even-first as the chosen executable contract rather than source fact.",
+      "The shared-state invariant is clear: next identifies the only legal next output and parity determines the eligible worker.",
+      "The candidate correctly uses a while guard around wait, keeps check/output/state-advance under the same monitor, and includes a terminal notify path.",
+      "Both startup orders are explained as irrelevant to correctness because eligibility is state-driven rather than timing-driven.",
+      "Interruption is not swallowed; broader cooperative-cancellation behavior is correctly left as an additional contract.",
+      "Independent exact-candidate compilation plus deterministic/randomized concurrency validation passed with bounded termination.",
+      "No fabricated production experience is claimed."
+    ]
+  }
+}
