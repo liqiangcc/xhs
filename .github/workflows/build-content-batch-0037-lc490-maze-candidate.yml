@@ -1,0 +1,281 @@
+name: Build Content Batch 0037 LC490 Maze Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0037-lc490-maze-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-lc490-maze-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8dc7928cdcb10b86101be42a434da27e
+  SOURCE_QID: 8dc7928cdcb10b86101be42a434da27e
+  SOURCE_TAGGED: note_tagged/6684e61d000000001f00703b.json
+  PRIMARY_SOURCE: https://leetcode.com/problems/the-maze/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Guard exact source and long-tail baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：LC490 - The Maze (迷宫问题)';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source question drift');
+          const formal=fs.readFileSync(`review/answers/${cid}.md`,'utf8');
+          if(!formal.includes('"status":"needs_update"')||!formal.includes('"quality_tier":"long_tail_baseline"')) throw new Error('formal answer no longer long-tail baseline');
+          if(!formal.includes(expected)) throw new Error('formal source locator drift');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists');
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),c=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!c.ok||c.canonical?.canonical_id!==process.env.CANONICAL_ID||c.answer_type!=='coding') throw new Error('canonical/type drift');
+          const src=c.source_questions||[];
+          if(!src.some(x=>x.question_id===process.env.SOURCE_QID&&(x.original_question||'').includes('LC490'))) throw new Error(`canonical source wording drift: ${JSON.stringify(src)}`);
+          NODE
+
+      - name: Write source-bounded candidate and executable writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; mkdir -p "$out" review/candidates/answers
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_8dc7928cdcb10b86101be42a434da27e","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # LC490 - The Maze（迷宫问题）
+
+          ## 核心结论
+
+          LC490 的关键不是“每次走一格”，而是 **球会沿一个方向持续滚动，直到撞墙前才停下**；只有停下以后才能选择下一方向。因此应把“可停留位置”当作搜索状态：从一个停止点向四个方向滚到下一个停止点，再用 BFS 或 DFS 判断能否到达并停在 `destination`。下面给出不修改 `maze` 的 Java BFS 实现；题目只问可达性，所以 BFS 与 DFS 都可以，BFS 并不是为了求最短路。
+
+          ## 1 分钟版
+
+          - 状态不是相邻格子，而是“球真正停下来的格子”；从当前停止点向四个方向一直滚到墙前一格。
+          - 每得到一个新的停止点，如果没访问过就标记并入队；每个停止点最多展开一次。
+          - 只有 `destination` 能作为停止点被搜索到才算成功；球只是从目标格经过但停不下来，答案仍是 `false`。
+          - 直接滚动扫描的最坏时间上界是 O(mn(m+n))，访问集合和队列是 O(mn)；若预计算每格四个方向的停止点，可把重复滚动扫描进一步收敛。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.ArrayDeque;
+          import java.util.Queue;
+
+          public final class Solution {
+              private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+
+              public boolean hasPath(int[][] maze, int[] start, int[] destination) {
+                  int rows = maze.length;
+                  int cols = maze[0].length;
+                  boolean[][] visited = new boolean[rows][cols];
+                  Queue<int[]> queue = new ArrayDeque<>();
+                  queue.offer(new int[] {start[0], start[1]});
+                  visited[start[0]][start[1]] = true;
+
+                  while (!queue.isEmpty()) {
+                      int[] cur = queue.poll();
+                      if (cur[0] == destination[0] && cur[1] == destination[1]) {
+                          return true;
+                      }
+
+                      for (int[] dir : DIRS) {
+                          int r = cur[0];
+                          int c = cur[1];
+                          while (inBounds(r + dir[0], c + dir[1], rows, cols)
+                                  && maze[r + dir[0]][c + dir[1]] == 0) {
+                              r += dir[0];
+                              c += dir[1];
+                          }
+                          if (!visited[r][c]) {
+                              visited[r][c] = true;
+                              queue.offer(new int[] {r, c});
+                          }
+                      }
+                  }
+                  return false;
+              }
+
+              private boolean inBounds(int r, int c, int rows, int cols) {
+                  return r >= 0 && r < rows && c >= 0 && c < cols;
+              }
+          }
+          ```
+
+          搜索不需要在滚动经过的中间格子上分叉；只有撞墙前的停止点才产生下一轮决策。把停止点标记为 `visited` 后，同一个状态无需重复展开，因此环形通道也不会无限搜索。
+
+          ## 关键细节
+
+          - **目标必须能停下**：这是 LC490 最容易写错的语义。经过 `destination` 不等于到达；只有一次滚动恰好停在那里，或 `start` 本身就是目标，才成功。
+          - **`visited` 标记停止点**：中间经过的格子不是本题的决策状态，不应该按普通迷宫“一格一步”的方式搜索。
+          - **BFS/DFS 都正确**：题目只问是否存在路径，不比较路径长度；若换成 Maze II 的最短滚动距离，才需要按距离建模并使用不同的最短路策略。
+          - **不修改输入**：实现单独维护 `visited`，避免把访问状态写回 `maze`，便于重复调用和测试。
+          - **复杂度上界**：最多有 O(mn) 个停止状态；每个状态最多向四个方向滚动，每次滚动最多扫描 O(m+n) 个格子，因此直接实现可给出 O(mn(m+n)) 的保守上界，空间 O(mn)。
+          - **空滚动不会重复入队**：某方向一开始就是墙时，停止点仍是当前格；因为当前格已经访问过，不会重新入队。
+
+          ## 原理机制
+
+          可以把迷宫隐式转换成一个“停止点图”：节点是球能够停住的空格；从节点 `(r,c)` 选择一个方向后，沿该方向越过若干空格，直到下一步会撞墙，此时最后一个合法格子就是一条边的终点。原题于是变成这个隐式图上的可达性问题。BFS 的不变量是：队列里只包含已经确认可作为停止状态、但尚未展开的节点；每次展开都完整生成四个方向的下一个停止点。`visited` 保证每个停止状态最多展开一次，所以搜索最终会终止。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构线上迷宫或路径规划案例。工程上可以把这类题映射为“动作具有持续效果、只能在离散边界重新决策”的状态搜索，例如批处理推进到检查点后才能切换策略；真正落地仍要根据业务定义状态、动作终止条件和代价模型。这里仅作算法建模映射，不把它说成个人生产经验。
+
+          ## 常见追问
+
+          - 问：为什么不能对四个相邻空格做普通 BFS？答：因为球不能在任意相邻格停下并转向；一次动作必须一直滚到墙前，所以普通格点 BFS 会引入原题不存在的转向能力。
+          - 问：为什么球经过终点还可能返回 `false`？答：终点要求“停在”该位置；如果前方没有墙，球会继续滚过去，那个中间位置不是可达停止状态。
+          - 问：这题为什么 DFS 也可以？答：目标只是判断隐式停止点图里是否可达，不要求最少步数；DFS 和 BFS 都能完整遍历可达状态。
+          - 问：最坏时间为什么不是简单 O(mn)？答：虽然停止状态最多 O(mn)，但每次展开一个方向都可能沿行或列扫描很多格子；不预计算转移时会有重复走廊扫描，因此给出 O(mn(m+n)) 的保守上界更准确。
+          - 问：怎么优化重复滚动？答：可以预计算每个空格向四个方向最终会停在哪里，或按行列墙位置建立跳转信息；之后搜索每条状态转移可做到 O(1)，代价是额外预处理和存储。
+
+          ## 易错点
+
+          - 把题目写成普通四邻接迷宫，允许在滚动中的任意格子转向。
+          - 只要滚动路径经过 `destination` 就立即返回 `true`。
+          - 用 `visited` 标记经过的每个中间格，混淆“经过位置”和“停止状态”。
+          - 忘记在入队时标记停止点，导致同一状态被重复加入队列。
+          - 把 BFS 的理由说成“求最短路”，但本题只要求布尔可达性。
+          EOF
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('boolean hasPath(int[][] maze, int[] start, int[] destination)')) throw new Error('complete Java implementation missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/Solution.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$out/MazeWriterTest.java" <<'JAVA'
+          import java.util.ArrayDeque;
+          import java.util.Arrays;
+          import java.util.Queue;
+          import java.util.Random;
+
+          public final class MazeWriterTest {
+              private static long randomCases;
+              public static void main(String[] args) {
+                  Solution s = new Solution();
+                  int[][] sample = {
+                      {0,0,1,0,0},
+                      {0,0,0,0,0},
+                      {0,0,0,1,0},
+                      {1,1,0,1,1},
+                      {0,0,0,0,0}
+                  };
+                  check(s, sample, new int[]{0,4}, new int[]{4,4}, true);
+                  check(s, sample, new int[]{0,4}, new int[]{3,2}, false);
+                  check(s, new int[][]{{0,0,0},{0,0,0},{0,0,0}}, new int[]{0,0}, new int[]{1,2}, false);
+                  check(s, new int[][]{{0}}, new int[]{0,0}, new int[]{0,0}, true);
+                  Random rnd = new Random(0x8DC7928CL);
+                  for (int rows=2; rows<=9; rows++) {
+                      for (int cols=2; cols<=9; cols++) {
+                          for (int round=0; round<35; round++) {
+                              int[][] maze = randomMaze(rows, cols, rnd);
+                              int[] start = randomOpen(maze, rnd);
+                              int[] dest = randomOpen(maze, rnd);
+                              boolean expected = reference(maze, start, dest);
+                              check(s, maze, start, dest, expected);
+                              randomCases++;
+                          }
+                      }
+                  }
+                  System.out.printf("PASS fixed=4 randomized=%d pass-through-not-stop=pass input-unmodified=pass%n", randomCases);
+              }
+
+              static void check(Solution s, int[][] maze, int[] start, int[] dest, boolean expected) {
+                  int[][] before = copy(maze);
+                  boolean actual = s.hasPath(maze, start, dest);
+                  if (actual != expected) throw new AssertionError("expected="+expected+" actual="+actual+" start="+Arrays.toString(start)+" dest="+Arrays.toString(dest));
+                  if (!Arrays.deepEquals(before, maze)) throw new AssertionError("maze mutated");
+              }
+
+              static boolean reference(int[][] maze, int[] start, int[] dest) {
+                  int rows=maze.length, cols=maze[0].length;
+                  int[][][] stop = new int[rows][cols][8];
+                  int[][] dirs={{1,0},{-1,0},{0,1},{0,-1}};
+                  for (int r=0;r<rows;r++) for (int c=0;c<cols;c++) if (maze[r][c]==0) {
+                      for (int d=0;d<4;d++) {
+                          int x=r,y=c;
+                          while (inside(x+dirs[d][0],y+dirs[d][1],rows,cols) && maze[x+dirs[d][0]][y+dirs[d][1]]==0) { x+=dirs[d][0]; y+=dirs[d][1]; }
+                          stop[r][c][2*d]=x; stop[r][c][2*d+1]=y;
+                      }
+                  }
+                  boolean[][] seen=new boolean[rows][cols];
+                  Queue<int[]> q=new ArrayDeque<>(); q.offer(new int[]{start[0],start[1]}); seen[start[0]][start[1]]=true;
+                  while(!q.isEmpty()) {
+                      int[] p=q.poll(); if(p[0]==dest[0]&&p[1]==dest[1]) return true;
+                      for(int d=0;d<4;d++) { int nr=stop[p[0]][p[1]][2*d], nc=stop[p[0]][p[1]][2*d+1]; if(!seen[nr][nc]) {seen[nr][nc]=true;q.offer(new int[]{nr,nc});} }
+                  }
+                  return false;
+              }
+
+              static int[][] randomMaze(int rows,int cols,Random rnd) {
+                  int[][] m=new int[rows][cols];
+                  for(int r=0;r<rows;r++) for(int c=0;c<cols;c++) m[r][c]=rnd.nextDouble()<0.28?1:0;
+                  boolean any=false; for(int[] row:m) for(int v:row) if(v==0) any=true;
+                  if(!any) m[rnd.nextInt(rows)][rnd.nextInt(cols)]=0;
+                  return m;
+              }
+              static int[] randomOpen(int[][] maze,Random rnd) { while(true){int r=rnd.nextInt(maze.length),c=rnd.nextInt(maze[0].length);if(maze[r][c]==0)return new int[]{r,c};} }
+              static boolean inside(int r,int c,int rows,int cols){return r>=0&&r<rows&&c>=0&&c<cols;}
+              static int[][] copy(int[][] a){int[][] b=new int[a.length][];for(int i=0;i<a.length;i++)b[i]=a[i].clone();return b;}
+          }
+          JAVA
+          (cd "$out" && javac -Xlint:all -Werror Solution.java MazeWriterTest.java && java MazeWriterTest > writer_stdout.txt)
+          stdout="$(cat "$out/writer_stdout.txt")"
+          test "$stdout" = 'PASS fixed=4 randomized=2240 pass-through-not-stop=pass input-unmodified=pass'
+
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:hash,result:'pass',validated_at:date,command:'extract exact candidate Java; javac -Xlint:all -Werror; fixed semantic cases plus 2240 seeded random mazes against precomputed-stop reference',stdout:process.env.STDOUT,checks:['official-style reachable sample','destination cannot be merely passed through','start equals destination','2240 random mazes match an independently precomputed stop-transition reference','input maze remains unchanged']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Repository tagged LC490 interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'primary-reference',title:'LeetCode 490 The Maze',locator:process.env.PRIMARY_SOURCE,source_type:'official_documentation',checked_at:date},{source_id:'writer-validation',title:'Writer LC490 executable validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'rolling-semantics',text:'A move rolls continuously in one direction until the wall boundary; decisions occur at stopping positions, and reaching the destination requires being able to stop there.',source_ids:['repository-source','primary-reference','writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'search-model',text:'The exact candidate searches the implicit graph of stopping positions and marks each stopping state once; BFS and DFS are both valid for boolean reachability.',source_ids:['writer-validation'],answer_locations:['核心结论','3 分钟版','原理机制','常见追问']},{claim_id:'boundaries-complexity',text:'The implementation handles start-equals-destination and pass-through-without-stop semantics, does not mutate the maze, matches a separately precomputed transition reference on 2240 random mazes, and has O(mn(m+n)) conservative direct-scan time with O(mn) auxiliary space.',source_ids:['writer-validation'],answer_locations:['1 分钟版','关键细节','常见追问','易错点']}],source_question_coverage:(ctx.source_questions||[]).map(x=>({question_id:x.question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']})),promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record bounded progress and commit candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';let t=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_8dc7928cdcb10b86101be42a434da27e` LC490 Maze candidate preserves the rolling-until-wall source boundary, models stopping positions as search states, includes a complete non-mutating Java BFS, explains pass-through-versus-stop semantics and O(mn(m+n))/O(mn) bounds, and passes fixed semantic cases plus 2240 seeded random mazes against a precomputed-stop reference. Writer evidence is frozen; isolated source-first review remains pending.';
+          if(!t.includes('`cq_q_8dc7928cdcb10b86101be42a434da27e` LC490 Maze candidate')) t=t.trimEnd()+'\n'+note+'\n';
+          fs.writeFileSync(task,t);
+          NODE
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0037/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'content: stage batch 0037 LC490 maze candidate'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during build'; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
