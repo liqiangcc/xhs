@@ -1,0 +1,151 @@
+name: Remediate Content Batch 0035 Tree Substructure Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0035-tree-substructure-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0035-tree-substructure-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SOURCE_QID: 7f3216de4698813dc7c1e7cf479deb0f
+  SOURCE_CID: cq_q_7f3216de4698813dc7c1e7cf479deb0f
+  TARGET_QID: 2c267f2f448a08e8b1f1e1590ce6df72
+  TARGET_CID: cq_q_2c267f2f448a08e8b1f1e1590ce6df72
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first preflight and relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0035
+          node <<'NODE'
+          const fs=require('fs');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(qs.map(q=>[q.question_id,q])), byC=new Map(cs.map(c=>[c.canonical_id,c]));
+          const source=byQ.get(process.env.SOURCE_QID), target=byQ.get(process.env.TARGET_QID);
+          const expectedSource='算法手撕：二叉树的子结构。输入两棵二叉树 A 和 B，判断 B 是否是 A 的子结构（约定空树不是子结构）。请分析时空复杂度';
+          const expectedTarget='算法：判断树B是否是树A的子结构 ：输入两颗二叉树，判断B是否是A的子结构';
+          if(!source||source.original_question!==expectedSource||source.canonical_id!==process.env.SOURCE_CID) throw new Error('source tree-substructure Question drifted');
+          if(!target||target.original_question!==expectedTarget||target.canonical_id!==process.env.TARGET_CID) throw new Error('target tree-substructure Question drifted');
+          for(const q of [source,target]) if(q.is_valid_for_library===false) throw new Error(`${q.question_id}: unexpectedly invalid`);
+          const sc=byC.get(process.env.SOURCE_CID), tc=byC.get(process.env.TARGET_CID);
+          if(JSON.stringify([...(sc?.question_ids||[])].sort())!==JSON.stringify([process.env.SOURCE_QID])) throw new Error('source Canonical no longer singleton-bounded');
+          if(JSON.stringify([...(tc?.question_ids||[])].sort())!==JSON.stringify([process.env.TARGET_QID])) throw new Error('target Canonical no longer singleton-bounded');
+          const near=qs.filter(q=>q.is_valid_for_library!==false && /二叉树.*子结构|树\s*B.*树\s*A.*子结构|B.*A.*子结构/i.test(q.original_question||''));
+          const expectedNear=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(near.map(q=>q.question_id).sort())!==JSON.stringify(expectedNear)) throw new Error(`source-near set changed: ${JSON.stringify(near.map(q=>q.question_id))}`);
+          const review=`# Answer Batch 0035 — Tree Substructure Relation Review\n\n`+
+            `## Source-first facts\n\n- \`${process.env.SOURCE_QID}\`: ${expectedSource}\n- \`${process.env.TARGET_QID}\`: ${expectedTarget}\n\n`+
+            `No historical relation/remediation record was consulted to reach this conclusion. Both current source Questions ask the same predicate: given binary trees A and B, determine whether B is a substructure of A. The batch-0035 wording makes two details explicit—empty B is not a substructure and time/space complexity should be analyzed—but neither detail creates a different algorithmic goal from the earlier source. The explicit empty-tree rule narrows an ambiguity that the earlier source left unstated, and the complexity request asks for analysis of the same implementation rather than a different output contract.\n\n`+
+            `## Decision\n\nRelation: \`same\`. Preserve \`${process.env.TARGET_CID}\` as the survivor because it already has a source-bounded executable candidate and independent validation path; consolidation must invalidate/rebuild its source binding before promotion so the new explicit empty-tree and complexity source is covered. Retire singleton \`${process.env.SOURCE_CID}\` through Select → Decide → Apply.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0035/tree_substructure_relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select decide and apply exact reviewed pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0035/tree_substructure_relation_apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$SOURCE_QID,$TARGET_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs'); const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0], actual=[...c.question_ids].sort(), expected=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`pair drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide --relation-candidate-key "$key" --relation same --actor-type ai --actor-id batch-0035-tree-substructure-source-first-review --actor-display-name 'Batch 0035 tree-substructure source-first reviewer' --rationale 'Both source Questions ask the same binary-tree substructure predicate. The newer wording only resolves empty-B=false and explicitly requests complexity analysis; it does not define a distinct algorithmic contract.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply --relation-candidate-key "$key" --canonical-id "$TARGET_CID" --canonical-title '判断树 B 是否是树 A 的子结构' > "$out/apply.json"
+
+      - name: Verify exact effect and record progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const cs=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(qs.map(q=>[q.question_id,q])), byC=new Map(cs.map(c=>[c.canonical_id,c]));
+          for(const qid of [process.env.SOURCE_QID,process.env.TARGET_QID]) if(byQ.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: ownership not consolidated`);
+          if(byC.has(process.env.SOURCE_CID)) throw new Error('source duplicate Canonical survived');
+          const members=[...(byC.get(process.env.TARGET_CID)?.question_ids||[])].sort(), expected=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`survivor members drifted: ${JSON.stringify(members)}`);
+          fs.writeFileSync('review/content_build/answer_batch_0035/tree_substructure_relation_apply.md',`# Answer Batch 0035 — Tree Substructure Relation Application\n\n- Reviewed relation: \`same\`.\n- Survivor: \`${process.env.TARGET_CID}\`.\n- Consolidated Questions: \`${process.env.SOURCE_QID}\`, \`${process.env.TARGET_QID}\`.\n- Retired duplicate Canonical: \`${process.env.SOURCE_CID}\`.\n- The survivor's prior candidate may be reused as input only after evidence/source coverage is rebuilt for both Questions and an isolated review passes.\n`);
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note=`- [x] \`${process.env.SOURCE_CID}\` tree-substructure singleton is source-first consolidated as \`same\` into \`${process.env.TARGET_CID}\`; the newer source explicitly supplies empty-B=false and requests complexity analysis. Survivor source/evidence binding must be rebuilt and independently reviewed against both Questions before promotion.`;
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Refresh generated answer-type audit
+        shell: bash
+        run: node scripts/xhs.js answer type-audit
+
+      - name: Full repository and answer gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced: $base_head -> $remote_head; fail closed."; exit 0; fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: consolidate batch 0035 tree-substructure duplicate'
+          git push origin "HEAD:$CONTENT_BRANCH"
