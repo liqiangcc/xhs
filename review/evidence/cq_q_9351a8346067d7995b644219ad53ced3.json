@@ -1,0 +1,117 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9351a8346067d7995b644219ad53ced3",
+  "candidate_sha256": "5026ff88def3ec3f4682cde0d17a1eda4cd9cfa79cd1e8214c4fb37f0cb7af71",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "nonempty-subsets-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-raw-ocr",
+      "title": "ByteDance backend interview raw OCR source",
+      "locator": "note_img_txt/68075d56000000000d017fd3.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Structured tagged non-empty subset question",
+      "locator": "note_tagged/68075d56000000000d017fd3.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer non-empty subset differential validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9351a8346067d7995b644219ad53ced3/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate subset differential validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9351a8346067d7995b644219ad53ced3/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_9351a8346067d7995b644219ad53ced3/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source specifies a subset coding problem with the empty subset excluded, but does not specify input uniqueness, value-level deduplication, output order, or size limits.",
+      "source_ids": ["repository-raw-ocr", "repository-tagged", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "position-contract",
+      "text": "The candidate makes position-based subset semantics explicit and treats duplicate-value deduplication as a separate contract requiring clarification.",
+      "source_ids": ["repository-raw-ocr", "repository-tagged", "writer-validation", "reviewer-validation", "isolated-review"],
+      "answer_locations": ["核心结论", "关键细节", "常见追问"]
+    },
+    {
+      "claim_id": "implementation-correctness",
+      "text": "The exact Java candidate compiles and matches an independent bitmask oracle across deterministic, exhaustive, and seeded randomized cases while never emitting the empty subset.",
+      "source_ids": ["writer-validation", "reviewer-validation", "isolated-review"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9351a8346067d7995b644219ad53ced3",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate Java block, compile it in an independent harness, and compare against a bitmask oracle",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate deterministic=6 exhaustive_binary_arrays=255 randomized=5000 n12=4095 duplicate_position_semantics=pass empty_excluded=pass",
+    "checks": [
+      "exact candidate Java implementation compiles under Java 21",
+      "six deterministic cases match an independent bitmask oracle",
+      "all 255 binary-valued arrays of length 0..7 match as output multisets",
+      "5000 seeded randomized arrays of length 0..12 match as output multisets",
+      "duplicate values preserve position-defined multiplicity",
+      "no empty subset is emitted",
+      "n=12 produces exactly 4095 non-empty subsets"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-nonempty-subsets-20260826-v2",
+    "review_version": "nonempty-subsets.position-contract.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The answer stays inside the preserved non-empty-subset source boundary and labels position-based semantics as an explicit executable contract.",
+      "The exact Java implementation records only non-empty paths, advances the start index, copies mutable path state, and restores it after recursion.",
+      "Duplicate-value behavior is explicitly separated from value-level deduplication instead of silently inventing an element-uniqueness requirement.",
+      "The increasing-index-sequence argument supports both completeness and absence of position-level duplicates.",
+      "The complexity discussion includes output-copy cost rather than claiming only O(2^n).",
+      "Independent exact-candidate compilation and deterministic, exhaustive, and randomized differential validation passed.",
+      "No fabricated production experience is claimed."
+    ]
+  }
+}
