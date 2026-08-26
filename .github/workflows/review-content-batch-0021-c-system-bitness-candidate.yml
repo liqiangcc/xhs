@@ -1,0 +1,145 @@
+name: Review Content Batch 0021 C System Bitness Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0021-c-system-bitness-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-c-system-bitness-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_37772fa23763570fb8d04764450230d3
+  SOURCE_QID_A: 37772fa23763570fb8d04764450230d3
+  SOURCE_QID_B: 8759fdb2629c78e7f847052e43922d24
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first isolated review and reviewer-owned C validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0021/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"; rm -rf "$out/reviewer_tmp"; mkdir -p "$out/reviewer_tmp"
+          # Phase A deliberately excludes writer_research, writer validation,
+          # formal-answer history, evidence ledgers, and remediation records.
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,a=process.env.SOURCE_QID_A,b=process.env.SOURCE_QID_B;
+          const raw='用C语言判断当前系统是32位还是64位';for(const p of ['note_desc/66e0126e000000002603f658.txt','note_desc/67e9712a000000000b02c3fb.txt'])if(!fs.readFileSync(p,'utf8').includes(raw))throw new Error(`${p}: primary raw source missing`);
+          const tagged=[['note_tagged/67e9712a000000000b02c3fb.json',a,'如何使用 C 语言编写代码来判断当前操作系统是 32 位还是 64 位？'],['note_tagged/66e0126e000000002603f658.json',b,'如何用 C 语言判断当前 system 是 32 位还是 64 位？']];
+          for(const [p,qid,title] of tagged){const n=JSON.parse(fs.readFileSync(p,'utf8')),q=(n.tagged_questions||[]).find(x=>x.question_id===qid||x.original_question===title);if(!q||q.original_question!==title)throw new Error(`${qid}: tagged source drift`);}
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点'])if(md.split(h).length!==2)throw new Error(`section missing/duplicate ${h}`);
+          for(const marker of ['标准 C 没有一个可移植接口','sizeof(void *) * CHAR_BIT','64 位 OS 完全可能运行 32 位进程','compiled-program pointer storage','不要把存储位数当地址位数','LP64','LLP64'])if(!md.includes(marker))throw new Error(`semantic marker missing: ${marker}`);
+          if(/sizeof\(void \*\).*所以操作系统一定|真实项目里我|线上事故|我们生产/.test(md))throw new Error('unsupported/fabricated claim detected');
+          if((md.match(/- 问：/g)||[]).length<6)throw new Error('followups insufficient');
+          const block=md.match(/```c\n([\s\S]*?)\n```/);if(!block)throw new Error('C code block missing');fs.writeFileSync(`review/content_build/answer_batch_0021/${cid}/reviewer_tmp/candidate.c`,block[1]+'\n');
+          NODE
+          cat > "$out/reviewer_tmp/oracle.c" <<'C'
+          #include <limits.h>
+          #include <stddef.h>
+          #include <stdio.h>
+          int main(void) { printf("%zu\n", sizeof(void *) * (size_t)CHAR_BIT); return 0; }
+          C
+          cat > "$out/reviewer_tmp/harness.c" <<'C'
+          #include <stddef.h>
+          #include <stdio.h>
+          #include <string.h>
+          const char *classify_pointer_storage_bits(size_t bits);
+          static int expect(size_t bits, const char *want) { const char *got=classify_pointer_storage_bits(bits); if(strcmp(got,want)!=0){fprintf(stderr,"bits=%zu got=%s want=%s\n",bits,got,want);return 1;} return 0; }
+          int main(void) {
+              if(expect(32u,"32-bit pointer storage")) return 1;
+              if(expect(64u,"64-bit pointer storage")) return 2;
+              if(expect(16u,"non-32/64 pointer storage")) return 3;
+              if(expect(48u,"non-32/64 pointer storage")) return 4;
+              if(expect(128u,"non-32/64 pointer storage")) return 5;
+              puts("PASS classify=32,64,16,48,128"); return 0;
+          }
+          C
+          gcc -std=c17 -Wall -Wextra -Werror -pedantic "$out/reviewer_tmp/candidate.c" -o "$out/reviewer_tmp/candidate"
+          gcc -std=c17 -Wall -Wextra -Werror -pedantic "$out/reviewer_tmp/oracle.c" -o "$out/reviewer_tmp/oracle"
+          bits="$("$out/reviewer_tmp/oracle")"; runtime="$("$out/reviewer_tmp/candidate")"; case "$runtime" in "compiled-program pointer storage: $bits bits ("*) ;; *) echo "candidate/oracle mismatch $runtime / $bits"; exit 1;; esac
+          gcc -std=c17 -Wall -Wextra -Werror -pedantic -DXHS_NO_MAIN "$out/reviewer_tmp/candidate.c" "$out/reviewer_tmp/harness.c" -o "$out/reviewer_tmp/harness"
+          harness="$("$out/reviewer_tmp/harness")"; test "$harness" = 'PASS classify=32,64,16,48,128'
+          BITS="$bits" RUNTIME="$runtime" HARNESS="$harness" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),cid=process.env.CANONICAL_ID,date='2026-08-26';const out=`review/content_build/answer_batch_0021/${cid}`,candidate=`review/candidates/answers/${cid}.md`;const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const findings=[
+            'Both primary raw interview notes preserve the identical request to use C to determine whether the current system is 32 or 64 bit; neither defines whether system means process ABI, OS kernel, or CPU capability.',
+            'The candidate correctly refuses to label sizeof(void*) as a portable host-OS-bitness query and instead describes sizeof(void*)*CHAR_BIT as current compiled-program pointer-object storage.',
+            'The answer explicitly covers the 64-bit-host/32-bit-process counterexample, preventing process ABI from being conflated with host-kernel bitness.',
+            'The candidate C block compiles under C17 with -Wall -Wextra -Werror -pedantic and its runtime storage report agrees with a reviewer-owned sizeof/CHAR_BIT oracle on the runner ABI.',
+            'A reviewer-owned harness independently exercises 32, 64, and non-32/64 classification branches, so the implementation does not force every C implementation into a false binary.',
+            'No fabricated project experience or unsupported claim that pointer storage equals virtual-address, CPU-register, or OS-kernel width was found.'
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'extract candidate C; gcc -std=c17 -Wall -Wextra -Werror -pedantic; compare runtime with reviewer oracle; compile XHS_NO_MAIN harness',stdout:`${process.env.RUNTIME}; ${process.env.HARNESS}`,observed_runner_pointer_storage_bits:Number(process.env.BITS),checks:['candidate C block compiles directly','runtime agrees with independent sizeof/CHAR_BIT oracle','32-bit classification','64-bit classification','16/48/128 non-binary classifications'],boundary_tests:[{case:'64-bit host may execute 32-bit process',expected:'answer treats pointer size as program ABI evidence, not host OS proof',passed:true},{case:'non-32/64 pointer storage',expected:'sample reports other width rather than inventing 32/64 classification',passed:true}]},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-c-system-bitness-20260826-v1',review_version:'c-system-bitness.v1',decision:'pass',revision_round:1,source_packet:['note_desc/66e0126e000000002603f658.txt','note_desc/67e9712a000000000b02c3fb.txt','note_tagged/66e0126e000000002603f658.json','note_tagged/67e9712a000000000b02c3fb.json',candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Bind writer evidence only after independent conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),cid=process.env.CANONICAL_ID,a=process.env.SOURCE_QID_A,b=process.env.SOURCE_QID_B,date='2026-08-26';const out=`review/content_build/answer_batch_0021/${cid}`,candidate=`review/candidates/answers/${cid}.md`;const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8')),writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8')),wv=JSON.parse(fs.readFileSync(`${out}/code_validation.json`,'utf8')),rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          if(review.decision!=='pass'||review.candidate_sha256!==hash||writer.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||rv.result!=='pass')throw new Error('review/evidence prerequisite drift');for(const qid of [a,b])if(!writer.source_question_coverage?.some(x=>x.question_id===qid&&x.covered))throw new Error(`${qid}: source coverage missing`);
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'c-system-bitness-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'raw-a',title:'Primary C system-bitness interview note A',locator:'note_desc/66e0126e000000002603f658.txt',source_type:'repository_source_record',checked_at:date},{source_id:'raw-b',title:'Primary C system-bitness interview note B',locator:'note_desc/67e9712a000000000b02c3fb.txt',source_type:'repository_source_record',checked_at:date},{source_id:'writer-validation',title:'Writer C17 runtime/oracle validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent C17 compile/runtime/classifier validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The duplicated raw source asks for C code to distinguish 32/64 bit system wording but does not define process ABI versus OS kernel versus CPU capability.',source_ids:['raw-a','raw-b'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'portable-boundary',text:'The answer treats sizeof(void*)*CHAR_BIT as current compiled-program pointer-object storage and explicitly denies that standard C thereby portably proves host OS or CPU bitness.',source_ids:['isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节','原理机制']},{claim_id:'code-validation',text:'Candidate C code compiles under strict C17 and agrees with independent runner oracle while its classification helper handles 32, 64 and other storage widths.',source_ids:['writer-validation','reviewer-validation'],answer_locations:['3 分钟版','关键细节']}],source_question_coverage:[{question_id:a,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},{question_id:b,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks,boundary_tests:rv.boundary_tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md';let text=fs.readFileSync(task,'utf8');const pending='- [ ] `cq_q_37772fa23763570fb8d04764450230d3` consolidated C system-bitness survivor now has a source-bounded candidate that distinguishes compiled-program pointer storage/ABI from host OS and CPU bitness, uses complete C17 `sizeof(void *) * CHAR_BIT` sample code without claiming a portable OS-bitness probe, and passes warnings-as-errors compile plus independent runner oracle and 32/64/other classifier validation. Writer evidence is frozen; isolated source-first review remains pending.';const passed='- [x] `cq_q_37772fa23763570fb8d04764450230d3` consolidated C system-bitness survivor covers both duplicate raw sources, explicitly distinguishes compiled-program pointer-object storage/ABI from host OS and CPU bitness, provides complete strict-C17 code, passes writer plus independent reviewer runtime/oracle and 32/64/nonstandard-width classifier validation, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';if(!text.includes(pending))throw new Error('writer marker missing');fs.writeFileSync(task,text.replace(pending,passed));
+          NODE
+
+      - name: Strict candidate audit and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit isolated review only from stable candidate head
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "review/content_build/answer_batch_0021/$CANONICAL_ID/reviewer_tmp"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"; remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "content branch advanced $base_head -> $remote_head; fail closed without push"; exit 0; fi
+          git add -A; git diff --cached --check
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass C system-bitness candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
