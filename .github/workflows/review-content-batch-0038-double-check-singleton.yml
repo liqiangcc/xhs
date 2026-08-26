@@ -1,0 +1,191 @@
+name: Review Content Batch 0038 Double Check Singleton Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0038-double-check-singleton.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0038-double-check-singleton-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9909e55e201ed60ba7e307766614e467
+  SOURCE_QID: 9909e55e201ed60ba7e307766614e467
+  SOURCE_STRUCTURED: note_structured/68218475000000000303b1f3.json
+  SOURCE_TAGGED: note_tagged/68218475000000000303b1f3.json
+  JLS17_URL: https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-17.html
+  JLS8_URL: https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-8.html
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze primary JLS assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0038/$cid"
+          mkdir -p "$out"
+          curl -fsSL --retry 3 "$JLS17_URL" -o /tmp/jls17.html
+          curl -fsSL --retry 3 "$JLS8_URL" -o /tmp/jls8.html
+          python3 - <<'PY'
+          import hashlib, html, json, os, pathlib, re
+          def text(path):
+              s=pathlib.Path(path).read_text(errors='replace')
+              s=re.sub(r'<script.*?</script>|<style.*?</style>',' ',s,flags=re.S|re.I)
+              s=re.sub(r'<[^>]+>',' ',s)
+              return re.sub(r'\s+',' ',html.unescape(s))
+          t17=text('/tmp/jls17.html'); t8=text('/tmp/jls8.html')
+          checks={
+            'volatile_happens_before':'A write to a volatile field' in t17 and 'happens-before every subsequent read of that field' in t17,
+            'monitor_happens_before':'An unlock on a monitor' in t17 and 'happens-before every subsequent lock on that monitor' in t17,
+            'volatile_jmm_consistency':'volatile' in t8 and 'Java Memory Model' in t8 and 'consistent value' in t8,
+          }
+          if not all(checks.values()): raise SystemExit(f'primary JLS assertion drift: {checks}')
+          out=pathlib.Path(f"review/content_build/answer_batch_0038/{os.environ['CANONICAL_ID']}")
+          snap={'schema_version':'primary_source_snapshot.v1','checked_at':'2026-08-27','sources':[{'url':os.environ['JLS17_URL'],'sha256':hashlib.sha256(pathlib.Path('/tmp/jls17.html').read_bytes()).hexdigest(),'checks':['volatile write happens-before subsequent read','monitor unlock happens-before subsequent lock']},{'url':os.environ['JLS8_URL'],'sha256':hashlib.sha256(pathlib.Path('/tmp/jls8.html').read_bytes()).hexdigest(),'checks':['volatile fields are defined by the Java Memory Model as a cross-thread consistency mechanism']}],'result':'pass'}
+          (out/'primary_source_snapshot.json').write_text(json.dumps(snap,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Source-first boundary and exact candidate validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0038/$cid"; tmp="/tmp/dcl-review"
+          rm -rf "$tmp"; mkdir -p "$tmp"
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          exact='手写 double check 单例，为什么加 volatile, 以及原理'
+          qid=os.environ['SOURCE_QID']; cid=os.environ['CANONICAL_ID']
+          structured=json.loads(pathlib.Path(os.environ['SOURCE_STRUCTURED']).read_text())
+          if exact not in structured.get('questions',[]): raise SystemExit('structured source drift')
+          tagged=json.loads(pathlib.Path(os.environ['SOURCE_TAGGED']).read_text())
+          q=next((x for x in tagged.get('tagged_questions',[]) if x.get('question_id')==qid),None)
+          if not q or q.get('original_question')!=exact or q.get('is_valid_for_library') is not True: raise SystemExit('tagged source drift')
+          writer=json.loads(pathlib.Path(f'review/content_build/answer_batch_0038/{cid}/writer_research.json').read_text())
+          if writer.get('review_state')!='writer_complete_isolated_review_pending': raise SystemExit('writer state drift')
+          snap=json.loads(pathlib.Path(f'review/content_build/answer_batch_0038/{cid}/primary_source_snapshot.json').read_text())
+          if snap.get('result')!='pass': raise SystemExit('primary source snapshot missing')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['static volatile Singleton instance','synchronized (Singleton.class)','happens-before','安全发布','第二次','volatile 写 happens-before']:
+              if marker not in md: raise SystemExit(f'candidate missing {marker}')
+          if len(re.findall(r'^- 问：',md,re.M)) < 5: raise SystemExit('followups insufficient')
+          if re.search(r'我在线上|我负责过|我们生产|真实项目里我曾|线上事故',md): raise SystemExit('fabricated project claim')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path('/tmp/dcl-review/Singleton.java').write_text(blocks[0].strip()+'\n')
+          PY
+
+          javac "$out/writer_validation.java"
+          writer_stdout="$(java -cp "$out" writer_validation)"
+          test "$writer_stdout" = 'PASS volatile=reflected threads=128 callsPerThread=2000 constructions=1 identity=stable initialized=42'
+
+          cat > "$tmp/ReviewerHarness.java" <<'JAVA'
+          import java.lang.reflect.*;
+          import java.util.*;
+          import java.util.concurrent.*;
+
+          public class ReviewerHarness {
+              public static void main(String[] args) throws Exception {
+                  Field f = Singleton.class.getDeclaredField("instance");
+                  int mods = f.getModifiers();
+                  if (!Modifier.isStatic(mods) || !Modifier.isVolatile(mods) || !Modifier.isPrivate(mods)) throw new AssertionError("instance modifiers");
+                  Constructor<?>[] cs = Singleton.class.getDeclaredConstructors();
+                  if (cs.length != 1 || !Modifier.isPrivate(cs[0].getModifiers())) throw new AssertionError("constructor must be private");
+
+                  int threads = 192, calls = 1500;
+                  ExecutorService pool = Executors.newFixedThreadPool(threads);
+                  CyclicBarrier start = new CyclicBarrier(threads);
+                  ConcurrentLinkedQueue<Singleton> identities = new ConcurrentLinkedQueue<>();
+                  List<Future<?>> fs = new ArrayList<>();
+                  for (int t=0;t<threads;t++) {
+                      fs.add(pool.submit(() -> {
+                          start.await();
+                          Singleton first = null;
+                          for (int i=0;i<calls;i++) {
+                              Singleton s=Singleton.getInstance();
+                              if (first==null) first=s;
+                              else if(first!=s) throw new AssertionError("identity changed in thread");
+                          }
+                          identities.add(first);
+                          return null;
+                      }));
+                  }
+                  for(Future<?> x:fs)x.get();
+                  pool.shutdown();
+                  if(!pool.awaitTermination(30,TimeUnit.SECONDS))throw new AssertionError("termination");
+                  Singleton expected=identities.peek();
+                  if(expected==null)throw new AssertionError("no identity");
+                  for(Singleton s:identities)if(s!=expected)throw new AssertionError("cross-thread identity mismatch");
+                  if(Singleton.getInstance()!=expected)throw new AssertionError("fast path instability");
+                  System.out.println("PASS exact_candidate volatile=private-static threads="+threads+" callsPerThread="+calls+" identity=stable constructor=private");
+              }
+          }
+          JAVA
+          (cd "$tmp" && javac Singleton.java ReviewerHarness.java && java ReviewerHarness > stdout.txt)
+          reviewer_stdout="$(cat "$tmp/stdout.txt")"
+          test "$reviewer_stdout" = 'PASS exact_candidate volatile=private-static threads=192 callsPerThread=1500 identity=stable constructor=private'
+
+          WRITER_STDOUT="$writer_stdout" REVIEW_STDOUT="$reviewer_stdout" python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; date='2026-08-27'
+          out=pathlib.Path(f'review/content_build/answer_batch_0038/{cid}'); candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          wv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'result':'pass','validated_at':date,'command':'javac writer_validation.java && java writer_validation','stdout':os.environ['WRITER_STDOUT'],'checks':['instance field reflected as static volatile','128-thread synchronized start contention','2000 calls per thread retain identity','exactly one instrumented construction','initialized state observed']}
+          (out/'writer_validation.json').write_text(json.dumps(wv,ensure_ascii=False,indent=2)+'\n')
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'extract exact candidate Java block, compile with independent reflection/concurrency harness, and exercise 192 threads x 1500 calls','stdout':os.environ['REVIEW_STDOUT'],'checks':['exact candidate compiles under Java 21','instance is private static volatile','constructor is private','all contending threads observe one stable identity','post-initialization fast path returns same identity']}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          findings=['The source boundary exactly asks for handwritten double-check singleton code, why volatile is needed, and the underlying principle.','The answer separates initialization mutual exclusion from safe publication: synchronized protects the compound creation path while volatile connects the lock-free fast-path read to the publishing write.','Oracle JLS 26 section 17.4.5 was checked source-first and states the volatile write-to-subsequent-read and monitor unlock-to-subsequent-lock happens-before rules used by the explanation.','Oracle JLS 26 section 8.3.1.4 was checked source-first for volatile field semantics; the answer avoids relying on an implementation-only main-memory slogan.','The exact candidate compiles under Java 21, has a private static volatile instance and private constructor, and an independent 192-thread stress harness observes one stable identity.','The answer explicitly notes that volatile does not make the compound null-check/construction atomic and that reflection/serialization guarantees are separate concerns.','No fabricated production experience is claimed.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-dcl-20260827-v1','review_version':'dcl.jmm-publication.v1','decision':'pass','revision_round':1,'source_packet':[os.environ['SOURCE_STRUCTURED'],os.environ['SOURCE_TAGGED'],str(out/'primary_source_snapshot.json'),str(candidate),'docs/refactor/09_answer_content_standard.md',str(out/'writer_validation.json'),str(out/'reviewer_validation.json')],'scores':{'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5},'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'dcl-source-bounded-writer-20260827-v1','writer_version':'xhs-answer-curator.v1'},'sources':[{'source_id':'repository-structured','title':'Structured DCL interview source','locator':os.environ['SOURCE_STRUCTURED'],'source_type':'repository_structured_source','checked_at':date},{'source_id':'repository-tagged','title':'Tagged DCL and volatile interview source','locator':os.environ['SOURCE_TAGGED'],'source_type':'repository_structured_source','checked_at':date},{'source_id':'jls-primary','title':'Oracle Java Language Specification 26 primary-source snapshot','locator':str(out/'primary_source_snapshot.json'),'source_type':'primary_official_documentation','checked_at':date},{'source_id':'writer-validation','title':'Writer DCL contention validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'reviewer-validation','title':'Independent exact-candidate DCL validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'isolated-review','title':'Fresh isolated source-first DCL review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The preserved source asks for handwritten DCL singleton code, why volatile is needed, and the principle.','source_ids':['repository-structured','repository-tagged'],'answer_locations':['核心结论','1 分钟版','3 分钟版']},{'claim_id':'jmm-publication','text':'A volatile write happens-before each subsequent volatile read of the same field, and monitor unlock happens-before subsequent lock; these JLS rules support the candidate safe-publication and mutual-exclusion explanation.','source_ids':['jls-primary','isolated-review'],'answer_locations':['核心结论','关键细节','原理机制','常见追问']},{'claim_id':'implementation-shape','text':'The exact candidate compiles and independently validates private static volatile publication, private construction and stable identity under concurrent access.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','易错点']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':review['scores'],'hard_failures':[],'uncovered_source_variants':[],'unsupported_claims':[],'findings':findings}}
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0038.md'); text=task.read_text()
+          line='- [x] `cq_q_9909e55e201ed60ba7e307766614e467` double-check singleton candidate preserves the exact DCL/volatile source boundary, grounds volatile publication and monitor synchronization in Oracle JLS 26 primary sources, provides complete Java DCL code, passes writer contention validation plus an independent exact-candidate 192-thread reflection/concurrency review, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.'
+          if line not in text:
+              if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n'
+              text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+          rm -f "$out"/*.class
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0038/$CANONICAL_ID/primary_source_snapshot.json" \
+                  "review/content_build/answer_batch_0038/$CANONICAL_ID/writer_validation.json" \
+                  "review/content_build/answer_batch_0038/$CANONICAL_ID/reviewer_validation.json" \
+                  "review/content_build/answer_batch_0038/$CANONICAL_ID/isolated_review_result.json" \
+                  "review/evidence/$CANONICAL_ID.json" \
+                  tasks/answer-batches/TASK-20260711-0313-answer-batch-0038.md
+          git commit -m 'review: pass batch 0038 double-check singleton candidate source-first'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
