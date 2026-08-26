@@ -1,0 +1,38 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_87c935cb9773c23c5088879578e95a82",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract exact candidate Java; javac -Xlint:all -Werror; compare candidate output to independent full-sort oracle plus partition-merge checks",
+  "stdout": "PASS exhaustive_arrays=19531 exhaustive_calls=175779 random=5000 partition=1000 full_sort_oracle=pass duplicates=pass extremes=pass invalid=reject",
+  "checks": [
+    "exact candidate Java compiles with warnings as errors",
+    "19531 exhaustive arrays x K=0..8 match full-sort oracle",
+    "5000 seeded randomized arrays match full-sort oracle",
+    "duplicate and long-extreme boundaries match oracle",
+    "declared null and negative-k contracts reject",
+    "1000 randomized partition/local-TopK merge cases match direct global oracle"
+  ],
+  "boundary_tests": [
+    {
+      "case": "K=0",
+      "expected": "return empty result without consuming a result candidate",
+      "passed": true
+    },
+    {
+      "case": "K greater than input length",
+      "expected": "return all input values in descending order",
+      "passed": true
+    },
+    {
+      "case": "equal-to-threshold duplicate",
+      "expected": "value multiset remains a valid largest-K multiset",
+      "passed": true
+    },
+    {
+      "case": "partitioned input",
+      "expected": "TopK of local TopK union equals direct global TopK",
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_87c935cb9773c23c5088879578e95a82",
+  "candidate_sha256": "cd304db9e2db7bf7ef2d7fcd94e6993e4360aeca18fddc46f664669c89322412",
+  "reviewed_at": "2026-08-26",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-top100-stream-20260826-v1",
+  "review_version": "top100.full-sort-oracle-and-merge.v1",
+  "decision": "pass",
+  "revision_round": 0,
+  "source_packet": [
+    "note_tagged/680e66cb0000000023012aa3.json",
+    "review/candidates/answers/cq_q_87c935cb9773c23c5088879578e95a82.md",
+    "docs/refactor/09_answer_content_standard.md",
+    "review/content_build/answer_batch_0036/cq_q_87c935cb9773c23c5088879578e95a82/reviewer_validation.json"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The preserved repository source says only “算法：千亿数组Top100”; it does not specify largest versus smallest, distinctness, element type, result ordering, storage topology, or API.",
+    "The candidate preserves that sparse source boundary and explicitly labels largest values, duplicate-preserving multiset semantics, sequential long input, descending result order, and Java as answer-side contracts rather than source facts.",
+    "The min-heap invariant is correct: after each consumed prefix, a full heap contains the largest K values from that prefix under the declared multiset contract, with the root as the weakest retained candidate.",
+    "Dropping a value equal to the current heap minimum remains correct for value-multiset TopK because replacing one retained threshold value by an equal value leaves the result multiset unchanged.",
+    "The complete Java class is runnable, returns descending output, handles K=0 and K larger than the input, preserves duplicate values, and its O(n log K) time plus O(K) auxiliary-space claims match the implementation.",
+    "Reviewer-owned validation extracts the exact candidate Java fence and compares it with an independent full-sort oracle across all 19,531 arrays of length 0..6 over values -2..2 for K=0..8, 5,000 seeded randomized cases, long extremes, and declared invalid-input boundaries.",
+    "A separate 1,000-case randomized partition test confirms the stated mergeability property: local TopK candidates from every partition are sufficient to reconstruct the direct global TopK under the same declared contract.",
+    "No fabricated production experience, placeholder implementation, cross-topic contamination, or uncovered source variant was found."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
