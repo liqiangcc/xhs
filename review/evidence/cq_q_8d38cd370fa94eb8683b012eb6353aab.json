@@ -1,0 +1,179 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_8d38cd370fa94eb8683b012eb6353aab",
+  "candidate_sha256": "cb297b59958d0d3b060b63523fbe7194580361236a531654a01b6c8533f86d99",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "preorder-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Repository tagged binary-tree preorder interview question",
+      "locator": "note_tagged/680a3a20000000001c03319f.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "primary-reference",
+      "title": "LeetCode 144 Binary Tree Preorder Traversal",
+      "locator": "https://leetcode.com/problems/binary-tree-preorder-traversal/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer preorder executable validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8d38cd370fa94eb8683b012eb6353aab/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent preorder validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8d38cd370fa94eb8683b012eb6353aab/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_8d38cd370fa94eb8683b012eb6353aab/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "preorder-semantics",
+      "text": "Binary-tree preorder visits root, then the left subtree, then the right subtree.",
+      "source_ids": [
+        "repository-source",
+        "primary-reference",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "iterative-order",
+      "text": "The exact stack solution pushes right before left so the left child is popped first under LIFO semantics.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "boundaries-complexity",
+      "text": "The implementation handles null, duplicate values, random shapes and a 100000-node skew tree; the source-first review confirms O(n) time and O(h) auxiliary stack.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "8d38cd370fa94eb8683b012eb6353aab",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate Java; javac -Xlint:all -Werror; fixed, 4344 randomized-reference and 100000-depth skew tests",
+    "result": "pass",
+    "reported_stdout": "PASS boundary=4 randomized_trees=4344 deep_skew=100000 duplicate_values=pass root-left-right=pass",
+    "checks": [
+      "exact candidate compiles",
+      "null and single-node boundaries",
+      "root-left-right fixed shape",
+      "duplicate values preserved structurally",
+      "4344 random trees match independent recursive reference",
+      "100000-node skew tree completes iteratively"
+    ],
+    "boundary_tests": [
+      {
+        "case": "null root",
+        "expected": "returns empty list",
+        "passed": true
+      },
+      {
+        "case": "single node",
+        "expected": "returns root only",
+        "passed": true
+      },
+      {
+        "case": "mixed left/right tree",
+        "expected": "root-left-right order",
+        "passed": true
+      },
+      {
+        "case": "duplicate node values",
+        "expected": "structural traversal preserves all nodes without deduplication",
+        "passed": true
+      },
+      {
+        "case": "100000-node right-skew tree",
+        "expected": "iterative traversal completes with exact 0..99999 order",
+        "passed": true
+      },
+      {
+        "case": "4344 seeded random trees",
+        "expected": "exact candidate matches independent recursive preorder reference",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-preorder-20260826-v1",
+    "review_version": "preorder.iterative-randomized-skew.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The candidate directly answers the preserved binary-tree preorder question and does not invent hidden source constraints.",
+      "The root-left-right definition is implemented exactly by a complete iterative Java solution.",
+      "The explanation correctly derives right-before-left push order from LIFO stack semantics rather than memorizing a code pattern.",
+      "Time is O(n); auxiliary stack is O(h), worst-case O(n), with returned output space kept conceptually separate.",
+      "Null, duplicate values, unbalanced trees, recursion depth and Morris traversal are handled as explicit boundaries/tradeoffs.",
+      "Independent execution validates four fixed boundaries, 4344 randomized trees against a separately written recursive reference, and a 100000-node skew tree; no semantic mismatch was found.",
+      "The project mapping remains hypothetical and contains no fabricated production claim."
+    ]
+  }
+}
