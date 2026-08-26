@@ -1,0 +1,35 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_37245bc43848028f006b2e4eaea7500c",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract candidate Java; javac -Xlint:all -Werror; independent 10000-operation ArrayList differential harness",
+  "stdout": "PASS independent_ops=10000 oracle=ArrayList boundaries=empty-single-head-middle-tail-null-oob",
+  "checks": [
+    "candidate Java compiles with warnings-as-errors",
+    "empty and invalid-access behavior",
+    "single-node transitions",
+    "head/middle/tail insert and remove",
+    "set returns old value",
+    "null payload",
+    "negative and upper-bound rejection",
+    "10000 deterministic randomized CRUD operations against ArrayList"
+  ],
+  "boundary_tests": [
+    {
+      "case": "source underspecifies API",
+      "expected": "answer marks Java/index/null/tail choices as candidate assumptions",
+      "passed": true
+    },
+    {
+      "case": "empty and single-node head/tail transitions",
+      "expected": "public behavior remains consistent across first insert and final remove",
+      "passed": true
+    },
+    {
+      "case": "index versus insertion bounds",
+      "expected": "get/set/remove use [0,size) while insert accepts [0,size]",
+      "passed": true
+    }
+  ]
+}

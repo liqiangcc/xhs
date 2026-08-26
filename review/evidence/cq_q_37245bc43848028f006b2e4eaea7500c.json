@@ -1,0 +1,157 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_37245bc43848028f006b2e4eaea7500c",
+  "candidate_sha256": "f24191553a7089d4d269c119f99dc212606e3d8491a36116812eaf4d705a89ff",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "singly-linked-list-source-bounded-writer-20260824-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "primary-source",
+      "title": "Primary tagged interview note",
+      "locator": "note_tagged/6655a5b10000000016010440.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer linked-list differential validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37245bc43848028f006b2e4eaea7500c/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent linked-list differential validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37245bc43848028f006b2e4eaea7500c/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh source-first isolated review",
+      "locator": "review/content_build/answer_batch_0021/cq_q_37245bc43848028f006b2e4eaea7500c/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The primary source requires a handwritten singly linked-list structure with CRUD but does not preserve language or API-shape constraints.",
+      "source_ids": [
+        "primary-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "implementation",
+      "text": "Under the explicitly declared Java/index-based contract, head/tail/size transitions and CRUD behavior pass writer and independent differential validation.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity-and-boundaries",
+      "text": "The candidate distinguishes constant-time tail append/head updates from index-based linear traversal and covers empty, single-node, null, and index-boundary behavior.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "37245bc43848028f006b2e4eaea7500c",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract candidate Java; javac -Xlint:all -Werror; independent 10000-operation ArrayList differential harness",
+    "result": "pass",
+    "reported_stdout": "PASS independent_ops=10000 oracle=ArrayList boundaries=empty-single-head-middle-tail-null-oob",
+    "checks": [
+      "candidate Java compiles with warnings-as-errors",
+      "empty and invalid-access behavior",
+      "single-node transitions",
+      "head/middle/tail insert and remove",
+      "set returns old value",
+      "null payload",
+      "negative and upper-bound rejection",
+      "10000 deterministic randomized CRUD operations against ArrayList"
+    ],
+    "boundary_tests": [
+      {
+        "case": "source underspecifies API",
+        "expected": "answer marks Java/index/null/tail choices as candidate assumptions",
+        "passed": true
+      },
+      {
+        "case": "empty and single-node head/tail transitions",
+        "expected": "public behavior remains consistent across first insert and final remove",
+        "passed": true
+      },
+      {
+        "case": "index versus insertion bounds",
+        "expected": "get/set/remove use [0,size) while insert accepts [0,size]",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-singly-linked-list-20260826-v1",
+    "review_version": "singly-linked-list.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Primary source preserves only the requirement to handwrite a singly linked-list structure with CRUD; language, API shape, index-versus-value semantics, null policy, and tail-pointer policy are not preserved constraints.",
+      "Candidate clearly labels Java generics, index-based CRUD, null support, and tail tracking as answer-side assumptions rather than source facts.",
+      "The representation invariant is explicit and the CRUD pointer updates, index bounds, and head/tail transitions are internally consistent.",
+      "Candidate Java compiles with warnings treated as errors and an independent 10000-operation ArrayList differential harness passes empty, single-node, head/middle/tail, null, and out-of-bounds cases.",
+      "Complexity claims match the implementation: tail append and head insert/remove are constant time while index-based traversal operations are linear in the worst case.",
+      "No fabricated production experience or placeholder implementation was found; follow-ups are specific to the linked-list contract and include failure/boundary cases."
+    ]
+  }
+}
