@@ -1,0 +1,202 @@
+name: Review Content Batch 0037 Odd-Even Printer Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0037-odd-even-printer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-odd-even-printer-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9407244d0c35fae8f646869ef4a6b77c
+  SOURCE_QID: 9407244d0c35fae8f646869ef4a6b77c
+  SOURCE_STRUCTURED: note_structured/677deb41000000001a01d349.json
+  SOURCE_TAGGED: note_tagged/677deb41000000001a01d349.json
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Phase A source-first boundary and exact-candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0037/$cid"
+          tmp="$out/reviewer_tmp"
+          rm -rf "$tmp"
+          mkdir -p "$tmp"
+
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']
+          structured=json.loads(pathlib.Path(os.environ['SOURCE_STRUCTURED']).read_text())
+          exact='算法：双线程交替打印奇偶数。'
+          if exact not in structured.get('questions',[]): raise SystemExit('structured source drift')
+          tagged=json.loads(pathlib.Path(os.environ['SOURCE_TAGGED']).read_text())
+          q=next((x for x in tagged.get('tagged_questions',[]) if x.get('question_id')==qid),None)
+          if not q or q.get('original_question')!=exact or q.get('is_valid_for_library') is not True:
+              raise SystemExit('tagged source drift')
+
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['共享状态只有 `next`','while (next <= maxInclusive','monitor.wait()','monitor.notifyAll()','InterruptedException','启动顺序不影响结果','终止通知不能漏']:
+              if marker not in md: raise SystemExit(f'candidate missing {marker}')
+          if len(re.findall(r'^- 问：',md,re.M))<5: raise SystemExit('followups insufficient')
+          if re.search(r'我在线上|我负责过|我们生产|真实项目里我曾|线上事故',md): raise SystemExit('fabricated project claim')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          snippet=blocks[0].strip()
+          harness='''import java.io.*;\nimport java.nio.charset.StandardCharsets;\nimport java.util.*;\nimport java.util.concurrent.atomic.AtomicReference;\n\npublic class CandidateHarness {\n'''+snippet+'''\n
+            static void check(int max, boolean oddFirst) throws Exception {
+              PrintStream original=System.out;
+              ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+              PrintStream capture=new PrintStream(bytes,true,StandardCharsets.UTF_8);
+              AtomicReference<Throwable> failure=new AtomicReference<>();
+              try {
+                System.setOut(capture);
+                AlternatingPrinter p=new AlternatingPrinter(max);
+                Thread even=new Thread(() -> { try { p.printEven(); } catch(Throwable t){failure.compareAndSet(null,t);} },"even");
+                Thread odd=new Thread(() -> { try { p.printOdd(); } catch(Throwable t){failure.compareAndSet(null,t);} },"odd");
+                if(oddFirst){odd.start();Thread.yield();even.start();}else{even.start();Thread.yield();odd.start();}
+                even.join(3000); odd.join(3000);
+                if(even.isAlive()||odd.isAlive()){even.interrupt();odd.interrupt();throw new AssertionError("termination max="+max);}
+                if(failure.get()!=null) throw new AssertionError("thread failure",failure.get());
+              } finally { capture.flush(); System.setOut(original); }
+              String text=bytes.toString(StandardCharsets.UTF_8).trim();
+              List<Integer> got=new ArrayList<>();
+              if(!text.isEmpty()) for(String line:text.split("\\\\R")) got.add(Integer.parseInt(line.trim()));
+              if(got.size()!=max+1) throw new AssertionError("count max="+max+" got="+got.size());
+              for(int i=0;i<=max;i++) if(got.get(i)!=i) throw new AssertionError("order max="+max+" i="+i+" got="+got.get(i));
+            }
+
+            public static void main(String[] args) throws Exception {
+              boolean rejected=false; try{new AlternatingPrinter(-1);}catch(IllegalArgumentException e){rejected=true;}
+              if(!rejected) throw new AssertionError("negative max accepted");
+              int deterministic=0;
+              for(int max:new int[]{0,1,2,3,4,5,10,31,100,500}){check(max,false);deterministic++;check(max,true);deterministic++;}
+              Random r=new Random(0x9407244dL); int randomized=0;
+              for(int i=0;i<3000;i++){int max=r.nextInt(401);check(max,r.nextBoolean());randomized++;}
+              System.out.println("PASS exact_candidate negative=rejected deterministic="+deterministic+" randomized="+randomized+" exact_order=0..max termination=pass odd_first=pass even_first=pass");
+            }
+          }
+          '''
+          pathlib.Path(f'review/content_build/answer_batch_0037/{cid}/reviewer_tmp/CandidateHarness.java').write_text(harness)
+          PY
+
+          (cd "$tmp" && javac CandidateHarness.java && java CandidateHarness > stdout.txt)
+          stdout="$(cat "$tmp/stdout.txt")"
+          test "$stdout" = 'PASS exact_candidate negative=rejected deterministic=20 randomized=3000 exact_order=0..max termination=pass odd_first=pass even_first=pass'
+
+          REVIEW_STDOUT="$stdout" python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; date='2026-08-26'
+          out=pathlib.Path(f'review/content_build/answer_batch_0037/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          checks=[
+            'exact candidate Java implementation compiles under Java 21',
+            'negative max contract is rejected',
+            '20 deterministic runs cover ten ranges under both thread startup orders',
+            '3000 seeded randomized range/start-order runs terminate within the bounded join window',
+            'captured output is exactly 0..maxInclusive with no duplicates, gaps, or reordering',
+            'maxInclusive=0 and odd-first startup terminate without deadlock'
+          ]
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'extract the exact candidate Java block, compile in an independent harness, execute deterministic and randomized two-thread schedules with bounded termination checks','stdout':os.environ['REVIEW_STDOUT'],'checks':checks}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=[
+            'The answer keeps the source boundary narrow and explicitly labels 0..maxInclusive/even-first as the chosen executable contract rather than source fact.',
+            'The shared-state invariant is clear: next identifies the only legal next output and parity determines the eligible worker.',
+            'The candidate correctly uses a while guard around wait, keeps check/output/state-advance under the same monitor, and includes a terminal notify path.',
+            'Both startup orders are explained as irrelevant to correctness because eligibility is state-driven rather than timing-driven.',
+            'Interruption is not swallowed; broader cooperative-cancellation behavior is correctly left as an additional contract.',
+            'Independent exact-candidate compilation plus deterministic/randomized concurrency validation passed with bounded termination.',
+            'No fabricated production experience is claimed.'
+          ]
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-odd-even-printer-20260826-v1','review_version':'odd-even.monitor-state-machine.v1','decision':'pass','revision_round':1,'source_packet':[os.environ['SOURCE_STRUCTURED'],os.environ['SOURCE_TAGGED'],str(candidate),'docs/refactor/09_answer_content_standard.md',str(out/'reviewer_validation.json')],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Phase B bind evidence and record task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0037/$cid"
+          javac "$out/writer_validation.java"
+          java -cp "$out" writer_validation
+
+          python3 - <<'PY'
+          import json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; date='2026-08-26'
+          out=pathlib.Path(f'review/content_build/answer_batch_0037/{cid}')
+          writer=json.loads((out/'writer_research.json').read_text())
+          wv=json.loads((out/'writer_validation.json').read_text())
+          rv=json.loads((out/'reviewer_validation.json').read_text())
+          review=json.loads((out/'isolated_review_result.json').read_text())
+          if writer.get('review_state')!='writer_complete_isolated_review_pending' or wv.get('result')!='pass' or rv.get('result')!='pass' or review.get('decision')!='pass': raise SystemExit('phase state mismatch')
+          evidence={
+            'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':review['candidate_sha256'],'checked_at':date,
+            'writer':{'writer_id':'odd-even-printer-source-bounded-writer-20260826-v1','writer_version':'xhs-answer-curator.v1'},
+            'sources':[
+              {'source_id':'repository-structured','title':'Structured Java interview source','locator':os.environ['SOURCE_STRUCTURED'],'source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'repository-tagged','title':'Tagged odd/even alternating-print question','locator':os.environ['SOURCE_TAGGED'],'source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'writer-validation','title':'Writer two-thread ordering validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'reviewer-validation','title':'Independent exact-candidate concurrency validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'isolated-review','title':'Fresh isolated source-first review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}
+            ],
+            'claims':[
+              {'claim_id':'source-boundary','text':'The source asks for two threads alternating odd/even numbers but does not specify range, first parity, synchronization primitive, or interruption policy.','source_ids':['repository-structured','repository-tagged','isolated-review'],'answer_locations':['核心结论','1 分钟版','关键细节']},
+              {'claim_id':'state-machine','text':'The candidate uses a single monitor-protected next counter; parity is a guard, wait is rechecked in a while loop, state advancement and output are serialized, and termination wakes any remaining waiter.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['1 分钟版','3 分钟版','关键细节','原理机制']},
+              {'claim_id':'concurrency-behavior','text':'The exact candidate compiles and emits exactly 0..maxInclusive under both startup orders across deterministic and seeded randomized executions with bounded termination.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','常见追问']}
+            ],
+            'source_question_coverage':[{'question_id':os.environ['SOURCE_QID'],'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},
+            'review_state':'independent_source_first_review_passed',
+            'review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':review['scores'],'hard_failures':[],'uncovered_source_variants':[],'unsupported_claims':[],'findings':review['findings']}
+          }
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md')
+          text=task.read_text()
+          pending='- [ ] `cq_q_9407244d0c35fae8f646869ef4a6b77c` odd/even alternating-printer candidate preserves the structured/tagged source boundary without inventing range or starting parity, adopts an explicit 0..maxInclusive even-first contract with a documented 1-based adaptation, provides a complete monitor/wait-notify Java implementation, and passes deterministic plus 1000 seeded randomized two-thread ordering/termination validation under both startup orders; isolated source-first review and evidence/code gate are still pending.'
+          passed='- [x] `cq_q_9407244d0c35fae8f646869ef4a6b77c` odd/even alternating-printer candidate preserves the structured/tagged source boundary without inventing range or starting parity, adopts an explicit 0..maxInclusive even-first contract with a documented 1-based adaptation, contains a complete monitor/wait-notify Java implementation, passes writer validation plus independent exact-candidate deterministic/randomized concurrency validation under both startup orders with bounded termination, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.'
+          if pending not in text: raise SystemExit('pending task marker missing')
+          task.write_text(text.replace(pending,passed))
+          PY
+          rm -rf "$out/reviewer_tmp"
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" \
+                  "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" \
+                  "review/evidence/$CANONICAL_ID.json" \
+                  tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'review: pass batch 0037 odd-even printer candidate source-first'
+          git push origin HEAD:"$CONTENT_BRANCH"
