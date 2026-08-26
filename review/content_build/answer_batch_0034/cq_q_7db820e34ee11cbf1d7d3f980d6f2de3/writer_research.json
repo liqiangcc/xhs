@@ -2,7 +2,7 @@
   "schema_version": "answer_writer_research.v1",
   "canonical_id": "cq_q_7db820e34ee11cbf1d7d3f980d6f2de3",
   "checked_at": "2026-08-26",
-  "review_state": "writer_complete_isolated_review_pending",
+  "review_state": "independent_source_first_review_passed",
   "sources": [
     {
       "source_id": "repository-source",
@@ -16,6 +16,13 @@
       "title": "Deterministic JDK 21 deadlock reproduction and ThreadMXBean detection",
       "locator": "review/content_build/answer_batch_0034/cq_q_7db820e34ee11cbf1d7d3f980d6f2de3/code_validation.json",
       "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Independent source-first deadlock candidate review",
+      "locator": "review/content_build/answer_batch_0034/cq_q_7db820e34ee11cbf1d7d3f980d6f2de3/isolated_review_result.json",
+      "source_type": "repository_structured_source",
       "checked_at": "2026-08-26"
     }
   ],
@@ -57,6 +64,20 @@
         "关键细节",
         "常见追问"
       ]
+    },
+    {
+      "claim_id": "isolated-review-verdict",
+      "text": "Independent source-first review found no hard failures, unsupported claims or uncovered source variants and independently reproduced the exact candidate deadlock under a bounded JDK 21 detector run.",
+      "source_ids": [
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
     }
   ],
   "source_question_coverage": [
@@ -73,5 +94,31 @@
       ]
     }
   ],
-  "promotion_blocker": "isolated_independent_review_human_approval_and_real_review_policy_not_yet_satisfied"
+  "promotion_blocker": "required_human_approval_and_real_review_policy_not_yet_satisfied",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0034-deadlock-20260826-v1",
+    "review_version": "batch-0034.deadlock.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The preserved source explicitly asks both how to avoid deadlock and for a deadlock code example; it does not preserve a required lock primitive, JDK version, business incident or database scenario.",
+      "The candidate directly separates prevention, bounded acquisition/failure recovery, and detection/diagnosis, rather than presenting deadlock detection as prevention.",
+      "The deliberate example is deterministic rather than sleep-probabilistic: a latch ensures both daemon workers hold opposite first ReentrantLocks before each requests the other lock.",
+      "The exact Java fence independently compiles on JDK 21 and ThreadMXBean.findDeadlockedThreads() reports at least two deadlocked threads within a bounded deadline; daemon workers allow the evidence process to exit without pretending the deadlock was resolved.",
+      "The avoidance explanation correctly ties global lock ordering to breaking circular wait, and scopes tryLock timeout to a failure/release/retry protocol while warning about livelock/retry storms. No production history is fabricated."
+    ]
+  }
 }
