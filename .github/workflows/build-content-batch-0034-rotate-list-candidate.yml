@@ -1,0 +1,188 @@
+name: Build Content Batch 0034 Rotate List Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0034-rotate-list-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0034-rotate-list-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7e93bb8ccd946bbd81a28ca6d880ccf5
+  SOURCE_QID: 7e93bb8ccd946bbd81a28ca6d880ccf5
+  SOURCE_NOTE: note_tagged/67b971110000000029035414.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source boundary and ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0034/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,note=process.env.SOURCE_NOTE,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`;
+          const expected='算法：旋转链表 (LeetCode 61)';
+          const tagged=JSON.parse(fs.readFileSync(note,'utf8')); const src=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected||src.question_type!=='算法手撕_Coding') throw new Error('source wording/type drifted');
+          if(src.domain?.l1!=='算法'||src.domain?.l2!=='链表') throw new Error('source domain drifted');
+          const ctx=JSON.parse(fs.readFileSync(path.join(out,'context.json'),'utf8')); if(!ctx.ok||ctx.answer_type!=='coding') throw new Error('canonical context/type drifted');
+          const library=(ctx.source_questions||[]).find(x=>x.original_question===expected); if(!library||!ctx.canonical.question_ids.includes(library.question_id)) throw new Error('Question -> Canonical mapping drifted');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists; refuse overwrite');
+          fs.writeFileSync(path.join(out,'source_mapping.json'),JSON.stringify({schema_version:'answer_source_mapping.v1',canonical_id:cid,library_question_id:library.question_id,note_question_id:qid,note_path:note,original_question:expected,question_type:src.question_type,domain:src.domain,verified_at:'2026-08-26'},null,2)+'\n');
+          const boundary='review/content_build/answer_batch_0034/source_boundary_audit.md';let text=fs.existsSync(boundary)?fs.readFileSync(boundary,'utf8'):'# Answer Batch 0034 Source Boundary Audit\n';const heading=`## ${cid}`;
+          if(!text.includes(heading))text+=`\n${heading}\n\n- Exact repository source: ${note}, question ${qid}.\n- Preserved wording: ${expected}\n- Preserved intent: solve the linked-list rotation problem identified as LeetCode 61.\n- Not preserved locally: full platform statement, exact ListNode declaration, numeric bounds, or negative-k behavior.\n- Executable candidate policy: rotate a singly linked list to the right by non-negative k positions, return null for an empty list, preserve/relink the original nodes without allocating replacement list nodes, and reject negative k.\n- The algorithm computes length, reduces k modulo n, temporarily closes the list into a ring, then breaks the ring at the new tail in O(n) time and O(1) auxiliary space.\n- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.\n`;
+          fs.writeFileSync(boundary,text);
+          NODE
+
+      - name: Write source-bounded rotate-list candidate and fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0034/$cid"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_7e93bb8ccd946bbd81a28ca6d880ccf5","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 旋转链表（LeetCode 61）
+
+          ## 核心结论
+
+          来源通过 “LeetCode 61” 标识旋转链表题。这里把可执行契约明确出来：把单链表**向右旋转非负 k 个位置**；空链表返回 `null`，`k=0` 或 `k%n=0` 返回原头；只重连原节点，不新建替代节点；负数 k 不在题目契约内，本实现显式拒绝。最简做法是先求长度 n 和原尾节点，把 k 化成 `k % n`，临时让尾节点指回头节点形成环，再走 `n-k-1` 步找到新尾并断环。时间 O(n)，额外空间 O(1)。
+
+          ## 1 分钟版
+
+          - 先遍历一次得到链表长度 `n` 和原尾 `tail`。
+          - `shift = k % n`；如果 `shift == 0`，不需要修改任何 `next`。
+          - 让 `tail.next = head`，先把线性链表临时接成环。
+          - 向右转 `shift` 位后，新尾是原链表第 `n-shift` 个节点，即从 head 再走 `n-shift-1` 条边。
+          - `newHead = newTail.next`，然后 `newTail.next = null` 断环。
+          - 每个节点最多常数次访问，所以 O(n)；只用几个指针和整数，所以 O(1) 额外空间。
+
+          ## 3 分钟版
+
+          ```java
+          public final class RotateList {
+              public static final class ListNode {
+                  public int val;
+                  public ListNode next;
+                  public ListNode(int val) { this.val = val; }
+              }
+
+              public static ListNode rotateRight(ListNode head, int k) {
+                  if (k < 0) throw new IllegalArgumentException("k must be non-negative");
+                  if (head == null || head.next == null || k == 0) return head;
+
+                  int n = 1;
+                  ListNode tail = head;
+                  while (tail.next != null) {
+                      tail = tail.next;
+                      n++;
+                  }
+
+                  int shift = k % n;
+                  if (shift == 0) return head;
+
+                  tail.next = head;
+                  int stepsToNewTail = n - shift - 1;
+                  ListNode newTail = head;
+                  for (int i = 0; i < stepsToNewTail; i++) {
+                      newTail = newTail.next;
+                  }
+
+                  ListNode newHead = newTail.next;
+                  newTail.next = null;
+                  return newHead;
+              }
+          }
+          ```
+
+          例如 `1→2→3→4→5`、`k=2`：`n=5`，新尾应该是第 `5-2=3` 个节点 3。先连接 `5→1` 成环，找到 3 后令新头为 4，再断开 `3.next`，结果就是 `4→5→1→2→3`。
+
+          ## 关键细节
+
+          - **先取模**：旋转 n 次等于没旋转，所以 `k % n` 能把很大的 k 收敛到 `[0,n-1]`。
+          - **断环位置**：右转 shift 后，新头是原来的第 `n-shift+1` 个节点（1-based），因此新尾是第 `n-shift` 个；从 head 走的边数是 `n-shift-1`。
+          - **`shift==0` 提前返回**：如果先成环再忘记断开，会把原本合法链表变成永久环；提前返回也避免无意义写操作。
+          - **节点身份**：题目是链表重排，本实现只修改 `next`，不复制节点。测试不仅要比较值顺序，也要确认所有原节点恰好出现一次且最终无环。
+          - **负 k**：来源没有要求左旋/负数语义；本答案选择显式拒绝，而不是让 Java `%` 的负余数悄悄产生错误下标。
+          - **长度为 0/1**：空链表没有取模分母，单节点旋转后身份与结构都不变，所以要在求模前处理。
+
+          ## 原理机制
+
+          右旋并没有改变节点的相对循环顺序，只是改变“从哪个节点作为 head 开始看”以及“哪个位置断开”。因此把链表临时闭环后，问题就从搬动 k 次尾节点变成一次定位切口：长度是 n、右移 shift，那么新的线性序列从原下标 `n-shift`（0-based）开始，新尾正好是它前一个节点。这样避免做 k 次 O(n) 找尾操作。
+
+          ## 项目经验版
+
+          来源没有真实项目或性能数据，不能虚构线上使用链表旋转的经历。实际代码里如果只是业务容器重排，通常优先使用语言标准集合而不是手写链表；这道题的价值在于验证指针不变量。工程验证应特别检查“没有丢节点、没有重复节点、没有遗留环”，而不仅是输出值看起来正确。
+
+          ## 常见追问
+
+          - 问：为什么不每次把尾节点摘下来放到头部？答：一次旋转就要先找到尾及前驱，单链表是 O(n)，重复 k 次最坏 O(kn)；闭环找切口只需 O(n)。
+          - 问：为什么需要 `k % n`？答：完整旋转 n 次结构回到原样，模运算消掉整圈；也避免 k 很大时做无意义工作。
+          - 问：怎么证明没有丢节点？答：成环前链表的每个原节点都在唯一 next 链上；成环只新增一条 `tail→head` 边，最后只删除新尾的一条出边，因此节点集合不变，只改变线性起点。
+          - 问：如何检测忘记断环？答：测试遍历时限制最多 n 个节点并要求第 n 个节点的 next 为 null，或者用快慢指针检查最终结果无环。
+          - 问：能不能用快慢指针？答：可以在得到 n 和 shift 后让快指针先走 shift，再快慢一起到尾，此时慢指针定位新尾；本质仍是在找同一个切口。
+
+          ## 易错点
+
+          - 空链表时就执行 `k % n`，触发除零。
+          - 把新尾位置写成 `n-shift` 条边而多走一步。
+          - `shift==0` 时仍成环却没有正确断开。
+          - 只比较输出值，没检查原节点身份、节点数量和是否产生环。
+          - 把负 k 交给 `%` 后继续执行，却没有定义左旋或负数契约。
+          EOF
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8'),f=md.match(/```java\n([\s\S]*?)\n```/);if(!f)throw new Error('Java fence missing');fs.writeFileSync(`review/content_build/answer_batch_0034/${cid}/RotateList.java`,f[1].trim()+'\n');
+          NODE
+          cat > "$out/RotateListTest.java" <<'JAVA'
+          import java.util.*;
+          public final class RotateListTest {
+              static RotateList.ListNode[] nodes(int...v){RotateList.ListNode[] a=new RotateList.ListNode[v.length];for(int i=0;i<v.length;i++){a[i]=new RotateList.ListNode(v[i]);if(i>0)a[i-1].next=a[i];}return a;}
+              static void check(int[] vals,int k,int[] expected){RotateList.ListNode[] a=nodes(vals);RotateList.ListNode h=a.length==0?null:a[0];RotateList.ListNode r=RotateList.rotateRight(h,k);List<RotateList.ListNode> seen=new ArrayList<>();for(RotateList.ListNode p=r;p!=null;p=p.next){if(seen.contains(p))throw new AssertionError("cycle");seen.add(p);if(seen.size()>a.length)throw new AssertionError("too many");}if(seen.size()!=a.length)throw new AssertionError("lost node");for(RotateList.ListNode x:a)if(!seen.contains(x))throw new AssertionError("identity lost");int[] got=seen.stream().mapToInt(x->x.val).toArray();if(!Arrays.equals(got,expected))throw new AssertionError(Arrays.toString(got));}
+              public static void main(String[]x){check(new int[]{},0,new int[]{});check(new int[]{1},999,new int[]{1});check(new int[]{1,2,3,4,5},2,new int[]{4,5,1,2,3});check(new int[]{0,1,2},4,new int[]{2,0,1});check(new int[]{1,2,3},3,new int[]{1,2,3});check(new int[]{1,2},Integer.MAX_VALUE,new int[]{2,1});boolean threw=false;try{RotateList.rotateRight(nodes(1,2)[0],-1);}catch(IllegalArgumentException e){threw=true;}if(!threw)throw new AssertionError("negative");System.out.println("PASS empty singleton sample modulo full-cycle huge-k identity no-cycle negative-contract exact-fence");}
+          }
+          JAVA
+
+      - name: Run JDK 21 fixture and freeze writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0034/$cid";mkdir -p "$out/classes";javac -d "$out/classes" "$out/RotateList.java" "$out/RotateListTest.java";stdout="$(java -cp "$out/classes" RotateListTest)";test "$stdout" = 'PASS empty singleton sample modulo full-cycle huge-k identity no-cycle negative-contract exact-fence'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0034/${process.env.CANONICAL_ID}`,m=JSON.parse(fs.readFileSync(path.join(out,'source_mapping.json'),'utf8'));
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',command:'javac exact rotate-list fence + identity/structure tests && java RotateListTest',stdout:process.env.STDOUT,checks:['empty/singleton','sample and modulo cases','full-cycle and huge k','original node identity preservation','no cycle/lost node','negative-k contract']},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Repository source identifying Rotate List / LeetCode 61 and boundary audit',locator:`${m.note_path} + ${out}/source_mapping.json + review/content_build/answer_batch_0034/source_boundary_audit.md`,source_type:'repository_source_record',checked_at:'2026-08-26'},{source_id:'fixture',title:'Deterministic JDK 21 exact-fence rotate-list structural validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}],claims:[{claim_id:'source-boundary',text:'The repository source identifies Rotate List as LeetCode 61 but does not locally preserve the full platform statement, ListNode declaration, bounds or negative-k semantics.',source_ids:['repository-source'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'implementation',text:'Under the explicitly stated right-rotation/non-negative-k contract, the exact candidate relinks the original nodes via length/modulo/ring/cut in O(n) time and O(1) auxiliary space.',source_ids:['fixture'],answer_locations:['核心结论','3 分钟版','关键细节','原理机制']},{claim_id:'structure',text:'The executable fixture verifies value order, original node identities, no lost/duplicate nodes and no residual cycle across boundary cases.',source_ids:['fixture'],answer_locations:['关键细节','常见追问']}],source_question_coverage:[{question_id:m.library_question_id,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_human_approval_and_real_review_policy_not_yet_satisfied'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md';let t=fs.readFileSync(task,'utf8'),p='- Rotate-list canonical `'+cid+'` has a source-bounded right-rotation candidate with exact Java fence, identity/no-cycle validation, and writer evidence; isolated review and promotion gates remain pending.';if(!t.includes(p))t=t.trimEnd()+'\n'+p+'\n';fs.writeFileSync(task,t);
+          NODE
+
+      - name: Commit verified candidate if branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH";remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")";base_head='${{ steps.base.outputs.head }}';if [ "$remote_head" != "$base_head" ];then echo "Content branch advanced: $base_head -> $remote_head; discard local mutation.";exit 0;fi
+          git add review/candidates/answers/"$CANONICAL_ID".md review/content_build/answer_batch_0034 tasks/answer-batches/TASK-20260711-0313-answer-batch-0034.md;git diff --cached --check;git config user.name xhs-content-builder;git config user.email 43640935+liqiangcc@users.noreply.github.com;git commit -m 'content: build batch 0034 rotate-list candidate';git push origin "HEAD:$CONTENT_BRANCH"
