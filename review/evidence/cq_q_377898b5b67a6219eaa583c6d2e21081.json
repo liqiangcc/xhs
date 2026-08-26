@@ -1,0 +1,155 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_377898b5b67a6219eaa583c6d2e21081",
+  "candidate_sha256": "c582c1be79cfbd93788dd7fb1f6301420031d62e50d0faeb5ca291ce38e41243",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "integer-to-one-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "primary-source",
+      "title": "Baidu interview image transcription",
+      "locator": "note_img_txt/66138d03000000001a00e8ca.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer exact-recurrence differential validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_377898b5b67a6219eaa583c6d2e21081/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent reverse-BFS and exact-edge validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_377898b5b67a6219eaa583c6d2e21081/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh source-first isolated review",
+      "locator": "review/content_build/answer_batch_0021/cq_q_377898b5b67a6219eaa583c6d2e21081/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source requires the minimum operations from a positive integer to 1, with even values divided by 2 and odd values allowed +/-1.",
+      "source_ids": [
+        "primary-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "candidate-contract",
+      "text": "Java int input, invalid-input rejection, and long intermediate state are explicit candidate choices, not recovered source requirements.",
+      "source_ids": [
+        "primary-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "algorithm-validation",
+      "text": "Greedy low-bit implementation including the n=3 exception matches writer exact recurrence and independent reviewer reverse-BFS/edge validation; Integer.MAX_VALUE is safely handled.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "377898b5b67a6219eaa583c6d2e21081",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract candidate Java; javac -Xlint:all -Werror; reverse-graph BFS 1..100000 plus exact edge recurrence",
+    "result": "pass",
+    "reported_stdout": "PASS reverse-bfs=1..100000 exact-edges=11 int-max=32 invalid=reject",
+    "checks": [
+      "candidate Java compiles with warnings-as-errors",
+      "reverse BFS equality for all n=1..100000",
+      "n=3 exception",
+      "powers-of-two-adjacent edge values",
+      "Integer.MAX_VALUE exact result 32",
+      "declared invalid-input rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "source versus Java API",
+        "expected": "Java/int/exception contract remains explicitly answer-side",
+        "passed": true
+      },
+      {
+        "case": "odd 3 exception",
+        "expected": "3 reaches 1 in two operations by decrementing",
+        "passed": true
+      },
+      {
+        "case": "int overflow boundary",
+        "expected": "Integer.MAX_VALUE can increment safely via long intermediate state",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-integer-to-one-20260826-v1",
+    "review_version": "integer-to-one.greedy.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The primary source preserves only the positive-integer transition rules and minimum-step goal; Java, int range, invalid-input behavior, and implementation strategy are not source constraints.",
+      "Candidate explicitly labels the Java int API and long intermediate state as answer-side choices and does not expand them into source facts.",
+      "Even states are treated as forced division; odd-state low-bit reasoning includes the n=3 exception and the Integer.MAX_VALUE overflow boundary.",
+      "Reviewer-extracted Java compiles with warnings as errors and matches a reviewer-owned reverse-graph BFS for every n from 1 through 100000; selected edge values including Integer.MAX_VALUE also match an exact recurrence.",
+      "The O(log n) time and O(1) auxiliary-space claims match the iterative implementation over a fixed-width integer domain.",
+      "No fabricated production experience, placeholder code, or unresolved source variant was found."
+    ]
+  }
+}
