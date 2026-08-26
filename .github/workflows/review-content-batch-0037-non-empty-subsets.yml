@@ -101,8 +101,7 @@ jobs:
             }
           }
           '''
-          pathlib.Path(f'{tmp_path(cid)}/CandidateHarness.java').write_text(harness)
-          def tmp_path(c): return f'review/content_build/answer_batch_0037/{c}/reviewer_tmp'
+          pathlib.Path(f'review/content_build/answer_batch_0037/{cid}/reviewer_tmp/CandidateHarness.java').write_text(harness)
           PY
 
           (cd "$tmp" && javac CandidateHarness.java && java CandidateHarness > stdout.txt)
@@ -202,4 +201,9 @@ jobs:
                   "review/evidence/$CANONICAL_ID.json" \
                   tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
           git commit -m 'review: pass batch 0037 non-empty subsets candidate source-first'
-          git push origin HEAD:"$CONTENT_BRANCH"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
