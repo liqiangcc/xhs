@@ -1,0 +1,322 @@
+name: Build Content Batch 0036 Sliding Window Maximum Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0036-sliding-window-maximum.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0036-sliding-window-maximum-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c
+  EXPLICIT_QID: b55a6649e9e0b7e2351c5d1f3d5f167c
+  SHORTHAND_QID: 86a4c030e736e3eea9fed1f6b739694d
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard consolidated source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID, explicit=process.env.EXPLICIT_QID, shorthand=process.env.SHORTHAND_QID;
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0036/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('Sliding Window Maximum canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          const members=[...(ctx.canonical?.question_ids||[])].sort();
+          const expected=[explicit,shorthand].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`consolidated ownership drifted: ${JSON.stringify(members)}`);
+          const byQ=new Map((ctx.source_questions||[]).map(q=>[q.question_id,q]));
+          const expectedTitles=new Map([
+            [explicit,'算法手撕：滑动窗口最大值（Sliding Window Maximum）。'],
+            [shorthand,'算法手撕：滑动窗口的最大值（Sliding Window Maximum）。'],
+          ]);
+          for(const [qid,text] of expectedTitles){
+            const q=byQ.get(qid);
+            if(!q||q.original_question!==text) throw new Error(`${qid}: source wording drifted: ${q?.original_question}`);
+          }
+          const rr=fs.readFileSync('review/content_build/answer_batch_0036/sliding_window_max_relation_review.md','utf8');
+          const phrase='给定一个数组和滑动窗口大小K，返回每个滑动窗口的最大值。';
+          if(!rr.includes('Relation: `same`')||!rr.includes(phrase)||!rr.includes(cid)) throw new Error('sliding-window relation review missing or stale');
+          NODE
+
+      - name: Write source-bounded candidate and executable oracle fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          if [ -e "$candidate" ]; then
+            echo 'Candidate already exists; fail closed rather than overwrite a reviewable artifact.'
+            exit 1
+          fi
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 算法手撕：滑动窗口最大值（Sliding Window Maximum）
+
+          ## 核心结论
+
+          仓库的完整来源只保留了“给定一个数组和滑动窗口大小 K，返回每个滑动窗口的最大值”，另一条合并来源只保留题名。最合适的数据结构是保存下标的单调双端队列：队首始终是当前窗口最大值的下标；新元素进入时从队尾删除所有不大于它的旧候选，并在每一步先淘汰已经滑出左边界的下标。每个下标最多入队、出队一次，所以时间 `O(n)`，队列最多保存 `k` 个下标，额外空间 `O(k)`。
+
+          ## 1 分钟版
+
+          - 队列存下标，不直接存值，这样既能判断元素是否已经离开窗口，也能通过下标取最大值。
+          - 维护队列对应值从队首到队尾严格递减；队首就是当前窗口最大值。
+          - 扫描到下标 `i` 时，先删除 `<= i-k` 的队首，因为这些位置已经不属于当前窗口。
+          - 再从队尾删除 `nums[dq.last] <= nums[i]` 的下标：新元素更靠右且不小于旧元素，旧元素以后不可能再成为任何窗口最大值。
+          - 把 `i` 入队；当 `i >= k-1` 时输出 `nums[dq.first]`。
+          - 每个下标只会入队一次、从队首或队尾移除一次，因此总时间 `O(n)`，空间 `O(k)`。
+
+          ## 3 分钟版
+
+          来源没有保存函数签名、`k` 非法时的行为或 `null` 约束。为了让实现可执行，下面显式采用本地练习合同：输入非 `null` 的 `int[] nums` 和 `1 <= k <= nums.length`；非法 `k` 或 `null` 输入抛 `IllegalArgumentException`。这些是测试合同，不冒充原题原文。
+
+          ```java
+          import java.util.ArrayDeque;
+          import java.util.Deque;
+
+          public final class SlidingWindowMaximum {
+              public static int[] maxSlidingWindow(int[] nums, int k) {
+                  if (nums == null || k <= 0 || k > nums.length) {
+                      throw new IllegalArgumentException("invalid input");
+                  }
+
+                  int[] answer = new int[nums.length - k + 1];
+                  Deque<Integer> deque = new ArrayDeque<>();
+                  int out = 0;
+
+                  for (int i = 0; i < nums.length; i++) {
+                      while (!deque.isEmpty() && deque.peekFirst() <= i - k) {
+                          deque.removeFirst();
+                      }
+                      while (!deque.isEmpty() && nums[deque.peekLast()] <= nums[i]) {
+                          deque.removeLast();
+                      }
+                      deque.addLast(i);
+
+                      if (i >= k - 1) {
+                          answer[out++] = nums[deque.peekFirst()];
+                      }
+                  }
+                  return answer;
+              }
+          }
+          ```
+
+          正确性的核心不变量是：队列中的下标都属于当前窗口候选范围，并且对应数值从队首到队尾严格递减。队尾被删除的旧元素同时满足“更早”和“不更大”，所以在新元素仍处于窗口期间它不可能成为最大值；等新元素离开窗口时，这个旧元素一定更早就已经离开，因此永久淘汰是安全的。队首则是所有仍存活候选中最大的值。
+
+          ## 关键细节
+
+          - **为什么存下标**：窗口滑动依赖位置；只存值无法可靠判断哪个重复值已经过期。
+          - **过期条件**：扫描到 `i` 时当前窗口左边界是 `i-k+1`，因此下标 `<= i-k` 必须删除。
+          - **重复最大值**：这里用 `<=` 从队尾删除，让较新的相同值保留。改成 `<` 也能得到正确最大值，但会保留更多相等候选；两种策略都必须配合正确的过期逻辑。
+          - **输出时机**：只有扫描完前 `k` 个元素以后才形成第一个完整窗口，即 `i >= k-1`。
+          - **`k=1`**：每个元素自己就是窗口最大值，输出与输入相同。
+          - **`k=n`**：只产生一个窗口，输出整个数组最大值。
+          - **复杂度**：嵌套 `while` 不代表 `O(nk)`；一个下标最多入队一次，并最多从某一端移除一次，所以所有队列操作总计 `O(n)`。
+
+          ## 原理机制
+
+          暴力方案会为每个长度为 `k` 的窗口重新扫描 `k` 个元素，最坏时间 `O(nk)`。单调队列把“未来仍可能成为最大值”的候选压缩保存下来。若一个旧候选 `j` 在新位置 `i` 到来时满足 `j < i` 且 `nums[j] <= nums[i]`，那么任何同时包含 `j` 和 `i` 的未来窗口里，`j` 都赢不了 `i`；而 `j` 又比 `i` 更早离开窗口，所以它从此没有成为最大值的机会，可以永久删除。这一支配关系正是单调队列能线性处理问题的原因。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构线上使用。工程上遇到固定长度时间窗的最大值、峰值或最小值维护时，可以先判断是否具有与本题相同的“过期 + 支配淘汰”结构；若窗口按时间戳而不是固定元素数滑动，过期判断要改成时间条件；若还要支持任意删除、分位数或动态窗口，单调队列可能不再满足需求，需要换成堆、平衡树或其他结构。
+
+          ## 常见追问
+
+          - 问：为什么队尾小于当前值的元素可以永久删除？答：它既比当前元素更早，又不比当前元素大；只要当前元素还在窗口，它就不可能成为最大值，而它会更早离开窗口，所以以后也没有翻身机会。
+          - 问：为什么要先删过期元素？答：队首可能已经不在当前窗口；如果直接读队首会把旧窗口的最大值带进新窗口。只要在输出前完成过期清理都可以，先清理最容易维持明确不变量。
+          - 问：重复值怎么办？答：本实现删除旧的相等值、保留较新的相等值。较新值寿命更长且最大值相同，所以不会影响答案。
+          - 问：能不能用优先队列？答：可以维护值和下标并惰性删除过期元素，通常是 `O(n log k)`；单调双端队列利用本题的顺序与支配关系可做到 `O(n)`。
+          - 问：为什么不是普通滑动窗口变量就够了？答：窗口左端移走的元素可能正是当前最大值，仅保存一个最大值无法知道次大候选；单调队列保存了按支配关系压缩后的候选集合。
+          - 问：如果题目要求滑动窗口最小值？答：结构完全对称，把队列维护方向反过来，让队首始终对应最小值即可。
+
+          ## 易错点
+
+          - 只存值不存下标，重复值和过期判断容易出错。
+          - 把过期条件写成 `< i-k`，导致恰好离开窗口的下标多留一轮。
+          - 第一个窗口还没形成就开始写结果，产生数量或下标偏移错误。
+          - 看到嵌套 `while` 就误判为二次复杂度，没有做“每个下标只进出一次”的摊还分析。
+          - 把本候选采用的非法 `k`/`null` 行为说成来源已明确要求。
+          EOF
+
+          cat > "$out/SlidingWindowMaximumValidation.java" <<'JAVA'
+          import java.util.ArrayDeque;
+          import java.util.Arrays;
+          import java.util.Deque;
+          import java.util.Random;
+
+          public final class SlidingWindowMaximumValidation {
+              static int[] solve(int[] nums, int k) {
+                  if (nums == null || k <= 0 || k > nums.length) throw new IllegalArgumentException("invalid input");
+                  int[] answer = new int[nums.length - k + 1];
+                  Deque<Integer> deque = new ArrayDeque<>();
+                  int out = 0;
+                  for (int i = 0; i < nums.length; i++) {
+                      while (!deque.isEmpty() && deque.peekFirst() <= i - k) deque.removeFirst();
+                      while (!deque.isEmpty() && nums[deque.peekLast()] <= nums[i]) deque.removeLast();
+                      deque.addLast(i);
+                      if (i >= k - 1) answer[out++] = nums[deque.peekFirst()];
+                  }
+                  return answer;
+              }
+
+              static int[] oracle(int[] nums, int k) {
+                  int[] answer = new int[nums.length - k + 1];
+                  for (int left = 0; left + k <= nums.length; left++) {
+                      int max = nums[left];
+                      for (int j = left + 1; j < left + k; j++) max = Math.max(max, nums[j]);
+                      answer[left] = max;
+                  }
+                  return answer;
+              }
+
+              static void check(int[] nums, int k) {
+                  int[] actual = solve(nums, k), expected = oracle(nums, k);
+                  if (!Arrays.equals(actual, expected)) {
+                      throw new AssertionError("nums=" + Arrays.toString(nums) + " k=" + k + " actual=" + Arrays.toString(actual) + " expected=" + Arrays.toString(expected));
+                  }
+              }
+
+              public static void main(String[] args) {
+                  check(new int[]{1,3,-1,-3,5,3,6,7}, 3);
+                  check(new int[]{1}, 1);
+                  check(new int[]{4,3,2,1}, 2);
+                  check(new int[]{1,2,3,4}, 2);
+                  check(new int[]{2,2,2,2}, 2);
+                  check(new int[]{-4,-2,-5,-1}, 2);
+                  check(new int[]{9,1,9,1,9}, 3);
+                  check(new int[]{5,1,4,3,2}, 5);
+                  if (!Arrays.equals(solve(new int[]{7,6,5},1), new int[]{7,6,5})) throw new AssertionError("k=1 boundary failed");
+                  try { solve(new int[]{1,2},0); throw new AssertionError("k=0 accepted"); } catch (IllegalArgumentException expected) {}
+                  try { solve(new int[]{1,2},3); throw new AssertionError("k>n accepted"); } catch (IllegalArgumentException expected) {}
+                  try { solve(null,1); throw new AssertionError("null accepted"); } catch (IllegalArgumentException expected) {}
+                  Random random = new Random(20260826L);
+                  for (int t = 0; t < 5000; t++) {
+                      int n = 1 + random.nextInt(40);
+                      int[] nums = new int[n];
+                      for (int i = 0; i < n; i++) nums[i] = random.nextInt(41) - 20;
+                      int k = 1 + random.nextInt(n);
+                      check(nums, k);
+                  }
+                  System.out.println("PASS fixed=9 boundaries=3 randomized=5000 oracle=quadratic-window-scan");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          javac "$out/SlidingWindowMaximumValidation.java"
+          stdout="$(java -cp "$out" SlidingWindowMaximumValidation)"
+          test "$stdout" = 'PASS fixed=9 boundaries=3 randomized=5000 oracle=quadratic-window-scan'
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID, explicit=process.env.EXPLICIT_QID, shorthand=process.env.SHORTHAND_QID;
+          const out=`review/content_build/answer_batch_0036/${cid}`;
+          const date='2026-08-26';
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,
+            command:'javac SlidingWindowMaximumValidation.java && java SlidingWindowMaximumValidation',stdout:process.env.STDOUT,
+            checks:['canonical example','k=1','k=n','strictly increasing','strictly decreasing','duplicate maxima','negative values','invalid k under adopted local contract','null under adopted local contract','5000 deterministic randomized arrays'],
+            boundary_tests:['window expiry at i-k','duplicate maxima','k=1','k=n','invalid k is adopted contract rather than source fact'],
+            oracle:'independent quadratic per-window maximum scan'
+          },null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,
+            review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'relation-review',title:'Sliding Window Maximum source-first relation review',locator:'review/content_build/answer_batch_0036/sliding_window_max_relation_review.md',source_type:'repository_source_record',checked_at:date},
+              {source_id:'explicit-repository-source',title:'Source-explicit Sliding Window Maximum interview record',locator:`note_tagged/68b124e8000000001b032114.json#question_id=${explicit}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'shorthand-repository-source',title:'Consolidated Sliding Window Maximum shorthand source',locator:`note_tagged/68b85518000000001d026c52.json#question_id=${shorthand}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'fixture',title:'Sliding Window Maximum deterministic and randomized executable oracle',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The preserved fuller source asks for an array plus window size K and one maximum per window; exact method signature, invalid-k behavior, null behavior and complexity requirement are not preserved source constraints.',source_ids:['relation-review','explicit-repository-source','shorthand-repository-source'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},
+              {claim_id:'algorithm-behavior',text:'Under the candidate adopted executable contract, the monotonic deque matches an independent quadratic oracle on fixed boundary cases and 5000 deterministic randomized arrays.',source_ids:['fixture'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}
+            ],
+            source_question_coverage:[
+              {question_id:explicit,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制']},
+              {question_id:shorthand,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版']}
+            ],
+            promotion_blocker:'isolated_independent_review_not_yet_performed'
+          },null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [ ] `cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c` consolidated Sliding Window Maximum survivor now has a source-bounded candidate with explicit adopted API/invalid-input assumptions and an executable Java monotonic-deque implementation matching an independent quadratic oracle across fixed boundaries plus 5000 deterministic randomized arrays. Writer evidence is frozen; isolated source-first review is still required before promotion.';
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+          find "$out" -name '*.class' -delete
+
+      - name: Run repository gates before publishing candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during sliding-window writer slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: build sliding-window-maximum candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
