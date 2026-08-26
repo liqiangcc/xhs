@@ -1,0 +1,64 @@
+name: Remediate Content Batch 0039 Expression Evaluator Literal Boundary
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0039-expression-evaluator-literal-boundary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-expression-evaluator-literal-boundary
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9c43dc0f1e5fa93786e94fc1bf818de3
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Clarify exact literal domain and revalidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="review/candidates/answers/$CANONICAL_ID.md"
+          python3 - <<'PY'
+          import os,pathlib
+          p=pathlib.Path(f"review/candidates/answers/{os.environ['CANONICAL_ID']}.md")
+          s=p.read_text()
+          old="Java 21、十进制 `long` 整数、空白可出现、支持二元 `+ - * /`、一元 `+ -` 和任意嵌套圆括号"
+          new="Java 21、非负十进制数字字面量必须落在 `0..Long.MAX_VALUE`，负值由一元 `-` 或运算产生且每一步结果必须落在 `long` 范围；空白可出现、支持二元 `+ - * /`、一元 `+ -` 和任意嵌套圆括号"
+          if old not in s: raise SystemExit('core literal-boundary marker drifted')
+          s=s.replace(old,new,1)
+          old2="- **溢出**：数字扫描和四则运算都使用 `Math.*Exact`；超出 `long` 表示范围就失败。若题目要求任意精度，应把数值层替换成 `BigInteger`，解析结构无需改变。"
+          new2="- **溢出**：当前数字扫描先读取非负十进制 magnitude，因此单个数字字面量上限是 `Long.MAX_VALUE`；负值由一元 `-` 或后续运算产生。扫描和四则运算都使用 `Math.*Exact`，任一步超出 `long` 范围就失败。若题目要求直接接受 `-9223372036854775808` 这样的最小值字面量或任意精度，应调整 lexer/数值层（例如使用带符号解析或 `BigInteger`），解析优先级结构无需改变。"
+          if old2 not in s: raise SystemExit('overflow marker drifted')
+          p.write_text(s.replace(old2,new2,1))
+          PY
+          out="review/content_build/answer_batch_0039/$CANONICAL_ID"
+          javac "$out/ExpressionEvaluator.java" "$out/ExpressionEvaluatorTest.java"
+          java -cp "$out" ExpressionEvaluatorTest | grep -Fx 'PASS precedence parentheses nesting unary left-associativity division invalid-input divide-zero overflow'
+          find "$out" -name '*.class' -delete
+          git diff --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "$file"
+          git commit -m 'content: clarify batch 0039 expression literal boundary'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
