@@ -1,0 +1,207 @@
+name: Remediate Content Batch 0036 Minimum Subarray Relations
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0036-min-subarray-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0036-min-subarray-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  STRICT_QID: 85dca72d93b635bce7ae1bf0a34a4d6a
+  STRICT_CID: cq_q_85dca72d93b635bce7ae1bf0a34a4d6a
+  GE_QID_A: c9140120c502ec6ff9bb5b3a272a7cc7
+  GE_CID_A: cq_q_c9140120c502ec6ff9bb5b3a272a7cc7
+  GE_QID_B: f59bce25182f9cab55ea413875396272
+  GE_CID_B: cq_q_f59bce25182f9cab55ea413875396272
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first neighborhood and relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0036
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const expected=new Map([
+            [process.env.STRICT_QID,'算法：大于目标值的最短子数组？'],
+            [process.env.GE_QID_A,'算法：和大于等于目标值的最短连续子数组 (滑动窗口)'],
+            [process.env.GE_QID_B,'算法手撕：和大于等于目标值的最短连续子数组。'],
+          ]);
+          for(const [qid,text] of expected){
+            const q=byQ.get(qid);
+            if(!q||q.original_question!==text) throw new Error(`${qid}: source wording drifted: ${q?.original_question}`);
+            if(q.is_valid_for_library===false) throw new Error(`${qid}: unexpectedly invalid before relation review`);
+            if(!String(q.question_type||'').includes('Coding')) throw new Error(`${qid}: not a Coding question: ${q.question_type}`);
+          }
+          const ownership=[
+            [process.env.STRICT_QID,process.env.STRICT_CID],
+            [process.env.GE_QID_A,process.env.GE_CID_A],
+            [process.env.GE_QID_B,process.env.GE_CID_B],
+          ];
+          for(const [qid,cid] of ownership){
+            if(byQ.get(qid)?.canonical_id!==cid) throw new Error(`${qid}: ownership drifted to ${byQ.get(qid)?.canonical_id}`);
+            const c=byC.get(cid);
+            if(!c||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error(`${cid}: expected singleton before relation review: ${JSON.stringify(c?.question_ids)}`);
+          }
+          const neighborhood=questions.filter(q=>q.is_valid_for_library!==false && /(?:大于|大于等于).*目标值.*最短.*子数组|最短.*子数组.*(?:大于|大于等于).*目标值/.test(q.original_question||''));
+          const ids=neighborhood.map(q=>q.question_id).sort();
+          const expectedIds=[process.env.STRICT_QID,process.env.GE_QID_A,process.env.GE_QID_B].sort();
+          if(JSON.stringify(ids)!==JSON.stringify(expectedIds)) throw new Error(`minimum-subarray source-near neighborhood drifted: ${JSON.stringify(neighborhood.map(q=>({qid:q.question_id,text:q.original_question,cid:q.canonical_id})))}`);
+
+          const rawA=fs.readFileSync('note_desc/681a34e3000000002102e69d.txt','utf8');
+          const rawB=fs.readFileSync('note_desc/681b47a100000000220350a7.txt','utf8');
+          const rawC=fs.readFileSync('note_desc/6833da02000000000303954e.txt','utf8');
+          if(!rawA.includes('题目代码题：大于目标值的最短子数组')) throw new Error('strict raw source phrase missing');
+          if(!rawB.includes('算法题：和大于等于目标值的最短连续子数组')) throw new Error('first >= raw source phrase missing');
+          if(!rawC.includes('和大于等于目标值的最短连续子数组')) throw new Error('second >= raw source phrase missing');
+
+          const review=`# Minimum Subarray Source-First Relation Review\n\n`+
+            `## Primary-source facts\n\n`+
+            `- \`${process.env.STRICT_QID}\`: raw source preserves “大于目标值的最短子数组”; current normalized Question is “${expected.get(process.env.STRICT_QID)}”.\n`+
+            `- \`${process.env.GE_QID_A}\`: raw source preserves “和大于等于目标值的最短连续子数组”.\n`+
+            `- \`${process.env.GE_QID_B}\`: a second raw source independently preserves the same “和大于等于目标值的最短连续子数组” wording.\n`+
+            `- corpus-wide active source-near enumeration for target-value minimum subarrays returns exactly these three Questions.\n`+
+            `- none of the three raw source fragments preserves the element-sign domain, target domain, exact API, examples, or empty/no-solution output convention.\n\n`+
+            `No historical relation/remediation decision was consulted before this conclusion.\n\n`+
+            `## Decisions\n\n`+
+            `1. \`${process.env.GE_QID_A}\` and \`${process.env.GE_QID_B}\`: relation \`same\`. Both preserve the same >= target contiguous-minimum-subarray contract; wording differences are presentation only. Preserve \`${process.env.GE_CID_A}\` as survivor and retire duplicate \`${process.env.GE_CID_B}\`.\n`+
+            `2. \`${process.env.STRICT_QID}\` versus the >= pair: relation \`related\`, not \`same\`. The strict > versus >= comparator changes equality-boundary outputs, so source-first normalization must not erase that distinction absent stronger evidence that the strict source is a transcription error. Preserve \`${process.env.STRICT_CID}\` independently.\n`+
+            `3. Content consequence: both surviving Answers remain \`needs_update\`. A sliding-window implementation is only conditionally valid when the element domain gives the needed monotonicity (for example positive/nonnegative inputs); the raw sources do not preserve that constraint. Rebuild/review must label any adopted executable domain rather than presenting it as source fact.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0036/min_subarray_relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select decide and apply exact duplicate >= pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0036/min_subarray_relation_apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$GE_QID_A,$GE_QID_B" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected exactly one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0];
+          const actual=[...c.question_ids].sort();
+          const expected=[process.env.GE_QID_A,process.env.GE_QID_B].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected pair drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0036-min-subarray-source-first-review \
+            --actor-display-name 'Minimum subarray source-first reviewer' \
+            --rationale 'Two independent raw sources preserve the same “和大于等于目标值的最短连续子数组” contract. Consolidate only this exact >= pair. Keep the separate strict “大于目标值” Question distinct because equality changes observable outputs.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$GE_CID_A" \
+            --canonical-title '算法：和大于等于目标值的最短连续子数组 (滑动窗口)' > "$out/apply.json"
+
+      - name: Verify exact ownership effects and record boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q])),byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          for(const qid of [process.env.GE_QID_A,process.env.GE_QID_B]) if(byQ.get(qid)?.canonical_id!==process.env.GE_CID_A) throw new Error(`${qid}: >= survivor ownership missing`);
+          if(byC.has(process.env.GE_CID_B)) throw new Error('duplicate >= Canonical survived reviewed consolidation');
+          const members=[...(byC.get(process.env.GE_CID_A)?.question_ids||[])].sort();
+          const expected=[process.env.GE_QID_A,process.env.GE_QID_B].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`>= survivor members drifted: ${JSON.stringify(members)}`);
+          if(byQ.get(process.env.STRICT_QID)?.canonical_id!==process.env.STRICT_CID) throw new Error('strict > Question was incorrectly merged');
+          const strict=byC.get(process.env.STRICT_CID);
+          if(!strict||JSON.stringify(strict.question_ids||[])!==JSON.stringify([process.env.STRICT_QID])) throw new Error('strict > Canonical member set drifted');
+
+          fs.writeFileSync('review/content_build/answer_batch_0036/min_subarray_relation_apply.md',
+            '# Minimum Subarray Relation Application\n\n'+
+            '- `>=` source pair relation: `same`; both Questions now owned by survivor `'+process.env.GE_CID_A+'`.\n'+
+            '- Retired duplicate `>=` Canonical: `'+process.env.GE_CID_B+'`.\n'+
+            '- Strict `>` Question remains independently owned by `'+process.env.STRICT_CID+'`; source-first relation to the `>=` survivor is `related`, not `same`.\n'+
+            '- Neither survivor is promoted by this normalization slice. Missing element-domain/API constraints remain explicit content-rebuild boundaries.\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_85dca72d93b635bce7ae1bf0a34a4d6a` strict-`>` minimum-subarray source was independently compared source-first with the two repository `>=` target minimum-subarray sources. The two `>=` sources are consolidated as one Canonical, while this strict-`>` Canonical remains distinct (`related`, not `same`) because equality changes observable results. Raw sources do not preserve the element-sign/API contract, so the Answer still requires a source-bounded rebuild that labels any monotonic sliding-window domain as an adopted assumption.';
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Refresh generated audit and run full gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during minimum-subarray relation slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: normalize shortest-subarray source relations'
+          git push origin "HEAD:$CONTENT_BRANCH"
