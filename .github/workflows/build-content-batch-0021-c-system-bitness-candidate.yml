@@ -1,0 +1,225 @@
+name: Build Content Batch 0021 C System Bitness Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0021-c-system-bitness-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-c-system-bitness-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_37772fa23763570fb8d04764450230d3
+  SOURCE_QID_A: 37772fa23763570fb8d04764450230d3
+  SOURCE_QID_B: 8759fdb2629c78e7f847052e43922d24
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard consolidated primary-source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,a=process.env.SOURCE_QID_A,b=process.env.SOURCE_QID_B;
+          const out=`review/content_build/answer_batch_0021/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${out}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding')throw new Error('survivor context missing/type drift');
+          const members=[...(ctx.canonical?.question_ids||[])].sort(),expected=[a,b].sort();if(JSON.stringify(members)!==JSON.stringify(expected))throw new Error(`ownership drifted ${JSON.stringify(members)}`);
+          const src=new Map((ctx.source_questions||[]).map(q=>[q.question_id,q.original_question]));
+          if(src.get(a)!=='如何使用 C 语言编写代码来判断当前操作系统是 32 位还是 64 位？'||src.get(b)!=='如何用 C 语言判断当前 system 是 32 位还是 64 位？')throw new Error(`source wording drifted ${JSON.stringify([...src])}`);
+          const raw='用C语言判断当前系统是32位还是64位';for(const p of ['note_desc/66e0126e000000002603f658.txt','note_desc/67e9712a000000000b02c3fb.txt'])if(!fs.readFileSync(p,'utf8').includes(raw))throw new Error(`${p}: raw source drift`);
+          const relation=fs.readFileSync('review/content_build/answer_batch_0036/c_system_bitness_relation_review.md','utf8');if(!relation.includes('Relation: `same`')||!relation.includes(cid))throw new Error('same-relation review missing');
+          NODE
+
+      - name: Write source-bounded C candidate and executable validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"; candidate="review/candidates/answers/$CANONICAL_ID.md"
+          if [ -e "$candidate" ]; then echo 'candidate already exists; fail closed'; exit 1; fi
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_37772fa23763570fb8d04764450230d3","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 如何用 C 语言判断当前系统是 32 位还是 64 位？
+
+          ## 核心结论
+
+          先澄清“系统位数”指什么。**标准 C 没有一个可移植接口能直接告诉你宿主操作系统内核或 CPU 是 32 位还是 64 位。** `sizeof(void *)` 能可靠告诉当前这个已编译程序中 `void *` 对象占多少个 C 字节；乘以 `CHAR_BIT` 得到它的存储位数。在常见 32/64 位 ABI 中，这通常分别是 32/64 位，因此面试里常把它当作“当前程序/进程位数”的简洁判断，但不能把它无条件等同于宿主 OS 位数：例如 64 位 OS 完全可能运行 32 位进程。
+
+          ## 1 分钟版
+
+          - 如果面试官实际问的是“当前编译出来的程序是 32 位还是 64 位”，可看 `sizeof(void *) * CHAR_BIT`。
+          - `sizeof` 的单位是 C 的 byte，不保证一个 byte 永远是 8 bit，所以严格写法要乘 `<limits.h>` 里的 `CHAR_BIT`。
+          - 常见环境下结果为 32 或 64；若得到其他值，应原样报告，不能硬套二选一。
+          - 这个值描述的是当前程序 ABI 下指针对象的**存储大小**，不等于“可寻址位数”，也不自动证明 OS 内核或 CPU 的位数。
+          - 真要判断宿主 OS/CPU，需要使用目标平台的 API、编译器目标宏或构建系统信息；那已经超出纯标准 C 的可移植能力。
+
+          ## 3 分钟版
+
+          下面给一个可直接编译的标准 C 示例。它有意把输出写成“compiled-program pointer storage”，避免把进程 ABI 误说成宿主操作系统事实：
+
+          ```c
+          #include <limits.h>
+          #include <stddef.h>
+          #include <stdio.h>
+
+          const char *classify_pointer_storage_bits(size_t bits) {
+              if (bits == 32u) return "32-bit pointer storage";
+              if (bits == 64u) return "64-bit pointer storage";
+              return "non-32/64 pointer storage";
+          }
+
+          #ifndef XHS_NO_MAIN
+          int main(void) {
+              const size_t bits = sizeof(void *) * (size_t)CHAR_BIT;
+              printf("compiled-program pointer storage: %zu bits (%s)\n",
+                     bits, classify_pointer_storage_bits(bits));
+              return 0;
+          }
+          #endif
+          ```
+
+          若在典型 x86-64 的 64 位进程里运行，通常会看到 64；若把同一程序按 32 位 ABI 编译并运行，则通常会看到 32。这里的关键是**编译目标/进程 ABI**：即使宿主 OS 是 64 位，32 位兼容进程里的 `sizeof(void *)` 仍可能是 4 个 8-bit byte。因此只凭这个结果不能回答“宿主内核一定是几位”。
+
+          ## 关键细节
+
+          - **`sizeof(void *)` 的含义**：是一个 `void *` 对象占用多少个 C byte。它不是标准 C 对“OS 位数”的定义。
+          - **为什么乘 `CHAR_BIT`**：`sizeof` 以 byte 为单位，C 标准通过 `CHAR_BIT` 描述一个 byte 包含多少 bit；把 4 byte 直接写成 32 bit 隐含了 `CHAR_BIT == 8` 的平台假设。
+          - **不要把存储位数当地址位数**：对象表示可能包含实现细节；`sizeof(void *) * CHAR_BIT` 首先是存储大小，不应进一步宣称等于全部可用虚拟地址位。
+          - **32 位进程 / 64 位 OS**：这就是为什么 `sizeof(void *)` 更适合回答“当前程序/ABI”而不是“宿主 OS”。
+          - **编译器宏的边界**：`_WIN64`、`__x86_64__`、`__aarch64__` 一类宏可以描述特定工具链/目标，但它们不是标准 C 的通用 OS-bitness 查询接口；使用时必须声明平台和编译器边界。
+          - **平台 API 的边界**：若业务真的需要知道宿主内核或 CPU 能力，应针对 Windows/Linux/macOS 等目标平台使用对应 API/系统信息，并测试 32 位进程运行在 64 位宿主上的兼容场景。
+
+          ## 原理机制
+
+          C 源码先被编译成某个目标 ABI 的机器程序。这个 ABI 决定基本类型和指针对象的表示、对齐以及调用约定等。`sizeof(void *)` 是在**编译后的这个程序模型里**求指针对象大小，所以它天然跟“这个程序按什么数据模型/ABI 编译”绑定。操作系统和 CPU 则是程序外部的运行环境；一个 64 位宿主可以提供 32 位兼容 ABI，因此“程序指针大小”和“宿主位数”没有一一对应关系。把这三个层次分开，才能避免 `sizeof(pointer) == 4` 就断言“OS 一定 32 位”的错误。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构。如果工程代码只需要决定当前二进制的数据布局，优先让构建系统按目标 ABI生成配置，或直接使用 `sizeof`/类型能力做编译期与运行期判断；如果功能依赖宿主 OS/CPU 能力，则把探测放进平台适配层，并在 CI 中覆盖原生 64 位、32 位兼容进程等目标组合。不要让业务层根据一个指针大小猜宿主平台能力。
+
+          ## 常见追问
+
+          - 问：直接写 `sizeof(int *) == 8` 可以吗？答：它能观察当前程序里该指针对象的大小，但硬编码 8 byte 还隐含 `CHAR_BIT == 8`；更重要的是它仍不能可移植地证明宿主 OS 是 64 位。
+          - 问：为什么 64 位系统上可能得到 4？答：因为程序可能按 32 位 ABI 编译并通过兼容层运行；`sizeof` 观察的是当前程序的数据模型。
+          - 问：`sizeof(long)` 能不能判断？答：更不能泛化。不同 64 位 ABI 对 `long` 的大小并不统一，例如常见 LP64 与 LLP64 数据模型就不同；判断当前程序指针存储大小应直接看指针类型。
+          - 问：`UINTPTR_MAX` 呢？答：实现若提供 `uintptr_t`，它是能够保存转换后对象指针值的无符号整数类型，可用于讨论该实现的相关整数范围；它仍不是标准 C 的宿主 OS 位数接口，也不能替代平台探测。
+          - 问：用编译器宏是不是更准确？答：它可能更直接描述特定编译目标，但要绑定具体编译器和平台；回答时应明确“目标架构/二进制”与“运行时宿主 OS”不是同一件事。
+          - 问：真正要判断 Windows/Linux 宿主是 32/64 位怎么办？答：使用对应平台明确支持的系统 API或系统信息，并特别验证 32 位进程跑在 64 位 OS 的情况；不要只靠标准 C 的 `sizeof` 推断。
+
+          ## 易错点
+
+          - 直接说“`sizeof(void *) == 8` 所以操作系统一定是 64 位”，混淆程序 ABI 与宿主 OS。
+          - 默认 `sizeof` 的一个 byte 永远等于 8 bit，却不说明 `CHAR_BIT`。
+          - 把指针对象的存储位数进一步等同于 CPU 寄存器宽度、虚拟地址有效位数或物理地址宽度。
+          - 用 `sizeof(long)` 当通用规则，忽略 LP64/LLP64 等不同 ABI 数据模型。
+          - 使用平台宏或 API，却把它描述成“纯标准 C 的可移植方案”。
+          EOF
+
+          cat > "$out/candidate_runtime.c" <<'C'
+          #include <limits.h>
+          #include <stddef.h>
+          #include <stdio.h>
+          const char *classify_pointer_storage_bits(size_t bits) {
+              if (bits == 32u) return "32-bit pointer storage";
+              if (bits == 64u) return "64-bit pointer storage";
+              return "non-32/64 pointer storage";
+          }
+          #ifndef XHS_NO_MAIN
+          int main(void) {
+              const size_t bits = sizeof(void *) * (size_t)CHAR_BIT;
+              printf("compiled-program pointer storage: %zu bits (%s)\n", bits, classify_pointer_storage_bits(bits));
+              return 0;
+          }
+          #endif
+          C
+          cat > "$out/oracle.c" <<'C'
+          #include <limits.h>
+          #include <stddef.h>
+          #include <stdio.h>
+          int main(void) { printf("%zu\n", sizeof(void *) * (size_t)CHAR_BIT); return 0; }
+          C
+          cat > "$out/classifier_test.c" <<'C'
+          #include <stddef.h>
+          #include <stdio.h>
+          #include <string.h>
+          const char *classify_pointer_storage_bits(size_t bits);
+          int main(void) {
+              if (strcmp(classify_pointer_storage_bits(32u), "32-bit pointer storage") != 0) return 1;
+              if (strcmp(classify_pointer_storage_bits(64u), "64-bit pointer storage") != 0) return 2;
+              if (strcmp(classify_pointer_storage_bits(48u), "non-32/64 pointer storage") != 0) return 3;
+              puts("PASS classify=32,64,other");
+              return 0;
+          }
+          C
+
+      - name: Execute C validation and freeze writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"
+          gcc -std=c17 -Wall -Wextra -Werror -pedantic "$out/candidate_runtime.c" -o "$out/candidate_runtime"
+          gcc -std=c17 -Wall -Wextra -Werror -pedantic "$out/oracle.c" -o "$out/oracle"
+          bits="$("$out/oracle")"; runtime="$("$out/candidate_runtime")"
+          case "$runtime" in "compiled-program pointer storage: $bits bits ("*) ;; *) echo "runtime/oracle mismatch: $runtime vs $bits"; exit 1;; esac
+          gcc -std=c17 -Wall -Wextra -Werror -pedantic -DXHS_NO_MAIN "$out/candidate_runtime.c" "$out/classifier_test.c" -o "$out/classifier_test"
+          classifier="$("$out/classifier_test")"; test "$classifier" = 'PASS classify=32,64,other'
+          BITS="$bits" RUNTIME="$runtime" CLASSIFIER="$classifier" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,a=process.env.SOURCE_QID_A,b=process.env.SOURCE_QID_B,date='2026-08-26';const out=`review/content_build/answer_batch_0021/${cid}`;
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'gcc -std=c17 -Wall -Wextra -Werror -pedantic; run candidate, independent sizeof/CHAR_BIT oracle, and 32/64/other classifier harness',stdout:`${process.env.RUNTIME}; ${process.env.CLASSIFIER}`,observed_runner_pointer_storage_bits:Number(process.env.BITS),checks:['candidate C17 compile with warnings-as-errors','runtime pointer-storage report equals independent C oracle on runner ABI','classifier handles 32','classifier handles 64','classifier handles non-32/64 without forcing binary answer'],boundary_tests:['current runner ABI only validates one real environment','32/64/other branches tested synthetically','evidence does not claim runner pointer size equals universal OS bitness']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'raw-a',title:'Primary interview note A',locator:'note_desc/66e0126e000000002603f658.txt',source_type:'repository_source_record',checked_at:date},{source_id:'raw-b',title:'Primary interview note B',locator:'note_desc/67e9712a000000000b02c3fb.txt',source_type:'repository_source_record',checked_at:date},{source_id:'relation',title:'C system bitness source-first same-relation review',locator:'review/content_build/answer_batch_0036/c_system_bitness_relation_review.md',source_type:'repository_structured_source',checked_at:date},{source_id:'fixture',title:'C17 compile/runtime/oracle validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'Both raw notes preserve the same request to use C to determine whether the current system is 32 or 64 bit, but do not define system as process ABI, OS kernel, or CPU capability.',source_ids:['raw-a','raw-b','relation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'executable-sample',text:'The candidate C code compiles as C17, reports sizeof(void*)*CHAR_BIT consistently with an independent runner oracle, and classifies 32/64/other storage widths without forcing an unsupported dichotomy.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节']}],source_question_coverage:[{question_id:a,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制']},{question_id:b,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md';let text=fs.readFileSync(task,'utf8');const note='- [ ] `cq_q_37772fa23763570fb8d04764450230d3` consolidated C system-bitness survivor now has a source-bounded candidate that distinguishes compiled-program pointer storage/ABI from host OS and CPU bitness, uses complete C17 `sizeof(void *) * CHAR_BIT` sample code without claiming a portable OS-bitness probe, and passes warnings-as-errors compile plus independent runner oracle and 32/64/other classifier validation. Writer evidence is frozen; isolated source-first review remains pending.';if(!text.includes(note))text=text.trimEnd()+`\n${note}\n`;fs.writeFileSync(task,text);
+          NODE
+          rm -f "$out/candidate_runtime" "$out/oracle" "$out/classifier_test"
+
+      - name: Run complete candidate gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable survivor head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"; remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "content branch advanced $base_head -> $remote_head; fail closed without push"; exit 0; fi
+          git add -A; git diff --cached --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: build C system-bitness survivor candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
