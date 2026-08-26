@@ -1,0 +1,57 @@
+name: Audit Content Batch 0035 Tree Substructure Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/audit-content-batch-0035-tree-substructure-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SOURCE_CANONICAL: cq_q_7f3216de4698813dc7c1e7cf479deb0f
+  EXISTING_CANONICAL: cq_q_2c267f2f448a08e8b1f1e1590ce6df72
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enumerate source-near binary-tree substructure Questions and ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const matches=questions.filter(q=>q.is_valid_for_library!==false && /二叉树.*子结构|树\s*B.*树\s*A.*子结构|B.*A.*子结构/i.test(q.original_question||''));
+          const ids=[...new Set(matches.map(q=>q.canonical_id).filter(Boolean))];
+          const cs=ids.map(id=>canonicals.find(c=>c.canonical_id===id)).filter(Boolean);
+          console.log('RELATION_AUDIT_BEGIN');
+          console.log(JSON.stringify({
+            source:process.env.SOURCE_CANONICAL,
+            existing:process.env.EXISTING_CANONICAL,
+            match_count:matches.length,
+            canonical_count:ids.length,
+            matches:matches.map(q=>({question_id:q.question_id,canonical_id:q.canonical_id,original_question:q.original_question,source_note_id:q.source_note_id,source_question_index:q.source_question_index,question_type:q.question_type})),
+            canonicals:cs.map(c=>({canonical_id:c.canonical_id,canonical_title:c.canonical_title,frequency:c.frequency,question_ids:c.question_ids,answer_status:c.answer_status}))
+          },null,2));
+          console.log('RELATION_AUDIT_END');
+          NODE
+          echo 'SOURCE_CONTEXT_BEGIN'
+          node scripts/xhs.js answer context --canonical-id "$SOURCE_CANONICAL" --noWrite
+          echo 'SOURCE_CONTEXT_END'
+          echo 'EXISTING_CONTEXT_BEGIN'
+          node scripts/xhs.js answer context --canonical-id "$EXISTING_CANONICAL" --noWrite
+          echo 'EXISTING_CONTEXT_END'
