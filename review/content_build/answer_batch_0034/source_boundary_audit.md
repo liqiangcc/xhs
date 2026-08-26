@@ -64,3 +64,13 @@
 - Not preserved: API name, null-input contract, character encoding/code-point semantics, maximum lengths, or whether all matches versus first match are required.
 - Executable candidate policy: non-null Java String inputs, return the first UTF-16 char index or -1, and return 0 for an empty pattern; use KMP as the primary implementation and explain brute force as the simpler alternative.
 - Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
+
+## cq_q_7e93bb8ccd946bbd81a28ca6d880ccf5
+
+- Exact repository source: note_tagged/67b971110000000029035414.json, question 7e93bb8ccd946bbd81a28ca6d880ccf5.
+- Preserved wording: 算法：旋转链表 (LeetCode 61)
+- Preserved intent: solve the linked-list rotation problem identified as LeetCode 61.
+- Not preserved locally: full platform statement, exact ListNode declaration, numeric bounds, or negative-k behavior.
+- Executable candidate policy: rotate a singly linked list to the right by non-negative k positions, return null for an empty list, preserve/relink the original nodes without allocating replacement list nodes, and reject negative k.
+- The algorithm computes length, reduces k modulo n, temporarily closes the list into a ring, then breaks the ring at the new tail in O(n) time and O(1) auxiliary space.
+- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
