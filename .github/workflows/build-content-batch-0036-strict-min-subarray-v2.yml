@@ -1,0 +1,342 @@
+name: Build Content Batch 0036 Strict Minimum Subarray Candidate v2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0036-strict-min-subarray-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0036-strict-min-subarray-writer-v2
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_85dca72d93b635bce7ae1bf0a34a4d6a
+  SOURCE_QID: 85dca72d93b635bce7ae1bf0a34a4d6a
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard reviewed source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0036/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('strict minimum-subarray context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`strict source ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!=='算法：大于目标值的最短子数组？') throw new Error(`source wording drifted: ${src?.original_question}`);
+          const raw=fs.readFileSync('note_desc/681a34e3000000002102e69d.txt','utf8');
+          if(!raw.includes('题目代码题：大于目标值的最短子数组')) throw new Error('primary raw source phrase missing');
+          const rr=fs.readFileSync('review/content_build/answer_batch_0036/min_subarray_relation_review.md','utf8');
+          if(!rr.includes('relation `related`, not `same`')||!rr.includes('strict > versus >=')) throw new Error('reviewed strict/>= relation boundary missing');
+          const apply=fs.readFileSync('review/content_build/answer_batch_0036/min_subarray_relation_apply.md','utf8');
+          if(!apply.includes('Strict `>` Question remains independently owned')) throw new Error('strict relation application missing');
+          NODE
+
+      - name: Write source-bounded candidate and executable oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          test ! -e "$candidate" || { echo 'Candidate already exists; fail closed.'; exit 1; }
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_85dca72d93b635bce7ae1bf0a34a4d6a","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 算法：大于目标值的最短子数组
+
+          ## 核心结论
+
+          当前仓库原始面经只保留了“**大于目标值的最短子数组**”，并没有保留数组元素是否全为正数/非负数、目标值范围、函数签名和无解返回约定。仓库里另外两条来源明确写的是“**和大于等于目标值**的最短连续子数组”，source-first 关系审查已经把那两条 `>=` 来源合并，同时保留当前严格 `>` 问题为独立 Canonical，因为 `>` 与 `>=` 在“和刚好等于 target”时会得到不同结果。
+
+          因此这题不能无条件套“正整数数组滑动窗口”。面试时我会先确认元素符号域：如果元素保证非负，可以用双指针滑窗；如果允许负数，窗口和对边界移动不再单调，普通滑窗可能漏解。为了让当前残缺来源有一个不依赖隐藏正数条件的完整可执行答案，下面显式采用练习合同：`nums` 可以含任意 `int`，求和**严格大于** `target` 的最短非空连续子数组长度，无解返回 `0`。这个一般版使用前缀和 + 单调双端队列，时间 `O(n)`、空间 `O(n)`。这些 API/输入细节是本答案为验证而采用的合同，不是原题已保存事实。
+
+          ## 1 分钟版
+
+          - 先锁定比较符：当前来源是 `sum > target`，不是 `sum >= target`；相等不能算答案。
+          - 如果数组全为非负数，右端扩张时窗口和不会下降，左端收缩时窗口和不会上升，可以用双指针不断扩右、满足 `sum > target` 后尽量缩左，得到 `O(n)`。
+          - 如果允许负数，上述单调性失效。例如扩右加入负数可能让和变小，缩左移除负数反而可能让和变大，普通滑窗不能保证不漏最优解。
+          - 一般整数版令 `prefix[j]` 为前 `j` 个元素的和，区间 `[i,j)` 的和是 `prefix[j]-prefix[i]`，目标是最小化 `j-i` 且差值严格大于 `target`。
+          - 双端队列保存仍可能成为最优左端的前缀下标，并保持对应前缀和严格递增。队首满足严格阈值时持续弹出并更新答案；新前缀小于等于队尾时，队尾被更晚且更小的前缀完全支配，可以淘汰。
+          - 每个前缀下标最多入队一次、从某一端出队一次，所以总时间 `O(n)`。
+
+          ## 3 分钟版
+
+          采用的可执行合同：输入 `int[] nums` 和 `long target`，允许正数、零、负数；返回最短**非空连续**子数组长度，使其和满足严格 `sum > target`，不存在则返回 `0`。前缀和用 `long`，避免大量 `int` 累加造成 32 位溢出。
+
+          ```java
+          import java.util.ArrayDeque;
+          import java.util.Deque;
+
+          public final class StrictMinSubarray {
+              public static int minLengthStrictlyGreater(long target, int[] nums) {
+                  int n = nums.length;
+                  long[] prefix = new long[n + 1];
+                  for (int i = 0; i < n; i++) {
+                      prefix[i + 1] = prefix[i] + nums[i];
+                  }
+
+                  int best = n + 1;
+                  Deque<Integer> deque = new ArrayDeque<>();
+                  for (int j = 0; j <= n; j++) {
+                      while (!deque.isEmpty()
+                              && prefix[j] - prefix[deque.peekFirst()] > target) {
+                          best = Math.min(best, j - deque.removeFirst());
+                      }
+                      while (!deque.isEmpty()
+                              && prefix[j] <= prefix[deque.peekLast()]) {
+                          deque.removeLast();
+                      }
+                      deque.addLast(j);
+                  }
+                  return best == n + 1 ? 0 : best;
+              }
+          }
+          ```
+
+          队首为什么能弹：对当前右端 `j`，若最早候选 `i` 已满足 `prefix[j]-prefix[i] > target`，先记录 `j-i`。未来右端只会更晚，继续保留同一个 `i` 产生的长度只会更长，所以这个 `i` 可以永久移除，再尝试更晚的左端寻找更短答案。
+
+          队尾为什么能弹：若 `i1 < i2` 且 `prefix[i2] <= prefix[i1]`，对任何未来 `j`，从 `i2` 出发的区间更短，同时 `prefix[j]-prefix[i2]` 不小于 `prefix[j]-prefix[i1]`。因此 `i1` 在“长度”和“可获得区间和”两方面都不可能优于 `i2`，已经被完全支配。
+
+          ## 关键细节
+
+          - **严格 `>` 是合同边界**：`target=7, nums=[7]` 时答案是 `0`；若题目是 `>=`，答案才是 `1`。归一化时不能把这两个问题机械合并。
+          - **不能虚构正数约束**：来源没有保存 `nums[i] > 0`。只有面试官确认非负/正数域后，才能把普通滑窗当成完整正确实现。
+          - **负数破坏普通滑窗单调性**：右扩可能降低和，左缩可能提高和，局部“够了就缩、不够就扩”的策略不再具有完备性。
+          - **前缀和用 `long`**：即使单个元素是 `int`，长数组累加仍可能超过 32 位。
+          - **非空区间**：循环先用已有候选检查当前 `j`，再把 `j` 入队，因此不会把 `i==j` 的空区间当成答案。
+          - **相等前缀只保留更晚下标**：两者对未来产生相同区间和，但更晚下标能得到更短长度，所以更早下标被支配。
+          - **无解返回值是 adopted contract**：来源没有保存返回 `0`/`-1` 等约定；这里选择 `0` 只是为了形成可验证合同。
+          - **复杂度**：前缀构造 `O(n)`；每个前缀下标只进行常数次队列操作，总时间 `O(n)`，最坏队列保存 `O(n)` 个下标。
+
+          ## 原理机制
+
+          这题的核心不是“记住单调队列模板”，而是把二维区间搜索转换成前缀和候选的支配关系。连续区间 `[i,j)` 的和由两个前缀值决定。固定 `j` 后，我们既希望 `prefix[i]` 尽量小，让差值更容易超过 target，又希望 `i` 尽量大，让区间更短。
+
+          单调队列恰好只保留没有被同时支配的候选：若一个更晚下标拥有更小或相等的前缀和，旧下标永远不可能再优；而一旦某个最早候选已经对当前 `j` 可行，记录它后，未来只会产生更长区间，也没有继续保留价值。两个方向的永久淘汰使所有候选只被处理常数次，从而从暴力 `O(n^2)` 降到 `O(n)`。
+
+          若真实题目确认所有元素非负，结构会进一步简化：右端增加不会降低窗口和，左端增加不会提高窗口和，此时一个当前窗口就足够，不需要维护整组前缀候选。面试时应根据真实约束选择更简单的正确算法，而不是为了展示技巧强行上复杂结构。
+
+          ## 项目经验版
+
+          来源没有任何真实项目上下文，因此不能虚构“线上使用过单调队列”的经历。工程上可把它类比成“时间序列中寻找累计量首次严格越过阈值的最短连续窗口”。真正落地要先确认是否存在负向修正、比较是 `>` 还是 `>=`、输出要长度还是具体区间、是否是流式追加、以及累计值的溢出范围；这些合同会决定双指针、前缀结构或流式状态机是否合适。
+
+          ## 常见追问
+
+          - 问：为什么不直接用滑动窗口？答：普通双指针依赖窗口和随边界移动具有单调性，典型前提是元素非负。当前来源没保存这个条件，所以一般版用前缀和 + 单调队列；若面试官确认全正数，我会优先写更简单的滑窗。
+          - 问：`>` 和 `>=` 只差一个符号，为什么要拆 Canonical？答：因为它改变可观察结果，例如 `target=7, [7]` 在 `>=` 下长度为 1，在严格 `>` 下无解。没有证据证明是转录错误时不能丢掉这个边界。
+          - 问：为什么队尾相等前缀保留更晚的？答：未来右端固定时区间和相同，但更晚下标给出的长度更短，因此更早下标永远不会更优。
+          - 问：为什么队首满足后可以连续弹多个？答：弹掉一个更早候选后，下一个候选左端更晚、潜在长度更短；只要仍严格超过 target，就应该继续更新最短长度。
+          - 问：负数具体怎么让普通滑窗失败？答：加入负数可能让总和下降，移除负数可能让总和上升，因此无法只凭当前和决定唯一正确的移动方向。
+          - 问：如果要求返回左右下标呢？答：更新 `best` 时同时记录被弹出的 `i` 和当前 `j` 即可；长度相同时再按题目定义 tie-break。
+          - 问：为什么使用 `long`？答：前缀和可能累计大量 `int`，32 位溢出会同时破坏差值比较和队列单调关系。
+
+          ## 易错点
+
+          - 把严格 `>` 写成 `>=`，尤其在区间和刚好等于 target 时。
+          - 来源没有正数约束，却直接套普通滑动窗口并宣称对任意整数成立。
+          - 只做队首可行性弹出，不做队尾前缀支配清理。
+          - 相等前缀错误保留更早位置，放弃了更短区间优势。
+          - 前缀和仍用 `int`，导致大输入溢出后比较失真。
+          - 把空区间当成合法答案；这里合同要求非空，无解返回 `0` 只是哨兵。
+          - 因题名相似把仓库 `>=` survivor 与当前严格 `>` Canonical 合并，丢失 equality boundary。
+          EOF
+
+          cat > "$out/StrictMinSubarrayValidation.java" <<'JAVA'
+          import java.util.ArrayDeque;
+          import java.util.Arrays;
+          import java.util.Deque;
+          import java.util.Random;
+
+          public final class StrictMinSubarrayValidation {
+              static int solve(long target, int[] nums) {
+                  int n = nums.length;
+                  long[] prefix = new long[n + 1];
+                  for (int i = 0; i < n; i++) prefix[i + 1] = prefix[i] + nums[i];
+                  int best = n + 1;
+                  Deque<Integer> deque = new ArrayDeque<>();
+                  for (int j = 0; j <= n; j++) {
+                      while (!deque.isEmpty() && prefix[j] - prefix[deque.peekFirst()] > target) {
+                          best = Math.min(best, j - deque.removeFirst());
+                      }
+                      while (!deque.isEmpty() && prefix[j] <= prefix[deque.peekLast()]) deque.removeLast();
+                      deque.addLast(j);
+                  }
+                  return best == n + 1 ? 0 : best;
+              }
+
+              static int oracle(long target, int[] nums) {
+                  int best = nums.length + 1;
+                  for (int i = 0; i < nums.length; i++) {
+                      long sum = 0;
+                      for (int j = i; j < nums.length; j++) {
+                          sum += nums[j];
+                          if (sum > target) best = Math.min(best, j - i + 1);
+                      }
+                  }
+                  return best == nums.length + 1 ? 0 : best;
+              }
+
+              static int nonnegativeWindow(long target, int[] nums) {
+                  int best = nums.length + 1, left = 0;
+                  long sum = 0;
+                  for (int right = 0; right < nums.length; right++) {
+                      if (nums[right] < 0) throw new IllegalArgumentException("nonnegative only");
+                      sum += nums[right];
+                      while (left <= right && sum > target) {
+                          best = Math.min(best, right - left + 1);
+                          sum -= nums[left++];
+                      }
+                  }
+                  return best == nums.length + 1 ? 0 : best;
+              }
+
+              static void check(long target, int[] input, int expected) {
+                  int actual = solve(target, input);
+                  if (actual != expected) throw new AssertionError("target="+target+" input="+Arrays.toString(input)+" expected="+expected+" actual="+actual);
+              }
+
+              public static void main(String[] args) {
+                  check(7, new int[]{7}, 0);
+                  check(7, new int[]{8}, 1);
+                  check(7, new int[]{2,3,1,2,4,3}, 3); // 4+3 equals 7, so strict solution is length 3
+                  check(3, new int[]{2,-1,2,2}, 2);
+                  check(3, new int[]{5,-10,5}, 1);
+                  check(0, new int[]{-1,0,1}, 1);
+                  check(10, new int[]{}, 0);
+                  check(-2, new int[]{-3,-1}, 1);
+                  check(4, new int[]{2,2}, 0);
+                  check(4, new int[]{2,2,1}, 3);
+
+                  Random r = new Random(2026082603L);
+                  long checked = 0;
+                  for (int round=0; round<7000; round++) {
+                      int n=r.nextInt(45);
+                      int[] a=new int[n];
+                      for(int i=0;i<n;i++) a[i]=-20+r.nextInt(41);
+                      long target=-30+r.nextInt(91);
+                      int expected=oracle(target,a), actual=solve(target,a);
+                      if(expected!=actual) throw new AssertionError("general round="+round+" target="+target+" input="+Arrays.toString(a)+" expected="+expected+" actual="+actual);
+                      checked += n;
+                  }
+
+                  Random p = new Random(2026082604L);
+                  for (int round=0; round<3000; round++) {
+                      int n=p.nextInt(70);
+                      int[] a=new int[n];
+                      for(int i=0;i<n;i++) a[i]=p.nextInt(21);
+                      long target=p.nextInt(150);
+                      int expected=oracle(target,a), window=nonnegativeWindow(target,a);
+                      if(expected!=window) throw new AssertionError("nonnegative round="+round+" target="+target+" input="+Arrays.toString(a)+" expected="+expected+" window="+window);
+                  }
+                  System.out.println("PASS fixed=10 general-randomized=7000 nonnegative-window-randomized=3000 strict-greater=true negatives=true equality-boundary=true empty=true checked-elements="+checked);
+              }
+          }
+          JAVA
+
+      - name: Execute writer oracle and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$CANONICAL_ID"
+          javac "$out/StrictMinSubarrayValidation.java"
+          stdout="$(java -cp "$out" StrictMinSubarrayValidation)"
+          case "$stdout" in
+            PASS\ fixed=10\ general-randomized=7000\ nonnegative-window-randomized=3000\ strict-greater=true\ negatives=true\ equality-boundary=true\ empty=true\ checked-elements=*) ;;
+            *) echo "unexpected validation output: $stdout"; exit 1 ;;
+          esac
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0036/${cid}`;
+          const boundaryTests=[
+            {case:'target=7 nums=[7]',expected:'0 because equality does not satisfy strict >',passed:true},
+            {case:'target=7 nums=[2,3,1,2,4,3]',expected:'3 because [4,3] only equals target',passed:true},
+            {case:'target=4 nums=[2,2]',expected:'0 because sum equals target only',passed:true},
+            {case:'negative-containing arrays',expected:'general deque agrees with exhaustive oracle',passed:true}
+          ];
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac StrictMinSubarrayValidation.java && java StrictMinSubarrayValidation',stdout:process.env.STDOUT,checks:['strict > equality boundaries','mixed positive/negative arrays','empty input under adopted contract','7000 arbitrary-integer randomized arrays','3000 nonnegative arrays validating sliding-window specialization'],boundary_tests:boundaryTests,oracle:'quadratic enumeration of every nonempty contiguous subarray'},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[
+            {source_id:'raw-source',title:'Original interview note preserving strict greater-than minimum-subarray wording',locator:'note_desc/681a34e3000000002102e69d.txt',source_type:'repository_source_record',checked_at:date},
+            {source_id:'tagged-source',title:'Normalized strict minimum-subarray Question',locator:`note_tagged/681a34e3000000002102e69d.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+            {source_id:'relation-review',title:'Source-first strict > versus >= minimum-subarray relation review',locator:'review/content_build/answer_batch_0036/min_subarray_relation_review.md',source_type:'repository_structured_source',checked_at:date},
+            {source_id:'validation',title:'General deque plus nonnegative sliding-window oracle validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}
+          ],claims:[
+            {claim_id:'source-boundary',text:'The raw source preserves strict > target but not element sign, target range, API, examples or no-solution convention; repository >= sources are a distinct related contract.',source_ids:['raw-source','tagged-source','relation-review'],answer_locations:['核心结论','3 分钟版','关键细节']},
+            {claim_id:'general-correctness',text:'Under the explicitly adopted arbitrary-integer/nonempty/0-if-none contract, the prefix-sum monotonic-deque implementation matches exhaustive quadratic enumeration on fixed boundaries and 7000 deterministic randomized arrays.',source_ids:['validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},
+            {claim_id:'window-specialization',text:'For nonnegative arrays, the simpler strict-threshold sliding window matches the same oracle on 3000 deterministic randomized arrays and is presented only as a conditional specialization.',source_ids:['validation'],answer_locations:['核心结论','1 分钟版','原理机制','常见追问']}
+          ],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_85dca72d93b635bce7ae1bf0a34a4d6a` strict-`>` minimum-subarray candidate is now source-bounded against the primary raw wording and reviewed `>`/`>=` relation boundary. It avoids inventing a positive-element constraint by supplying a complete arbitrary-integer prefix-sum + monotonic-deque implementation, explicitly explains the nonnegative sliding-window specialization, and passes fixed equality/negative cases plus 7000 general and 3000 nonnegative deterministic randomized oracle checks. Writer research is frozen; isolated source-first review remains pending.';
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Writer-stage repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit writer artifact from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during strict minimum-subarray writer slice: $base_head -> $remote_head; fail closed."
+            exit 1
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0036/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: build batch 0036 strict-min-subarray candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
