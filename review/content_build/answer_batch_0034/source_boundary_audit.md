@@ -55,3 +55,12 @@
 - Not preserved: lock primitive, JDK version, business incident, timeout policy, database semantics, or monitor-vs-explicit-lock requirement.
 - Executable policy: deterministic opposite-order ReentrantLock deadlock, daemon workers, bounded ThreadMXBean detection.
 - Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
+
+## cq_q_7e01e07cd1fe6acda1a2206768766697
+
+- Exact repository source: note_tagged/67e55f22000000001c01e146.json, question 7e01e07cd1fe6acda1a2206768766697.
+- Preserved wording: 算法：实现子串匹配（KMP 算法或暴力搜索）。
+- Preserved intent: implement substring matching, with KMP or brute-force search accepted by the source wording.
+- Not preserved: API name, null-input contract, character encoding/code-point semantics, maximum lengths, or whether all matches versus first match are required.
+- Executable candidate policy: non-null Java String inputs, return the first UTF-16 char index or -1, and return 0 for an empty pattern; use KMP as the primary implementation and explain brute force as the simpler alternative.
+- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
