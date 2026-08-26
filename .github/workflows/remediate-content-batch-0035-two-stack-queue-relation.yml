@@ -1,0 +1,204 @@
+name: Remediate Content Batch 0035 Two Stack Queue Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0035-two-stack-queue-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0035-two-stack-queue-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SOURCE_QID: 7f276bae3d88861ba9c9abc663d172cf
+  SOURCE_CID: cq_q_7f276bae3d88861ba9c9abc663d172cf
+  TARGET_QID: 36ab1630843f456fa940c19962292fbe
+  TARGET_ALIAS_QID: 4a4761c79b9ebbb35a45eaf3843caca0
+  TARGET_CID: cq_q_36ab1630843f456fa940c19962292fbe
+  DISTINCT_API_QID: eaae17962ef4c12e3a382e102ff461c1
+  DISTINCT_API_CID: cq_q_eaae17962ef4c12e3a382e102ff461c1
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first preflight and relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0035
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const expected=new Map([
+            [process.env.SOURCE_QID,'算法 2：使用两个栈实现一个队列（要求不使用额外的辅助数据结构）'],
+            [process.env.TARGET_QID,'算法：两个栈实现队列'],
+            [process.env.TARGET_ALIAS_QID,'算法：两个栈模拟队列？'],
+            [process.env.DISTINCT_API_QID,'编程题: 用两个栈模拟队列 (实现push、pop、count)'],
+          ]);
+          for(const [qid,text] of expected){
+            const q=byQ.get(qid);
+            if(!q||q.original_question!==text) throw new Error(`${qid}: source wording drifted: ${q?.original_question}`);
+            if(q.is_valid_for_library===false) throw new Error(`${qid}: unexpectedly invalid before relation review`);
+          }
+          if(byQ.get(process.env.SOURCE_QID)?.canonical_id!==process.env.SOURCE_CID) throw new Error('source singleton ownership drifted');
+          for(const qid of [process.env.TARGET_QID,process.env.TARGET_ALIAS_QID]){
+            if(byQ.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: target ownership drifted`);
+          }
+          if(byQ.get(process.env.DISTINCT_API_QID)?.canonical_id!==process.env.DISTINCT_API_CID) throw new Error('explicit API canonical ownership drifted');
+          const source=byC.get(process.env.SOURCE_CID), target=byC.get(process.env.TARGET_CID), api=byC.get(process.env.DISTINCT_API_CID);
+          if(!source||JSON.stringify([...(source.question_ids||[])].sort())!==JSON.stringify([process.env.SOURCE_QID])) throw new Error('source Canonical is no longer singleton-bounded');
+          const targetMembers=[...(target?.question_ids||[])].sort();
+          const expectedTarget=[process.env.TARGET_QID,process.env.TARGET_ALIAS_QID].sort();
+          if(JSON.stringify(targetMembers)!==JSON.stringify(expectedTarget)) throw new Error(`target Canonical member set drifted: ${JSON.stringify(targetMembers)}`);
+          if(!api||!(api.question_ids||[]).includes(process.env.DISTINCT_API_QID)) throw new Error('explicit API Canonical missing');
+          const review=`# Answer Batch 0035 — Two-Stack Queue Relation Review\n\n`+
+            `## Source-first facts\n\n`+
+            `- \`${process.env.SOURCE_QID}\`: ${expected.get(process.env.SOURCE_QID)}\n`+
+            `- \`${process.env.TARGET_QID}\`: ${expected.get(process.env.TARGET_QID)}\n`+
+            `- \`${process.env.TARGET_ALIAS_QID}\`: ${expected.get(process.env.TARGET_ALIAS_QID)}\n`+
+            `- nearby but kept distinct: \`${process.env.DISTINCT_API_QID}\`: ${expected.get(process.env.DISTINCT_API_QID)}\n\n`+
+            `No historical relation/remediation record was consulted to reach this conclusion. The first three current Questions ask the same coding contract: implement FIFO queue behavior using two stacks. The source singleton adds the restriction that no additional auxiliary data structure may be used; that restriction is compatible with the ordinary two-stack implementation and does not change the abstract input/output objective or require a different data-structure topology. The push/pop/count wording is intentionally not folded into this reviewed group because it preserves an additional count API obligation that the other three source Questions do not state.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\` for the three reviewed Questions. Preserve \`${process.env.TARGET_CID}\` as the survivor because it already owns the two generic source variants. Retire singleton \`${process.env.SOURCE_CID}\` through the reviewed Select → Decide → Apply path. Keep \`${process.env.DISTINCT_API_CID}\` separate in this bounded decision. Any survivor Answer invalidated by the expanded audited source set must remain rebuildable and must be independently reviewed before promotion.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0035/two_stack_queue_relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select decide and apply exact reviewed group
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0035/two_stack_queue_relation_apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$SOURCE_QID,$TARGET_QID,$TARGET_ALIAS_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected exactly one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0];
+          const actual=[...c.question_ids].sort();
+          const expected=[process.env.SOURCE_QID,process.env.TARGET_QID,process.env.TARGET_ALIAS_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected Question set drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0035-two-stack-queue-source-first-review \
+            --actor-display-name 'Batch 0035 two-stack queue source-first reviewer' \
+            --rationale 'Current source-first review found the singleton no-extra-auxiliary-data-structure wording and the two generic two-stack queue wordings preserve one FIFO-by-two-stacks coding contract; the separate push/pop/count API source remains outside this reviewed relation.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$TARGET_CID" \
+            --canonical-title '算法：两个栈实现队列' > "$out/apply.json"
+
+      - name: Verify ownership effect and record task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byCid=new Map(canon.map(x=>[x.canonical_id,x])), byQid=new Map(qs.map(x=>[x.question_id,x]));
+          const reviewed=[process.env.SOURCE_QID,process.env.TARGET_QID,process.env.TARGET_ALIAS_QID];
+          for(const qid of reviewed){
+            if(byQid.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: expected target ownership after reviewed apply`);
+          }
+          if(byCid.has(process.env.SOURCE_CID)) throw new Error('duplicate source Canonical survived same-relation consolidation');
+          const target=byCid.get(process.env.TARGET_CID);
+          const members=[...(target?.question_ids||[])].sort();
+          const expected=[...reviewed].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`target member set drifted after apply: ${JSON.stringify(members)}`);
+          if(byQid.get(process.env.DISTINCT_API_QID)?.canonical_id!==process.env.DISTINCT_API_CID) throw new Error('explicit push/pop/count source was incorrectly folded');
+          fs.writeFileSync('review/content_build/answer_batch_0035/two_stack_queue_relation_apply.md',
+            '# Answer Batch 0035 — Two-Stack Queue Relation Application\n\n'+
+            '- Reviewed relation: `same`.\n'+
+            `- Survivor: \`${process.env.TARGET_CID}\`.\n`+
+            `- Consolidated Questions: ${reviewed.map(q=>`\`${q}\``).join(', ')}.\n`+
+            `- Retired duplicate Canonical: \`${process.env.SOURCE_CID}\`.\n`+
+            `- Explicit push/pop/count Canonical preserved separately: \`${process.env.DISTINCT_API_CID}\`.\n`+
+            '- Mutation path: explicit reviewed group Select → AI Decision → Application dedup apply with current ownership/freshness checks.\n'+
+            '- Survivor Answer promotion is intentionally deferred if consolidation invalidated it; the expanded source set must be rebuilt and independently reviewed.\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0035.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note=`- [x] \`${process.env.SOURCE_CID}\` source singleton is source-first consolidated as \`same\` into existing \`${process.env.TARGET_CID}\`; all three generic/no-extra-auxiliary-data-structure Question variants now share one Canonical, while the explicit push/pop/count API Canonical remains separate. Survivor Answer promotion is deferred until rebuilt/reviewed against the expanded source set.`;
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Refresh generated answer-type audit after consolidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+
+      - name: Full repository and answer gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during reviewed relation slice: $base_head -> $remote_head; fail closed and regenerate next run."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: consolidate batch 0035 two-stack queue duplicate'
+          git push origin "HEAD:$CONTENT_BRANCH"
