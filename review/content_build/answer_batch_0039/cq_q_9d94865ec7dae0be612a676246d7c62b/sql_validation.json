@@ -1,0 +1,32 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9d94865ec7dae0be612a676246d7c62b",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "python3 sql_validation.py",
+  "stdout": "PASS top3=Cara,Eve,Alice includes-score-80 stable-tie-break pass-score-parameterized student-grain",
+  "checks": [
+    "student-level conditional aggregation precedes ranking",
+    "score exactly 80 counts under the declared >=80 contract",
+    "ROW_NUMBER plus student_id yields a deterministic exact-three result",
+    "pass threshold is a bound parameter rather than fabricated source fact",
+    "displayed passed-subject count is independent from the >=80 ranking count"
+  ],
+  "boundary_tests": [
+    {
+      "case": "score exactly 80",
+      "expected": "counts toward high_score_subjects under declared >=80 contract",
+      "passed": true
+    },
+    {
+      "case": "tie on high_score_subjects",
+      "expected": "student_id ascending deterministically breaks tie for exact-three contract",
+      "passed": true
+    },
+    {
+      "case": "pass threshold supplied as parameter",
+      "expected": "passed_subjects uses bound pass_score independently of 80-point rank condition",
+      "passed": true
+    }
+  ]
+}
