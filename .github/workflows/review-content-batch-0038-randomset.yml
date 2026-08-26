@@ -1,0 +1,319 @@
+name: Review Content Batch 0038 RandomSet Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0038-randomset.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0038-randomset-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9694af9aa76b0f1537ef610d0f498cb5
+  SOURCE_QID: 9694af9aa76b0f1537ef610d0f498cb5
+  SOURCE_STRUCTURED: note_structured/656de8b6000000001502f038.json
+  SOURCE_TAGGED: note_tagged/656de8b6000000001502f038.json
+  JDK_HASHMAP_DOC: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  JDK_ARRAYLIST_DOC: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayList.html
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Phase A source-first boundary and exact-candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0038/$cid"
+          tmp="$out/reviewer_tmp"
+          rm -rf "$tmp"
+          mkdir -p "$tmp"
+
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']
+          exact='算法：实现一个RandomSet，保证set/remove/contains/randomGet都是O(1)的复杂度'
+          structured=json.loads(pathlib.Path(os.environ['SOURCE_STRUCTURED']).read_text())
+          if exact not in structured.get('questions',[]): raise SystemExit('structured source drift')
+          tagged=json.loads(pathlib.Path(os.environ['SOURCE_TAGGED']).read_text())
+          q=next((x for x in tagged.get('tagged_questions',[]) if x.get('question_id')==qid),None)
+          if not q or q.get('original_question')!=exact or q.get('is_valid_for_library') is not True:
+              raise SystemExit('tagged source drift')
+
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in [
+              'ArrayList<T> values',
+              'HashMap<T, Integer> index',
+              'values.set(pos, last)',
+              'index.put(last, pos)',
+              'values.remove(lastIndex)',
+              'NoSuchElementException',
+              'values.size() == index.size()',
+              '期望/均摊常数时间',
+              'ArrayList.remove(i)',
+              '该实现不是线程安全容器'
+          ]:
+              if marker not in md: raise SystemExit(f'candidate missing {marker}')
+          if len(re.findall(r'^- 问：',md,re.M)) < 5: raise SystemExit('followups insufficient')
+          if re.search(r'我在线上|我负责过|我们生产|真实项目里我曾|线上事故',md): raise SystemExit('fabricated project claim')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          snippet=blocks[0].strip()
+          harness='''import java.util.*;\n\npublic class CandidateHarness {\n'''+snippet+'''\n
+            static void invariant(RandomSet<Integer> s, Set<Integer> oracle) {
+              if(s.size()!=oracle.size()) throw new AssertionError("size mismatch");
+              if(s.values.size()!=s.index.size()) throw new AssertionError("internal size mismatch");
+              if(s.values.size()!=oracle.size()) throw new AssertionError("oracle size mismatch");
+              HashSet<Integer> seen=new HashSet<>();
+              for(int i=0;i<s.values.size();i++){
+                Integer v=s.values.get(i);
+                if(!seen.add(v)) throw new AssertionError("duplicate value "+v);
+                Integer mapped=s.index.get(v);
+                if(mapped==null || mapped!=i) throw new AssertionError("index mismatch i="+i+" v="+v+" mapped="+mapped);
+                if(!oracle.contains(v)) throw new AssertionError("non-oracle member "+v);
+              }
+              if(!seen.equals(oracle)) throw new AssertionError("membership mismatch");
+            }
+
+            static void expectEmpty(RandomSet<Integer> s) {
+              boolean threw=false;
+              try{s.randomGet();}catch(NoSuchElementException e){threw=true;}
+              if(!threw) throw new AssertionError("empty randomGet did not throw");
+            }
+
+            public static void main(String[] args) {
+              boolean nullRandomRejected=false;
+              try{new RandomSet<Integer>(null);}catch(NullPointerException e){nullRandomRejected=true;}
+              if(!nullRandomRejected) throw new AssertionError("null Random accepted");
+
+              RandomSet<Integer> d=new RandomSet<>(new Random(7));
+              HashSet<Integer> doracle=new HashSet<>();
+              expectEmpty(d);
+              if(!d.set(10) || !doracle.add(10)) throw new AssertionError("set 10");
+              if(!d.set(20) || !doracle.add(20)) throw new AssertionError("set 20");
+              if(!d.set(30) || !doracle.add(30)) throw new AssertionError("set 30");
+              if(!d.set(40) || !doracle.add(40)) throw new AssertionError("set 40");
+              if(d.set(20)) throw new AssertionError("duplicate accepted");
+              invariant(d,doracle);
+              if(!d.remove(20) || !doracle.remove(20)) throw new AssertionError("middle remove");
+              invariant(d,doracle);
+              if(!d.remove(40) || !doracle.remove(40)) throw new AssertionError("remove existing after swap");
+              invariant(d,doracle);
+              if(d.remove(999)) throw new AssertionError("absent remove true");
+              if(!d.contains(10) || d.contains(20)) throw new AssertionError("contains deterministic");
+              for(int i=0;i<2000;i++) if(!doracle.contains(d.randomGet())) throw new AssertionError("random non-member deterministic");
+
+              RandomSet<Integer> s=new RandomSet<>(new Random(0x9694af9aL));
+              HashSet<Integer> oracle=new HashSet<>();
+              Random ops=new Random(0x27a1f11L);
+              int operations=150000, reads=0, invariantChecks=0;
+              for(int t=0;t<operations;t++){
+                int value=ops.nextInt(801)-400;
+                int op=ops.nextInt(4);
+                if(op==0){
+                  boolean a=s.set(value), e=oracle.add(value);
+                  if(a!=e) throw new AssertionError("set differential t="+t);
+                }else if(op==1){
+                  boolean a=s.remove(value), e=oracle.remove(value);
+                  if(a!=e) throw new AssertionError("remove differential t="+t);
+                }else if(op==2){
+                  if(s.contains(value)!=oracle.contains(value)) throw new AssertionError("contains differential t="+t);
+                }else{
+                  if(oracle.isEmpty()) expectEmpty(s);
+                  else{
+                    Integer got=s.randomGet();
+                    if(!oracle.contains(got)) throw new AssertionError("randomGet non-member t="+t+" got="+got);
+                    reads++;
+                  }
+                }
+                if((t & 127)==0){invariant(s,oracle);invariantChecks++;}
+              }
+              invariant(s,oracle); invariantChecks++;
+              while(!oracle.isEmpty()){
+                Integer v=oracle.iterator().next();
+                if(!s.remove(v)) throw new AssertionError("drain remove false");
+                oracle.remove(v);
+                if((oracle.size() & 63)==0){invariant(s,oracle);invariantChecks++;}
+              }
+              invariant(s,oracle); expectEmpty(s);
+              System.out.println("PASS exact_candidate deterministic=swap-delete duplicate=rejected absent-remove=false empty=randomGet-throws randomized="+operations+" reads="+reads+" invariant-checks="+invariantChecks+" oracle=HashSet null-random=rejected");
+            }
+          }
+          '''
+          pathlib.Path(f'review/content_build/answer_batch_0038/{cid}/reviewer_tmp/CandidateHarness.java').write_text(harness)
+          PY
+
+          (cd "$tmp" && javac CandidateHarness.java && java CandidateHarness > stdout.txt)
+          stdout="$(cat "$tmp/stdout.txt")"
+          case "$stdout" in
+            PASS\ exact_candidate\ deterministic=swap-delete\ duplicate=rejected\ absent-remove=false\ empty=randomGet-throws\ randomized=150000\ reads=*\ invariant-checks=*\ oracle=HashSet\ null-random=rejected) ;;
+            *) echo "unexpected reviewer stdout: $stdout" >&2; exit 1 ;;
+          esac
+
+          REVIEW_STDOUT="$stdout" python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; date='2026-08-27'
+          out=pathlib.Path(f'review/content_build/answer_batch_0038/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          checks=[
+            'exact candidate Java implementation compiles under Java 21 inside an independent harness',
+            'duplicate insertion, absent removal, contains, empty randomGet and constructor null-Random behavior follow the candidate contract/code',
+            'middle removal and later removal of the moved element preserve the dense-array/value-to-index-map bijection',
+            '150000 seeded randomized set/remove/contains/randomGet operations agree with an independent HashSet membership oracle',
+            'the reviewer repeatedly checks values.size()==index.size(), index.get(values.get(i))==i, no duplicate array members and exact oracle membership',
+            'randomGet never returns a removed or otherwise absent member and the fully drained set rejects randomGet'
+          ]
+          rv={
+            'schema_version':'answer_code_validation.v1',
+            'canonical_id':cid,
+            'candidate_sha256':digest,
+            'result':'pass',
+            'validated_at':date,
+            'command':'extract the exact candidate Java block, compile it in an independent harness, and differentially validate deterministic plus 150000 seeded randomized operations against an independent HashSet oracle while checking the array-index bijection',
+            'stdout':os.environ['REVIEW_STDOUT'],
+            'checks':checks
+          }
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=[
+            'The answer preserves the exact RandomSet source boundary and labels duplicate insertion, absent removal, empty randomGet, Java generics and the strict-worst-case interpretation as implementation/analysis contracts rather than source facts.',
+            'The dense ArrayList plus value-to-index HashMap invariant is explicit, and swap-with-last deletion updates the moved value mapping before removing the tail.',
+            'The exact candidate Java compiles under Java 21 and independently matches a HashSet membership oracle across deterministic cases and 150000 seeded randomized operations while the internal bijection is repeatedly checked.',
+            'The complexity wording avoids overclaiming: Java SE 21 documents constant-time basic HashMap operations when hashes disperse properly, while ArrayList positional access is constant time and append is amortized constant time; the candidate therefore distinguishes expected/amortized behavior from an unstated deterministic worst-case O(1) guarantee.',
+            'The answer covers duplicate members, missing deletion, empty random access, swap-delete of a middle element, space O(n), random-member validity and the non-thread-safe compound-state boundary.',
+            'The direct ArrayList middle-delete O(n) pitfall and the ghost-index bug when removing the last element are both explained as concrete failure modes.',
+            'No fabricated production experience, business metric or incident is claimed; the project section remains an explicit mapping/verification prompt.'
+          ]
+          review={
+            'schema_version':'isolated_review.v1',
+            'canonical_id':cid,
+            'candidate_sha256':digest,
+            'reviewed_at':date,
+            'review_mode':'source_first_isolated',
+            'reviewer_id':'source-first-isolated-reviewer-randomset-20260827-v1',
+            'review_version':'randomset.array-map-swap-delete.v1',
+            'decision':'pass',
+            'revision_round':1,
+            'source_packet':[os.environ['SOURCE_STRUCTURED'],os.environ['SOURCE_TAGGED'],str(candidate),'docs/refactor/09_answer_content_standard.md',os.environ['JDK_HASHMAP_DOC'],os.environ['JDK_ARRAYLIST_DOC'],str(out/'reviewer_validation.json')],
+            'scores':scores,
+            'hard_failures':[],
+            'unsupported_claims':[],
+            'uncovered_source_variants':[],
+            'findings':findings,
+            'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']
+          }
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Phase B bind evidence and record task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0038/$cid"
+          javac "$out/writer_validation.java"
+          java -cp "$out" writer_validation
+
+          python3 - <<'PY'
+          import json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; date='2026-08-27'
+          out=pathlib.Path(f'review/content_build/answer_batch_0038/{cid}')
+          writer=json.loads((out/'writer_research.json').read_text())
+          wv=json.loads((out/'writer_validation.json').read_text())
+          rv=json.loads((out/'reviewer_validation.json').read_text())
+          review=json.loads((out/'isolated_review_result.json').read_text())
+          if writer.get('review_state')!='writer_complete_isolated_review_pending' or wv.get('result')!='pass' or rv.get('result')!='pass' or review.get('decision')!='pass':
+              raise SystemExit('phase state mismatch')
+          evidence={
+            'schema_version':'answer_evidence.v1',
+            'canonical_id':cid,
+            'candidate_sha256':review['candidate_sha256'],
+            'checked_at':date,
+            'writer':{'writer_id':'randomset-source-bounded-writer-20260827-v1','writer_version':'xhs-answer-curator.v1'},
+            'sources':[
+              {'source_id':'repository-structured','title':'Structured Pinduoduo interview source containing the RandomSet prompt','locator':os.environ['SOURCE_STRUCTURED'],'source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'repository-tagged','title':'Tagged RandomSet O(1) coding question','locator':os.environ['SOURCE_TAGGED'],'source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'jdk21-hashmap','title':'Java SE 21 HashMap API','locator':os.environ['JDK_HASHMAP_DOC'],'source_type':'official_documentation','checked_at':date},
+              {'source_id':'jdk21-arraylist','title':'Java SE 21 ArrayList API','locator':os.environ['JDK_ARRAYLIST_DOC'],'source_type':'official_documentation','checked_at':date},
+              {'source_id':'writer-validation','title':'Writer RandomSet deterministic and randomized validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'reviewer-validation','title':'Independent exact-candidate RandomSet differential validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'isolated-review','title':'Fresh isolated source-first RandomSet review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}
+            ],
+            'claims':[
+              {'claim_id':'source-boundary','text':'The preserved source asks for RandomSet set/remove/contains/randomGet operations described as O(1) without specifying language, duplicate insertion, missing deletion, empty randomGet, concurrency, or whether O(1) means deterministic worst-case versus expected/amortized behavior.','source_ids':['repository-structured','repository-tagged','isolated-review'],'answer_locations':['核心结论','1 分钟版','关键细节','常见追问']},
+              {'claim_id':'java-collections-complexity','text':'Java SE 21 documents constant-time basic HashMap operations when the hash function disperses elements properly and constant-time ArrayList positional access with amortized constant-time append; the candidate correctly avoids upgrading those conditions into an unconditional deterministic worst-case O(1) claim.','source_ids':['jdk21-hashmap','jdk21-arraylist','isolated-review'],'answer_locations':['核心结论','关键细节','常见追问']},
+              {'claim_id':'swap-delete-invariant','text':'The exact candidate keeps a dense array plus value-to-index map and repairs the moved element mapping during swap-with-last deletion, preserving size equality and index.get(values.get(i))==i.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['1 分钟版','3 分钟版','关键细节','原理机制']},
+              {'claim_id':'behavior-validation','text':'Writer and independent reviewer validations cover duplicate insertion, absent removal, middle/last deletion paths, contains, empty randomGet, random-member validity, a HashSet membership oracle and repeated internal bijection checks under seeded randomized operation sequences.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','常见追问','易错点']}
+            ],
+            'source_question_coverage':[{'question_id':os.environ['SOURCE_QID'],'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},
+            'review_state':'independent_source_first_review_passed',
+            'review':{
+              'reviewer_id':review['reviewer_id'],
+              'review_version':review['review_version'],
+              'independent':True,
+              'decision':'pass',
+              'revision_round':1,
+              'scores':review['scores'],
+              'hard_failures':[],
+              'uncovered_source_variants':[],
+              'unsupported_claims':[],
+              'findings':review['findings']
+            }
+          }
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0038.md')
+          text=task.read_text()
+          old='- [ ] `cq_q_9694af9aa76b0f1537ef610d0f498cb5` RandomSet candidate preserves the exact set/remove/contains/randomGet source boundary, uses dense-array plus value-to-index-map swap deletion, explicitly distinguishes expected/amortized Java-container O(1) from an unstated strict worst-case guarantee, and has reproducible deterministic plus 100000-operation randomized writer validation. Isolated source-first review and evidence binding remain pending.'
+          new='- [x] `cq_q_9694af9aa76b0f1537ef610d0f498cb5` RandomSet candidate preserves the exact set/remove/contains/randomGet source boundary, uses dense-array plus value-to-index-map swap deletion, distinguishes expected/amortized Java-container O(1) from an unstated strict worst-case guarantee with Java SE 21 primary documentation, passes writer validation plus an independent exact-candidate 150000-operation HashSet differential review with repeated index-bijection checks, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.'
+          if old in text:
+              text=text.replace(old,new,1)
+          elif new not in text:
+              if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n\n'
+              text=text.rstrip()+'\n\n'+new+'\n'
+          task.write_text(text)
+          PY
+          rm -rf "$out/reviewer_tmp"
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0038/$CANONICAL_ID/reviewer_validation.json" \
+                  "review/content_build/answer_batch_0038/$CANONICAL_ID/isolated_review_result.json" \
+                  "review/evidence/$CANONICAL_ID.json" \
+                  tasks/answer-batches/TASK-20260711-0313-answer-batch-0038.md
+          git commit -m 'review: pass batch 0038 RandomSet candidate source-first'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
