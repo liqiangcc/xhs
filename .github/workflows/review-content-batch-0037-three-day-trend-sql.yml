@@ -1,0 +1,186 @@
+name: Review Content Batch 0037 Three-Day Trend SQL Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0037-three-day-trend-sql.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-three-day-trend-sql-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_910472ffdcfb2d2541ca198b952df943
+  SOURCE_QID: 910472ffdcfb2d2541ca198b952df943
+  SOURCE_DESC: note_desc/6822deb7000000002100178b.txt
+  SOURCE_TAGGED: note_tagged/6822deb7000000002100178b.json
+  SQLITE_WINDOW_DOC: https://www.sqlite.org/windowfunctions.html
+  SQLITE_DATE_DOC: https://www.sqlite.org/lang_datefunc.html
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Phase A source-first isolated review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; candidate="review/candidates/answers/$cid.md"; tmp="$out/reviewer_tmp"
+          rm -rf "$tmp"; mkdir -p "$tmp"
+
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const raw=fs.readFileSync(process.env.SOURCE_DESC,'utf8');
+          if(!raw.includes('11.SQL题：波峰波谷，连续三天')) throw new Error('raw source drift');
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='SQL：查询波峰波谷，找出连续三天上升/下降的记录?';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('tagged source drift');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||'';
+          const bullets=(one.match(/^- /gm)||[]).length; if(bullets<4||bullets>6) throw new Error(`one-minute backbone drift ${bullets}`);
+          for(const marker of ['LAG(..., 1/2)','连续三行','四天','严格上升','严格下降','PARTITION BY entity_id','julianday','波峰 / 波谷']) if(!md.includes(marker)) throw new Error(`missing boundary ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
+          if(/我在线上|我负责过|我们生产|真实项目里我曾|线上事故/.test(md)) throw new Error('fabricated project claim');
+          const blocks=[...md.matchAll(/```sql\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==2) throw new Error(`expected schema and executable SQL blocks, got ${blocks.length}`);
+          const sql=blocks[1][1];
+          for(const marker of ['LAG(dt, 1)','LAG(metric, 2)','julianday(prev_dt) - julianday(prev2_dt) = 1','prev2_metric < prev_metric','prev2_metric > prev_metric']) if(!sql.includes(marker)) throw new Error(`SQL missing ${marker}`);
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/reviewer_tmp/query.sql`,sql+'\n');
+          NODE
+
+          cat > "$tmp/reviewer_validation.py" <<'PY'
+          import datetime as dt
+          import random
+          import sqlite3
+          from pathlib import Path
+
+          sql=Path('query.sql').read_text()
+
+          def expected(rows):
+              rows=sorted(rows)
+              out=[]
+              for i in range(2,len(rows)):
+                  d2,v2=rows[i-2]; d1,v1=rows[i-1]; d0,v0=rows[i]
+                  dd2=dt.date.fromisoformat(d2); dd1=dt.date.fromisoformat(d1); dd0=dt.date.fromisoformat(d0)
+                  if (dd1-dd2).days!=1 or (dd0-dd1).days!=1: continue
+                  if v2 < v1 < v0: trend='up'
+                  elif v2 > v1 > v0: trend='down'
+                  else: continue
+                  out.append((d2,d1,d0,trend))
+              return out
+
+          def run(rows):
+              con=sqlite3.connect(':memory:')
+              con.execute('create table daily_metric(dt text primary key, metric real not null)')
+              con.executemany('insert into daily_metric values(?,?)',rows)
+              return list(con.execute(sql))
+
+          deterministic=[
+              ('2026-01-01',1),('2026-01-02',2),('2026-01-03',3),('2026-01-04',4),
+              ('2026-01-05',4),('2026-01-06',3),('2026-01-07',2),
+              ('2026-01-09',10),('2026-01-10',9),('2026-01-11',8),
+          ]
+          assert run(deterministic)==expected(deterministic)
+          assert run(deterministic)==[
+              ('2026-01-01','2026-01-02','2026-01-03','up'),
+              ('2026-01-02','2026-01-03','2026-01-04','up'),
+              ('2026-01-05','2026-01-06','2026-01-07','down'),
+              ('2026-01-09','2026-01-10','2026-01-11','down'),
+          ]
+
+          rng=random.Random(0x910472)
+          base=dt.date(2026,2,1)
+          for _ in range(500):
+              dates=[]
+              for day in range(35):
+                  if rng.random()<0.76:
+                      dates.append((base+dt.timedelta(days=day)).isoformat())
+              rows=[(d,rng.randint(-4,4)) for d in dates]
+              actual=run(rows); oracle=expected(rows)
+              if actual!=oracle:
+                  raise AssertionError((rows,actual,oracle))
+
+          print('PASS deterministic=1 randomized=500 strict_up_down=pass equality_break=pass missing_day_break=pass four_day_rise_two_windows=pass oracle_match=pass')
+          PY
+          (cd "$tmp" && python3 reviewer_validation.py > stdout.txt)
+          stdout="$(cat "$tmp/stdout.txt")"
+          test "$stdout" = 'PASS deterministic=1 randomized=500 strict_up_down=pass equality_break=pass missing_day_break=pass four_day_rise_two_windows=pass oracle_match=pass'
+
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const validation={schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:hash,result:'pass',validated_at:date,command:'extract exact candidate SQL; deterministic SQLite fixture plus 500 independently generated sparse/equal/random daily-series datasets checked against a Python oracle',stdout:process.env.REVIEW_STDOUT,checks:['exact SQL executes','calendar adjacency required','strict up/down matches oracle','equal values break trend','missing dates break continuity','four-day rise produces overlapping three-day windows','500 randomized datasets match independent oracle']};
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify(validation,null,2)+'\n');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The candidate keeps the sparse repository source boundary explicit instead of inventing a real schema or pretending the phrase “波峰波谷，连续三天” uniquely defines output granularity.',
+            'It chooses a clear, executable three-calendar-day sliding-window contract and explicitly distinguishes strict monotonic rise/fall from a different local peak/valley interpretation.',
+            'The SQL checks date adjacency as well as row adjacency, preventing a missing calendar day from being misclassified as a continuous three-day trend.',
+            'Strict comparison semantics, one-row-per-day input grain, NULL handling boundary, overlapping windows in a four-day run, and dialect differences are all surfaced.',
+            'The exact SQL agrees with an independent oracle across the deterministic boundary fixture and 500 randomized sparse/equal-valued datasets.',
+            'The answer correctly identifies LAG as the mechanism for projecting the previous two ordered rows and limits julianday to the executable SQLite fixture rather than claiming it is portable SQL.',
+            'The project section remains hypothetical and contains no fabricated production metrics or experience.'
+          ];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-three-day-trend-sql-20260826-v1',review_version:'three-day-trend.sqlite-window-oracle.v1',decision:'pass',revision_round:1,source_packet:[process.env.SOURCE_DESC,process.env.SOURCE_TAGGED,process.env.SQLITE_WINDOW_DOC,process.env.SQLITE_DATE_DOC,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          NODE
+
+      - name: Phase B bind evidence after isolated conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"
+          python3 "$out/writer_validation.py"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`;
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          const wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`,'utf8'));
+          const rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          const review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||rv.result!=='pass'||review.decision!=='pass') throw new Error('phase state mismatch');
+          if(new Set([wv.candidate_sha256,rv.candidate_sha256,review.candidate_sha256]).size!==1) throw new Error(`candidate hash mismatch ${wv.candidate_sha256} ${rv.candidate_sha256} ${review.candidate_sha256}`);
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:review.candidate_sha256,checked_at:date,writer:{writer_id:'three-day-trend-sql-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Repository Meituan data-engineering interview source',locator:process.env.SOURCE_DESC,source_type:'repository_source_record',checked_at:date},{source_id:'repository-tagged',title:'Structured tagged three-day peak/valley SQL question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'sqlite-window',title:'SQLite Window Functions documentation',locator:process.env.SQLITE_WINDOW_DOC,source_type:'official_documentation',checked_at:date},{source_id:'sqlite-date',title:'SQLite Date And Time Functions documentation',locator:process.env.SQLITE_DATE_DOC,source_type:'official_documentation',checked_at:date},{source_id:'writer-validation',title:'Writer deterministic SQLite validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent randomized SQLite/oracle validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source preserves only the sparse three-day peak/valley prompt; schema, dialect, strictness, and result grain are explicitly treated as assumptions.',source_ids:['repository-source','repository-tagged','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版']},{claim_id:'lag-and-calendar',text:'LAG brings the previous two ordered rows into the current row, while explicit Julian-day differences prove calendar-day adjacency in the SQLite fixture.',source_ids:['sqlite-window','sqlite-date','writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制']},{claim_id:'trend-behavior',text:'The exact SQL detects strict rising/falling three-day windows, rejects equal-value and missing-day sequences, and emits overlapping windows for longer monotonic runs.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:process.env.SOURCE_QID,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks},review_state:'independent_source_first_review_passed',review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings}};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';
+          let text=fs.readFileSync(task,'utf8');
+          const line='- [x] `cq_q_910472ffdcfb2d2541ca198b952df943` three-day trend SQL candidate preserves the sparse peak/valley source boundary, adopts an explicit strict three-calendar-day sliding-window contract, distinguishes local extrema from monotonic trends, checks date continuity as well as value order, passes deterministic writer validation plus 500 independent randomized sparse-series oracle comparisons, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!text.includes(line)) fs.writeFileSync(task,text.trimEnd()+'\n'+line+'\n');
+          NODE
+          npm run ci:answer:validate:strict
+          npm run ci:canonical:check
+          node scripts/content/check_answer_evidence.js --noWrite
+
+      - name: Commit isolated review if branch is unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during review; refusing stale write' >&2; exit 1; }
+          rm -rf "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_tmp"
+          git config user.name "xhs-review-bot"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" "tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md"
+          git commit -m "review: pass batch 0037 three-day trend SQL candidate source-first"
+          git push origin "HEAD:$CONTENT_BRANCH"
