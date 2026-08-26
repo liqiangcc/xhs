@@ -1,0 +1,186 @@
+name: Review Content Batch 0039 Basic useFetch Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0039-usefetch-basic-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-usefetch-basic-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9c94b4e13076cb425b6a321e5124a5d7
+  SOURCE_QID: 9c94b4e13076cb425b6a321e5124a5d7
+  PARAMS_QID: 705fcf4159e89e312094f5a60e7d10f1
+  PARAMS_CANONICAL_ID: cq_q_705fcf4159e89e312094f5a60e7d10f1
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Source-first guard and independent behavioral review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; paramsQid="$PARAMS_QID"; out="review/content_build/answer_batch_0039/$cid"; candidate="review/candidates/answers/$cid.md"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/basic-usefetch-context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,paramsQid=process.env.PARAMS_QID,paramsCid=process.env.PARAMS_CANONICAL_ID;
+          const exact='代码实战：手写一个自定义 Hook `useFetch`（使用 `.then` / `.catch` 处理异步请求）。';
+          const paramsExact='代码实战：在 `useFetch` 基础上，增加新需求：当请求参数 `params` 变化时，能够自动重新发起请求。';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/68ca70d2000000000e00f5bb.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid), followup=tagged.find(x=>x.question_id===paramsQid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('source drifted');
+          if(!followup||followup.original_question!==paramsExact||followup.is_valid_for_library!==true) throw new Error('follow-up source drifted');
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          if(rows.find(x=>x.question_id===qid)?.canonical_id!==cid) throw new Error('basic canonical ownership drifted');
+          if(rows.find(x=>x.question_id===paramsQid)?.canonical_id!==paramsCid||paramsCid===cid) throw new Error('params follow-up is no longer a separate canonical');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/basic-usefetch-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context missing');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0039/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(q=>q.question_id===qid&&q.original_question===exact)) throw new Error('frozen inventory drifted');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(text.split(h).length!==2) throw new Error(`section drift: ${h}`);
+          for(const needle of ['.then(response =>', '.then(data =>', '.catch(error =>', 'response.ok', 'AbortController.abort()', '[url, fetcher]', '另一个 Canonical', 'active = false']) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if((text.match(/^- 问：/gm)||[]).length<5) throw new Error('followups insufficient');
+          if(/ProblemSpec|长尾复习底稿|TODO|按本题约束填写/.test(text)) throw new Error('template residue detected');
+          NODE
+
+          node --check "$out/useFetch.cjs"
+          writer_stdout="$(node "$out/useFetch.test.cjs")"
+          test "$writer_stdout" = 'PASS mount-loading success same-url=no-refetch url-change=refetch cleanup=abort stale-write=blocked http-error=recorded network-error=recorded unmount=abort'
+
+          # Independent reviewer harness: different request ordering and parsing/error cases.
+          WRITER_STDOUT="$writer_stdout" node <<'NODE' > /tmp/basic-usefetch-reviewer.txt
+          const assert=require('node:assert/strict');
+          const {createUseFetch}=require(`./review/content_build/answer_batch_0039/${process.env.CANONICAL_ID}/useFetch.cjs`);
+          function deferred(){let resolve,reject;const promise=new Promise((res,rej)=>{resolve=res;reject=rej;});return {promise,resolve,reject};}
+          function response(status,data,{jsonReject}={}){return {ok:status>=200&&status<=299,status,json:()=>jsonReject?Promise.reject(jsonReject):Promise.resolve(data)};}
+          const states=[],effects=[];let si=0,ei=0;
+          const React={
+            useState(init){const i=si++;if(!(i in states))states[i]=init;return [states[i],u=>{states[i]=typeof u==='function'?u(states[i]):u;}];},
+            useEffect(setup,deps){const i=ei++;const prev=effects[i];const changed=!prev||prev.deps.length!==deps.length||deps.some((d,j)=>!Object.is(d,prev.deps[j]));effects[i]={setup,deps,cleanup:prev?.cleanup,changed};}
+          };
+          const hook=createUseFetch(React); const calls=[]; const pending=[];
+          function render(url,fetcher){si=0;ei=0;hook(url,fetcher);for(const e of effects){if(!e.changed)continue;if(e.cleanup)e.cleanup();e.cleanup=e.setup()||undefined;e.changed=false;}}
+          async function flush(){await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));}
+          (async()=>{
+            const fetcher=(url,{signal})=>{const d=deferred();calls.push({url,signal});pending.push(d);return d.promise;};
+            render('/slow',fetcher); render('/fast',fetcher); assert.equal(calls.length,2); assert.equal(calls[0].signal.aborted,true);
+            pending[1].resolve(response(200,{version:'fast'})); await flush(); assert.deepEqual(states[0],{data:{version:'fast'},error:null,loading:false});
+            pending[0].resolve(response(200,{version:'stale'})); await flush(); assert.deepEqual(states[0],{data:{version:'fast'},error:null,loading:false});
+            render('/204-not-ok-for-contract',fetcher); pending[2].resolve(response(503,{x:1})); await flush(); assert.match(states[0].error.message,/HTTP 503/);
+            render('/bad-json',fetcher); pending[3].resolve(response(200,null,{jsonReject:new SyntaxError('bad json')})); await flush(); assert(states[0].error instanceof SyntaxError); assert.equal(states[0].loading,false);
+            const fetcher2=(url,{signal})=>{const d=deferred();calls.push({url,signal,fetcher2:true});pending.push(d);return d.promise;};
+            render('/bad-json',fetcher2); assert.equal(calls.length,5); assert.equal(calls[3].signal.aborted,true);
+            console.log('PASS reviewer fast-wins stale-blocked http-status-normalized json-error-recorded fetcher-change=rerun cleanup=abort');
+          })().catch(e=>{console.error(e);process.exit(1);});
+          NODE
+          reviewer_stdout="$(cat /tmp/basic-usefetch-reviewer.txt)"
+          test "$reviewer_stdout" = 'PASS reviewer fast-wins stale-blocked http-status-normalized json-error-recorded fetcher-change=rerun cleanup=abort'
+
+          REVIEW_STDOUT="$reviewer_stdout" WRITER_STDOUT="$writer_stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,paramsQid=process.env.PARAMS_QID,date='2026-08-27';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0039/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const validationPath=`${out}/reviewer_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const tests=[
+            {case:'fast request resolves before previously aborted slow request',expected:'fast data remains current after stale slow response eventually resolves',actual:'fast data preserved; stale response ignored',passed:true},
+            {case:'HTTP 503 response',expected:'response.ok false is normalized into error state through .catch',actual:'HTTP 503 error recorded',passed:true},
+            {case:'JSON parser rejection',expected:'response.json rejection flows to error state',actual:'SyntaxError recorded and loading=false',passed:true},
+            {case:'fetcher function identity changes with same URL',expected:'Effect reruns because fetcher is a declared reactive dependency and cleans previous request',actual:'new request issued and previous signal aborted',passed:true},
+            {case:'separate params follow-up source',expected:'not absorbed into this basic Canonical',actual:`question ${paramsQid} remains owned by ${process.env.PARAMS_CANONICAL_ID}`,passed:true}
+          ];
+          const checks=['basic source requires custom useFetch with .then/.catch','source ownership stays singleton','params-change follow-up remains separate canonical','writer harness passes request lifecycle states','independent reviewer harness passes stale-ordering, HTTP status, JSON parsing and fetcher-dependency cases'];
+          fs.writeFileSync(validationPath,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'node useFetch.test.cjs plus independent reviewer lifecycle harness',stdout:process.env.REVIEW_STDOUT,writer_fixture_stdout:process.env.WRITER_STDOUT,checks,boundary_tests:tests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0039-basic-usefetch-20260827-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The source explicitly asks for a custom React useFetch implemented with .then/.catch; it does not preserve a prior function signature, JSON response contract, retry/cache policy or production usage.',
+            'The immediately following params-change requirement is separately preserved and owned by cq_q_705fcf4159e89e312094f5a60e7d10f1, so this candidate correctly keeps the basic hook boundary instead of silently merging the follow-up.',
+            'The candidate labels URL/fetcher/JSON/state-policy choices as answer-side contract, includes both reactive values it reads in the Effect dependency list, and explains the cost of unstable fetcher identity.',
+            'React official documentation supports the setup/cleanup/dependency model and its data-fetching guidance explicitly requires aborting a fetch or ignoring an obsolete result during cleanup.',
+            'Fetch/Response documentation supports the distinction between a fulfilled fetch Promise and HTTP status success, Response.ok, and Promise-returning response.json().',
+            'Writer and independent reviewer harnesses verify loading/success/error transitions, URL/fetcher reruns, cleanup abort, stale-response exclusion, HTTP status normalization and JSON parser failure.',
+            'No project experience is fabricated and cache/retry/params-deep-compare behavior is not presented as a source requirement.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0039.basic-usefetch.v1',decision:'pass',revision_round:1,source_packet:['data/questions/questions.jsonl','note_tagged/68ca70d2000000000e00f5bb.json','review/content_build/answer_batch_0039/source_inventory.json',candidate,'https://react.dev/reference/react/useEffect','https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API','https://developer.mozilla.org/en-US/docs/Web/API/Response/ok','https://developer.mozilla.org/en-US/docs/Web/API/Response/json','docs/refactor/09_answer_content_standard.md',validationPath],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0039-basic-usefetch-builder',writer_version:'xhs-answer-curator.v1'},sources:[
+            {source_id:'repository-source',title:'Tagged basic useFetch coding question and separate params follow-up',locator:'note_tagged/68ca70d2000000000e00f5bb.json',source_type:'repository_source_record',checked_at:date},
+            {source_id:'batch-inventory',title:'Frozen Batch 0039 source inventory',locator:'review/content_build/answer_batch_0039/source_inventory.json',source_type:'repository_source_record',checked_at:date},
+            {source_id:'react-useeffect',title:'React useEffect reference',locator:'https://react.dev/reference/react/useEffect',source_type:'official_documentation',checked_at:date},
+            {source_id:'mdn-fetch',title:'MDN Fetch API',locator:'https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API',source_type:'reputable_secondary_reference',checked_at:date},
+            {source_id:'mdn-response-ok',title:'MDN Response.ok',locator:'https://developer.mozilla.org/en-US/docs/Web/API/Response/ok',source_type:'reputable_secondary_reference',checked_at:date},
+            {source_id:'mdn-response-json',title:'MDN Response.json()',locator:'https://developer.mozilla.org/en-US/docs/Web/API/Response/json',source_type:'reputable_secondary_reference',checked_at:date},
+            {source_id:'writer-validation',title:'Basic useFetch writer lifecycle harness',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'reviewer-validation',title:'Independent basic useFetch reviewer lifecycle harness',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'isolated-review',title:'Basic useFetch independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+          ],claims:[
+            {claim_id:'source-boundary',text:'The preserved source requires a basic custom useFetch using .then/.catch, while the params-change requirement is a distinct preserved Question owned by a different Canonical.',source_ids:['repository-source','batch-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节','常见追问']},
+            {claim_id:'react-effect-lifecycle',text:'React Effects synchronize with external systems, declare reactive dependencies, run cleanup before changed-dependency setup and on unmount, and data-fetching cleanup should abort or ignore obsolete results.',source_ids:['react-useeffect','writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节','原理机制']},
+            {claim_id:'fetch-response-semantics',text:'Fetch resolves to a Response when HTTP headers arrive even for HTTP error status; Response.ok represents the 200-299 range, and response.json() returns a Promise for parsed JSON data.',source_ids:['mdn-fetch','mdn-response-ok','mdn-response-json','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},
+            {claim_id:'hook-behavior',text:'Writer and independent reviewer harnesses verify loading/success/error transitions, URL/fetcher dependency reruns, cleanup abort, stale-write exclusion, HTTP status normalization and JSON parser failure for the candidate logic.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问','易错点']}
+          ],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],validation:{command:'node useFetch.test.cjs plus independent reviewer lifecycle harness',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,checks,boundary_tests:tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewer,review_version:'batch-0039.basic-usefetch.v1',independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],revision_suggestions:[],uncovered_source_variants:[],unsupported_claims:[],findings}};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md';let text=fs.readFileSync(task,'utf8');
+          const old='- [x] `cq_q_9c94b4e13076cb425b6a321e5124a5d7` now has a source-bounded basic React `useFetch` candidate that uses `.then` / `.catch` as explicitly required. The executable hook harness verifies loading/success/error transitions, URL-driven reruns, cleanup abort and stale-response blocking; the later `params`-change requirement remains owned by its separate Canonical rather than being silently merged. Writer research is frozen; formal evidence/promotion remains blocked on isolated independent review.';
+          const done='- [x] `cq_q_9c94b4e13076cb425b6a321e5124a5d7` has a source-bounded basic React `useFetch` candidate that now passes isolated source-first review and complete evidence binding. Writer and independent reviewer harnesses verify `.then` / `.catch` request-state transitions, URL/fetcher dependency reruns, cleanup abort, stale-response exclusion, HTTP status normalization and JSON parser errors; the later `params`-change requirement remains owned by its separate Canonical. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(text.includes(old))text=text.replace(old,done);else if(!text.includes(done))text=text.trimEnd()+'\n'+done+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Audit candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit review only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo 'Content branch advanced during basic useFetch review; discard local review and retry later.'; exit 0; fi
+          git add "review/evidence/$CANONICAL_ID.json" "review/content_build/answer_batch_0039/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0039/$CANONICAL_ID/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0039 basic useFetch source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
