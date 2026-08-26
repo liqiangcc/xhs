@@ -1,0 +1,64 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9c94b4e13076cb425b6a321e5124a5d7",
+  "candidate_sha256": "96330ff8847ff313bba4484ab1bc798c50cb7dc84d795a330726f9b6f8b76522",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "extract the exact candidate JavaScript block, syntax-check it, load it into an isolated hook lifecycle harness, and execute independent dependency/error/cleanup boundary tests",
+  "stdout": "PASS exact-candidate success same-deps stable fetcher-change-rerun json-parse-error strict-setup-cleanup-setup stale-write-blocked http-error network-error unmount-abort",
+  "checks": [
+    "the exact candidate JavaScript block parses successfully",
+    "successful JSON response reaches data with loading=false",
+    "unchanged url/fetcher dependencies do not refetch",
+    "fetcher identity changes rerun the effect and abort the prior request",
+    "JSON parsing rejection reaches the error state",
+    "a setup-cleanup-setup cycle equivalent to React development stress testing aborts the old request and blocks its stale write",
+    "HTTP 404 is normalized through response.ok into the error state",
+    "network rejection reaches the error state",
+    "unmount cleanup aborts the active request"
+  ],
+  "boundary_tests": [
+    {
+      "case": "same url and same fetcher identity",
+      "expected": "no second request",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "same url but new fetcher identity",
+      "expected": "old request cleanup plus new request",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "response.json rejects",
+      "expected": "error recorded and loading=false",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "development setup-cleanup-setup cycle",
+      "expected": "first request aborted and stale result cannot overwrite second request",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "HTTP 404 response",
+      "expected": "response.ok=false becomes HTTP error",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "network rejection",
+      "expected": "non-abort error recorded",
+      "actual": "verified",
+      "passed": true
+    },
+    {
+      "case": "unmount",
+      "expected": "active request aborted",
+      "actual": "verified",
+      "passed": true
+    }
+  ]
+}
