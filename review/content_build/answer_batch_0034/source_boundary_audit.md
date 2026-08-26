@@ -46,3 +46,12 @@
 - Candidate executable policy: interpret a split into subarrays as a partition of the whole input, in original order, into non-empty contiguous segments; allow signed int values; each segment sum must be <= k; empty input returns 0; return -1 when no valid partition exists.
 - Because non-negativity is not preserved, the main solution uses prefix sums + DP rather than assuming the one-pass greedy optimization; the greedy variant is described only conditionally for non-negative inputs.
 - Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
+
+## cq_q_7db820e34ee11cbf1d7d3f980d6f2de3
+
+- Exact repository source: note_tagged/685696fe0000000012033bb6.json, question 7db820e34ee11cbf1d7d3f980d6f2de3.
+- Preserved wording: 如何避免死锁？请写一个死锁案例。
+- Preserved intent: explain how deadlocks are avoided and provide a concrete deadlocking Java example.
+- Not preserved: lock primitive, JDK version, business incident, timeout policy, database semantics, or monitor-vs-explicit-lock requirement.
+- Executable policy: deterministic opposite-order ReentrantLock deadlock, daemon workers, bounded ThreadMXBean detection.
+- Promotion remains blocked until isolated review, evidence gate, required human approval, and real-review policy are satisfied.
