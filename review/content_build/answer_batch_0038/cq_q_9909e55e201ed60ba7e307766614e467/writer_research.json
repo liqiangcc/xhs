@@ -1,0 +1,77 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_9909e55e201ed60ba7e307766614e467",
+  "checked_at": "2026-08-27",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-structured",
+      "title": "Structured interview source containing the double-check singleton prompt",
+      "locator": "note_structured/68218475000000000303b1f3.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Tagged double-check singleton and volatile coding question",
+      "locator": "note_tagged/68218475000000000303b1f3.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "jls-17.4.5",
+      "title": "Java Language Specification 26, 17.4.5 Happens-before Order",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-17.html#jls-17.4.5",
+      "source_type": "primary_official_documentation",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "jls-8.3.1.4",
+      "title": "Java Language Specification 26, 8.3.1.4 volatile Fields",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-8.html#jls-8.3.1.4",
+      "source_type": "primary_official_documentation",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation-source",
+      "title": "DCL singleton contention and reflection validation program",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9909e55e201ed60ba7e307766614e467/writer_validation.java",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source explicitly asks for a handwritten double-check singleton, why volatile is required, and the underlying principle.",
+      "source_ids": ["repository-structured", "repository-tagged"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版"]
+    },
+    {
+      "claim_id": "volatile-happens-before",
+      "text": "JLS 17.4.5 specifies that a write to a volatile field happens-before every subsequent read of that field; JLS 8.3.1.4 defines volatile fields as a JMM mechanism for cross-thread consistent visibility.",
+      "source_ids": ["jls-17.4.5", "jls-8.3.1.4"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "monitor-and-fast-path-boundary",
+      "text": "The candidate uses synchronized mutual exclusion only for initialization and volatile publication for the lock-free fast-path read; removing either changes a distinct correctness property.",
+      "source_ids": ["jls-17.4.5", "writer-validation-source"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "executable-shape",
+      "text": "The checked-in validation reflects the singleton reference as static volatile and stress-calls the DCL implementation from 128 threads, checking one construction, stable identity and initialized state.",
+      "source_ids": ["writer-validation-source"],
+      "answer_locations": ["3 分钟版", "关键细节", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9909e55e201ed60ba7e307766614e467",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
