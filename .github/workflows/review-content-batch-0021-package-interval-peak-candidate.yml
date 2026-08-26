@@ -78,7 +78,7 @@ jobs:
           if(!tq||tq.original_question!==expected) throw new Error('tagged source drift');
           const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
           for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift: ${h}`);
-          for(const marker of ['[putTime, takeTime)','O(n+T)','O(n log n)','O(T)','1.6 GB','来源没有规定时间戳精度','相邻峰值合并']) if(!md.includes(marker)) throw new Error(`semantic marker missing: ${marker}`);
+          for(const marker of ['[putTime, takeTime)','O(n+T)','O(n log n)','O(T)','1.6 GB','没有规定时间戳精度','相邻峰值合并']) if(!md.includes(marker)) throw new Error(`semantic marker missing: ${marker}`);
           if(/真实项目里我|线上事故|我们生产|我在线上|我负责|我优化到/.test(md)) throw new Error('fabricated project-experience claim detected');
           if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
           if((md.match(/```java\n[\s\S]*?\n```/g)||[]).length!==1) throw new Error('expected exactly one Java answer block');
