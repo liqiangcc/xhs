@@ -1,0 +1,137 @@
+name: Remediate Content Batch 0036 Linked List Operation Unrecoverable Source
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0036-linked-list-operation-unrecoverable.yml
+      - scripts/content/remediate_batch_0036_unrecoverable_linked_list_operation.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0036-linked-list-operation-unrecoverable
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_863524333cd6488b996a811a4497ebdc
+  QUESTION_ID: 863524333cd6488b996a811a4497ebdc
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply independently audited source-first fail-closed retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/remediate_batch_0036_unrecoverable_linked_list_operation.py > /tmp/remediate.py
+          python3 -m py_compile /tmp/remediate.py
+          python3 /tmp/remediate.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify explainable invalid projection and retired reachability
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.')
+          cid='cq_q_863524333cd6488b996a811a4497ebdc';qid='863524333cd6488b996a811a4497ebdc';expected='算法：链表操作'
+          canon={json.loads(x)['canonical_id'] for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()}
+          questions={r['question_id']:r for r in (json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip())}
+          progress_ids={r.get('canonical_id') for r in json.loads((root/'review/progress.json').read_text(encoding='utf-8')).get('items',[])}
+          audit=json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8'));decisions={r.get('question_id'):r for r in audit.get('decisions',[])}
+          if cid in canon: raise SystemExit('retired Canonical still active')
+          row=questions.get(qid)
+          if not row or row.get('original_question')!=expected: raise SystemExit('invalid Question projection missing/drifted')
+          if row.get('canonical_id') is not None or row.get('is_valid_for_library') is not False or row.get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit(f'invalid projection incorrect: {row}')
+          if cid in progress_ids: raise SystemExit('ReviewProgress still active')
+          if (root/'review/answers'/f'{cid}.md').exists(): raise SystemExit('active Answer still exists')
+          if not (root/'review/archive/answers'/f'{cid}.md').exists(): raise SystemExit('archived baseline Answer missing')
+          if (root/'review/candidates/answers'/f'{cid}.md').exists(): raise SystemExit('unexpected candidate exists')
+          d=decisions.get(qid)
+          if not d or d.get('decision')!='exclude' or d.get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit('validity exclusion missing')
+          note=d.get('exclusion_note') or ''
+          for token in ('链表操作','反转','合并','删除','判环','输入','输出','strict-valid Coding'):
+              if token not in note: raise SystemExit(f'exclusion explanation missing {token}')
+          print('PASS batch0036 generic linked-list-operation source retired fail-closed and explainable')
+          PY
+
+      - name: Verify complete repository gates after retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite --noManifest
+          node scripts/xhs.js review integrity --noManifest
+          node scripts/xhs.js answer type-audit --check --noWrite --noManifest
+          node scripts/xhs.js answer validate --strict --noWrite --noManifest
+          node scripts/xhs.js validate all --noWrite --noManifest
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Record bounded batch progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md');t=p.read_text(encoding='utf-8')
+          if '- Status: `pending`' in t:t=t.replace('- Status: `pending`','- Status: `in_progress`',1)
+          line='- [x] Source-unrecoverable singleton `cq_q_863524333cd6488b996a811a4497ebdc` is excluded fail-closed: the primary source preserves only the category-level phrase “链表操作”, without the specific operation, input/output representation, constraints or examples needed to distinguish reverse/merge/delete/cycle and other incompatible linked-list contracts; its Canonical is retired, baseline Answer archived, ReviewProgress removed, and invalid Question projection remains explicitly explainable.'
+          if '## Progress' not in t:t=t.rstrip()+'\n\n## Progress\n\n'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ];then
+            echo "Content branch advanced during remediation: $base_head -> $remote_head"
+            echo 'Discard verified local mutation.'
+            exit 0
+          fi
+          git add -A
+          if git diff --cached --quiet;then echo 'No batch 0036 linked-list remediation changes.';exit 0;fi
+          git diff --cached --check
+          git config user.name xhs-remediation-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: retire unrecoverable batch 0036 linked-list operation'
+          git push origin "HEAD:$CONTENT_BRANCH"
