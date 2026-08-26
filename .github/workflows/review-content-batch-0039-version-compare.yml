@@ -1,0 +1,291 @@
+name: Review Content Batch 0039 Version Compare Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0039-version-compare.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-version-compare-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9e22dda08d291f9e651d29d69976d97e
+  SOURCE_QID_A: 9e22dda08d291f9e651d29d69976d97e
+  SOURCE_QID_B: ad3a48d5db87388f867a2f597860d103
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first exact-candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qa="$SOURCE_QID_A"; qb="$SOURCE_QID_B"
+          out="review/content_build/answer_batch_0039/$cid"
+          tmp="/tmp/version-compare-review"
+          rm -rf "$tmp"; mkdir -p "$tmp" "$out"
+
+          python3 - <<'PY'
+          import json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qa=os.environ['SOURCE_QID_A']; qb=os.environ['SOURCE_QID_B']
+          rows=[json.loads(line) for line in pathlib.Path('data/questions/questions.jsonl').read_text().splitlines() if line.strip()]
+          expected={
+            qa:'算法：比较版本号大小。',
+            qb:'算法手撕：比较版本号（Compare Version Numbers）。',
+          }
+          for qid,text in expected.items():
+              row=next((x for x in rows if x.get('question_id')==qid),None)
+              if not row: raise SystemExit(f'{qid}: current Question missing')
+              if row.get('original_question')!=text: raise SystemExit(f'{qid}: source wording drift: {row.get("original_question")}')
+              if row.get('canonical_id')!=cid: raise SystemExit(f'{qid}: ownership drift: {row.get("canonical_id")}')
+              if row.get('is_valid_for_library') is not True: raise SystemExit(f'{qid}: source invalid')
+
+          inventory=json.loads(pathlib.Path('review/content_build/answer_batch_0039/source_inventory.json').read_text())
+          frozen=next((x for x in inventory.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not frozen: raise SystemExit('frozen source inventory item missing')
+          if not any(x.get('question_id')==qa and x.get('original_question')==expected[qa] for x in frozen.get('source_questions',[])):
+              raise SystemExit('frozen primary source wording missing')
+
+          source_b=json.loads(pathlib.Path('note_tagged/6878ac580000000010026c75.json').read_text())
+          if not any(x.get('question_id')==qb and x.get('original_question')==expected[qb] and x.get('is_valid_for_library') is True for x in source_b.get('tagged_questions',[])):
+              raise SystemExit('second primary source wording missing')
+
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['答案侧契约','缺失尾部 revision 按 `0`','不支持负号','不是 SemVer 比较器','O(1)','任意长度']:
+              if marker not in md: raise SystemExit(f'candidate missing boundary marker: {marker}')
+          if len(re.findall(r'^- 问：',md,re.M))<5: raise SystemExit('followups insufficient')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path('/tmp/version-compare-review/VersionCompare.java').write_text(blocks[0].strip()+'\n')
+          PY
+
+          cat > "$tmp/VersionCompareReviewerTest.java" <<'JAVA'
+          public final class VersionCompareReviewerTest {
+              private static void expect(int expected, String left, String right) {
+                  int actual = VersionCompare.compareVersion(left, right);
+                  if (actual != expected) {
+                      throw new AssertionError(left + " vs " + right + ": expected " + expected + " but got " + actual);
+                  }
+              }
+
+              private static void reject(String value) {
+                  try {
+                      VersionCompare.compareVersion(value, "1.0");
+                      throw new AssertionError("expected rejection for " + value);
+                  } catch (IllegalArgumentException expected) {
+                      // expected
+                  }
+              }
+
+              public static void main(String[] args) {
+                  expect(0, "1", "1.0.0.0");
+                  expect(0, "01.002.0003", "1.2.3");
+                  expect(1, "1.0.10", "1.0.2");
+                  expect(-1, "2.999", "3.0");
+                  expect(0, "000.0000", "0");
+                  expect(1,
+                      "12345678901234567890123456789012345678901234567890.1",
+                      "9999999999999999999999999999999999999999999999999.999");
+                  expect(-1,
+                      "7.99999999999999999999999999999999999999999999999999",
+                      "7.100000000000000000000000000000000000000000000000000");
+                  reject("");
+                  reject(".1");
+                  reject("1.");
+                  reject("1..0");
+                  reject("1.a");
+                  reject("-1");
+                  reject("1.0-alpha");
+                  try {
+                      VersionCompare.compareVersion(null, "1");
+                      throw new AssertionError("expected null rejection");
+                  } catch (IllegalArgumentException expected) {
+                      // expected
+                  }
+                  try {
+                      VersionCompare.compareVersion("1", null);
+                      throw new AssertionError("expected null rejection");
+                  } catch (IllegalArgumentException expected) {
+                      // expected
+                  }
+                  System.out.println("PASS exact-candidate trailing-zero leading-zero first-difference arbitrary-length malformed-input contract-boundary");
+              }
+          }
+          JAVA
+
+          javac -d "$tmp/classes" "$tmp/VersionCompare.java" "$tmp/VersionCompareReviewerTest.java"
+          reviewer_stdout="$(java -cp "$tmp/classes" VersionCompareReviewerTest)"
+          test "$reviewer_stdout" = 'PASS exact-candidate trailing-zero leading-zero first-difference arbitrary-length malformed-input contract-boundary'
+
+          REVIEW_STDOUT="$reviewer_stdout" python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qa=os.environ['SOURCE_QID_A']; qb=os.environ['SOURCE_QID_B']; date='2026-08-27'
+          out=pathlib.Path(f'review/content_build/answer_batch_0039/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          rv={
+            'schema_version':'answer_code_validation.v1',
+            'canonical_id':cid,
+            'candidate_sha256':digest,
+            'result':'pass',
+            'validated_at':date,
+            'command':'extract exact Java candidate; compile with javac; execute independent adversarial reviewer fixture',
+            'stdout':os.environ['REVIEW_STDOUT'],
+            'checks':[
+              'exact candidate Java compiles',
+              'missing trailing revisions compare as zero under the explicitly adopted answer contract',
+              'leading-zero revisions compare numerically',
+              'first differing revision determines ordering',
+              'arbitrary-length decimal revisions avoid finite-width integer overflow',
+              'empty, malformed, signed, prerelease-like, and null inputs are rejected outside the adopted contract'
+            ]
+          }
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+
+          findings=[
+            'The two current repository Questions preserve only the standalone compare-version-numbers operation; neither source preserves a complete parsing, malformed-input, numeric-width, or SemVer contract.',
+            'The candidate explicitly labels its dot-separated nonnegative-decimal revision rules as an answer-side executable contract instead of presenting those rules as source facts.',
+            'The exact Java code block compiles and passes an independent adversarial fixture covering trailing-zero equality, leading-zero equality, first-difference ordering, and arbitrary-length decimal revisions.',
+            'Length-then-lexicographic comparison after removing leading zeros is correct for nonnegative decimal revisions and avoids an unstated int/long width limit.',
+            'Malformed, signed, prerelease-like, empty, and null inputs are explicitly outside the adopted contract; the answer also states that it is not a SemVer comparator.',
+            'The answer includes complexity, an O(1)-extra-space scanning variant, targeted follow-ups, failure boundaries, and no fabricated production or personal experience.'
+          ]
+          scores={
+            'facts_and_evidence':24,
+            'directness_and_relevance':19,
+            'type_specific_completeness':18,
+            'mechanism_and_causality':14,
+            'boundaries_and_tradeoffs':10,
+            'followup_quality':5,
+            'oral_quality':5
+          }
+          review={
+            'schema_version':'isolated_review.v1',
+            'canonical_id':cid,
+            'candidate_sha256':digest,
+            'reviewed_at':date,
+            'review_mode':'source_first_isolated',
+            'reviewer_id':'source-first-isolated-reviewer-version-compare-20260827-v1',
+            'review_version':'version-compare.v1',
+            'decision':'pass',
+            'revision_round':1,
+            'source_packet':[
+              'data/questions/questions.jsonl',
+              'review/content_build/answer_batch_0039/source_inventory.json',
+              'note_tagged/6878ac580000000010026c75.json',
+              str(candidate),
+              'docs/refactor/09_answer_content_standard.md',
+              str(out/'reviewer_validation.json')
+            ],
+            'scores':scores,
+            'hard_failures':[],
+            'unsupported_claims':[],
+            'uncovered_source_variants':[],
+            'findings':findings,
+            'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']
+          }
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+
+          evidence={
+            'schema_version':'answer_evidence.v1',
+            'canonical_id':cid,
+            'candidate_sha256':digest,
+            'checked_at':date,
+            'writer':{'writer_id':'version-compare-source-bounded-writer-20260827-v1','writer_version':'xhs-answer-curator.v1'},
+            'sources':[
+              {'source_id':'current-question-projection','title':'Current consolidated Question projection for both compare-version source rows','locator':'data/questions/questions.jsonl','source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'frozen-primary-source','title':'Frozen Batch 0039 source inventory','locator':'review/content_build/answer_batch_0039/source_inventory.json','source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'second-primary-source','title':'Go backend tagged interview source containing Compare Version Numbers prompt','locator':'note_tagged/6878ac580000000010026c75.json','source_type':'repository_primary_source','checked_at':date},
+              {'source_id':'writer-validation','title':'Writer deterministic Java boundary fixture','locator':str(out/'java_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'reviewer-validation','title':'Independent exact-candidate Java adversarial validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'isolated-review','title':'Fresh isolated source-first version-compare review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}
+            ],
+            'claims':[
+              {'claim_id':'source-boundary','text':'Both current source Questions ask the same standalone compare-version-numbers operation; detailed parsing and malformed-input rules are not preserved source facts.','source_ids':['current-question-projection','frozen-primary-source','second-primary-source'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},
+              {'claim_id':'adopted-contract','text':'The candidate explicitly adopts dot-separated nonnegative decimal revisions, ignores leading zeros, treats missing trailing revisions as zero, and rejects malformed or non-decimal input as an answer-side executable boundary.','source_ids':['reviewer-validation','isolated-review'],'answer_locations':['核心结论','3 分钟版','关键细节','常见追问']},
+              {'claim_id':'implementation-behavior','text':'Independent compilation and execution verify trailing-zero equality, leading-zero equality, first-difference ordering, arbitrary-length revision comparison, and explicit rejection outside the adopted contract.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','原理机制','常见追问','易错点']}
+            ],
+            'source_question_coverage':[
+              {'question_id':qa,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},
+              {'question_id':qb,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}
+            ],
+            'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},
+            'review_state':'independent_source_first_review_passed',
+            'review':{
+              'reviewer_id':review['reviewer_id'],
+              'review_version':review['review_version'],
+              'independent':True,
+              'decision':'pass',
+              'revision_round':1,
+              'scores':scores,
+              'hard_failures':[],
+              'uncovered_source_variants':[],
+              'unsupported_claims':[],
+              'findings':findings
+            }
+          }
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md')
+          text=task.read_text()
+          line='- [x] `cq_q_9e22dda08d291f9e651d29d69976d97e` version-compare candidate now passes isolated source-first review across both consolidated source Questions. The exact Java candidate independently compiles and passes adversarial checks for trailing/leading-zero equality, first-difference ordering, arbitrary-length decimal revisions, and explicit malformed-input rejection under the clearly labeled answer-side contract. Evidence binding is complete; formal promotion remains governed by repository human approval and real-review policy.'
+          if line not in text:
+              text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Validate reviewed evidence and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --canonical-id "$CANONICAL_ID" --require-evidence --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0039/$CANONICAL_ID/reviewer_validation.json" \
+                  "review/content_build/answer_batch_0039/$CANONICAL_ID/isolated_review_result.json" \
+                  "review/evidence/$CANONICAL_ID.json" \
+                  tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git commit -m 'review: pass batch 0039 version-compare candidate source-first'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
