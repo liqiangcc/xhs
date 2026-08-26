@@ -1,0 +1,186 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_3a1c2667429257c4fbe7e2d8d8012096",
+  "candidate_sha256": "e544324532ea0bcab746a568230db567f9dd339af7f176782045c337517ca8d2",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "package-interval-peak-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "raw-note",
+      "title": "Cainiao interview note preserving the 100-million package interval question",
+      "locator": "note_desc/68b81a39000000001c034f47.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "tagged-question",
+      "title": "Normalized package interval peak question",
+      "locator": "note_tagged/68b81a39000000001c034f47.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic and randomized interval validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_3a1c2667429257c4fbe7e2d8d8012096/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent direct-membership boundary-span oracle validation",
+      "locator": "review/content_build/answer_batch_0021/cq_q_3a1c2667429257c4fbe7e2d8d8012096/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh source-first isolated review",
+      "locator": "review/content_build/answer_batch_0021/cq_q_3a1c2667429257c4fbe7e2d8d8012096/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source asks for the peak not-yet-picked-up package time range, its duration, and time/space complexity from about 100 million same-day put/take records; it does not prescribe precision, endpoint semantics, language, or a specific algorithm.",
+      "source_ids": [
+        "raw-note",
+        "tagged-question"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "candidate-contract",
+      "text": "Half-open [put,take), nonnegative integer offsets, Java, all peak segments, and total peak duration are explicit answer-side choices rather than source facts.",
+      "source_ids": [
+        "raw-note",
+        "tagged-question",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "sweep-correctness",
+      "text": "Under the declared half-open contract, the grouped endpoint implementation matches an independent direct-membership oracle across exhaustive small multisets, independently seeded random cases, simultaneous boundaries, disjoint peaks, and large sparse timestamps.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity-and-memory",
+      "text": "Sorting 2n endpoints gives O(n log n) time and O(n) event storage; a fixed small time domain permits O(n+T) time and O(T) storage. Two hundred million primitive long endpoints are about 1.6 GB decimal before JVM/input/output overhead.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "f2d52be391d5a320a5460d80e4256278",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "compile PackagePeak.java with javac -Xlint:all -Werror; compare to independent direct-membership boundary-span oracle over exhaustive small multisets and independently seeded randomized cases",
+    "result": "pass",
+    "reported_stdout": "PASS exhaustive_cases=15504 random_cases=5000 direct_membership_oracle=pass simultaneous_boundary=pass disjoint_peaks=pass large_sparse_time=pass invalid_contract=reject",
+    "checks": [
+      "candidate implementation compiles with warnings-as-errors",
+      "15504 exhaustive interval multisets match direct-membership oracle",
+      "5000 independently seeded randomized interval sets match direct-membership oracle",
+      "simultaneous boundary continuity and disjoint equal peaks match declared half-open contract",
+      "large sparse timestamps near encoding limit match oracle",
+      "declared invalid inputs reject"
+    ],
+    "boundary_tests": [
+      {
+        "case": "source versus answer-side contract",
+        "expected": "endpoint semantics, Java/API, all-peaks return shape and algorithm choice remain explicit answer-side decisions",
+        "passed": true
+      },
+      {
+        "case": "same-time put and take",
+        "expected": "all deltas at one timestamp are combined and occupancy is evaluated on the following positive-length span",
+        "passed": true
+      },
+      {
+        "case": "multiple peak ranges",
+        "expected": "all disjoint equal maxima are retained and adjacent uninterrupted peak spans merge",
+        "passed": true
+      },
+      {
+        "case": "100-million scale memory claim",
+        "expected": "event-array estimate is approximately 1.6 GB decimal and is not represented as total process memory",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-package-interval-peak-20260826-v1",
+    "review_version": "package-interval-peak.direct-membership-oracle.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The primary interview note asks for the time range with the most not-yet-picked-up packages, that range duration, and time/space complexity for about 100 million same-day put/take records; it does not prescribe timestamp precision, endpoint semantics, language, Difference Array, Sweep Line, or one specific return shape.",
+      "The candidate explicitly labels half-open [put,take), nonnegative integer offsets, Java, returning all peak segments, and summing peak duration as answer-side contracts rather than recovered source facts.",
+      "The grouped-endpoint sweep invariant is correct under that contract: after all changes at t are applied, current is exactly the active-package count on [t,next), and adjacent equal-peak spans remain continuous when a boundary has net delta zero.",
+      "Reviewer-owned validation compiles the committed Java implementation with warnings as errors and compares it to an independent direct-membership oracle that counts interval containment on every distinct boundary span, not to the writer delta-sweep implementation.",
+      "The reviewer covers all 15,504 multisets of up to five intervals over a six-boundary toy domain, 5,000 independently seeded randomized cases, simultaneous put/take boundaries, disjoint equal peaks, large sparse timestamps near the declared encoding limit, and invalid inputs.",
+      "The O(n log n) general endpoint-sort bound and O(n+T)/O(T) fixed-domain alternative are correctly distinguished. Two hundred million primitive long endpoints consume about 1.6 GB in decimal units; the answer explicitly excludes JVM/input/output overhead from that estimate and separately warns that production input layout must be validated.",
+      "The illustrative List<Interval> API is not itself a memory-optimal representation for 100 million records, but the candidate does not present the 1.6 GB event array as total process memory and explicitly directs real-scale implementations toward primitive input layouts, fixed buckets, streaming/merge, or external sorting as constraints permit.",
+      "No fabricated production experience, unsupported claim that the source mandated a specific algorithm, placeholder implementation, or uncovered source variant was found."
+    ]
+  }
+}
