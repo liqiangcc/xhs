@@ -1,0 +1,264 @@
+name: Build Content Batch 0036 Top100 Stream Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0036-top100-stream-candidate.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0036-top100-stream-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_87c935cb9773c23c5088879578e95a82
+  SOURCE_QID: 87c935cb9773c23c5088879578e95a82
+  SOURCE_TAGGED: note_tagged/680e66cb0000000023012aa3.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_sha256=$(sha256sum "$SOURCE_TAGGED" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "formal_sha256=$(sha256sum review/answers/$CANONICAL_ID.md | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Guard recoverable source and baseline state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：千亿数组Top100';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source question drift');
+          const formal=fs.readFileSync(`review/answers/${cid}.md`,'utf8');
+          if(!formal.includes('"status":"needs_update"')||!formal.includes('"quality_tier":"long_tail_baseline"')) throw new Error('formal answer no longer baseline');
+          if(!formal.includes(expected)) throw new Error('formal source locator drift');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`)) throw new Error('candidate already exists');
+          NODE
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),c=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!c.ok||c.canonical?.canonical_id!==process.env.CANONICAL_ID||c.answer_type!=='coding') throw new Error('canonical/type drift');
+          if(!(c.source_questions||[]).some(x=>x.question_id===process.env.SOURCE_QID)) throw new Error('source ownership missing');
+          NODE
+
+      - name: Write source-bounded Top100 candidate and writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0036/$cid"; mkdir -p "$out" review/candidates/answers
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_87c935cb9773c23c5088879578e95a82","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 千亿级数据 Top100：顺序扫描 + 100 元素小顶堆
+
+          ## 核心结论
+
+          题目只保留了“千亿数组 Top100”，没有说明元素类型、数据是否真的能整体放进内存、Top 是最大还是最小、是否去重、结果顺序以及数据入口。面对这个规模，先把“全量排序”排除为默认方案。这里采用明确的回答契约：求**最大的 100 个值，重复值按出现次数计入**，数据可以顺序读取但不要求整体驻留内存。维护容量为 100 的小顶堆：前 100 个元素入堆，此后只有新值大于堆顶时才替换堆顶。扫描结束后堆中恰好是当前看到数据的 Top100。
+
+          ## 1 分钟版
+
+          - 规模极大时不要先全排序，也不要假设整个输入能放进单机内存；算法只需要顺序扫描一次。
+          - 用容量 `K=100` 的小顶堆保存当前最大的 100 个值，堆顶是这 100 个候选里最小的那个，也就是淘汰门槛。
+          - 堆未满就加入；堆满后，如果 `x <= heapMin`，它不可能进入 Top100，直接丢弃；如果 `x > heapMin`，用 `x` 替换堆顶并下沉恢复堆。
+          - 不变量：处理完任意前缀后，堆保存该前缀中最大的 `min(K, prefixSize)` 个值（按重复次数计）。
+          - 时间 `O(n log K)`，这里 `K=100` 基本可视为线性扫描；额外空间 `O(K)`。真正的瓶颈通常会转向输入读取、分片和 I/O，而不是这 100 个候选本身。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.Arrays;
+          import java.util.PrimitiveIterator;
+
+          public final class TopKStream {
+              private TopKStream() {}
+
+              public static long[] largestK(PrimitiveIterator.OfLong input, int k) {
+                  if (input == null) throw new IllegalArgumentException("input must not be null");
+                  if (k < 0) throw new IllegalArgumentException("k must be nonnegative");
+                  if (k == 0) return new long[0];
+
+                  long[] heap = new long[k];
+                  int size = 0;
+                  while (input.hasNext()) {
+                      long x = input.nextLong();
+                      if (size < k) {
+                          heap[size] = x;
+                          siftUp(heap, size);
+                          size++;
+                      } else if (x > heap[0]) {
+                          heap[0] = x;
+                          siftDown(heap, size, 0);
+                      }
+                  }
+
+                  long[] result = Arrays.copyOf(heap, size);
+                  Arrays.sort(result);
+                  reverse(result);
+                  return result;
+              }
+
+              private static void siftUp(long[] heap, int i) {
+                  while (i > 0) {
+                      int p = (i - 1) >>> 1;
+                      if (heap[p] <= heap[i]) return;
+                      long t = heap[p]; heap[p] = heap[i]; heap[i] = t;
+                      i = p;
+                  }
+              }
+
+              private static void siftDown(long[] heap, int size, int i) {
+                  while (true) {
+                      int left = i * 2 + 1;
+                      if (left >= size) return;
+                      int right = left + 1;
+                      int child = right < size && heap[right] < heap[left] ? right : left;
+                      if (heap[i] <= heap[child]) return;
+                      long t = heap[i]; heap[i] = heap[child]; heap[child] = t;
+                      i = child;
+                  }
+              }
+
+              private static void reverse(long[] a) {
+                  for (int l = 0, r = a.length - 1; l < r; l++, r--) {
+                      long t = a[l]; a[l] = a[r]; a[r] = t;
+                  }
+              }
+          }
+          ```
+
+          代码把输入抽象成 `PrimitiveIterator.OfLong`，是为了表达“顺序读即可”，而不是声称来源规定了 Java 或 `long`。返回结果按降序排列也是回答侧契约；如果调用方不要求排序，可以直接返回堆内容，省掉最终 `O(K log K)` 排序。
+
+          ## 关键细节
+
+          - **Top 的语义**：来源只有“Top100”。本答案选择“最大的 100 个、允许重复”；若要求最小 100 个，把小顶堆对称改为容量 100 的大顶堆；若要求 100 个不同值，还要额外定义去重策略。
+          - **为什么是小顶堆**：我们关心的是“当前 TopK 中最弱的候选”。小顶堆以 `O(1)` 暴露这个门槛，以 `O(log K)` 完成替换。
+          - **不变量**：堆未满时保存全部已读值；堆满后保存已读前缀中最大的 K 个值。任何 `x <= heap[0]` 至少不比当前第 K 大候选更大，因此可以丢弃；更大的值必须进入候选并淘汰旧门槛。
+          - **重复值**：`x == heap[0]` 时直接丢弃仍然正确，因为当前堆已经有 K 个值都不小于它；若 TopK 中需要多个相同大值，它们会在堆填充或更早的替换阶段被保留下来。
+          - **输入规模**：来源没有给内存、机器数和存储介质，因此不能声称“单机数组一定能放下”。顺序输入接口只要求一遍读取，适用于文件、分片流或其他可迭代来源。
+          - **复杂度**：每个元素做一次门槛判断，至多一次 `O(log K)` 堆调整，所以时间 `O(n log K)`，空间 `O(K)`；`K=100` 时候选内存固定在很小规模，但全流程 I/O 成本仍取决于实际数据源。
+          - **分布式扩展**：如果数据已经分片，每个分片可先算本地 Top100，再把各分片最多 100 个候选汇总后再做一次 Top100；这是 TopK 的可合并性质。网络、失败重试和一致性语义仍需按真实执行环境定义。
+
+          ## 原理机制
+
+          TopK 不要求知道所有元素之间的全序，只需要持续维护一个大小为 K 的“候选边界”。当候选已满，小顶堆的根就是当前第 K 大的下界：比它小或相等的新值不可能挤进结果，比它大的值一定应该替换根。于是全局问题被压缩成每个元素与一个动态阈值的比较，避免保存和排序全部 n 个元素。若数据分片，本地 TopK 之外的元素也不可能进入全局 TopK，因此只汇总各分片 TopK 仍然不会漏掉最终答案。
+
+          ## 项目经验版
+
+          来源没有提供真实生产规模、磁盘格式、机器数量或吞吐指标，不能虚构“线上就是这么做的”。实际落地我会先确认数据落在哪里、是否允许一遍扫描、数值类型、重复语义、SLA 与机器内存，再决定单机流式堆、分片局部 TopK + 合并，还是借助已有批处理引擎；验证时重点测端到端扫描吞吐和 I/O，而不只测堆操作。
+
+          ## 常见追问
+
+          - 问：为什么不直接快速排序？答：全排序解决了比 Top100 更强的问题，要付出 `O(n log n)` 时间并通常需要让全量数据参与排序；TopK 只维护 100 个候选即可。
+          - 问：快速选择不是平均 `O(n)` 吗？答：如果数据已经整体可随机访问并允许原地修改，quickselect 是候选；但“千亿级”首先要确认能否整体放入可随机访问存储。本答案选择只要求顺序扫描、`O(K)` 内存的方案。
+          - 问：如何做分布式？答：每个分片先取本地 Top100，把所有局部候选合并后再取 Top100；任一分片里没进本地 Top100 的值，不可能进全局 Top100。
+          - 问：如果要求 Top100 distinct 呢？答：当前实现按出现次数计入，不满足 distinct。需要在候选层增加去重，并明确相同值跨分片的合并方式。
+          - 问：如果数据少于 100 个呢？答：返回全部已读元素并按当前回答契约降序排列；这是代码显式定义的边界，不是来源额外要求。
+
+          ## 易错点
+
+          - 看到“数组”就默认能把千亿级元素装进一个普通单机内存结构，再直接全排序。
+          - 用大顶堆维护“最大 TopK”，导致每次拿到的是最大候选而不是淘汰门槛；这里应使用小顶堆。
+          - 没有先说明“最大/最小、是否去重、结果是否排序”，却把自己的实现选择冒充成原题事实。
+          - 分布式场景把每个分片只取 Top10 后就想得到全局 Top100，局部候选数不足会漏解。
+          - 只报 CPU 复杂度，不考虑千亿级数据真正可能受输入扫描、网络和存储吞吐限制。
+          EOF
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const m=md.match(/```java\n([\s\S]*?)\n```/); if(!m) throw new Error('Java block missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0036/${cid}/TopKStream.java`,m[1]+'\n');
+          NODE
+          cat > "$out/TopKStreamWriterTest.java" <<'JAVA'
+          import java.util.Arrays;
+          import java.util.PrimitiveIterator;
+          import java.util.Random;
+          import java.util.stream.LongStream;
+
+          public final class TopKStreamWriterTest {
+              public static void main(String[] args) {
+                  check(new long[] {}, 100);
+                  check(new long[] {3,1,2}, 100);
+                  check(new long[] {5,5,5,4,4}, 3);
+                  check(new long[] {Long.MIN_VALUE,0,Long.MAX_VALUE,-1,1}, 2);
+                  check(new long[] {4,1,9,2,8,3,7,6,5}, 4);
+                  if(TopKStream.largestK(LongStream.of(1,2,3).iterator(),0).length!=0) throw new AssertionError("k=0");
+                  expect(() -> TopKStream.largestK(null,1));
+                  expect(() -> TopKStream.largestK(LongStream.of(1).iterator(),-1));
+                  Random r=new Random(0x87C935CBL);
+                  for(int c=0;c<5000;c++){
+                      int n=r.nextInt(150),k=r.nextInt(40);
+                      long[] a=new long[n]; for(int i=0;i<n;i++) a[i]=r.nextInt(101)-50;
+                      check(a,k);
+                  }
+                  System.out.println("PASS fixed=5 random=5000 duplicates=preserved extremes=pass invalid=reject");
+              }
+              private static void check(long[] a,int k){
+                  long[] sorted=a.clone(); Arrays.sort(sorted);
+                  int take=Math.min(k,sorted.length); long[] expected=new long[take];
+                  for(int i=0;i<take;i++) expected[i]=sorted[sorted.length-1-i];
+                  PrimitiveIterator.OfLong it=LongStream.of(a).iterator();
+                  long[] got=TopKStream.largestK(it,k);
+                  if(!Arrays.equals(got,expected)) throw new AssertionError("mismatch a="+Arrays.toString(a)+" k="+k+" got="+Arrays.toString(got)+" expected="+Arrays.toString(expected));
+              }
+              private static void expect(Runnable r){ boolean ok=false; try{r.run();}catch(IllegalArgumentException e){ok=true;} if(!ok) throw new AssertionError("expected IllegalArgumentException"); }
+          }
+          JAVA
+          (cd "$out" && javac -Xlint:all -Werror TopKStream.java TopKStreamWriterTest.java && java TopKStreamWriterTest > writer_stdout.txt)
+          test "$(cat "$out/writer_stdout.txt")" = 'PASS fixed=5 random=5000 duplicates=preserved extremes=pass invalid=reject'
+
+      - name: Freeze writer records and commit candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0036/$cid"; WRITER_STDOUT="$(cat "$out/writer_stdout.txt")" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0036/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const ch=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex'); const ih=crypto.createHash('sha256').update(fs.readFileSync(`${out}/TopKStream.java`)).digest('hex');
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,candidate_sha256:ch,implementation_sha256:ih,command:'extract candidate Java; javac -Xlint:all -Werror TopKStream.java TopKStreamWriterTest.java && java TopKStreamWriterTest',stdout:process.env.WRITER_STDOUT,checks:['fixed empty/short/duplicate/extreme cases','5000 seeded random arrays versus full-sort writer oracle','duplicates retained under declared contract','k=0 boundary','null/negative-k reject']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'tagged-source',title:'Repository tagged Top100 interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'TopK stream writer validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source preserves only “算法：千亿数组Top100”; largest-versus-smallest, distinctness, element type, result order, storage and API are not specified.',source_ids:['tagged-source'],answer_locations:['核心结论','关键细节']},{claim_id:'topk-behavior',text:'Under the explicit largest-K-with-duplicates sequential-input contract, the min-heap candidate matches a full-sort oracle over fixed and seeded random inputs.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+          rm -f "$out/writer_stdout.txt"
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node <<'NODE'
+          const fs=require('fs'); const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md'; let t=fs.readFileSync(task,'utf8');
+          const line='- `cq_q_87c935cb9773c23c5088879578e95a82` Top100 candidate preserves the minimal “千亿数组Top100” source boundary, labels largest/duplicates/sequential-input/result-order semantics as answer-side contracts, contains a complete primitive min-heap Java class, and passes fixed plus 5000 seeded writer comparisons; isolated review and promotion gates remain pending.';
+          if(!t.includes(line)) t=t.trimEnd()+'\n'+line+'\n'; fs.writeFileSync(task,t);
+          NODE
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0036/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0036 Top100 stream candidate'
+          git fetch --depth=1 origin "$CONTENT_BRANCH"; remote="$(git rev-parse origin/$CONTENT_BRANCH)"; base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then
+            test "$(git show "origin/$CONTENT_BRANCH:$SOURCE_TAGGED" | sha256sum | awk '{print $1}')" = '${{ steps.base.outputs.source_sha256 }}' || { echo source-changed; exit 0; }
+            test "$(git show "origin/$CONTENT_BRANCH:review/answers/$CANONICAL_ID.md" | sha256sum | awk '{print $1}')" = '${{ steps.base.outputs.formal_sha256 }}' || { echo formal-changed; exit 0; }
+            test -z "$(git ls-tree -r --name-only "origin/$CONTENT_BRANCH" -- "review/candidates/answers/$CANONICAL_ID.md")" || { echo candidate-concurrent; exit 0; }
+            git rebase "origin/$CONTENT_BRANCH"
+          fi
+          git push origin "HEAD:$CONTENT_BRANCH"
