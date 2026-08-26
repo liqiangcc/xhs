@@ -1,0 +1,247 @@
+name: Review Content Batch 0037 Simple HashMap Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0037-simple-hashmap.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-simple-hashmap-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8ae2ef1fe486e36a35795e5e7e4edb92
+  SOURCE_QID: 8ae2ef1fe486e36a35795e5e7e4edb92
+  SOURCE_TAGGED: note_tagged/662e0912000000000d031ea3.json
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha256=$(sha256sum review/candidates/answers/$CANONICAL_ID.md | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "implementation_sha256=$(sha256sum review/content_build/answer_batch_0037/$CANONICAL_ID/SimpleHashMap.java | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source_sha256=$(sha256sum "$SOURCE_TAGGED" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Phase A source-first review and independent differential validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; candidate="review/candidates/answers/$cid.md"
+          rm -rf "$out/reviewer_tmp"; mkdir -p "$out/reviewer_tmp"
+
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const q=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：手撕实现 HashMap (包含数组+链表结构及基本 put/get 逻辑)';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source question drift');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||'';
+          const bullets=(one.match(/^- /gm)||[]).length;
+          if(bullets<3||bullets>5) throw new Error(`one-minute backbone drift ${bullets}`);
+          for(const marker of ['Node<K, V>[] buckets','Math.floorMod','equals','固定','O(1+L)','O(b+n)','最坏 O(n)','来源没有规定 null 语义','不是线程安全']) if(!md.includes(marker)) throw new Error(`semantic marker missing ${marker}`);
+          if(!md.includes('数组 + 链表结构及基本 put/get 逻辑')||!md.includes('这里采用一个最小可执行契约')) throw new Error('source/answer-side contract boundary missing');
+          if(/真实项目里我|线上事故|我们生产|我在线上|我负责|我优化到/.test(md)) throw new Error('fabricated project claim');
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('public final class SimpleHashMap')) throw new Error('complete Java class missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/reviewer_tmp/SimpleHashMap.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$out/reviewer_tmp/SimpleHashMapReviewerTest.java" <<'JAVA'
+          import java.lang.reflect.Field;
+          import java.util.HashMap;
+          import java.util.Map;
+          import java.util.Objects;
+          import java.util.Random;
+
+          public final class SimpleHashMapReviewerTest {
+              private record Key(int id, int hash) {
+                  @Override public int hashCode() { return hash; }
+              }
+
+              private static long randomOps;
+
+              public static void main(String[] args) throws Exception {
+                  verifyStructure();
+                  verifyCollisionChainAndOverwrite();
+                  verifyHashBoundaries();
+                  for (int capacity : new int[] {1,2,3,7,17,31}) verifyAgainstOracle(capacity, 4000);
+                  verifyDeclaredExceptions();
+                  System.out.printf("PASS structure=array+linked-list collision-chain=200 overwrite=pass hash-boundaries=pass capacities=6 random_ops=%d hashmap-oracle=pass null-contract=reject%n", randomOps);
+              }
+
+              private static void verifyStructure() throws Exception {
+                  Field buckets=SimpleHashMap.class.getDeclaredField("buckets");
+                  if(!buckets.getType().isArray()) throw new AssertionError("buckets must be an array");
+                  Class<?> node=buckets.getType().getComponentType();
+                  Field next=node.getDeclaredField("next");
+                  if(next.getType()!=node) throw new AssertionError("bucket node must link to same node type");
+              }
+
+              private static void verifyCollisionChainAndOverwrite() {
+                  SimpleHashMap<Key,Integer> map=new SimpleHashMap<>(4);
+                  for(int i=0;i<200;i++) map.put(new Key(i,7),i);
+                  for(int i=0;i<200;i++) eq(map.get(new Key(i,7)),i);
+                  map.put(new Key(100,7),9999);
+                  eq(map.get(new Key(100,7)),9999);
+                  eq(map.get(new Key(201,7)),null);
+              }
+
+              private static void verifyHashBoundaries() {
+                  SimpleHashMap<Key,String> map=new SimpleHashMap<>(5);
+                  Key min=new Key(1,Integer.MIN_VALUE),neg=new Key(2,-1),zero=new Key(3,0),max=new Key(4,Integer.MAX_VALUE);
+                  map.put(min,"min"); map.put(neg,"neg"); map.put(zero,"zero"); map.put(max,"max");
+                  eq(map.get(new Key(1,Integer.MIN_VALUE)),"min");
+                  eq(map.get(new Key(2,-1)),"neg");
+                  eq(map.get(new Key(3,0)),"zero");
+                  eq(map.get(new Key(4,Integer.MAX_VALUE)),"max");
+              }
+
+              private static void verifyAgainstOracle(int capacity, int operations) {
+                  SimpleHashMap<Key,Integer> actual=new SimpleHashMap<>(capacity);
+                  Map<Key,Integer> oracle=new HashMap<>();
+                  Random r=new Random(0x8AE2EF1FL ^ capacity);
+                  for(int i=0;i<operations;i++) {
+                      Key k=new Key(r.nextInt(350), r.nextInt(17)-8);
+                      if(r.nextInt(3)!=0) {
+                          int v=r.nextInt(); actual.put(k,v); oracle.put(k,v);
+                      } else {
+                          eq(actual.get(k),oracle.get(k));
+                      }
+                      randomOps++;
+                  }
+                  for(Map.Entry<Key,Integer> e:oracle.entrySet()) eq(actual.get(e.getKey()),e.getValue());
+              }
+
+              private static void verifyDeclaredExceptions() {
+                  expect(IllegalArgumentException.class, () -> new SimpleHashMap<Key,String>(0));
+                  expect(IllegalArgumentException.class, () -> new SimpleHashMap<Key,String>(-1));
+                  SimpleHashMap<Key,String> map=new SimpleHashMap<>(2);
+                  expect(NullPointerException.class, () -> map.put(null,"x"));
+                  expect(NullPointerException.class, () -> map.put(new Key(1,1),null));
+                  expect(NullPointerException.class, () -> map.get(null));
+                  eq(map.get(new Key(9,9)),null);
+              }
+
+              private static void eq(Object actual,Object expected) {
+                  if(!Objects.equals(actual,expected)) throw new AssertionError("actual="+actual+" expected="+expected);
+              }
+
+              private static void expect(Class<? extends Throwable> type, Runnable action) {
+                  try { action.run(); } catch(Throwable t) { if(type.isInstance(t)) return; throw new AssertionError("wrong exception "+t,t); }
+                  throw new AssertionError("expected "+type.getSimpleName());
+              }
+          }
+          JAVA
+
+          (cd "$out/reviewer_tmp" && javac -Xlint:all -Werror SimpleHashMap.java SimpleHashMapReviewerTest.java && java SimpleHashMapReviewerTest > stdout.txt)
+          stdout="$(cat "$out/reviewer_tmp/stdout.txt")"
+          test "$stdout" = 'PASS structure=array+linked-list collision-chain=200 overwrite=pass hash-boundaries=pass capacities=6 random_ops=24000 hashmap-oracle=pass null-contract=reject'
+
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The preserved repository source requires only a hand-written HashMap with an array, linked-list collision structure, and basic put/get behavior; it does not require full JDK HashMap compatibility, resizing, deletion, iteration, treeification, null support, or concurrency.',
+            'The candidate preserves that sparse boundary and clearly labels fixed capacity, non-null keys/values, overwrite-on-duplicate, missing-get returns null, no resize, and no thread-safety as answer-side contracts rather than source facts.',
+            'The implementation has the required structure: a bucket array whose component node has a same-type next link, so collisions are represented by separate chaining rather than by an unbounded flat scan or collision overwrite.',
+            'Bucket selection and identity are correctly separated: the mixed hash plus Math.floorMod chooses a legal bucket even for negative/extreme hashes, while equals decides key identity inside the chain, allowing distinct same-hash keys to coexist.',
+            'put updates an existing equal key before inserting a new head node, and get traverses the same bucket chain; reviewer-owned validation covers a 200-node forced collision chain, overwrite of a middle key, and missing-key behavior.',
+            'The remediated answer now states both time and space bounds required by the Coding standard: O(1+L) per operation for target-chain length L, O(n) worst case, and O(b+n) storage for b buckets and n entries.',
+            'Reviewer-owned differential validation runs 24,000 seeded operations across six capacities against java.util.HashMap under the candidate declared non-null/fixed-capacity contract, plus explicit Integer.MIN_VALUE/-1/0/MAX_VALUE hash cases and constructor/null boundaries.',
+            'No fabricated production experience, placeholder implementation, uncovered source variant, or unsupported JDK-version threshold is asserted; expansion topics are kept as follow-up boundaries rather than silently changing the requested minimal implementation.'
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'extract exact candidate Java; javac -Xlint:all -Werror; reflect structure; forced collision/overwrite/hash-boundary tests; 24000 seeded differential operations vs java.util.HashMap under declared contract',stdout:process.env.REVIEW_STDOUT,checks:['exact candidate Java compiles with warnings as errors','bucket field is an array and node contains same-type next link','200 forced same-hash keys coexist and a middle key overwrites correctly','Integer.MIN_VALUE/-1/0/MAX_VALUE hashes index safely','24000 seeded put/get operations across six capacities match reference HashMap under non-null contract','zero/negative capacity and null key/value boundaries reject','missing key returns null'],boundary_tests:[{case:'capacity=1 with heavy collisions',expected:'all keys remain independently retrievable',passed:true},{case:'duplicate equal key after long collision chain',expected:'existing value overwritten without breaking other keys',passed:true},{case:'extreme negative and positive hashes',expected:'all indexes remain legal and values retrievable',passed:true},{case:'declared null contract',expected:'null key/value operations reject and missing get returns null',passed:true}]},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-simple-hashmap-20260826-v1',review_version:'simple-hashmap.array-chain-differential.v1',decision:'pass',revision_round:1,source_packet:[process.env.SOURCE_TAGGED,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Phase B bind writer evidence after independent conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const r=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          const wr=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          const wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`,'utf8'));
+          const rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          if(r.decision!=='pass'||r.candidate_sha256!==hash||wr.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||rv.result!=='pass') throw new Error('review/evidence prerequisite drift');
+          if(wv.candidate_sha256!==hash) throw new Error('writer candidate binding drift');
+          const ev={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'simple-hashmap-source-bounded-writer-20260826-v2',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'tagged-source',title:'Repository tagged hand-written HashMap interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer SimpleHashMap differential validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent SimpleHashMap structure and differential validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source requires an array-plus-linked-list HashMap with basic put/get and does not specify full JDK behavior, resizing, deletion, null or concurrency semantics.',source_ids:['tagged-source','isolated-review'],answer_locations:['核心结论','关键细节']},{claim_id:'structure-and-collision',text:'The exact candidate uses a bucket array with linked collision nodes; distinct same-hash keys coexist and equal keys overwrite under the declared contract.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制']},{claim_id:'index-and-lookup',text:'Bucket indexing remains legal for negative/extreme hashes and lookup/update behavior matches the reference Map across forced and randomized tests under the non-null contract.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','易错点']},{claim_id:'complexity-and-boundaries',text:'For b buckets, n entries and target-chain length L, the implementation performs O(1+L) bucket-plus-chain work, degrades to O(n) for a single long chain, uses O(b+n) storage, and intentionally omits resize/concurrency semantics.',source_ids:['reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks,boundary_tests:rv.boundary_tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:r.reviewer_id,review_version:r.review_version,independent:true,decision:'pass',revision_round:1,scores:r.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:r.findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(ev,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and complete repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Update task and commit review
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'); const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';
+          let t=fs.readFileSync(task,'utf8');
+          const pending='- `cq_q_8ae2ef1fe486e36a35795e5e7e4edb92` simple HashMap candidate preserves the explicit array+linked-list put/get source boundary, adopts a fixed-capacity/non-null contract, handles collisions and overwrite semantics, and passes forced plus 5000 seeded writer differential checks; isolated review and promotion gates remain pending.';
+          const done='- [x] `cq_q_8ae2ef1fe486e36a35795e5e7e4edb92` simple HashMap candidate preserves the explicit array+linked-list put/get source boundary, adopts a fixed-capacity/non-null contract, states O(1+L) operation and O(b+n) storage bounds, handles long collision chains, overwrite and extreme-hash semantics, passes writer plus 24000-operation independent differential validation, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!t.includes(pending)) throw new Error('pending task line drift');
+          t=t.replace(pending,done); fs.writeFileSync(task,t);
+          NODE
+          git config user.name xhs-review-bot
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m "review: pass batch 0037 simple HashMap candidate source-first"
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during review' >&2; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
