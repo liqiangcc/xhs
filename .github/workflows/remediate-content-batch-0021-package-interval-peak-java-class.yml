@@ -102,11 +102,10 @@ jobs:
           fs.writeFileSync(validation,JSON.stringify(v,null,2)+'\n');
           NODE
 
-      - name: Candidate code gate
+      - name: Repository consistency gates before isolated review
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-code --noWrite --noManifest
           node scripts/xhs.js canonical check --noWrite
           node scripts/xhs.js answer type-audit --check --noWrite
           node scripts/xhs.js answer validate --strict --noWrite
