@@ -1,82 +1,86 @@
 {
   "schema_version": "answer_evidence.v1",
   "canonical_id": "cq_q_2c267f2f448a08e8b1f1e1590ce6df72",
-  "candidate_sha256": "09046660349895fd4e64065ff70ef901a7fac455c79681eff24cf553124d6a4f",
-  "checked_at": "2026-08-23",
+  "candidate_sha256": "84c1a20f71b0b07db3d9e3567076f0fa56dddaa660ca872634b79fdf872c9b89",
+  "checked_at": "2026-08-26",
   "writer": {
-    "writer_id": "automation-content-builder-binary-tree-substructure-v1",
+    "writer_id": "tree-substructure-source-expansion-writer-20260826-v2",
     "writer_version": "xhs-answer-curator.v1"
   },
   "sources": [
     {
-      "source_id": "xhs-raw-note-6842998a",
-      "title": "ByteDance interview note containing the binary-tree substructure prompt",
-      "locator": "note_desc/6842998a000000000303f15c.txt",
+      "source_id": "explicit-source",
+      "title": "Tree-substructure source with empty-tree and complexity requirements",
+      "locator": "data/questions/questions.jsonl#question_id=7f3216de4698813dc7c1e7cf479deb0f",
       "source_type": "repository_source_record",
-      "checked_at": "2026-08-23"
+      "checked_at": "2026-08-26"
     },
     {
-      "source_id": "batch-0018-source-packet",
-      "title": "Answer Batch 0018 mechanically extracted repository-source packet",
-      "locator": "review/reports/ANSWER_BATCH_0018_SOURCE_PACKET.json",
+      "source_id": "generic-source",
+      "title": "Generic tree-substructure source",
+      "locator": "data/questions/questions.jsonl#question_id=2c267f2f448a08e8b1f1e1590ce6df72",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "relation-review",
+      "title": "Batch 0035 tree-substructure source-first relation review",
+      "locator": "review/content_build/answer_batch_0035/tree_substructure_relation_review.md",
       "source_type": "repository_structured_source",
-      "checked_at": "2026-08-23"
+      "checked_at": "2026-08-26"
     },
     {
-      "source_id": "batch-0018-source-boundary-audit",
-      "title": "Answer Batch 0018 source-first boundary audit",
-      "locator": "review/content_build/answer_batch_0018/source_boundary_audit.md",
-      "source_type": "repository_structured_source",
-      "checked_at": "2026-08-23"
-    },
-    {
-      "source_id": "binary-tree-substructure-validation",
-      "title": "Deterministic Java validation against enumerate-roots-and-match oracle",
-      "locator": "review/content_build/answer_batch_0018/cq_q_2c267f2f448a08e8b1f1e1590ce6df72/code_validation.json",
+      "source_id": "validation",
+      "title": "Fresh deterministic tree-substructure validation",
+      "locator": "review/content_build/answer_batch_0035/tree_substructure_source_expansion/code_validation.json",
       "source_type": "executable_test_or_reproducible_experiment",
-      "checked_at": "2026-08-23"
+      "checked_at": "2026-08-26"
     },
     {
-      "source_id": "binary-tree-substructure-isolated-review",
-      "title": "Source-first isolated review for the binary-tree substructure candidate",
-      "locator": "review/content_build/answer_batch_0018/cq_q_2c267f2f448a08e8b1f1e1590ce6df72/isolated_review_result.json",
+      "source_id": "isolated-review",
+      "title": "Fresh source-first isolated review",
+      "locator": "review/content_build/answer_batch_0035/tree_substructure_source_expansion/isolated_review_result.json",
       "source_type": "repository_structured_source",
-      "checked_at": "2026-08-23"
+      "checked_at": "2026-08-26"
     }
   ],
   "claims": [
     {
-      "claim_id": "source-contract",
-      "text": "The retained repository source explicitly states two binary-tree inputs and asks whether B is a substructure of A, while leaving empty-tree semantics, node type, API and language unspecified.",
+      "claim_id": "shared-goal",
+      "text": "Both retained Questions ask whether binary tree B is a substructure of binary tree A.",
       "source_ids": [
-        "xhs-raw-note-6842998a",
-        "batch-0018-source-packet",
-        "batch-0018-source-boundary-audit"
+        "explicit-source",
+        "generic-source",
+        "relation-review"
       ],
       "answer_locations": [
         "核心结论",
-        "3 分钟版",
-        "关键细节"
+        "1 分钟版",
+        "3 分钟版"
       ]
     },
     {
-      "claim_id": "candidate-api-boundary",
-      "text": "int node values, empty-B=false, boolean return, Java API shape and non-mutation are explicit candidate choices rather than source facts.",
+      "claim_id": "source-asymmetry",
+      "text": "Only the newer source explicitly states empty B is not a substructure and requests complexity analysis.",
       "source_ids": [
-        "batch-0018-source-boundary-audit",
-        "binary-tree-substructure-isolated-review"
+        "explicit-source",
+        "generic-source",
+        "isolated-review"
       ],
       "answer_locations": [
         "核心结论",
-        "关键细节"
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
       ]
     },
     {
       "claim_id": "matching-correctness",
-      "text": "Searching every A node as a candidate B root and recursively matching every node present in B, while succeeding when B is exhausted, implements the selected substructure contract and permits extra descendants in A after B ends.",
+      "text": "Searching candidate roots in A and succeeding when B is exhausted implements substructure semantics and permits extra descendants in A.",
       "source_ids": [
-        "binary-tree-substructure-validation",
-        "binary-tree-substructure-isolated-review"
+        "validation",
+        "isolated-review"
       ],
       "answer_locations": [
         "1 分钟版",
@@ -86,10 +90,10 @@
     },
     {
       "claim_id": "complexity",
-      "text": "The straightforward implementation has O(|A|*|B|) worst-case time because many A roots may trigger near-complete B matches; recursion depth is bounded by the involved tree heights.",
+      "text": "The implementation has O(|A|*|B|) worst-case time and recursion stack bounded by tree heights.",
       "source_ids": [
-        "binary-tree-substructure-validation",
-        "binary-tree-substructure-isolated-review"
+        "validation",
+        "isolated-review"
       ],
       "answer_locations": [
         "核心结论",
@@ -98,10 +102,9 @@
     },
     {
       "claim_id": "validation",
-      "text": "The exact Java fixture passes 9 fixed cases and 5000 deterministic randomized A/B tree pairs against an independent enumerate-roots-and-match oracle while confirming neither tree is mutated.",
+      "text": "The exact implementation passes 9 fixed and 5000 deterministic randomized cases against an independent oracle with emptyB=false and no mutation.",
       "source_ids": [
-        "binary-tree-substructure-validation",
-        "binary-tree-substructure-isolated-review"
+        "validation"
       ],
       "answer_locations": [
         "关键细节",
@@ -110,6 +113,18 @@
     }
   ],
   "source_question_coverage": [
+    {
+      "question_id": "7f3216de4698813dc7c1e7cf479deb0f",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
     {
       "question_id": "2c267f2f448a08e8b1f1e1590ce6df72",
       "covered": true,
@@ -128,44 +143,42 @@
     "result": "pass",
     "reported_stdout": "PASS fixed=9 randomized=5000 oracle=enumerate-roots-and-match emptyB=false mutation=none",
     "checks": [
-      "both empty and one-sided empty cases",
-      "single-node equality",
-      "positive and negative structural matches",
-      "repeated candidate root values",
-      "A extra descendants after B ends",
-      "5000 deterministic randomized tree pairs",
-      "pre/post full structural serialization equality"
+      "fixed=9",
+      "randomized=5000",
+      "independent oracle",
+      "empty B false",
+      "no mutation"
     ],
     "boundary_tests": [
       {
         "case": "empty B",
-        "expected": "false under explicit candidate contract",
+        "expected": "false from explicit source contract",
         "passed": true
       },
       {
-        "case": "A has extra descendants where B ends",
-        "expected": "still matches as a substructure",
+        "case": "A extra descendants after B ends",
+        "expected": "still matches",
         "passed": true
       },
       {
-        "case": "repeated values in A",
-        "expected": "later matching root is not skipped after an earlier mismatch",
+        "case": "repeated values",
+        "expected": "later candidate roots not skipped",
         "passed": true
       },
       {
-        "case": "5000 deterministic randomized pairs",
-        "expected": "matches independent oracle without mutation",
+        "case": "5000 deterministic random pairs",
+        "expected": "matches independent oracle",
         "passed": true
       }
     ]
   },
   "review_state": "independent_source_first_review_passed",
   "review": {
-    "reviewer_id": "source-first-isolated-reviewer-binary-tree-substructure-20260823",
-    "review_version": "binary-tree-substructure.root-search-and-match.v1",
+    "reviewer_id": "source-first-isolated-reviewer-tree-substructure-expansion-20260826-v3",
+    "review_version": "tree-substructure.source-expansion.v3",
     "independent": true,
     "decision": "pass",
-    "revision_round": 1,
+    "revision_round": 2,
     "scores": {
       "facts_and_evidence": 25,
       "directness_and_relevance": 20,
@@ -179,11 +192,13 @@
     "uncovered_source_variants": [],
     "unsupported_claims": [],
     "findings": [
-      "The candidate keeps the source goal and makes unsupported API choices explicit.",
-      "The substructure-vs-complete-subtree distinction is correctly encoded in the matcher termination condition.",
-      "The implementation, complexity discussion and independent randomized validation are mutually consistent.",
-      "No unsupported production or personal claims are asserted.",
-      "Formal promotion remains blocked only by the required human-approval gate."
+      "The surviving Canonical owns exactly the two current tree-substructure Questions.",
+      "Only the newer source explicitly says empty B is not a substructure and requests time/space complexity; the candidate preserves that source asymmetry.",
+      "The Java answer is a complete compilable class and the followups are question-specific.",
+      "The matcher correctly permits extra descendants in A after B is exhausted.",
+      "Nine fixed plus 5000 deterministic randomized cases match an independent enumerate-roots-and-match oracle without mutation.",
+      "Worst-case O(|A|*|B|) time and recursion-height space match the implementation and explicit complexity request.",
+      "No unsupported attribution, fabricated experience, uncovered variant, placeholder implementation, or hard failure remains; formal promotion remains policy-gated."
     ]
   }
 }
