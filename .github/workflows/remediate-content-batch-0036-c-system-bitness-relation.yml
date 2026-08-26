@@ -1,0 +1,186 @@
+name: Remediate Content Batch 0036 C System Bitness Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0036-c-system-bitness-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-c-system-bitness-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SOURCE_QID: 8759fdb2629c78e7f847052e43922d24
+  SOURCE_CID: cq_q_8759fdb2629c78e7f847052e43922d24
+  TARGET_QID: 37772fa23763570fb8d04764450230d3
+  TARGET_CID: cq_q_37772fa23763570fb8d04764450230d3
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first duplicate relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0036
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q])), byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const source=process.env.SOURCE_QID,target=process.env.TARGET_QID,sourceCid=process.env.SOURCE_CID,targetCid=process.env.TARGET_CID;
+          const expected=new Map([
+            [source,'如何用 C 语言判断当前 system 是 32 位还是 64 位？'],
+            [target,'如何使用 C 语言编写代码来判断当前操作系统是 32 位还是 64 位？'],
+          ]);
+          for(const [qid,cid] of [[source,sourceCid],[target,targetCid]]){
+            const q=byQ.get(qid);
+            if(!q||q.original_question!==expected.get(qid)) throw new Error(`${qid}: normalized source wording drifted: ${q?.original_question}`);
+            if(q.is_valid_for_library===false||!String(q.question_type||'').includes('Coding')) throw new Error(`${qid}: no longer active Coding source`);
+            if(q.canonical_id!==cid) throw new Error(`${qid}: ownership drifted to ${q.canonical_id}`);
+            const c=byC.get(cid);
+            if(!c||JSON.stringify(c.question_ids||[])!==JSON.stringify([qid])) throw new Error(`${cid}: expected singleton before relation review`);
+          }
+          const rawA=fs.readFileSync('note_desc/66e0126e000000002603f658.txt','utf8');
+          const rawB=fs.readFileSync('note_desc/67e9712a000000000b02c3fb.txt','utf8');
+          const phrase='用C语言判断当前系统是32位还是64位';
+          if(!rawA.includes(phrase)||!rawB.includes(phrase)) throw new Error('identical raw source phrase missing');
+          const neighborhood=questions.filter(q=>q.is_valid_for_library!==false && /(?:32\s*位.*64\s*位|64\s*位.*32\s*位)/.test(q.original_question||'') && /(?:C\s*语言|system|操作系统)/i.test(q.original_question||''));
+          const ids=neighborhood.map(q=>q.question_id).sort();
+          const expectedIds=[source,target].sort();
+          if(JSON.stringify(ids)!==JSON.stringify(expectedIds)) throw new Error(`C system-bitness neighborhood drifted: ${JSON.stringify(neighborhood.map(q=>({qid:q.question_id,text:q.original_question,cid:q.canonical_id})))}`);
+          const review=`# C System Bitness Source-First Relation Review\n\n`+
+            `## Primary-source facts\n\n`+
+            `- \`${source}\` comes from note \`66e0126e000000002603f658\`; its raw line is “${phrase}”.\n`+
+            `- \`${target}\` comes from note \`67e9712a000000000b02c3fb\`; its raw line is the same “${phrase}”.\n`+
+            `- The surrounding interview question sequence is the same in both notes; the later tagged wording expands “system” to “操作系统” and “使用 C 语言编写代码”, but the raw interview contract does not define a distinct variant.\n`+
+            `- The narrow active corpus neighborhood contains exactly these two Questions.\n`+
+            `- Neither raw source defines whether “system bitness” means process ABI/pointer representation, OS-kernel bitness or CPU capability.\n\n`+
+            `No historical answer/relation/remediation record was consulted before this conclusion.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\`. Consolidate \`${sourceCid}\` into \`${targetCid}\`. Retain \`${targetCid}\` as the survivor because its normalized wording and domain metadata make the intended OS-facing phrasing clearer, not because the raw sources preserve different semantics. The survivor Answer remains needs-update and must be rebuilt with the process-ABI versus host-OS/CPU semantic boundary explicit.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0036/c_system_bitness_relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select decide and apply exact same pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0036/c_system_bitness_relation_apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$SOURCE_QID,$TARGET_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0],actual=[...c.question_ids].sort(),expected=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected pair drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0036-c-system-bitness-source-first-review \
+            --actor-display-name 'C system bitness source-first reviewer' \
+            --rationale 'Both primary raw interview notes preserve the identical line 用C语言判断当前系统是32位还是64位 in the same surrounding question sequence. Their tagged wording differs only in normalization detail, not observable contract.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$TARGET_CID" \
+            --canonical-title '如何使用 C 语言编写代码来判断当前操作系统是 32 位还是 64 位？' > "$out/apply.json"
+
+      - name: Verify survivor ownership and record both batches
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q])),byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          for(const qid of [process.env.SOURCE_QID,process.env.TARGET_QID]) if(byQ.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: survivor ownership missing`);
+          if(byC.has(process.env.SOURCE_CID)) throw new Error('retired source Canonical still present');
+          const members=[...(byC.get(process.env.TARGET_CID)?.question_ids||[])].sort(),expected=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`survivor member set drifted: ${JSON.stringify(members)}`);
+          fs.writeFileSync('review/content_build/answer_batch_0036/c_system_bitness_relation_apply.md',
+            '# C System Bitness Relation Application\n\n'+
+            '- Reviewed relation: `same`.\n'+
+            '- Survivor: `'+process.env.TARGET_CID+'`.\n'+
+            '- Retired duplicate Canonical: `'+process.env.SOURCE_CID+'`.\n'+
+            '- Both source Questions now route to the survivor; no Answer promotion occurs in this normalization slice.\n');
+
+          const t36='tasks/answer-batches/TASK-20260711-0313-answer-batch-0036.md';
+          let a=fs.readFileSync(t36,'utf8');
+          const audit='- [ ] `cq_q_8759fdb2629c78e7f847052e43922d24` C system-bitness source boundary is source-first audited: the wording is recoverable but leaves `system` ambiguous between compiled-process ABI/pointer representation, OS kernel, and CPU capability. Any rebuilt answer must distinguish those meanings and must not present a `sizeof` probe as a portable host-OS-bitness detector; candidate/reviewer work remains pending.';
+          const done='- [x] `cq_q_8759fdb2629c78e7f847052e43922d24` duplicate C system-bitness singleton is source-first consolidated as `same` into `cq_q_37772fa23763570fb8d04764450230d3`: both primary raw notes preserve the identical interview line “用C语言判断当前系统是32位还是64位” in the same question sequence. The survivor Answer remains needs-update and must preserve the process-ABI versus host-OS/CPU semantic boundary.';
+          if(!a.includes(audit)) throw new Error('batch 0036 source-audit marker missing');
+          fs.writeFileSync(t36,a.replace(audit,done));
+
+          const t21='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md';
+          let b=fs.readFileSync(t21,'utf8');
+          const note='- `cq_q_37772fa23763570fb8d04764450230d3` now survives a source-first `same` consolidation with duplicate `cq_q_8759fdb2629c78e7f847052e43922d24`; two raw interview notes preserve the identical C system-bitness line. The consolidated Answer remains needs-update pending a source-bounded rebuild and isolated review that distinguishes compiled-process ABI/pointer representation from host OS or CPU bitness.';
+          if(!b.includes(note)) b=b.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(t21,b);
+          NODE
+
+      - name: Refresh generated audit and run complete gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during C system-bitness relation slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: consolidate duplicate C system-bitness sources'
+          git push origin "HEAD:$CONTENT_BRANCH"
