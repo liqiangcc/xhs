@@ -1,0 +1,127 @@
+name: Remediate Content Batch 0037 Simple HashMap Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0037-simple-hashmap-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-simple-hashmap-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8ae2ef1fe486e36a35795e5e7e4edb92
+  CANDIDATE_BLOB_SHA: 2b08ee3c3de73ce5a4bf3f9cb531bc431434b546
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Remediate coding-standard gaps without changing the source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; candidate="review/candidates/answers/$cid.md"; out="review/content_build/answer_batch_0037/$cid"
+          test "$(git hash-object "$candidate")" = "$CANDIDATE_BLOB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('review/candidates/answers/cq_q_8ae2ef1fe486e36a35795e5e7e4edb92.md')
+          text=p.read_text()
+          old='- 在哈希分布良好且负载受控时，put/get 平均接近 O(1)；固定桶数组如果碰撞严重，单个操作最坏会退化到 O(n)。'
+          new='- 设桶数为 `b`、元素数为 `n`、目标桶链长为 `L`：定位桶是 O(1)，桶内查找是 O(L)，因此分布良好时 put/get 平均接近 O(1)、最坏 O(n)；存储由桶数组和节点组成，总空间 O(b+n)，本实现 `b` 固定时随元素增长为 O(n)。'
+          if old not in text:
+              raise SystemExit('one-minute complexity sentence drift')
+          text=text.replace(old,new,1)
+          old='这段代码展示的是题目明确点名的核心结构和 put/get 链路，不宣称等价于 JDK HashMap。固定容量让冲突链可能越来越长；真实通用 Map 通常还要维护 size/load factor，并在阈值后扩容重散列。'
+          new='这段代码展示的是题目明确点名的核心结构和 put/get 链路，不宣称等价于某个 JDK 版本的 `HashMap`。设桶数为 `b`、元素数为 `n`、目标桶链长为 `L`：单次 put/get 为 O(1+L)，分布良好且负载受控时平均接近 O(1)，所有元素落入同一桶时最坏 O(n)；桶数组加全部节点占 O(b+n) 空间。固定容量让冲突链可能越来越长；若继续扩展为通用 Map，通常还要定义 size/load factor 与扩容重散列策略。'
+          if old not in text:
+              raise SystemExit('three-minute complexity paragraph drift')
+          text=text.replace(old,new,1)
+          old='- **null 边界**：Java 自带 HashMap 支持部分 null 语义，但来源没有要求复刻它。本简化实现拒绝 null key/value，使 `get()==null` 可以明确表示不存在。'
+          new='- **null 边界**：来源没有规定 null 语义。本简化实现选择拒绝 null key/value，使 `get()==null` 可以明确表示不存在；这是答案侧契约，不是原题隐含要求。'
+          if old not in text:
+              raise SystemExit('null boundary sentence drift')
+          text=text.replace(old,new,1)
+          old='- 问：为什么 JDK 里不只用链表？答：真实实现还会针对高碰撞链做更多优化；但来源只要求数组+链表和基本 put/get，本答案不把特定 JDK 版本的树化阈值冒充成题目要求。'
+          new='- 问：如果冲突链越来越长怎么办？答：需要先定义扩容与碰撞优化策略，例如在负载达到阈值后扩大桶数组并重新分桶；来源只要求数组+链表和基本 put/get，所以本答案不把任何特定 JDK 版本的树化阈值冒充成题目要求。'
+          if old not in text:
+              raise SystemExit('version-sensitive followup sentence drift')
+          text=text.replace(old,new,1)
+          p.write_text(text)
+          PY
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1) throw new Error('expected exactly one Java block');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/SimpleHashMap.java`,blocks[0][1]+'\n');
+          for(const marker of ['O(1+L)','O(b+n)','最坏 O(n)','来源没有规定 null 语义','答案侧契约']) if(!md.includes(marker)) throw new Error(`remediation marker missing ${marker}`);
+          if(md.includes('Java 自带 HashMap 支持部分 null 语义')) throw new Error('unsupported JDK null comparison remains');
+          if(md.includes('为什么 JDK 里不只用链表')) throw new Error('version-sensitive followup remains');
+          NODE
+
+          (cd "$out" && javac -Xlint:all -Werror SimpleHashMap.java SimpleHashMapWriterTest.java && java SimpleHashMapWriterTest > /tmp/hashmap-writer-stdout.txt)
+          test "$(cat /tmp/hashmap-writer-stdout.txt)" = 'PASS collisions=pass update=pass negative-hash=pass random=5000 hashmap-oracle=pass null-contract=reject'
+
+          CID="$cid" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CID;
+          const candidate=`review/candidates/answers/${cid}.md`,path=`review/content_build/answer_batch_0037/${cid}/writer_validation.json`;
+          const wv=JSON.parse(fs.readFileSync(path,'utf8'));
+          wv.candidate_sha256=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          wv.implementation_sha256=crypto.createHash('sha256').update(fs.readFileSync(`review/content_build/answer_batch_0037/${cid}/SimpleHashMap.java`)).digest('hex');
+          wv.validated_at='2026-08-26';
+          fs.writeFileSync(path,JSON.stringify(wv,null,2)+'\n');
+          NODE
+
+      - name: Pre-review semantic and structure audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||'';
+          if((one.match(/^- /gm)||[]).length<3||(one.match(/^- /gm)||[]).length>5) throw new Error('one-minute backbone must remain 3-5 bullets');
+          if(!/O\(b\+n\)/.test(md)||!/O\(1\+L\)/.test(md)) throw new Error('explicit time/space complexity missing');
+          if((md.match(/- 问：/g)||[]).length<3) throw new Error('followups insufficient');
+          if(/真实项目里我|线上事故|我们生产|我在线上|我负责|我优化到/.test(md)) throw new Error('fabricated project claim');
+          NODE
+
+      - name: Commit remediation atomically
+        shell: bash
+        env:
+          BASE_HEAD: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0037/$CANONICAL_ID/SimpleHashMap.java" "review/content_build/answer_batch_0037/$CANONICAL_ID/writer_validation.json"
+          git commit -m 'content: remediate batch 0037 HashMap complexity boundary'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_HEAD" || { echo 'content branch moved during remediation' >&2; exit 1; }
+          git push origin "HEAD:$CONTENT_BRANCH"
