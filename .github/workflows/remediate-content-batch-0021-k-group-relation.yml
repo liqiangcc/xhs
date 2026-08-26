@@ -1,0 +1,201 @@
+name: Remediate Content Batch 0021 K Group Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0021-k-group-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0021-k-group-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SOURCE_QID: 37b42623861093a397be5bff1ee3fad6
+  SOURCE_CID: cq_q_37b42623861093a397be5bff1ee3fad6
+  TARGET_QID: 47f6e217cc684f406d6472441b015c41
+  TARGET_OTHER_QID: 74dcc97230485151dd50aa5d7664cc0c
+  TARGET_CID: cq_topic_745b29f7
+  SOURCE_NOTE: note_desc/67f9c763000000001c016f0f.txt
+  TARGET_NOTE: note_desc/68b2bb7c000000001d00459e.txt
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first preflight and independent relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0021/k_group_relation'
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$SOURCE_CID" --noWrite > "$out/source_context.json"
+          node scripts/xhs.js answer context --canonical-id "$TARGET_CID" --noWrite > "$out/target_context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const out='review/content_build/answer_batch_0021/k_group_relation';
+          const source=JSON.parse(fs.readFileSync(`${out}/source_context.json`,'utf8'));
+          const target=JSON.parse(fs.readFileSync(`${out}/target_context.json`,'utf8'));
+          if(!source.ok||source.canonical?.canonical_id!==process.env.SOURCE_CID||source.answer_type!=='coding') throw new Error('source Canonical context missing or type drifted');
+          if(!target.ok||target.canonical?.canonical_id!==process.env.TARGET_CID||target.answer_type!=='coding') throw new Error('target Canonical context missing or type drifted');
+          const sourceMembers=[...(source.canonical?.question_ids||[])].sort();
+          if(JSON.stringify(sourceMembers)!==JSON.stringify([process.env.SOURCE_QID])) throw new Error(`source Canonical is no longer singleton-bounded: ${JSON.stringify(sourceMembers)}`);
+          const targetMembers=[...(target.canonical?.question_ids||[])].sort();
+          const expectedTarget=[process.env.TARGET_QID,process.env.TARGET_OTHER_QID].sort();
+          if(JSON.stringify(targetMembers)!==JSON.stringify(expectedTarget)) throw new Error(`target member set drifted: ${JSON.stringify(targetMembers)}`);
+          const expectedSource='算法手撕：LeetCode 25 - K 个一组翻转链表。给定一个链表，每 k 个节点一组进行翻转，请返回翻转后的链表';
+          const expectedTarget='算法手撕：K 个一组翻转链表（Reverse Nodes in k-Group）。';
+          const expectedTargetOther='算法：k个一组翻转链表';
+          const sourceQuestion=(source.source_questions||[]).find(x=>x.question_id===process.env.SOURCE_QID);
+          const targetQuestion=(target.source_questions||[]).find(x=>x.question_id===process.env.TARGET_QID);
+          const targetOther=(target.source_questions||[]).find(x=>x.question_id===process.env.TARGET_OTHER_QID);
+          if(sourceQuestion?.original_question!==expectedSource) throw new Error(`source wording drifted: ${sourceQuestion?.original_question}`);
+          if(targetQuestion?.original_question!==expectedTarget) throw new Error(`target wording drifted: ${targetQuestion?.original_question}`);
+          if(targetOther?.original_question!==expectedTargetOther) throw new Error(`target other wording drifted: ${targetOther?.original_question}`);
+          const rawSource=fs.readFileSync(process.env.SOURCE_NOTE,'utf8');
+          const rawTarget=fs.readFileSync(process.env.TARGET_NOTE,'utf8');
+          if(!rawSource.includes('手撕LC 25. K 个一组翻转链表')) throw new Error('source raw note no longer preserves LC25 k-group wording');
+          if(!rawTarget.includes('手撕：k个一组翻转链表')) throw new Error('target raw note no longer preserves k-group wording');
+          const review=`# Answer Batch 0021 — K-Group Linked-List Relation Review\n\n`+
+            `## Source-first facts\n\n`+
+            `- \`${process.env.SOURCE_QID}\`: ${sourceQuestion.original_question}\n`+
+            `- \`${process.env.TARGET_QID}\`: ${targetQuestion.original_question}\n`+
+            `- Existing target companion \`${process.env.TARGET_OTHER_QID}\`: ${targetOther.original_question}\n\n`+
+            `The raw source notes independently preserve “LC 25 / K 个一组翻转链表” and “k个一组翻转链表”. No historical merge/remediation record was used to reach the relation conclusion. All three current Questions ask the same coding problem boundary: reverse a singly linked list in groups of k and return the resulting list. The LC25 wording identifies the standard problem but does not introduce a distinct output, data model, or algorithmic objective relative to the existing target Canonical.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\` between \`${process.env.SOURCE_QID}\` and target bridge \`${process.env.TARGET_QID}\`. Preserve \`${process.env.TARGET_CID}\` as the survivor because it already owns two independently recovered k-group Questions. Retire singleton duplicate \`${process.env.SOURCE_CID}\` through the reviewed Select → Decide → Apply path. Consolidation must invalidate/rebuild the survivor Answer against all three current source Questions; this relation decision does not itself promote an Answer.\n`;
+          fs.writeFileSync(`${out}/relation_review.md`,review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select, decide, and apply exact reviewed pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0021/k_group_relation/apply'
+          mkdir -p "$out"
+          node scripts/xhs.js canonical suggest --question-ids "$SOURCE_QID,$TARGET_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected exactly one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0];
+          const actual=[...c.question_ids].sort();
+          const expected=[process.env.SOURCE_QID,process.env.TARGET_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected Question set drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0021-k-group-source-first-review \
+            --actor-display-name 'Batch 0021 K-group source-first reviewer' \
+            --rationale 'Current source-first review found the singleton LC25 K-group Question and an existing target member ask the same K-group linked-list reversal coding problem; the target already groups two equivalent independently recovered Questions.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$TARGET_CID" \
+            --canonical-title '算法：K 个一组翻转链表' > "$out/apply.json"
+
+      - name: Verify exact ownership effect and update batch record
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const canon=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const qs=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byCid=new Map(canon.map(x=>[x.canonical_id,x])), byQid=new Map(qs.map(x=>[x.question_id,x]));
+          for(const qid of [process.env.SOURCE_QID,process.env.TARGET_QID,process.env.TARGET_OTHER_QID]){
+            if(byQid.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: expected survivor ownership after reviewed apply`);
+          }
+          if(byCid.has(process.env.SOURCE_CID)) throw new Error('singleton duplicate source Canonical survived same-relation consolidation');
+          const target=byCid.get(process.env.TARGET_CID);
+          const members=[...(target?.question_ids||[])].sort();
+          const expected=[process.env.SOURCE_QID,process.env.TARGET_QID,process.env.TARGET_OTHER_QID].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`survivor member set drifted: ${JSON.stringify(members)}`);
+          fs.writeFileSync('review/content_build/answer_batch_0021/k_group_relation/application.md',
+            '# Answer Batch 0021 — K-Group Relation Application\n\n'+
+            '- Reviewed relation: `same`.\n'+
+            `- Survivor: \`${process.env.TARGET_CID}\`.\n`+
+            `- Consolidated Questions: \`${process.env.SOURCE_QID}\`, \`${process.env.TARGET_QID}\`, \`${process.env.TARGET_OTHER_QID}\`.\n`+
+            `- Retired duplicate Canonical: \`${process.env.SOURCE_CID}\`.\n`+
+            '- Mutation path: explicit pair Select → AI Decision → Application dedup apply with current ownership/freshness checks.\n'+
+            '- Formal Answer promotion is intentionally deferred; the survivor must be rebuilt and independently reviewed against the expanded three-source set.\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md';
+          let text=fs.readFileSync(task,'utf8');
+          const before='- `cq_q_37b42623861093a397be5bff1ee3fad6` — coding; risks: long_tail_baseline, placeholder_implementation';
+          const after='- `cq_q_37b42623861093a397be5bff1ee3fad6` — retired by fresh source-first `same` consolidation into `cq_topic_745b29f7`; all three recovered K-group linked-list Questions now share one Canonical. Survivor Answer is invalid/rebuild-required against the expanded source set before any promotion.';
+          if(!text.includes(before)) throw new Error('batch 0021 task line drifted');
+          fs.writeFileSync(task,text.replace(before,after));
+          NODE
+
+      - name: Refresh generated answer-type audit after canonical consolidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+
+      - name: Full repository and answer gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during reviewed K-group relation slice: $base_head -> $remote_head; fail closed and regenerate next run."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: consolidate batch 0021 k-group duplicate'
+          git push origin "HEAD:$CONTENT_BRANCH"
