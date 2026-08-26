@@ -1,0 +1,82 @@
+name: Audit Content Batch 0036 Temperature Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/audit-content-batch-0036-temperature-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  SHORTHAND_QID: 85d552bc1c5e793996cb2ea34fe2e614
+  SHORTHAND_CID: cq_q_85d552bc1c5e793996cb2ea34fe2e614
+  EXPLICIT_QID: 870fc85ff34de337bdcf1e05799217ca
+  EXPLICIT_CID: cq_q_870fc85ff34de337bdcf1e05799217ca
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Source-first enumerate temperature monotonic-stack relations
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const expected=new Map([
+            [process.env.SHORTHAND_QID,'算法：温度 (单调栈)'],
+            [process.env.EXPLICIT_QID,'算法手撕：每日温度（Daily Temperatures）。'],
+          ]);
+          for(const [qid,text] of expected){
+            const q=byQ.get(qid);
+            if(!q||q.original_question!==text) throw new Error(`${qid}: source wording drifted: ${q?.original_question}`);
+            if(q.is_valid_for_library===false) throw new Error(`${qid}: unexpectedly invalid before relation audit`);
+          }
+          if(byQ.get(process.env.SHORTHAND_QID)?.canonical_id!==process.env.SHORTHAND_CID) throw new Error('shorthand ownership drifted');
+          if(byQ.get(process.env.EXPLICIT_QID)?.canonical_id!==process.env.EXPLICIT_CID) throw new Error('explicit daily-temperatures ownership drifted');
+          const matches=questions.filter(q=>q.is_valid_for_library!==false && /每日温度|温度.*单调栈|单调栈.*温度|daily\s*temperatures/i.test(q.original_question||''));
+          const ids=[...new Set(matches.map(q=>q.canonical_id).filter(Boolean))];
+          const cs=ids.map(id=>byC.get(id)).filter(Boolean);
+          const notes={};
+          for(const q of matches){
+            const id=q.source_note_id||'unknown';
+            notes[id]=(notes[id]||0)+1;
+          }
+          console.log('TEMPERATURE_RELATION_AUDIT_BEGIN');
+          console.log(JSON.stringify({
+            shorthand:{question_id:process.env.SHORTHAND_QID,canonical_id:process.env.SHORTHAND_CID,source:byQ.get(process.env.SHORTHAND_QID)},
+            explicit:{question_id:process.env.EXPLICIT_QID,canonical_id:process.env.EXPLICIT_CID,source:byQ.get(process.env.EXPLICIT_QID)},
+            match_count:matches.length,
+            canonical_count:ids.length,
+            source_note_counts:notes,
+            matches:matches.map(q=>({question_id:q.question_id,canonical_id:q.canonical_id,original_question:q.original_question,source_note_id:q.source_note_id,source_question_index:q.source_question_index,question_type:q.question_type,tech_entities:q.tech_entities})),
+            canonicals:cs.map(c=>({canonical_id:c.canonical_id,canonical_question:c.canonical_question,frequency:c.frequency,question_ids:c.question_ids}))
+          },null,2));
+          console.log('TEMPERATURE_RELATION_AUDIT_END');
+          NODE
+
+      - name: Compare current answer contexts without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$SHORTHAND_CID" --noWrite
+          node scripts/xhs.js answer context --canonical-id "$EXPLICIT_CID" --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
