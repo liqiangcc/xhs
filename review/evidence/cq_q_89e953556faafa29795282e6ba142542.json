@@ -1,0 +1,167 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_89e953556faafa29795282e6ba142542",
+  "candidate_sha256": "fd3bf437603087fbcc5de56b8a4c920075518029bf75b7804efc7ebc25493681",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "leetcode287-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "tagged-source",
+      "title": "Repository tagged LeetCode 287 question",
+      "locator": "note_tagged/66c848ed000000001d0147df.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "official-problem",
+      "title": "LeetCode 287 Find the Duplicate Number",
+      "locator": "https://leetcode.com/problems/find-the-duplicate-number/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer executable validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_89e953556faafa29795282e6ba142542/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent executable validation",
+      "locator": "review/content_build/answer_batch_0037/cq_q_89e953556faafa29795282e6ba142542/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Isolated source-first review",
+      "locator": "review/content_build/answer_batch_0037/cq_q_89e953556faafa29795282e6ba142542/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "problem-contract",
+      "text": "Official LeetCode 287 supplies the n+1/[1,n]/single-distinct-duplicate/no-mutation/constant-space contract.",
+      "source_ids": [
+        "tagged-source",
+        "official-problem",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "floyd-correctness",
+      "text": "The exact candidate Floyd implementation returns the unique duplicate across official, smallest, multi-occurrence and randomized valid contracts.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "non-mutation-complexity",
+      "text": "The implementation is pointer-only and leaves nums unchanged; source-first review confirms linear time and constant auxiliary state.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "89e953556faafa29795282e6ba142542",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate Java; javac -Xlint:all -Werror; independent official, boundary and 5475 randomized valid-contract tests",
+    "result": "pass",
+    "reported_stdout": "PASS official=3 smallest=2 multi_occurrence=pass randomized=5475 input_immutable=pass",
+    "checks": [
+      "exact Java compiles",
+      "official examples pass",
+      "smallest cases pass",
+      "multi-occurrence duplicate passes",
+      "5475 randomized valid contracts pass",
+      "input remains unchanged"
+    ],
+    "boundary_tests": [
+      {
+        "case": "official basic duplicate [1,3,4,2,2]",
+        "expected": "returns 2 without mutation",
+        "passed": true
+      },
+      {
+        "case": "minimum n=1 input [1,1]",
+        "expected": "returns 1 without mutation",
+        "passed": true
+      },
+      {
+        "case": "duplicate occurs more than twice [3,3,3,3,3]",
+        "expected": "returns 3 without mutation",
+        "passed": true
+      },
+      {
+        "case": "5475 seeded valid contracts with varying multiplicity",
+        "expected": "always returns the unique duplicate and leaves input unchanged",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-leetcode287-20260826-v2",
+    "review_version": "leetcode287.floyd-contract-randomized.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Repository source names LeetCode 287 while the candidate explicitly attributes detailed constraints to the official problem rather than pretending the sparse row preserved them.",
+      "Candidate provides a complete Java Floyd cycle-entry implementation and directly answers the coding task.",
+      "Function-graph reasoning links [1,n] values, duplicate indegree, cycle formation, Floyd meeting and entry recovery.",
+      "O(n) time/O(1) space and no-mutation requirements are stated with HashSet/sorting alternatives correctly bounded.",
+      "Duplicate multiplicity is not restricted to exactly two; independent validation covers many-occurrence and 5475 seeded valid contracts.",
+      "No fabricated production experience or generic placeholder content is present."
+    ]
+  }
+}
