@@ -1,0 +1,38 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_84514fd4ca5bfa916e7260a3b68ea6ed",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "javac ThreeThreadOrderedPrinterValidation.java && java ThreeThreadOrderedPrinterValidation",
+  "stdout": "PASS fixed=5 stress=200 randomized-start=true exact-order=true owner-partition=true interrupt-cancel=true output-failure-cancel=true timeout-clean=true",
+  "checks": [
+    "zero/one/two/three/nine fixed limits terminate cleanly",
+    "200 stress runs with randomized thread start order preserve exact global ordering",
+    "every value is emitted by the correct modulo-3 owner",
+    "interrupting a waiting worker cancels and wakes the collaboration group",
+    "an output callback failure cancels and wakes the collaboration group",
+    "all worker joins are bounded by timeout and leave no live thread"
+  ],
+  "boundary_tests": [
+    {
+      "case": "limit=0",
+      "expected": "no output and all workers terminate",
+      "passed": true
+    },
+    {
+      "case": "limits 1,2,3,9 plus 200 deterministic stress limits",
+      "expected": "global sequence 1..limit and owner(value)=(value-1)%3 under shuffled starts",
+      "passed": true
+    },
+    {
+      "case": "worker 1 interrupted while awaiting its first turn",
+      "expected": "shared cancellation wakes all workers; no later thread waits for the departed owner",
+      "passed": true
+    },
+    {
+      "case": "output callback throws at value 2",
+      "expected": "original runtime failure is propagated by its worker and the other workers terminate through shared cancellation",
+      "passed": true
+    }
+  ]
+}
