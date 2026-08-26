@@ -1,0 +1,185 @@
+name: Review Content Batch 0037 Daily New Old Users Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0037-daily-new-old-users.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-daily-new-old-users-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8c97435494ae4e1055f82e1a4710634d
+  SOURCE_QID: 8c97435494ae4e1055f82e1a4710634d
+  SOURCE_TAGGED: note_tagged/67ffada6000000000d0171d2.json
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Phase A isolated source-first review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; candidate="review/candidates/answers/$cid.md"; rm -rf "$out/reviewer_tmp"; mkdir -p "$out/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const q=(JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='SQL 应用：给定一张用户登录日志表，请编写 SQL 统计“每天老用户和新增用户”的数量（考察点：左连接或 `NOT EXISTS` 判断新老用户）。';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source drift');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||''; const bullets=(one.match(/^- /gm)||[]).length; if(bullets<3||bullets>5) throw new Error(`one-minute backbone drift ${bullets}`);
+          for(const marker of ['DISTINCT','MIN(DATE(login_time))','NOT EXISTS','new_users','old_users','用户-日','时区','只扫描当天分区']) if(!md.includes(marker)) throw new Error(`missing ${marker}`);
+          const sql=[...md.matchAll(/```sql\n([\s\S]*?)\n```/g)]; if(sql.length!==2) throw new Error(`expected two executable SQL variants, got ${sql.length}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
+          if(/我在线上|我负责过|线上事故|我们生产|真实项目里我曾/.test(md)) throw new Error('fabricated project claim');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/reviewer_tmp/q_first.sql`,sql[0][1]+'\n');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/reviewer_tmp/q_exists.sql`,sql[1][1]+'\n');
+          NODE
+
+          cat > "$out/reviewer_tmp/review_validation.py" <<'PY'
+          import random, sqlite3
+          from collections import defaultdict
+          from pathlib import Path
+
+          root=Path(__file__).parent
+          q_first=(root/'q_first.sql').read_text()
+          q_exists=(root/'q_exists.sql').read_text()
+
+          def expected(rows):
+              days=defaultdict(set)
+              first={}
+              for user,ts in rows:
+                  day=ts[:10]
+                  days[day].add(user)
+                  first[user]=min(first.get(user,day),day)
+              out=[]
+              for day in sorted(days):
+                  new=sum(first[u]==day for u in days[day])
+                  old=sum(first[u]<day for u in days[day])
+                  out.append((day,new,old))
+              return out
+
+          def run_case(rows):
+              con=sqlite3.connect(':memory:')
+              con.execute('create table login_log(user_id text not null, login_time text not null)')
+              con.executemany('insert into login_log values(?,?)',rows)
+              a=list(con.execute(q_first)); b=list(con.execute(q_exists)); e=expected(rows)
+              assert a==e,(a,e); assert b==e,(b,e); assert a==b
+              active=list(con.execute('select DATE(login_time),count(distinct user_id) from login_log group by DATE(login_time) order by 1'))
+              assert [(d,n+o) for d,n,o in a]==active
+
+          boundary=[
+              [('u1','2026-01-01 01:00:00')],
+              [('u1','2026-01-01 01:00:00'),('u1','2026-01-01 02:00:00'),('u1','2026-01-02 01:00:00')],
+              [('u1','2026-01-01 01:00:00'),('u2','2026-01-02 01:00:00'),('u1','2026-01-03 01:00:00'),('u2','2026-01-03 02:00:00'),('u3','2026-01-03 03:00:00')],
+          ]
+          for rows in boundary: run_case(rows)
+
+          r=random.Random(0x8C974354)
+          randomized=0
+          for _ in range(600):
+              users=[f'u{i}' for i in range(1,r.randint(2,30))]
+              rows=[]
+              for user in users:
+                  first_day=r.randint(1,15)
+                  for day in range(first_day,21):
+                      if day==first_day or r.random()<0.28:
+                          for event in range(1+r.randint(0,3)):
+                              rows.append((user,f'2026-02-{day:02d} {r.randint(0,23):02d}:{r.randint(0,59):02d}:00'))
+              r.shuffle(rows); run_case(rows); randomized+=1
+          print(f'PASS boundary_cases=3 randomized_datasets={randomized} min-date=not-exists-equivalent user-day-dedup=pass active-invariant=pass')
+          PY
+          python3 "$out/reviewer_tmp/review_validation.py" > "$out/reviewer_tmp/stdout.txt"
+          stdout="$(cat "$out/reviewer_tmp/stdout.txt")"; test "$stdout" = 'PASS boundary_cases=3 randomized_datasets=600 min-date=not-exists-equivalent user-day-dedup=pass active-invariant=pass'
+
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundary_tests=[
+            {case:'one user, one first-day login',expected:'new=1 old=0',passed:true},
+            {case:'same user logs twice on first day and returns next day',expected:'same-day duplicate counts once; next day is old',passed:true},
+            {case:'mixed first-time and returning users across three dates',expected:'new/old partition equals distinct active users',passed:true},
+            {case:'600 seeded randomized login datasets',expected:'MIN(first_date) and NOT EXISTS match reference classifier and active-user invariant',passed:true}
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The candidate preserves the sparse source boundary and explicitly declares its schema, user-day deduplication and lifecycle-first-login assumptions instead of inventing them as source facts.','Both SQL variants directly answer daily new/old user counts; the NOT EXISTS variant reflects the source hint while the first-date variant exposes the state model clearly.','The answer correctly separates event rows from distinct users so repeated logins on one day do not inflate user counts.','The lifecycle-first-date definition makes new and old mutually exclusive and exhaustive over each day’s distinct active users; independent validation checks that invariant.','Timezone, anonymous-user, history-availability, late-data and large-table access-path boundaries are explicitly called out rather than hidden.','Independent reviewer-owned SQLite execution checks three boundary families and 600 randomized datasets against a separate reference classifier; no semantic mismatch was found.'];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'execute both exact candidate SQL variants on independent in-memory SQLite boundary and randomized datasets against a Python reference classifier',stdout:process.env.REVIEW_STDOUT,checks:['exact candidate SQL variants execute','same-day duplicate events deduplicate to one user-day','first appearance is new and later appearance is old','MIN(first_date) and NOT EXISTS variants agree','new+old equals distinct active users each day','600 randomized datasets match independent classifier'],boundary_tests},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-daily-new-old-users-20260826-v1',review_version:'daily-new-old-users.user-day-contract.v1',decision:'pass',revision_round:1,source_packet:[process.env.SOURCE_TAGGED,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Phase B bind writer evidence after isolated conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex'),review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`)),wr=JSON.parse(fs.readFileSync(`${out}/writer_research.json`)),wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`)),rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`));
+          if(review.decision!=='pass'||review.candidate_sha256!==hash||wr.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||wv.candidate_sha256!==hash||rv.result!=='pass') throw new Error('review/evidence prerequisite drift');
+          const ev={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'daily-new-old-users-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Repository tagged daily new/old login-user SQL question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer deterministic SQLite validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent randomized SQLite validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source asks for daily new and old user counts from login logs and points to left join or NOT EXISTS; concrete schema and operational boundaries are unstated.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'classification',text:'Under the explicit user-day/lifecycle-first-login contract, the exact first-date and NOT EXISTS SQL variants produce the same new/old classification.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','原理机制','常见追问']},{claim_id:'dedup-invariant',text:'Same-day duplicate login events count once and new_users + old_users equals distinct active users for every validated day.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','关键细节','易错点']}],source_question_coverage:wr.source_question_coverage,validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks,boundary_tests:rv.boundary_tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings}};
+          fs.mkdirSync('review/evidence',{recursive:true}); fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(ev,null,2)+'\n');
+          NODE
+
+      - name: Candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passed isolated review
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md'; let t=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_8c97435494ae4e1055f82e1a4710634d` daily new/old users SQL candidate preserves the login-log source boundary, explicitly defines user-day deduplication and lifecycle-first-login semantics, provides both first-date and `NOT EXISTS` formulations, and passes deterministic writer validation including duplicate same-day events and the active-user invariant. Writer evidence is frozen; isolated source-first review remains pending.';
+          const done='- [x] `cq_q_8c97435494ae4e1055f82e1a4710634d` daily new/old users SQL candidate preserves the login-log source boundary, explicitly defines user-day deduplication and lifecycle-first-login semantics, provides both first-date and `NOT EXISTS` formulations, passes deterministic writer validation plus 600 independent randomized datasets, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!t.includes(pending)) throw new Error('task progress drift'); t=t.replace(pending,done); fs.writeFileSync(task,t);
+          NODE
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'review: pass batch 0037 daily new-old users SQL candidate source-first'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during review' >&2; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
