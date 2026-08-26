@@ -1,0 +1,27 @@
+name: Trigger Content Batch 0038 RandomSet Review
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/trigger-content-batch-0038-randomset-review.yml
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: trigger-content-batch-0038-randomset-review
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Dispatch registered isolated review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run review-content-batch-0038-randomset.yml --repo liqiangcc/xhs --ref master
+
+# trigger: registered workflow dispatch after creation with explicit repository context
