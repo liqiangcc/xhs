@@ -1,0 +1,293 @@
+name: Build Content Batch 0039 Basic useFetch Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0039-usefetch-basic-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-usefetch-basic-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9c94b4e13076cb425b6a321e5124a5d7
+  SOURCE_QID: 9c94b4e13076cb425b6a321e5124a5d7
+  PARAMS_QID: 705fcf4159e89e312094f5a60e7d10f1
+  PARAMS_CANONICAL_ID: cq_q_705fcf4159e89e312094f5a60e7d10f1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify source and follow-up boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0039/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,paramsQid=process.env.PARAMS_QID,paramsCid=process.env.PARAMS_CANONICAL_ID;
+          const exact='代码实战：手写一个自定义 Hook `useFetch`（使用 `.then` / `.catch` 处理异步请求）。';
+          const paramsExact='代码实战：在 `useFetch` 基础上，增加新需求：当请求参数 `params` 变化时，能够自动重新发起请求。';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/68ca70d2000000000e00f5bb.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid), next=tagged.find(x=>x.question_id===paramsQid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('basic useFetch source drifted');
+          if(!next||next.original_question!==paramsExact||next.is_valid_for_library!==true) throw new Error('params follow-up source drifted');
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const basicRow=rows.find(x=>x.question_id===qid), paramsRow=rows.find(x=>x.question_id===paramsQid);
+          if(!basicRow||basicRow.canonical_id!==cid) throw new Error(`basic ownership drifted: ${basicRow?.canonical_id}`);
+          if(!paramsRow||paramsRow.canonical_id!==paramsCid||paramsCid===cid) throw new Error(`params ownership drifted: ${paramsRow?.canonical_id}`);
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0039/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`canonical question ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const ctxSrc=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!ctxSrc||ctxSrc.original_question!==exact) throw new Error('context source missing');
+          const inventory=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0039/source_inventory.json','utf8'));
+          const item=inventory.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(q=>q.question_id===qid&&q.original_question===exact)) throw new Error('frozen Batch 0039 source inventory drifted');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and executable hook harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0039/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_9c94b4e13076cb425b6a321e5124a5d7","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 手写 `useFetch`：用 `.then` / `.catch` 管理请求状态
+
+          ## 核心结论
+
+          来源明确要求手写 React 自定义 Hook `useFetch`，并使用 `.then` / `.catch` 处理异步请求，但没有保留既有函数签名、响应数据格式、重试/缓存规则。这里声明一个最小可执行答案侧契约：`useFetch(url, fetcher = fetch)` 请求 JSON；`fetcher(url, { signal })` 返回 `Promise<Response>`；Hook 返回 `{ data, error, loading }`。Effect 在 `url` 或 `fetcher` 变化时发起新请求，cleanup 取消旧请求并阻止旧 Promise 回写状态。
+
+          ## 1 分钟版
+
+          - 用 `useState` 保存 `data / error / loading`，把网络请求放进 `useEffect`，因为请求属于与外部系统同步的副作用。
+          - Effect 开始时设 `loading=true`、清空旧 error，然后调用 `fetcher(url, { signal })`，严格用 `.then(...).then(...).catch(...)` 串起 HTTP 检查、JSON 解析和状态更新。
+          - `fetch()` 对 HTTP 4xx/5xx 本身仍可能 resolve，所以要检查 `response.ok`，非成功响应主动抛错后统一进入 `.catch`。
+          - cleanup 调用 `AbortController.abort()`，并把 `active=false`；这样 URL 改变或组件卸载后，旧请求即使晚返回，也没有资格覆盖当前状态。
+          - 原题后续还有独立的 `params` 变化需求，那是另一个 Canonical；当前答案只给基础 Hook，不把后续参数 identity / 深比较规则偷偷合并进来。
+
+          ## 3 分钟版
+
+          ```javascript
+          import { useEffect, useState } from 'react';
+
+          export function useFetch(url, fetcher = fetch) {
+            const [state, setState] = useState({
+              data: null,
+              error: null,
+              loading: false,
+            });
+
+            useEffect(() => {
+              const controller = new AbortController();
+              let active = true;
+
+              setState(prev => ({ ...prev, error: null, loading: true }));
+
+              fetcher(url, { signal: controller.signal })
+                .then(response => {
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                  }
+                  return response.json();
+                })
+                .then(data => {
+                  if (!active) return;
+                  setState({ data, error: null, loading: false });
+                })
+                .catch(error => {
+                  if (!active) return;
+                  if (error?.name === 'AbortError') return;
+                  setState({ data: null, error, loading: false });
+                });
+
+              return () => {
+                active = false;
+                controller.abort();
+              };
+            }, [url, fetcher]);
+
+            return state;
+          }
+          ```
+
+          这段代码的状态机很简单：`idle/success/error -> loading -> success | error`。每一次 Effect setup 都对应一个请求版本；cleanup 让旧版本失效。这样既满足 `.then/.catch` 的题目要求，也避免只写“请求成功就 setData”而漏掉错误、卸载和竞态边界。
+
+          ## 关键细节
+
+          - **依赖完整性**：Effect 内读取了 `url` 和 `fetcher`，因此依赖数组包含两者。调用方若每次 render 都创建一个新的 `fetcher` 函数，会导致额外请求；实际项目应传稳定导入或用合适方式稳定函数引用。
+          - **HTTP 错误与 Promise reject 不是一回事**：原生 `fetch()` 在收到 HTTP 错误状态时通常仍返回 fulfilled Promise；用 `response.ok` 判断 200–299，再主动抛错，才能让 404/500 进入统一错误分支。
+          - **JSON 契约是答案侧假设**：原题没说响应格式。本实现调用 `response.json()`；如果实际返回文本、Blob 或流，应替换解析步骤。
+          - **竞态与卸载**：仅仅 abort 不足以假设所有自定义 `fetcher` 都会遵守 `signal`。`active` 作为状态写入门禁，保证已 cleanup 的请求不能再更新 UI。
+          - **取消不是业务失败**：旧请求被取消时不应该把 `AbortError` 展示成用户错误；cleanup 已把该请求版本判定为失效。
+          - **状态策略**：新请求开始时保留旧 `data`、清空旧 `error` 并设置 loading；失败时这里清空 data。是否保留失败前数据属于产品策略，原题没有规定。
+          - **与后续 `params` 题的边界**：当前 `url` 是基础请求输入；题库把“`params` 变化自动重发”单独保存为另一个来源问题和 Canonical，因此这里不定义 params 的对象 identity、深比较或 request-key 规则。
+
+          ## 原理机制
+
+          自定义 Hook 本质上是把一组 Hook 状态和副作用生命周期封装成可复用函数。`useState` 保存渲染需要的数据；`useEffect` 在提交后启动网络同步，并在依赖变化或卸载时先执行 cleanup。对请求而言，可以把每次 setup 看成一个版本：只有仍处于 `active=true` 的当前版本可以写状态，旧版本通过 cleanup 撤销写权限。
+
+          Promise 链里第一段 `.then` 负责把 Fetch API 的 `Response` 转成“成功数据或显式 HTTP 错误”，第二段 `.then` 只处理解析后的数据，`.catch` 汇总网络失败、主动抛出的 HTTP 错误和解析错误。这样正常路径和失败路径边界清晰。
+
+          ## 项目经验版
+
+          来源没有真实项目、接口协议、缓存策略或线上指标，不能虚构生产经历。实际落地会进一步确认是否已有框架数据层、是否需要缓存/去重/重试、SSR、分页，以及错误和旧数据的展示策略；这些属于工程扩展，不是这道基础手写题已经给出的事实。
+
+          ## 常见追问
+
+          - 问：为什么 `fetch` 返回 404 时 `.catch` 不一定执行？答：Fetch API 在收到 HTTP 响应后会 resolve 为 `Response`，HTTP 状态失败不等于网络 Promise reject；所以示例先检查 `response.ok`，再主动抛错。
+          - 问：为什么请求要放在 `useEffect`？答：网络是 React 外部系统，Effect 用 setup/cleanup 描述一次同步过程；依赖变化时 React 会先清理旧过程再启动新过程。
+          - 问：为什么既 `abort()` 又需要 `active`？答：`abort()` 尽量取消底层 Fetch，但注入的 `fetcher` 未必真正支持取消；`active` 是最终状态写入门禁，保证旧 Promise 不覆盖当前 UI。
+          - 问：为什么依赖里有 `fetcher`？答：Effect 读取了它；如果它是响应式值就应纳入依赖。调用方应避免每次 render 无意义地创建新函数。
+          - 问：如果不是 JSON 接口怎么办？答：把 `response.json()` 换成与接口契约一致的解析，例如 `text()` 或 `blob()`；原题没规定响应格式，所以 JSON 只是当前答案侧假设。
+          - 问：`params` 变化自动重发怎么加？答：题库把它保留成独立后续题。核心是把 params 纳入请求构造和 Effect 依赖，并明确对象 identity / 稳定引用与旧请求失效语义；不应在基础题里假装这些规则已经由来源给出。
+
+          ## 易错点
+
+          - 只写 `fetch(...).then(setData)`，没有 loading、错误路径和 cleanup。
+          - 以为 HTTP 404/500 一定会让 `fetch()` Promise reject，漏掉 `response.ok` 检查。
+          - URL 已变化或组件已卸载，旧响应仍然 `setState`，造成陈旧数据覆盖。
+          - Effect 读取 `url/fetcher` 却故意漏依赖，形成 stale closure；或反过来每次 render 创建新 fetcher 导致无意义重跑。
+          - 把 JSON、缓存、重试、params 深比较等答案侧选择说成原题已经规定。
+          EOF
+
+          cat > "$out/useFetch.cjs" <<'JS'
+          'use strict';
+          function createUseFetch(React, AbortControllerImpl = AbortController) {
+            const { useEffect, useState } = React;
+            return function useFetch(url, fetcher) {
+              const [state, setState] = useState({ data: null, error: null, loading: false });
+              useEffect(() => {
+                const controller = new AbortControllerImpl();
+                let active = true;
+                setState(prev => ({ ...prev, error: null, loading: true }));
+                fetcher(url, { signal: controller.signal })
+                  .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                  })
+                  .then(data => {
+                    if (!active) return;
+                    setState({ data, error: null, loading: false });
+                  })
+                  .catch(error => {
+                    if (!active) return;
+                    if (error?.name === 'AbortError') return;
+                    setState({ data: null, error, loading: false });
+                  });
+                return () => { active = false; controller.abort(); };
+              }, [url, fetcher]);
+              return state;
+            };
+          }
+          module.exports = { createUseFetch };
+          JS
+
+          cat > "$out/useFetch.test.cjs" <<'JS'
+          'use strict';
+          const assert=require('node:assert/strict');
+          const {createUseFetch}=require('./useFetch.cjs');
+          function deferred(){let resolve,reject;const promise=new Promise((res,rej)=>{resolve=res;reject=rej;});return {promise,resolve,reject};}
+          function response(status,data){return {ok:status>=200&&status<=299,status,json:()=>Promise.resolve(data)};}
+          function createHarness(){
+            const states=[],effects=[];let si=0,ei=0;
+            const React={
+              useState(init){const i=si++;if(!(i in states))states[i]=init;return [states[i],u=>{states[i]=typeof u==='function'?u(states[i]):u;}];},
+              useEffect(setup,deps){const i=ei++;const prev=effects[i];const changed=!prev||prev.deps.length!==deps.length||deps.some((d,j)=>!Object.is(d,prev.deps[j]));effects[i]={setup,deps,cleanup:prev?.cleanup,changed};}
+            };
+            const hook=createUseFetch(React);
+            function render(url,fetcher){si=0;ei=0;const result=hook(url,fetcher);for(const e of effects){if(!e.changed)continue;if(e.cleanup)e.cleanup();e.cleanup=e.setup()||undefined;e.changed=false;}return result;}
+            function cleanup(){for(const e of effects)if(e.cleanup){e.cleanup();e.cleanup=undefined;}}
+            return {states,render,cleanup};
+          }
+          async function flush(){await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));}
+          (async()=>{
+            const h=createHarness();const calls=[];const pending=[];
+            const fetcher=(url,{signal})=>{const d=deferred();calls.push({url,signal});pending.push(d);return d.promise;};
+            h.render('/a',fetcher);assert.equal(calls.length,1);assert.equal(h.states[0].loading,true);
+            pending[0].resolve(response(200,{id:'a'}));await flush();assert.deepEqual(h.states[0],{data:{id:'a'},error:null,loading:false});
+            h.render('/a',fetcher);assert.equal(calls.length,1);
+            h.render('/b',fetcher);assert.equal(calls.length,2);assert.equal(calls[0].signal.aborted,true);
+            const old=pending[1];h.render('/c',fetcher);assert.equal(calls.length,3);assert.equal(calls[1].signal.aborted,true);
+            old.resolve(response(200,{id:'stale-b'}));await flush();assert.notDeepEqual(h.states[0].data,{id:'stale-b'});
+            pending[2].resolve(response(200,{id:'c'}));await flush();assert.deepEqual(h.states[0],{data:{id:'c'},error:null,loading:false});
+            h.render('/404',fetcher);pending[3].resolve(response(404,{message:'missing'}));await flush();assert.equal(h.states[0].loading,false);assert.match(h.states[0].error.message,/HTTP 404/);assert.equal(h.states[0].data,null);
+            h.render('/network',fetcher);pending[4].reject(new TypeError('network down'));await flush();assert.equal(h.states[0].loading,false);assert.match(h.states[0].error.message,/network down/);
+            h.render('/unmount',fetcher);h.cleanup();assert.equal(calls[5].signal.aborted,true);
+            console.log('PASS mount-loading success same-url=no-refetch url-change=refetch cleanup=abort stale-write=blocked http-error=recorded network-error=recorded unmount=abort');
+          })().catch(e=>{console.error(e);process.exit(1);});
+          JS
+
+          node --check "$out/useFetch.cjs"
+          stdout="$(node "$out/useFetch.test.cjs")"
+          test "$stdout" = 'PASS mount-loading success same-url=no-refetch url-change=refetch cleanup=abort stale-write=blocked http-error=recorded network-error=recorded unmount=abort'
+
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,paramsQid=process.env.PARAMS_QID,out=`review/content_build/answer_batch_0039/${cid}`;
+          const boundary=[
+            {case:'initial request',expected:'loading=true then successful JSON data',actual:'verified',passed:true},
+            {case:'same url and fetcher identity',expected:'no duplicate request',actual:'verified',passed:true},
+            {case:'url changes',expected:'cleanup old request and issue new request',actual:'verified',passed:true},
+            {case:'stale old response',expected:'cannot overwrite current state after cleanup',actual:'verified',passed:true},
+            {case:'HTTP 404 Response',expected:'response.ok false becomes error state',actual:'verified',passed:true},
+            {case:'network rejection',expected:'.catch records non-abort error',actual:'verified',passed:true},
+            {case:'unmount',expected:'active request aborted',actual:'verified',passed:true}
+          ];
+          fs.writeFileSync(path.join(out,'code_validation.json'),JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-27',command:'node --check useFetch.cjs && node useFetch.test.cjs',stdout:process.env.STDOUT,checks:['mount/loading transition','success JSON transition','same-dependency no rerun','url dependency rerun','cleanup abort','stale-write prevention','HTTP failure normalization','network failure','unmount cleanup'],boundary_tests:boundary},null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-27',review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'repository-source',title:'ByteDance frontend interview tagged source plus frozen Batch 0039 inventory',locator:'note_tagged/68ca70d2000000000e00f5bb.json + review/content_build/answer_batch_0039/source_inventory.json',source_type:'repository_source_record',checked_at:'2026-08-27'},
+              {source_id:'react-useeffect',title:'React useEffect reference',locator:'https://react.dev/reference/react/useEffect',source_type:'official_documentation',checked_at:'2026-08-27'},
+              {source_id:'mdn-fetch',title:'MDN Fetch API and Response.ok/json references',locator:'https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API + https://developer.mozilla.org/en-US/docs/Web/API/Response/ok + https://developer.mozilla.org/en-US/docs/Web/API/Response/json',source_type:'reputable_secondary_reference',checked_at:'2026-08-27'},
+              {source_id:'fixture',title:'Basic useFetch deterministic hook lifecycle harness',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-27'}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The source asks for a basic custom useFetch implemented with .then/.catch; the params-change requirement is preserved as a separate source Question and Canonical.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','关键细节']},
+              {claim_id:'effect-lifecycle',text:'React Effects synchronize with external systems, declare reactive dependencies, and run cleanup before a changed-dependency setup and on unmount.',source_ids:['react-useeffect','fixture'],answer_locations:['1 分钟版','关键细节','原理机制']},
+              {claim_id:'fetch-response',text:'Fetch resolves to a Response even for HTTP error status, Response.ok represents 200-299, and response.json() returns a Promise for parsed body data.',source_ids:['mdn-fetch','fixture'],answer_locations:['1 分钟版','3 分钟版','关键细节','常见追问']},
+              {claim_id:'hook-behavior',text:'The executable harness verifies loading/success/error transitions, dependency reruns, cleanup abort, stale-write prevention and unmount behavior for the candidate logic.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            related_source_boundaries:[{question_id:paramsQid,relationship:'explicit_follow_up_separate_canonical',absorbed:false}],
+            promotion_blocker:'isolated_independent_review_not_yet_performed'
+          },null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md';let text=fs.readFileSync(task,'utf8');
+          const line='- [x] `cq_q_9c94b4e13076cb425b6a321e5124a5d7` now has a source-bounded basic React `useFetch` candidate that uses `.then` / `.catch` as explicitly required. The executable hook harness verifies loading/success/error transitions, URL-driven reruns, cleanup abort and stale-response blocking; the later `params`-change requirement remains owned by its separate Canonical rather than being silently merged. Writer research is frozen; formal evidence/promotion remains blocked on isolated independent review.';
+          if(!text.includes(line)) fs.writeFileSync(task,text.trimEnd()+'\n'+line+'\n');
+          NODE
+
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during basic useFetch candidate slice: $base_head -> $remote_head; fail closed without push."; exit 0; fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0039/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0039 basic useFetch candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
