@@ -1,0 +1,435 @@
+name: Build Content Batch 0021 Package Interval Peak Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0021-package-interval-peak-candidate.yml
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0021-package-interval-peak-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_3a1c2667429257c4fbe7e2d8d8012096
+  SOURCE_QID: f2d52be391d5a320a5460d80e4256278
+  SOURCE_TEXT: note_desc/68b81a39000000001c034f47.txt
+  SOURCE_TAGGED: note_tagged/68b81a39000000001c034f47.json
+
+jobs:
+  build:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_text_sha256=$(sha256sum "$SOURCE_TEXT" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source_tagged_sha256=$(sha256sum "$SOURCE_TAGGED" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - id: state
+        name: Guard source, Canonical boundary, and writer idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const out=`review/content_build/answer_batch_0021/${cid}`;
+          const expected='给定一天内1亿个包裹的存入和取出时间，如何找出未取出包裹数最多的时间段及持续时长？方案的时间和空间复杂度是多少？';
+          const ctx=JSON.parse(fs.readFileSync(`${out}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('Canonical context missing or type drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==expected) throw new Error(`normalized source wording drifted: ${src?.original_question}`);
+          const raw=fs.readFileSync(process.env.SOURCE_TEXT,'utf8');
+          const rawNeedle='现在给你这 1 亿个包裹的存入和取出时间，用一个数组来存储。';
+          const rawQuestion='如何找出这一天中的哪个时间段包裹没有被取出来的数目是最多的？以及它们所在的时间段是多长的时间？你的方案的时间和空间复杂度是多少？';
+          if(!raw.includes(rawNeedle)||!raw.includes(rawQuestion)) throw new Error('primary interview-note source wording drifted');
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const tq=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tq||tq.original_question!==expected) throw new Error('tagged normalized source drifted');
+          if(/差分数组|扫描线|Difference Array|Sweep Line/.test(expected)) throw new Error('normalized source unexpectedly prescribes a solution');
+          NODE
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          if [ -e "$candidate" ]; then
+            test -e "$out/writer_research.json"
+            test -e "$out/writer_validation.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+            echo 'Source-bounded candidate already exists with writer receipts.'
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded Java candidate and executable fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0021/$cid"
+          candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_3a1c2667429257c4fbe7e2d8d8012096","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 一天内 1 亿个包裹：找未取出数量的峰值时间段
+
+          ## 核心结论
+
+          来源只给出“一天内约 1 亿个包裹的存入时间和取出时间，找未取出包裹数最多的时间段、持续时长，以及时间/空间复杂度”，没有规定时间戳精度、端点包含关系、编程语言，也没有指定必须使用某一种算法。先明确答案侧契约：每个包裹对应半开区间 `[putTime, takeTime)`，即存入时立即计入、取出时立即不再计入；时间以一天起点后的非负整数偏移表示。若时间精度的取值域 `T` 很小且固定，优先用差分计数，时间 `O(n+T)`、空间 `O(T)`；若时间戳是一般的稀疏值，则把 `2n` 个端点按时间排序后扫描，比较模型下时间 `O(n log n)`、额外空间 `O(n)`。下面的 Java 实现采用后一种通用方案，并返回所有峰值区间及峰值总持续时长。
+
+          ## 1 分钟版
+
+          - 把每个包裹看成一个存续区间 `[put, take)`；在 `put` 时刻未取出数量 `+1`，在 `take` 时刻 `-1`。
+          - 同一时刻的所有变化要先合并，再看它到下一个不同时间戳之间的数量；这样能明确处理“一个刚取出、另一个同时存入”的情况。
+          - 一般时间戳：生成 `2n` 个事件、排序、按时间分组扫描。某个事件时刻 `t` 处理完净变化后，当前计数就是 `[t, nextTime)` 上的未取出数量。
+          - 记录扫描过程中最大的计数；出现更大值就清空旧峰值区间，等于最大值就追加，并把相邻峰值区间合并。
+          - 排序扫描时间 `O(n log n)`，事件数组空间 `O(n)`；如果时间只可能是秒级等固定桶，则差分数组可做到 `O(n+T)` 时间、`O(T)` 空间。
+
+          ## 3 分钟版
+
+          ```java
+          public static Result findPeak(List<Interval> intervals) {
+              long[] events = new long[Math.multiplyExact(intervals.size(), 2)];
+              int p = 0;
+              for (Interval x : intervals) {
+                  if (x.putTime() < 0 || x.takeTime() <= x.putTime()
+                          || x.takeTime() > (Long.MAX_VALUE >>> 1)) {
+                      throw new IllegalArgumentException("invalid interval");
+                  }
+                  events[p++] = (x.putTime() << 1) | 1L; // put: +1
+                  events[p++] = (x.takeTime() << 1);     // take: -1
+              }
+              Arrays.sort(events);
+
+              long current = 0, max = 0, totalPeakDuration = 0;
+              List<Segment> peaks = new ArrayList<>();
+              int i = 0;
+              while (i < events.length) {
+                  long t = events[i] >>> 1;
+                  long delta = 0;
+                  while (i < events.length && (events[i] >>> 1) == t) {
+                      delta += ((events[i] & 1L) == 1L) ? 1 : -1;
+                      i++;
+                  }
+                  current += delta;
+                  if (i == events.length) break;
+
+                  long next = events[i] >>> 1;
+                  if (next == t || current <= 0) continue;
+                  if (current > max) {
+                      max = current;
+                      peaks.clear();
+                      totalPeakDuration = 0;
+                  }
+                  if (current == max) {
+                      totalPeakDuration += next - t;
+                      if (!peaks.isEmpty() && peaks.get(peaks.size() - 1).end() == t) {
+                          Segment last = peaks.remove(peaks.size() - 1);
+                          peaks.add(new Segment(last.start(), next));
+                      } else {
+                          peaks.add(new Segment(t, next));
+                      }
+                  }
+              }
+              return new Result(max, List.copyOf(peaks), totalPeakDuration);
+          }
+          ```
+
+          代码把事件编码进 primitive `long[]`，避免为 2 亿个端点创建 2 亿个 Java 对象。最低位表示事件类型，其余位保存时间偏移；因此这个具体实现限制时间偏移不超过 `Long.MAX_VALUE >>> 1`，对“一天内”的常见秒/毫秒/微秒/纳秒偏移都足够。若输入时间是任意 64 位绝对时间戳，可改成两个 primitive 数组或显式事件结构，不改变扫描思想。
+
+          ## 关键细节
+
+          - **端点语义必须先定**：这里使用 `[put, take)`。同一时刻的取出和存入先汇总成净变化，扫描的是事件时刻之间的连续时间段，而不是把一个瞬时时刻重复计数。
+          - **为什么看 `[t,next)`**：事件只会在端点改变数量。处理完时刻 `t` 的全部净变化后，到下一个事件前数量保持不变，所以这一整段可以一次比较。
+          - **“时间段”可能不止一个**：全天可能存在多个互不相邻、但峰值数量相同的区间。实现返回全部最大区间，并额外给出这些区间持续时长之和；如果业务只要第一个峰值，可在结果层再选取。
+          - **相邻峰值合并**：若某时刻净变化为 0，峰值数量实际上没有中断，`[a,t)` 与 `[t,b)` 应合并为 `[a,b)`。
+          - **1 亿规模的内存**：通用排序实现需要 `2n` 个 `long`，仅事件数组约 `16n` 字节；`n=1e8` 时约 1.6 GB（不含 JVM/输入/输出开销），因此工程上要结合机器内存、输入布局和时间精度选择 primitive 数组、分块/外排或固定时间桶。
+          - **固定精度时更优**：如果题目补充“时间精确到秒”，一天只有 `T=86400` 个桶，可以对 `put` 桶 `+1`、`take` 桶 `-1`，一次前缀扫描得到峰值，时间 `O(n+T)`、空间 `O(T)`，明显比对 2 亿事件比较排序更合适。
+          - **不能擅自假定精度**：来源没有说是秒、毫秒还是任意时间戳，所以正式答案同时给出有界离散域和一般稀疏域两种复杂度，而不把差分数组写成来源要求。
+
+          ## 原理机制
+
+          这是“动态区间重叠数”的峰值问题。每个包裹在 `[put, take)` 内贡献 1，把区间端点转成 `+1/-1` 后，未取出数量就是这些变化量按时间的前缀和。排序的作用是得到变化发生的时间顺序；按相同时间分组则把端点并发事件压缩为一个净变化。由于两个相邻不同端点之间没有任何事件，前缀和在整个开区间上保持常数，所以只需要在每个 `[t,next)` 段上比较一次，就能完整找到峰值区间和持续时间。
+
+          若时间坐标本身来自一个很小的离散域，排序可以被“直接按坐标记增量”替代；本质仍然是同一个前缀和模型。区别只是如何得到按时间有序的增量序列，因此复杂度应根据时间域是否有界来选择，而不是机械固定为某一种算法名称。
+
+          ## 项目经验版
+
+          来源没有真实线上实现、时间精度、机器配置或延迟指标，不能虚构“生产中就是这么做的”。真正处理 1 亿条记录时，我会先确认时间精度、输入是否已按时间排序、数据是否一次装得进内存、是否允许外排，以及需要返回一个峰值区间还是全部峰值区间。若是秒级/分钟级运营容量分析，固定桶通常最简单；若是高精度稀疏时间戳，则优先使用 primitive 事件数组或外部排序，并用样本与压力测试验证内存峰值。
+
+          ## 常见追问
+
+          - 问：同一时刻一个包裹取出、另一个包裹存入，先算哪个？答：本答案定义半开区间 `[put,take)`，在同一时间点把所有 `+1/-1` 合并成净变化；随后 `[t,next)` 的数量是确定的，不依赖人为事件顺序。
+          - 问：为什么不是一定 `O(n)`？答：只有时间坐标有固定小域、输入已排序或有其它可利用约束时才能省掉一般排序；对无序的一般时间戳，先得到端点顺序通常需要排序。
+          - 问：如果时间精确到秒怎么做？答：一天 86400 个桶，`diff[put]++`、`diff[take]--`，扫描前缀和并合并最大值连续桶即可，复杂度 `O(n+86400)` 时间、`O(86400)` 空间。
+          - 问：为什么要返回多个区间？答：最大未取出数量可能在早晚两个不连续区间都出现。来源没有规定只取一个，因此保留全部峰值区间信息更完整。
+          - 问：2 亿个事件内存会不会太大？答：会。primitive `long[]` 单事件 8 字节，2 亿个约 1.6 GB；如果机器预算不允许，应利用固定时间桶、已排序输入、分块外排或流式归并等约束降低常驻内存。
+          - 问：包裹存入和取出时间相同怎么办？答：当前 API 把 `take <= put` 视为非法输入。若业务允许零持续时间记录，应先定义其是否贡献瞬时库存；对持续时间峰值统计通常可以把它视为不占用任何正长度区间并过滤掉。
+
+          ## 易错点
+
+          - 没定义端点包含关系，就在同一时间的取出/存入事件上得到不稳定结果。
+          - 只找到“某个峰值时刻”，却没有计算峰值保持到下一个事件的持续时间。
+          - 最大值再次出现时覆盖旧区间，丢失多个不连续峰值区间。
+          - 净变化为 0 时错误地把连续峰值拆成两个时间段。
+          - 对 1 亿条数据使用事件对象列表，忽略对象头、引用和 GC 带来的巨大内存放大。
+          - 在来源没有时间精度约束时直接声称差分数组一定是 `O(1)` 空间，或反过来声称任何实现都必须 `O(n log n)`。
+          EOF
+
+          cat > "$out/PackagePeak.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.Arrays;
+          import java.util.List;
+
+          public final class PackagePeak {
+              private PackagePeak() {}
+
+              public record Interval(long putTime, long takeTime) {}
+              public record Segment(long start, long end) {}
+              public record Result(long maxPackages, List<Segment> segments, long totalPeakDuration) {}
+
+              public static Result findPeak(List<Interval> intervals) {
+                  if (intervals == null) throw new IllegalArgumentException("intervals is null");
+                  long eventCount = Math.multiplyExact((long) intervals.size(), 2L);
+                  if (eventCount > Integer.MAX_VALUE) throw new IllegalArgumentException("too many intervals for one Java array");
+                  long[] events = new long[(int) eventCount];
+                  int p = 0;
+                  for (Interval x : intervals) {
+                      if (x == null || x.putTime() < 0 || x.takeTime() <= x.putTime()
+                              || x.takeTime() > (Long.MAX_VALUE >>> 1)) {
+                          throw new IllegalArgumentException("invalid interval");
+                      }
+                      events[p++] = (x.putTime() << 1) | 1L;
+                      events[p++] = (x.takeTime() << 1);
+                  }
+                  Arrays.sort(events);
+
+                  long current = 0;
+                  long max = 0;
+                  long total = 0;
+                  ArrayList<Segment> peaks = new ArrayList<>();
+                  int i = 0;
+                  while (i < events.length) {
+                      long t = events[i] >>> 1;
+                      long delta = 0;
+                      while (i < events.length && (events[i] >>> 1) == t) {
+                          delta += ((events[i] & 1L) == 1L) ? 1L : -1L;
+                          i++;
+                      }
+                      current += delta;
+                      if (current < 0) throw new IllegalStateException("negative active package count");
+                      if (i == events.length) break;
+                      long next = events[i] >>> 1;
+                      if (next <= t || current <= 0) continue;
+                      if (current > max) {
+                          max = current;
+                          peaks.clear();
+                          total = 0;
+                      }
+                      if (current == max) {
+                          total = Math.addExact(total, next - t);
+                          if (!peaks.isEmpty() && peaks.get(peaks.size() - 1).end() == t) {
+                              Segment last = peaks.remove(peaks.size() - 1);
+                              peaks.add(new Segment(last.start(), next));
+                          } else {
+                              peaks.add(new Segment(t, next));
+                          }
+                      }
+                  }
+                  return new Result(max, List.copyOf(peaks), total);
+              }
+          }
+          JAVA
+
+          cat > "$out/PackagePeakWriterTest.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.Random;
+
+          public final class PackagePeakWriterTest {
+              private static long randomizedCases;
+
+              public static void main(String[] args) {
+                  assertResult(List.of(), new PackagePeak.Result(0, List.of(), 0));
+                  assertResult(List.of(new PackagePeak.Interval(0, 10), new PackagePeak.Interval(10, 20)),
+                          new PackagePeak.Result(1, List.of(new PackagePeak.Segment(0, 20)), 20));
+                  assertResult(List.of(new PackagePeak.Interval(0, 5), new PackagePeak.Interval(2, 3),
+                                       new PackagePeak.Interval(7, 9), new PackagePeak.Interval(8, 10)),
+                          new PackagePeak.Result(2, List.of(new PackagePeak.Segment(2, 3), new PackagePeak.Segment(8, 9)), 2));
+                  assertResult(List.of(new PackagePeak.Interval(10_000_000_000L, 10_000_000_100L),
+                                       new PackagePeak.Interval(10_000_000_020L, 10_000_000_050L)),
+                          new PackagePeak.Result(2, List.of(new PackagePeak.Segment(10_000_000_020L, 10_000_000_050L)), 30));
+
+                  Random rnd = new Random(0x21_3A1C266L);
+                  for (int c = 0; c < 12_000; c++) {
+                      int horizon = 2 + rnd.nextInt(15);
+                      int n = rnd.nextInt(24);
+                      ArrayList<PackagePeak.Interval> xs = new ArrayList<>();
+                      for (int j = 0; j < n; j++) {
+                          int a = rnd.nextInt(horizon);
+                          int b = a + 1 + rnd.nextInt(horizon - a);
+                          xs.add(new PackagePeak.Interval(a, b));
+                      }
+                      PackagePeak.Result actual = PackagePeak.findPeak(xs);
+                      PackagePeak.Result expected = brute(xs, horizon);
+                      if (!actual.equals(expected)) {
+                          throw new AssertionError("random mismatch case=" + c + " intervals=" + xs + " actual=" + actual + " expected=" + expected);
+                      }
+                      randomizedCases++;
+                  }
+
+                  expectInvalid(List.of(new PackagePeak.Interval(5, 5)));
+                  expectInvalid(List.of(new PackagePeak.Interval(5, 4)));
+                  expectInvalid(List.of(new PackagePeak.Interval(-1, 4)));
+                  System.out.printf("PASS randomized_cases=%d simultaneous_boundary=pass disjoint_peaks=pass large_timestamp=pass invalid_contract=pass%n", randomizedCases);
+              }
+
+              private static PackagePeak.Result brute(List<PackagePeak.Interval> xs, int horizon) {
+                  long max = 0;
+                  long[] count = new long[horizon];
+                  for (PackagePeak.Interval x : xs) {
+                      for (int t = (int) x.putTime(); t < (int) x.takeTime(); t++) count[t]++;
+                  }
+                  for (long v : count) max = Math.max(max, v);
+                  if (max == 0) return new PackagePeak.Result(0, List.of(), 0);
+                  ArrayList<PackagePeak.Segment> out = new ArrayList<>();
+                  long total = 0;
+                  int t = 0;
+                  while (t < horizon) {
+                      if (count[t] != max) { t++; continue; }
+                      int start = t;
+                      while (t < horizon && count[t] == max) t++;
+                      out.add(new PackagePeak.Segment(start, t));
+                      total += t - start;
+                  }
+                  return new PackagePeak.Result(max, List.copyOf(out), total);
+              }
+
+              private static void assertResult(List<PackagePeak.Interval> xs, PackagePeak.Result expected) {
+                  PackagePeak.Result actual = PackagePeak.findPeak(xs);
+                  if (!actual.equals(expected)) throw new AssertionError("actual=" + actual + " expected=" + expected);
+              }
+
+              private static void expectInvalid(List<PackagePeak.Interval> xs) {
+                  try {
+                      PackagePeak.findPeak(xs);
+                      throw new AssertionError("expected invalid interval");
+                  } catch (IllegalArgumentException expected) {
+                      // pass
+                  }
+              }
+          }
+          JAVA
+
+      - name: Execute writer validation and freeze writer research
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"
+          (cd "$out" && javac -Xlint:all -Werror PackagePeak.java PackagePeakWriterTest.java && java PackagePeakWriterTest > writer_stdout.txt)
+          stdout="$(cat "$out/writer_stdout.txt")"
+          test "$stdout" = 'PASS randomized_cases=12000 simultaneous_boundary=pass disjoint_peaks=pass large_timestamp=pass invalid_contract=pass'
+          WRITER_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),path=require('path'),crypto=require('crypto');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const out=`review/content_build/answer_batch_0021/${cid}`;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const sha=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+          fs.writeFileSync(path.join(out,'writer_validation.json'),JSON.stringify({
+            schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-26',
+            command:'javac -Xlint:all -Werror PackagePeak.java PackagePeakWriterTest.java && java PackagePeakWriterTest',
+            stdout:process.env.WRITER_STDOUT,
+            checks:['half-open simultaneous boundary continuity','multiple disjoint peak segments','large sparse timestamps','12000 seeded randomized differential cases against discrete brute-force oracle','invalid interval contract'],
+            candidate_sha256:sha(candidate),implementation_sha256:sha(path.join(out,'PackagePeak.java')),test_sha256:sha(path.join(out,'PackagePeakWriterTest.java'))
+          },null,2)+'\n');
+          fs.writeFileSync(path.join(out,'writer_research.json'),JSON.stringify({
+            schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-26',review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'primary-note',title:'Raw Cainiao interview note preserving the 100-million package interval question',locator:process.env.SOURCE_TEXT,source_type:'repository_source_record',checked_at:'2026-08-26'},
+              {source_id:'tagged-question',title:'Normalized tagged package interval peak question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:'2026-08-26'},
+              {source_id:'writer-validation',title:'Package interval peak deterministic and randomized Java validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-26'}
+            ],
+            claims:[
+              {claim_id:'source-boundary',text:'The source asks for the peak time range and duration from one day of package put/take timestamps plus time and space complexity; it does not prescribe timestamp precision, endpoint semantics, programming language, Difference Array, or Sweep Line.',source_ids:['primary-note','tagged-question'],answer_locations:['核心结论','关键细节','易错点']},
+              {claim_id:'candidate-contract',text:'Half-open [put,take) intervals, nonnegative integer time offsets, returning all peak segments and total peak duration, and Java are explicit answer-side choices rather than source facts.',source_ids:['primary-note','tagged-question'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},
+              {claim_id:'algorithm-validation',text:'The grouped endpoint sweep matches a discrete brute-force occupancy oracle across 12,000 seeded randomized interval sets and dedicated simultaneous-boundary, disjoint-peak, large-timestamp and invalid-input cases.',source_ids:['writer-validation'],answer_locations:['3 分钟版','关键细节','原理机制']}
+            ],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            promotion_blocker:'isolated_independent_review_not_yet_performed'
+          },null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- `cq_q_3a1c2667429257c4fbe7e2d8d8012096` — coding; normalized to source-preserving package interval peak wording; removed inferred prescribed algorithms.';
+          const next='- `cq_q_3a1c2667429257c4fbe7e2d8d8012096` — coding; normalized source boundary is preserved; source-bounded Java candidate and writer differential validation PASS; isolated independent review and evidence binding remain pending.';
+          if(text.includes(old)) text=text.replace(old,next);
+          else if(!text.includes(next)) throw new Error('batch 0021 task status wording drifted');
+          fs.writeFileSync(task,text);
+          NODE
+          rm "$out/writer_stdout.txt"
+
+      - name: Verify candidate auditability and repository gates
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --canonical-id "$CANONICAL_ID" --require-evidence --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit candidate only if content head stayed stable
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during validation: $base_head -> $remote_head"
+            echo 'Discarding this local mutation; a pull-request refresh will retry against the newer content head.'
+            exit 0
+          fi
+          git config user.name "xhs-content-builder"
+          git config user.email "43640935+liqiangcc@users.noreply.github.com"
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0021/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md
+          git diff --cached --check
+          git commit -m "content: stage batch 0021 package interval peak candidate"
+          git push origin "HEAD:$CONTENT_BRANCH"
