@@ -1,0 +1,389 @@
+name: Build Content Batch 0021 Topological Sort Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0021-topological-sort-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0021-topological-sort-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_37ffe67ab69164654b0a19aa57b410df
+  SOURCE_QID: 37ffe67ab69164654b0a19aa57b410df
+  SOURCE_NOTE: note_desc/65f3d1b5000000001302669c.txt
+  SOURCE_TAGGED: note_tagged/65f3d1b5000000001302669c.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: |
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_note_sha256=$(sha256sum "$SOURCE_NOTE" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "source_tagged_sha256=$(sha256sum "$SOURCE_TAGGED" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Guard primary-source and Canonical boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const out=`review/content_build/answer_batch_0021/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${out}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('Canonical context missing or type drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!=='算法：拓扑排序') throw new Error(`source wording drifted: ${src?.original_question}`);
+          const raw=fs.readFileSync(process.env.SOURCE_NOTE,'utf8');
+          if(!raw.includes('8.手撕 拓扑排序')) throw new Error('raw source wording drift');
+          const tagged=JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8'));
+          const tq=(tagged.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!tq||tq.original_question!=='算法：拓扑排序') throw new Error('tagged source drift');
+          NODE
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          if [ -e "$candidate" ]; then echo 'candidate already exists; fail closed'; exit 1; fi
+
+      - name: Write source-bounded Java candidate and executable fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0021/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_37ffe67ab69164654b0a19aa57b410df","version":1,"status":"draft","updated_at":"2026-08-26","answer_type":"coding","quality_tier":"candidate"} -->
+          # 算法：拓扑排序
+
+          ## 核心结论
+
+          来源只保留“手撕拓扑排序”，没有给语言、图的输入格式、顶点编号、是否要求字典序或遇到环时的返回方式。这里明确一个可执行的答案侧契约：Java，顶点编号为 `0..vertexCount-1`，`edges[i] = {from, to}` 表示有向边 `from -> to`；返回任意一个合法拓扑序。如果图里存在有向环，抛出 `IllegalArgumentException`。实现使用 Kahn 算法：先统计每个点的入度，把所有入度为 0 的点入队；每弹出一个点，就删除它的出边并减少邻点入度，新变成 0 的点继续入队。最终输出数量等于顶点数时成功，否则说明至少还有一部分点被环锁住。
+
+          ## 1 分钟版
+
+          - 拓扑排序只对有向无环图有完整排序结果；核心不变量是“入队的点当前入度一定为 0”。
+          - 先建邻接表并统计 `indegree[to]++`，再把所有入度为 0 的顶点放入队列。
+          - 每次取出一个点加入答案，遍历它的出边，把对应邻点入度减 1；减到 0 就入队。
+          - 如果最后处理了全部 `V` 个点，得到合法拓扑序；若只处理了少于 `V` 个点，剩余子图中存在有向环。
+          - 建图和每条边只处理常数次，所以时间 `O(V + E)`，邻接表、入度、队列和结果总空间 `O(V + E)`。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.ArrayDeque;
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public final class TopologicalSort {
+              private TopologicalSort() {}
+
+              public static int[] sort(int vertexCount, int[][] edges) {
+                  if (vertexCount < 0) {
+                      throw new IllegalArgumentException("vertexCount must be >= 0");
+                  }
+                  if (edges == null) {
+                      throw new NullPointerException("edges");
+                  }
+
+                  List<List<Integer>> graph = new ArrayList<>(vertexCount);
+                  for (int i = 0; i < vertexCount; i++) {
+                      graph.add(new ArrayList<>());
+                  }
+                  int[] indegree = new int[vertexCount];
+
+                  for (int[] edge : edges) {
+                      if (edge == null || edge.length != 2) {
+                          throw new IllegalArgumentException("each edge must contain from and to");
+                      }
+                      int from = edge[0];
+                      int to = edge[1];
+                      if (from < 0 || from >= vertexCount || to < 0 || to >= vertexCount) {
+                          throw new IllegalArgumentException("edge endpoint out of range");
+                      }
+                      graph.get(from).add(to);
+                      indegree[to]++;
+                  }
+
+                  ArrayDeque<Integer> queue = new ArrayDeque<>();
+                  for (int v = 0; v < vertexCount; v++) {
+                      if (indegree[v] == 0) {
+                          queue.addLast(v);
+                      }
+                  }
+
+                  int[] order = new int[vertexCount];
+                  int size = 0;
+                  while (!queue.isEmpty()) {
+                      int v = queue.removeFirst();
+                      order[size++] = v;
+                      for (int next : graph.get(v)) {
+                          if (--indegree[next] == 0) {
+                              queue.addLast(next);
+                          }
+                      }
+                  }
+
+                  if (size != vertexCount) {
+                      throw new IllegalArgumentException("graph contains a directed cycle");
+                  }
+                  return order;
+              }
+          }
+          ```
+
+          例如边 `0→2, 1→2, 2→3` 中，最初 `0、1` 的入度都是 0，可以先后以任意顺序处理；只有两者都被移除后，`2` 的入度才会降到 0，之后才能处理 `3`。因此合法答案不一定唯一，验证时应该检查所有边都满足 `position[from] < position[to]`，而不是把某一个固定数组当成唯一标准答案。
+
+          ## 关键细节
+
+          - **来源边界**：题源只要求“手撕拓扑排序”。Java、`int[][] edges`、顶点从 0 编号、Kahn/BFS 和“有环抛异常”都是答案侧选择，不冒充原题要求。
+          - **为什么入度为 0 才能取**：当前还没有任何未处理前驱指向它，因此把它放到当前答案位置不会违反依赖顺序。
+          - **怎么判环**：如果队列提前空了但仍有顶点没输出，剩余顶点都至少有一个来自剩余子图的前驱；沿前驱持续追溯必然重复某个点，因此剩余部分含有向环。
+          - **答案可能不唯一**：同时有多个入度 0 顶点时，选择顺序可以不同。若题目额外要求字典序最小，应把普通队列换成优先队列；当前来源没有这个要求。
+          - **重复边**：本契约允许重复 `from -> to` 记录。建图时每条都让入度加 1，删除 `from` 时也逐条减 1，因此仍然自洽；如果业务语义要求去重，应在输入契约中单独说明。
+          - **自环**：`v -> v` 会让 `v` 永远无法降到 0，最终按有向环处理。
+          - **空图**：`vertexCount == 0` 且空边集合时返回空数组。
+          - **复杂度**：每个顶点入队出队至多一次，每条边建图和删除各访问一次，因此时间 `O(V + E)`；邻接表占 `O(V + E)`，其他结构 `O(V)`。
+
+          ## 原理机制
+
+          Kahn 算法可以理解为不断删除 DAG 的“源点”。DAG 一定至少存在一个入度为 0 的顶点；否则从任意点不断沿前驱往回走，在有限顶点集合中必然遇到重复点，从而形成环，和 DAG 假设矛盾。删除一个源点及其所有出边后，剩下的图仍然是 DAG，所以可以重复这个过程。每次删除的源点都追加到结果中，保证它出现在所有尚未删除后继之前。
+
+          反过来，如果处理过程中已经没有入度为 0 的点，但图里还有顶点，说明剩余子图不存在源点，因此必然含环。于是“输出了多少个点”同时给出了排序成功和环检测的判据。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构“线上用拓扑排序解决过某个依赖系统”。工程映射时常见的是任务依赖、构建依赖或配置依赖；真正落地前需要确认图是否可能动态变化、是否允许重复边、是否要稳定/字典序输出，以及发现环后要返回哪条环路。当前代码只回答静态图的一次性拓扑排序；若要诊断具体环，需要额外保存父指针或再做一次 DFS 提取环路径。
+
+          ## 常见追问
+
+          - 问：为什么拓扑序可能不唯一？答：同一时刻可能有多个入度为 0 的点，它们之间当前没有必须先后的依赖；选择顺序不同会得到不同但都合法的拓扑序。
+          - 问：怎么判断返回结果正确？答：结果必须包含每个顶点恰好一次，并且对每条 `u -> v` 都满足 `u` 在 `v` 前面；不能只和一个固定期望数组做相等比较。
+          - 问：如果有环怎么办？答：Kahn 算法最终处理数量会小于 `V`；当前 API 明确抛异常。若题目要求返回空数组或布尔值，只需调整接口语义，核心判环条件不变。
+          - 问：DFS 也能做吗？答：可以。DFS 用三色状态发现回边，并在退出节点时逆序记录；Kahn 用入度和队列。两者都是 `O(V+E)`，这里选 Kahn 只是答案侧实现选择。
+          - 问：如果要求字典序最小拓扑序呢？答：把当前保存零入度顶点的 FIFO 队列换成最小堆，每次取编号最小的可选点，时间会多出堆操作成本。
+
+          ## 易错点
+
+          - 把拓扑排序当普通数值排序，完全没有建有向图和依赖关系。
+          - 入度统计错方向，把 `from` 而不是 `to` 的入度加 1。
+          - 输出部分顶点后直接返回，没有用 `processed == V` 检测环。
+          - 认为拓扑序只有一个，测试代码写死一个固定答案。
+          - 使用邻接矩阵后仍声称无条件 `O(V+E)`，没有按实际数据结构重新核算复杂度。
+          - 把 Java、BFS/Kahn、编号方式或异常行为说成题源已经明确规定。
+          EOF
+
+          cat > "$out/TopologicalSort.java" <<'JAVA'
+          import java.util.ArrayDeque;
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public final class TopologicalSort {
+              private TopologicalSort() {}
+
+              public static int[] sort(int vertexCount, int[][] edges) {
+                  if (vertexCount < 0) throw new IllegalArgumentException("vertexCount must be >= 0");
+                  if (edges == null) throw new NullPointerException("edges");
+                  List<List<Integer>> graph = new ArrayList<>(vertexCount);
+                  for (int i = 0; i < vertexCount; i++) graph.add(new ArrayList<>());
+                  int[] indegree = new int[vertexCount];
+                  for (int[] edge : edges) {
+                      if (edge == null || edge.length != 2) throw new IllegalArgumentException("each edge must contain from and to");
+                      int from = edge[0], to = edge[1];
+                      if (from < 0 || from >= vertexCount || to < 0 || to >= vertexCount) throw new IllegalArgumentException("edge endpoint out of range");
+                      graph.get(from).add(to);
+                      indegree[to]++;
+                  }
+                  ArrayDeque<Integer> queue = new ArrayDeque<>();
+                  for (int v = 0; v < vertexCount; v++) if (indegree[v] == 0) queue.addLast(v);
+                  int[] order = new int[vertexCount];
+                  int size = 0;
+                  while (!queue.isEmpty()) {
+                      int v = queue.removeFirst();
+                      order[size++] = v;
+                      for (int next : graph.get(v)) if (--indegree[next] == 0) queue.addLast(next);
+                  }
+                  if (size != vertexCount) throw new IllegalArgumentException("graph contains a directed cycle");
+                  return order;
+              }
+          }
+          JAVA
+
+          cat > "$out/TopologicalSortWriterTest.java" <<'JAVA'
+          import java.util.ArrayList;
+          import java.util.Arrays;
+          import java.util.List;
+          import java.util.Random;
+
+          public final class TopologicalSortWriterTest {
+              private static long exhaustiveGraphs = 0;
+
+              public static void main(String[] args) {
+                  for (int n = 0; n <= 4; n++) enumerateSimpleGraphs(n);
+                  check(new int[][]{{0,2},{1,2},{2,3}}, 4);
+                  check(new int[][]{{0,1},{0,1},{1,2}}, 3);
+                  expectCycle(1, new int[][]{{0,0}});
+                  expectCycle(3, new int[][]{{0,1},{1,2},{2,0}});
+                  Random r = new Random(20260826L);
+                  for (int rep = 0; rep < 500; rep++) {
+                      int n = 1 + r.nextInt(40);
+                      List<int[]> es = new ArrayList<>();
+                      for (int u = 0; u < n; u++) for (int v = u + 1; v < n; v++) if (r.nextInt(11) == 0) es.add(new int[]{u,v});
+                      check(es.toArray(int[][]::new), n);
+                  }
+                  expect(IllegalArgumentException.class, () -> TopologicalSort.sort(-1, new int[0][]));
+                  expect(NullPointerException.class, () -> TopologicalSort.sort(0, null));
+                  expect(IllegalArgumentException.class, () -> TopologicalSort.sort(2, new int[][]{{0}}));
+                  expect(IllegalArgumentException.class, () -> TopologicalSort.sort(2, new int[][]{{0,2}}));
+                  System.out.printf("PASS exhaustive_simple_graphs=%d random_dags=500 duplicate_edges=pass cycles=pass invalid=reject%n", exhaustiveGraphs);
+              }
+
+              private static void enumerateSimpleGraphs(int n) {
+                  List<int[]> possible = new ArrayList<>();
+                  for (int u = 0; u < n; u++) for (int v = 0; v < n; v++) if (u != v) possible.add(new int[]{u,v});
+                  int count = 1 << possible.size();
+                  for (int mask = 0; mask < count; mask++) {
+                      List<int[]> es = new ArrayList<>();
+                      for (int i = 0; i < possible.size(); i++) if ((mask & (1 << i)) != 0) es.add(possible.get(i));
+                      int[][] edges = es.toArray(int[][]::new);
+                      boolean cycle = hasCycle(n, edges);
+                      if (cycle) expectCycle(n, edges); else check(edges, n);
+                      exhaustiveGraphs++;
+                  }
+              }
+
+              private static boolean hasCycle(int n, int[][] edges) {
+                  List<List<Integer>> g = new ArrayList<>();
+                  for (int i = 0; i < n; i++) g.add(new ArrayList<>());
+                  for (int[] e : edges) g.get(e[0]).add(e[1]);
+                  int[] state = new int[n];
+                  for (int v = 0; v < n; v++) if (state[v] == 0 && dfs(v, g, state)) return true;
+                  return false;
+              }
+
+              private static boolean dfs(int v, List<List<Integer>> g, int[] state) {
+                  state[v] = 1;
+                  for (int w : g.get(v)) {
+                      if (state[w] == 1) return true;
+                      if (state[w] == 0 && dfs(w, g, state)) return true;
+                  }
+                  state[v] = 2;
+                  return false;
+              }
+
+              private static void check(int[][] edges, int n) {
+                  int[] order = TopologicalSort.sort(n, edges);
+                  if (order.length != n) throw new AssertionError("wrong length");
+                  int[] pos = new int[n];
+                  boolean[] seen = new boolean[n];
+                  for (int i = 0; i < n; i++) {
+                      int v = order[i];
+                      if (v < 0 || v >= n || seen[v]) throw new AssertionError("invalid vertex order=" + Arrays.toString(order));
+                      seen[v] = true; pos[v] = i;
+                  }
+                  for (int[] e : edges) if (pos[e[0]] >= pos[e[1]]) throw new AssertionError("edge order violation " + Arrays.toString(e));
+              }
+
+              private static void expectCycle(int n, int[][] edges) {
+                  expect(IllegalArgumentException.class, () -> TopologicalSort.sort(n, edges));
+              }
+
+              private static void expect(Class<? extends Throwable> type, Runnable action) {
+                  try { action.run(); throw new AssertionError("missing " + type.getSimpleName()); }
+                  catch (Throwable t) { if (!type.isInstance(t)) throw new AssertionError("wrong exception " + t); }
+              }
+          }
+          JAVA
+
+      - name: Execute writer validation and freeze research record
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0021/$CANONICAL_ID"
+          (cd "$out" && javac -Xlint:all -Werror TopologicalSort.java TopologicalSortWriterTest.java && java TopologicalSortWriterTest > writer_stdout.txt)
+          stdout="$(cat "$out/writer_stdout.txt")"
+          test "$stdout" = 'PASS exhaustive_simple_graphs=4166 random_dags=500 duplicate_edges=pass cycles=pass invalid=reject'
+          WRITER_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-26';
+          const out=`review/content_build/answer_batch_0021/${cid}`;
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'javac -Xlint:all -Werror TopologicalSort.java TopologicalSortWriterTest.java && java TopologicalSortWriterTest',stdout:process.env.WRITER_STDOUT,checks:['all directed simple graphs for vertex counts 0..4 checked against an independent DFS cycle oracle','every DAG result contains each vertex once and respects every directed edge','500 deterministic generated DAGs','duplicate-edge handling','self-loop and multi-node cycle rejection','invalid vertex count, null/malformed/out-of-range edge inputs rejected']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'raw-note',title:'Interview note preserving the hand-written topological-sort request',locator:process.env.SOURCE_NOTE,source_type:'repository_source_record',checked_at:date},{source_id:'tagged-question',title:'Tagged topological-sort question record',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Topological-sort deterministic Java validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The recoverable source only asks the candidate to hand-write topological sort; it does not prescribe Java, graph representation, ordering policy, algorithm variant, or cycle API.',source_ids:['raw-note','tagged-question'],answer_locations:['核心结论','关键细节','易错点']},{claim_id:'candidate-contract',text:'Java vertices 0..V-1, int[][] directed edges, any valid topological order, Kahn processing, and exception-on-cycle are explicit answer-side choices.',source_ids:['raw-note','tagged-question'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'implementation-validation',text:'The Java implementation is checked against an independent DFS cycle oracle on all simple directed graphs through four vertices, plus deterministic DAGs, duplicate edges, cycles and declared invalid-input cases.',source_ids:['writer-validation'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+          rm -f "$out"/*.class "$out/writer_stdout.txt"
+
+      - name: Update batch task writer state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md';
+          let text=fs.readFileSync(task,'utf8');
+          const old='- `cq_q_37ffe67ab69164654b0a19aa57b410df` — coding; risks: long_tail_baseline, placeholder_implementation';
+          const next='- `cq_q_37ffe67ab69164654b0a19aa57b410df` — coding; source-bounded Java Kahn topological-sort candidate is staged with language/API/cycle behavior explicit, writer exhaustive-small-graph plus deterministic DAG validation PASS, and source binding recorded. Isolated independent review remains pending; formal promotion remains blocked by repository human approval and real-review policy.';
+          if(text.includes(old)) text=text.replace(old,next); else if(!text.includes(next)) throw new Error('task summary marker drift');
+          const note='- [ ] `cq_q_37ffe67ab69164654b0a19aa57b410df` writer pass is complete: raw note and tagged question bind the hand-written topological-sort request, a source-bounded Java Kahn candidate plus reproducible fixture are committed, and writer validation is PASS. Next gate is isolated source-first review.';
+          if(!text.includes(note)) text=text.trimEnd()+'\n'+note+'\n';
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Run pre-review repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Commit candidate without overwriting unrelated progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0021/$CANONICAL_ID" "tasks/answer-batches/TASK-20260711-0313-answer-batch-0021.md"
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: build topological sort candidate'
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote="$(git rev-parse origin/$CONTENT_BRANCH)"; base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then
+            if git cat-file -e "origin/$CONTENT_BRANCH:review/candidates/answers/$CANONICAL_ID.md" 2>/dev/null; then echo 'candidate appeared concurrently; fail closed'; exit 0; fi
+            remote_note="$(git show "origin/$CONTENT_BRANCH:$SOURCE_NOTE" | sha256sum | awk '{print $1}')"
+            remote_tagged="$(git show "origin/$CONTENT_BRANCH:$SOURCE_TAGGED" | sha256sum | awk '{print $1}')"
+            test "$remote_note" = '${{ steps.base.outputs.source_note_sha256 }}' || { echo 'source note changed; fail closed'; exit 0; }
+            test "$remote_tagged" = '${{ steps.base.outputs.source_tagged_sha256 }}' || { echo 'tagged source changed; fail closed'; exit 0; }
+            git rebase "origin/$CONTENT_BRANCH"
+          fi
+          git push origin "HEAD:$CONTENT_BRANCH"
