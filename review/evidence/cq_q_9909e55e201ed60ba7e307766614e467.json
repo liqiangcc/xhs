@@ -1,0 +1,153 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9909e55e201ed60ba7e307766614e467",
+  "candidate_sha256": "26390debc4a1945abcdd86617ff807bc2c2315795d82cf2723892478a276d4db",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "dcl-source-bounded-writer-20260827-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-structured",
+      "title": "Structured DCL interview source",
+      "locator": "note_structured/68218475000000000303b1f3.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Tagged DCL and volatile interview source",
+      "locator": "note_tagged/68218475000000000303b1f3.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "jls-primary",
+      "title": "Oracle Java Language Specification 26 primary-source snapshot",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9909e55e201ed60ba7e307766614e467/primary_source_snapshot.json",
+      "source_type": "primary_official_documentation",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer DCL contention validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9909e55e201ed60ba7e307766614e467/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate DCL validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9909e55e201ed60ba7e307766614e467/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first DCL review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9909e55e201ed60ba7e307766614e467/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks for handwritten DCL singleton code, why volatile is needed, and the principle.",
+      "source_ids": [
+        "repository-structured",
+        "repository-tagged"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "jmm-publication",
+      "text": "A volatile write happens-before each subsequent volatile read of the same field, and monitor unlock happens-before subsequent lock; these JLS rules support the candidate safe-publication and mutual-exclusion explanation.",
+      "source_ids": [
+        "jls-primary",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "implementation-shape",
+      "text": "The exact candidate compiles and independently validates private static volatile publication, private construction and stable identity under concurrent access.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9909e55e201ed60ba7e307766614e467",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact candidate Java block, compile with independent reflection/concurrency harness, and exercise 192 threads x 1500 calls",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate volatile=private-static threads=192 callsPerThread=1500 identity=stable constructor=private",
+    "checks": [
+      "exact candidate compiles under Java 21",
+      "instance is private static volatile",
+      "constructor is private",
+      "all contending threads observe one stable identity",
+      "post-initialization fast path returns same identity"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-dcl-20260827-v1",
+    "review_version": "dcl.jmm-publication.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The source boundary exactly asks for handwritten double-check singleton code, why volatile is needed, and the underlying principle.",
+      "The answer separates initialization mutual exclusion from safe publication: synchronized protects the compound creation path while volatile connects the lock-free fast-path read to the publishing write.",
+      "Oracle JLS 26 section 17.4.5 was checked source-first and states the volatile write-to-subsequent-read and monitor unlock-to-subsequent-lock happens-before rules used by the explanation.",
+      "Oracle JLS 26 section 8.3.1.4 was checked source-first for volatile field semantics; the answer avoids relying on an implementation-only main-memory slogan.",
+      "The exact candidate compiles under Java 21, has a private static volatile instance and private constructor, and an independent 192-thread stress harness observes one stable identity.",
+      "The answer explicitly notes that volatile does not make the compound null-check/construction atomic and that reflection/serialization guarantees are separate concerns.",
+      "No fabricated production experience is claimed."
+    ]
+  }
+}
