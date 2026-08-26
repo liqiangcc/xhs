@@ -1,0 +1,152 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_941c1d33b39c30a33ae65f2457810760",
+  "candidate_sha256": "d2eba48691bb0d014d36aab57efe2fa2f55a3f9a82bbfd7dd5e4915e9038adff",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "longest-palindrome-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-structured",
+      "title": "Structured Hello interview source containing the longest-palindrome prompt",
+      "locator": "note_structured/681b2c5e000000001101ecb6.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "repository-tagged",
+      "title": "Tagged longest-palindrome space-optimization question",
+      "locator": "note_tagged/681b2c5e000000001101ecb6.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer longest-palindrome brute-force differential validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_941c1d33b39c30a33ae65f2457810760/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate brute-force differential validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_941c1d33b39c30a33ae65f2457810760/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_941c1d33b39c30a33ae65f2457810760/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks for the longest palindromic substring with space-complexity optimization without specifying language, null/empty behavior, tie-breaking, or Unicode comparison units.",
+      "source_ids": [
+        "repository-structured",
+        "repository-tagged",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "center-expansion",
+      "text": "Enumerating odd and even centers and expanding while the two boundary units match finds every candidate palindrome while storing only constant-size search state.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity-and-boundaries",
+      "text": "The exact candidate has O(n^2) worst-case time and O(1) peak auxiliary search state, uses Java UTF-16 char units, rejects null, returns empty for empty input, and resolves equal-length maxima by earliest start.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "941c1d33b39c30a33ae65f2457810760",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract the exact candidate Java block, compile it inside an independent harness, and compare deterministic/exhaustive/randomized outputs against a brute-force longest-palindrome oracle",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate null=rejected deterministic=15 exhaustive=3280 randomized=20000 oracle=bruteforce tie=earliest-start odd_even=covered",
+    "checks": [
+      "exact candidate Java implementation compiles under Java 21",
+      "null is rejected and empty/single-character inputs follow the explicit contract",
+      "15 deterministic cases cover odd/even centers, ties, all-equal strings and boundaries",
+      "all 3280 strings of length 0..7 over a three-character alphabet match an independent brute-force oracle",
+      "20000 seeded randomized strings of length 0..40 match the independent brute-force oracle",
+      "babad resolves to the earliest-start longest palindrome and cbbd exercises the even-center path"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-longest-palindrome-20260826-v1",
+    "review_version": "longest-palindrome.center-expansion.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The answer preserves the narrow source boundary and clearly labels Java/null/empty/tie/Unicode behavior as implementation contracts rather than source facts.",
+      "The center-expansion invariant is explained for both odd and even centers, including the post-loop [left+1,right-1] boundary.",
+      "The exact candidate implementation is complete Java rather than pseudocode and matches an independent brute-force oracle on deterministic, exhaustive, and randomized cases.",
+      "The O(n^2) worst-case time and O(1) peak auxiliary search state are stated separately from returned-output storage.",
+      "Tie behavior is deterministic and explicitly documented; the candidate does not assume an unstated online-judge acceptance rule.",
+      "The UTF-16 char-unit boundary is explicit, and code-point/grapheme semantics are correctly left as a different contract.",
+      "Manacher is presented as a time-optimization alternative with O(n) auxiliary arrays rather than being conflated with the requested space optimization.",
+      "No fabricated production experience or business metric is claimed."
+    ]
+  }
+}
