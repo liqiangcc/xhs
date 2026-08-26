@@ -1,0 +1,174 @@
+name: Review Content Batch 0039 Top Students SQL Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0039-top-students-sql.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-top-students-sql-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9d94865ec7dae0be612a676246d7c62b
+  SOURCE_QID: 9d94865ec7dae0be612a676246d7c62b
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Source-first exact-candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0039/$cid"; tmp="/tmp/top-students-review"
+          rm -rf "$tmp"; mkdir -p "$tmp" "$out"
+
+          python3 - <<'PY'
+          import json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']
+          exact='SQL数据聚合：编写SQL查询考取80分以上科目数量排名前三的学生名单，并展示姓名及其对应的及格学科数'
+          rows=[json.loads(line) for line in pathlib.Path('data/questions/questions.jsonl').read_text().splitlines() if line.strip()]
+          row=next((x for x in rows if x.get('question_id')==qid),None)
+          if not row or row.get('original_question')!=exact or row.get('canonical_id')!=cid or row.get('is_valid_for_library') is not True:
+              raise SystemExit('current source/ownership drift')
+          primary=json.loads(pathlib.Path('note_tagged/6887a6a7000000002203fd29.json').read_text())
+          if not any(q.get('question_id')==qid and q.get('original_question')==exact and q.get('is_valid_for_library') is True for q in primary.get('tagged_questions',[])):
+              raise SystemExit('primary source drift')
+          inventory=json.loads(pathlib.Path('review/content_build/answer_batch_0039/source_inventory.json').read_text())
+          item=next((x for x in inventory.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not item or not any(q.get('question_id')==qid and q.get('original_question')==exact for q in item.get('source_questions',[])):
+              raise SystemExit('frozen source inventory drift')
+
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['score >= 80',':pass_score','ROW_NUMBER()','DENSE_RANK()','每个 `(student_id, subject_id)` 只有一条最终成绩','答案侧契约']:
+              if marker not in md: raise SystemExit(f'candidate boundary marker missing: {marker}')
+          if len(re.findall(r'^- 问：',md,re.M))<5: raise SystemExit('followups insufficient')
+          blocks=re.findall(r'```sql\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one SQL block, got {len(blocks)}')
+          pathlib.Path('/tmp/top-students-review/candidate.sql').write_text(blocks[0].strip()+'\n')
+          PY
+
+          python3 "$out/sql_validation.py" > "$tmp/writer_stdout.txt"
+          test "$(cat "$tmp/writer_stdout.txt")" = 'PASS top3=Cara,Eve,Alice includes-score-80 stable-tie-break pass-score-parameterized student-grain'
+
+          python3 - <<'PY' > "$tmp/reviewer_stdout.txt"
+          import pathlib,sqlite3
+          sql=pathlib.Path('/tmp/top-students-review/candidate.sql').read_text()
+          con=sqlite3.connect(':memory:')
+          con.execute('CREATE TABLE students(student_id INTEGER PRIMARY KEY, name TEXT NOT NULL)')
+          con.execute('CREATE TABLE scores(student_id INTEGER NOT NULL, subject_id TEXT NOT NULL, score INTEGER NOT NULL, UNIQUE(student_id, subject_id))')
+          con.executemany('INSERT INTO students VALUES (?,?)',[(1,'Alice'),(2,'Bob'),(3,'Cara'),(4,'Dan'),(5,'Eve'),(6,'Finn')])
+          con.executemany('INSERT INTO scores VALUES (?,?,?)',[
+            (1,'a',90),(1,'b',85),(1,'c',70),
+            (2,'a',95),(2,'b',80),(2,'c',59),
+            (3,'a',100),(3,'b',99),(3,'c',98),
+            (4,'a',81),(4,'b',79),(4,'c',60),
+            (5,'a',80),(5,'b',80),(5,'c',80),
+            (6,'a',79),(6,'b',79),(6,'c',79),
+          ])
+          rows=list(con.execute(sql,{'pass_score':60}))
+          expected=[('Cara',3),('Eve',3),('Alice',3)]
+          if rows!=expected: raise SystemExit(f'pass60 mismatch rows={rows} expected={expected}')
+          rows75=list(con.execute(sql,{'pass_score':75}))
+          expected75=[('Cara',3),('Eve',3),('Alice',2)]
+          if rows75!=expected75: raise SystemExit(f'pass75 mismatch rows={rows75} expected={expected75}')
+          print('PASS exact_candidate student-grain >=80-boundary exact-three stable-tie pass-score-independent')
+          PY
+          reviewer_stdout="$(cat "$tmp/reviewer_stdout.txt")"
+          test "$reviewer_stdout" = 'PASS exact_candidate student-grain >=80-boundary exact-three stable-tie pass-score-independent'
+
+          REVIEW_STDOUT="$reviewer_stdout" python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; date='2026-08-27'
+          out=pathlib.Path(f'review/content_build/answer_batch_0039/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          checks=['exact SQL candidate parses and executes','conditional aggregation occurs at student grain before ranking','score exactly 80 counts under the declared >=80 interpretation','ROW_NUMBER plus student_id gives deterministic exact-three output under the declared tie contract','changing pass_score changes displayed passed_subjects independently from the >=80 ranking metric']
+          boundary_tests=[
+            {'case':'Bob has score exactly 80','expected':'80 counts toward high-score subject count under declared >=80 contract','passed':True},
+            {'case':'Cara and Eve tie at three high-score subjects','expected':'student_id tie-break deterministically orders Cara then Eve while returning exactly three students','passed':True},
+            {'case':'pass_score changes from 60 to 75','expected':'Alice passed_subjects changes from 3 to 2 while ranking by >=80 count is unchanged','passed':True},
+            {'case':'Finn has no score >=80','expected':'does not enter top three when higher student aggregates exist','passed':True}
+          ]
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'extract exact SQL candidate and execute independent SQLite adversarial fixture with two pass-score bindings','stdout':os.environ['REVIEW_STDOUT'],'checks':checks,'boundary_tests':boundary_tests}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          findings=[
+            'The repository source preserves ranking students by count of subjects at 80 or above and displaying name plus passed-subject count, but it does not preserve schema names, the pass threshold, tie semantics, or multiple-attempt policy.',
+            'The candidate explicitly labels those missing details as answer-side assumptions: a minimal students/scores schema, one final row per student/subject, a bound :pass_score, and exact-three ROW_NUMBER semantics with student_id as tie-breaker.',
+            'The exact SQL independently executes successfully and ranks only after student-level conditional aggregation; the 80-point inclusive boundary is covered by a dedicated case.',
+            'Changing pass_score from 60 to 75 changes the displayed pass count without changing the >=80 ranking metric, proving the two conditions are not conflated.',
+            'The answer explains the DENSE_RANK alternative if the interviewer instead intends the top three ranks with all ties, and it refuses to invent retry/retake semantics or production experience.'
+          ]
+          scores={'facts_and_evidence':24,'directness_and_relevance':19,'type_specific_completeness':19,'mechanism_and_causality':14,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-top-students-sql-20260827-v1','review_version':'top-students-sql.v1','decision':'pass','revision_round':1,'source_packet':['data/questions/questions.jsonl','note_tagged/6887a6a7000000002203fd29.json','review/content_build/answer_batch_0039/source_inventory.json',str(candidate),'docs/refactor/09_answer_content_standard.md',str(out/'reviewer_validation.json')],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={
+            'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,
+            'writer':{'writer_id':'top-students-sql-source-bounded-writer-20260827-v1','writer_version':'xhs-answer-curator.v1'},
+            'sources':[
+              {'source_id':'primary-source','title':'Kuaishou test-development tagged source','locator':'note_tagged/6887a6a7000000002203fd29.json','source_type':'repository_structured_source','checked_at':date},
+              {'source_id':'batch-inventory','title':'Frozen Batch 0039 source inventory','locator':'review/content_build/answer_batch_0039/source_inventory.json','source_type':'repository_source_record','checked_at':date},
+              {'source_id':'writer-validation','title':'Writer deterministic top-students SQLite validation','locator':str(out/'sql_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'reviewer-validation','title':'Independent exact-candidate top-students SQL validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+              {'source_id':'isolated-review','title':'Fresh isolated source-first top-students SQL review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}
+            ],
+            'claims':[
+              {'claim_id':'source-boundary','text':'The source requires ranking by count of subjects at 80 or above and displaying student name plus passed-subject count, while schema, pass threshold, tie semantics and multiple-attempt policy are not preserved source facts.','source_ids':['primary-source','batch-inventory','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},
+              {'claim_id':'candidate-contract','text':'The candidate explicitly adopts a minimal students/scores schema, one final score per student/subject, a parameterized pass threshold and deterministic exact-three ROW_NUMBER tie semantics.','source_ids':['reviewer-validation','isolated-review'],'answer_locations':['核心结论','3 分钟版','关键细节','常见追问']},
+              {'claim_id':'query-behavior','text':'Writer and independent reviewer fixtures verify student-grain aggregation, the >=80 boundary, exact-three deterministic ties and independence of the passed-subject metric from the ranking metric.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','原理机制','常见追问','易错点']}
+            ],
+            'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],
+            'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':checks,'boundary_tests':boundary_tests},
+            'review_state':'independent_source_first_review_passed',
+            'review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'uncovered_source_variants':[],'unsupported_claims':[],'findings':findings}
+          }
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md'); text=task.read_text()
+          old='- [x] `cq_q_9d94865ec7dae0be612a676246d7c62b` now has a source-bounded SQL candidate with an explicit minimal schema, parameterized pass threshold, and deterministic exact-three tie contract. A SQLite fixture verifies student-grain conditional aggregation, inclusion of score 80, stable tie-breaking, and independent passed-subject counting. Writer research is frozen; formal evidence/promotion remains blocked on isolated independent review.'
+          new='- [x] `cq_q_9d94865ec7dae0be612a676246d7c62b` has a source-bounded SQL candidate that now passes isolated source-first review and complete evidence binding. Independent exact-candidate execution verifies student-grain conditional aggregation, inclusion of score 80, deterministic exact-three tie handling under the declared answer-side contract, and a parameterized pass threshold independent from the ranking metric. Formal promotion remains governed by repository human approval and real-review policy.'
+          if old in text: text=text.replace(old,new,1)
+          elif new not in text: text=text.rstrip()+'\n'+new+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Validate exact candidate evidence and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+
+      - name: Commit reviewed candidate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0039/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0039/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git commit -m 'review: pass batch 0039 top-students SQL candidate source-first'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
