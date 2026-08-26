@@ -1,0 +1,44 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9ebb896630d1e350f41ee29dec6f3cdf",
+  "candidate_sha256": "9795ac2f581a4c99ac983e0df509b99f08560ce84cb0e582d75655cfdd247808",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "extract exact SQL candidate and execute independent SQLite adversarial fixture",
+  "stdout": "PASS exact_candidate groups=6 strict_boundary=1 preaggregation_filter_trap=1 duplicate_value_rows=preserved",
+  "checks": [
+    "exact candidate SQL parses and executes",
+    "groups by both user_id and month",
+    "aggregates before applying the monthly >1000 filter",
+    "exactly 1000 is excluded",
+    "equal-valued source rows are both counted",
+    "different users/months with equal totals remain distinct groups"
+  ],
+  "boundary_tests": [
+    {
+      "case": "two sub-threshold rows 400+700 for one user/month",
+      "expected": "aggregate 1100 is retained; filtering occurs after aggregation",
+      "passed": true
+    },
+    {
+      "case": "exact monthly total 1000",
+      "expected": "excluded by strict >1000 predicate",
+      "passed": true
+    },
+    {
+      "case": "monthly total 1001",
+      "expected": "retained",
+      "passed": true
+    },
+    {
+      "case": "two equal-valued 600 income records",
+      "expected": "both records count; total 1200",
+      "passed": true
+    },
+    {
+      "case": "same total for different users/months",
+      "expected": "remain distinct (user_id, month) groups",
+      "passed": true
+    }
+  ]
+}
