@@ -1,0 +1,137 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9c3a49f5f175dcfabd68eccd2c46e01e",
+  "candidate_sha256": "f3fbbce4d4217e37e9c392645c3cb3b634512272126de9db1fbc2801a5f7e7c6",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "modular-divisibility-source-bounded-writer-20260827-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-tagged",
+      "title": "Tagged modular-divisibility source",
+      "locator": "note_tagged/6668516a000000000e033155.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer modulo/BigInteger validation",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9c3a49f5f175dcfabd68eccd2c46e01e/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate modular review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9c3a49f5f175dcfabd68eccd2c46e01e/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first modular review",
+      "locator": "review/content_build/answer_batch_0038/cq_q_9c3a49f5f175dcfabd68eccd2c46e01e/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks whether 17^400 - 19^100 is divisible by 10.",
+      "source_ids": [
+        "repository-tagged"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "residue-proof",
+      "text": "Both powers have residue 1 modulo 10, so the difference has residue 0 and is divisible by 10.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "executable-validation",
+      "text": "The exact fast modular exponentiation code is cross-checked against BigInteger and independent Python modular arithmetic.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9c3a49f5f175dcfabd68eccd2c46e01e",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact Java candidate and cross-check residues with Java BigInteger and independent Python pow",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate left=1 right=1 difference=0 crosscheck=12231 oracle=BigInteger; PASS python_modular_oracle left=1 right=1 difference=0",
+    "checks": [
+      "exact candidate compiles under Java 21",
+      "candidate returns residues 1 and 1 and divisibility true",
+      "12231 generic modPow cases match BigInteger",
+      "independent Python modular arithmetic returns difference residue 0"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-modular-divisibility-20260827-v1",
+    "review_version": "modular-divisibility.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The preserved source exactly asks whether 17^400 - 19^100 is divisible by 10.",
+      "The answer directly proves 17^400 ≡ 1 (mod 10) using the period-4 last-digit cycle of 7 and 19^100 ≡ 1 (mod 10) using the period-2 cycle of 9.",
+      "The exact candidate Java compiles and independently matches BigInteger and Python modular oracles.",
+      "The answer correctly explains that divisibility of a difference depends on congruence modulo 10 and does not require expanding or comparing the full powers.",
+      "The generic binary modular exponentiation implementation is O(log exponent) and keeps intermediate values bounded under modulus 10.",
+      "No fabricated project experience is claimed."
+    ]
+  }
+}
