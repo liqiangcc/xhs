@@ -1,0 +1,187 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c",
+  "candidate_sha256": "e92c80b0477a0bf3630d298c3bd5edbcdbdce24729704bac3e69bdb953da0761",
+  "checked_at": "2026-08-26",
+  "writer": {
+    "writer_id": "sliding-window-maximum-source-bounded-writer-20260826-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "explicit-source",
+      "title": "Source-explicit Sliding Window Maximum interview record",
+      "locator": "note_tagged/68b124e8000000001b032114.json#question_id=b55a6649e9e0b7e2351c5d1f3d5f167c",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "shorthand-source",
+      "title": "Consolidated Sliding Window Maximum shorthand source",
+      "locator": "note_tagged/68b85518000000001d026c52.json#question_id=86a4c030e736e3eea9fed1f6b739694d",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "relation-review",
+      "title": "Source-first same-relation review",
+      "locator": "review/content_build/answer_batch_0036/sliding_window_max_relation_review.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer quadratic-oracle validation",
+      "locator": "review/content_build/answer_batch_0036/cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent candidate-code compilation and quadratic-oracle validation",
+      "locator": "review/content_build/answer_batch_0036/cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-26"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh source-first isolated review",
+      "locator": "review/content_build/answer_batch_0036/cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-26"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The survivor covers both consolidated sources while exact API, invalid-k behavior, null behavior and complexity requirement remain non-source assumptions.",
+      "source_ids": [
+        "explicit-source",
+        "shorthand-source",
+        "relation-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-correctness",
+      "text": "The candidate Java monotonic deque matches independent quadratic per-window validation across fixed and randomized inputs.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The candidate deque operations admit O(n) amortized total time and O(k) live auxiliary indices.",
+      "source_ids": [
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "b55a6649e9e0b7e2351c5d1f3d5f167c",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "question_id": "86a4c030e736e3eea9fed1f6b739694d",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract candidate Java; javac SlidingWindowMaximum.java SlidingWindowMaximumReviewer.java; java SlidingWindowMaximumReviewer",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=9 invalid=3 randomized=3000 oracle=quadratic-window-scan checked-windows=61608",
+    "checks": [
+      "candidate code compiles directly",
+      "canonical example",
+      "duplicates",
+      "increasing/decreasing",
+      "negative values",
+      "k=1",
+      "k=n",
+      "adopted invalid-input behavior",
+      "3000 deterministic randomized arrays"
+    ],
+    "boundary_tests": [
+      {
+        "case": "canonical mixed example",
+        "expected": "[3,3,5,5,6,7]",
+        "passed": true
+      },
+      {
+        "case": "duplicate maxima",
+        "expected": "equal values preserve correct maxima while newest equal candidate may dominate",
+        "passed": true
+      },
+      {
+        "case": "k=1 and k=n",
+        "expected": "identity maxima and one global maximum respectively",
+        "passed": true
+      },
+      {
+        "case": "3000 deterministic randomized arrays",
+        "expected": "exact agreement with independent quadratic window oracle",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-sliding-window-maximum-20260826-v1",
+    "review_version": "sliding-window-maximum.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The primary repository source preserves array + window-size-K -> maximum for every window; the second consolidated source only repeats the problem title. Exact method signature, invalid-k behavior, null behavior and complexity requirement are not preserved source facts.",
+      "The candidate explicitly labels null and invalid-k behavior as an adopted executable contract rather than source wording.",
+      "The deque stores indices, expires indices at <= i-k, removes dominated tail candidates and exposes the current maximum at the head.",
+      "Java extracted directly from the candidate compiles and matches a reviewer-owned quadratic oracle on fixed duplicate/boundary cases plus 3000 deterministic randomized arrays.",
+      "Each index is inserted once and removed at most once, supporting O(n) amortized time; at most k live candidate indices support O(k) auxiliary space.",
+      "No fabricated production experience or unsupported source-specific API constraint was found."
+    ]
+  }
+}
