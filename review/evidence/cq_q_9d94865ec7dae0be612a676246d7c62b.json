@@ -1,0 +1,170 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9d94865ec7dae0be612a676246d7c62b",
+  "candidate_sha256": "68131010721af11cdd44eb154335e507a1b59e0748a35eac81a4489369b6d1a7",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "top-students-sql-source-bounded-writer-20260827-v1",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "primary-source",
+      "title": "Kuaishou test-development tagged source",
+      "locator": "note_tagged/6887a6a7000000002203fd29.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "batch-inventory",
+      "title": "Frozen Batch 0039 source inventory",
+      "locator": "review/content_build/answer_batch_0039/source_inventory.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic top-students SQLite validation",
+      "locator": "review/content_build/answer_batch_0039/cq_q_9d94865ec7dae0be612a676246d7c62b/sql_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-candidate top-students SQL validation",
+      "locator": "review/content_build/answer_batch_0039/cq_q_9d94865ec7dae0be612a676246d7c62b/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh isolated source-first top-students SQL review",
+      "locator": "review/content_build/answer_batch_0039/cq_q_9d94865ec7dae0be612a676246d7c62b/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source requires ranking by count of subjects at 80 or above and displaying student name plus passed-subject count, while schema, pass threshold, tie semantics and multiple-attempt policy are not preserved source facts.",
+      "source_ids": [
+        "primary-source",
+        "batch-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "candidate-contract",
+      "text": "The candidate explicitly adopts a minimal students/scores schema, one final score per student/subject, a parameterized pass threshold and deterministic exact-three ROW_NUMBER tie semantics.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "query-behavior",
+      "text": "Writer and independent reviewer fixtures verify student-grain aggregation, the >=80 boundary, exact-three deterministic ties and independence of the passed-subject metric from the ranking metric.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9d94865ec7dae0be612a676246d7c62b",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact SQL candidate and execute independent SQLite adversarial fixture with two pass-score bindings",
+    "result": "pass",
+    "reported_stdout": "PASS exact_candidate student-grain >=80-boundary exact-three stable-tie pass-score-independent",
+    "checks": [
+      "exact SQL candidate parses and executes",
+      "conditional aggregation occurs at student grain before ranking",
+      "score exactly 80 counts under the declared >=80 interpretation",
+      "ROW_NUMBER plus student_id gives deterministic exact-three output under the declared tie contract",
+      "changing pass_score changes displayed passed_subjects independently from the >=80 ranking metric"
+    ],
+    "boundary_tests": [
+      {
+        "case": "Bob has score exactly 80",
+        "expected": "80 counts toward high-score subject count under declared >=80 contract",
+        "passed": true
+      },
+      {
+        "case": "Cara and Eve tie at three high-score subjects",
+        "expected": "student_id tie-break deterministically orders Cara then Eve while returning exactly three students",
+        "passed": true
+      },
+      {
+        "case": "pass_score changes from 60 to 75",
+        "expected": "Alice passed_subjects changes from 3 to 2 while ranking by >=80 count is unchanged",
+        "passed": true
+      },
+      {
+        "case": "Finn has no score >=80",
+        "expected": "does not enter top three when higher student aggregates exist",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-top-students-sql-20260827-v1",
+    "review_version": "top-students-sql.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The repository source preserves ranking students by count of subjects at 80 or above and displaying name plus passed-subject count, but it does not preserve schema names, the pass threshold, tie semantics, or multiple-attempt policy.",
+      "The candidate explicitly labels those missing details as answer-side assumptions: a minimal students/scores schema, one final row per student/subject, a bound :pass_score, and exact-three ROW_NUMBER semantics with student_id as tie-breaker.",
+      "The exact SQL independently executes successfully and ranks only after student-level conditional aggregation; the 80-point inclusive boundary is covered by a dedicated case.",
+      "Changing pass_score from 60 to 75 changes the displayed pass count without changing the >=80 ranking metric, proving the two conditions are not conflated.",
+      "The answer explains the DENSE_RANK alternative if the interviewer instead intends the top three ranks with all ties, and it refuses to invent retry/retake semantics or production experience."
+    ]
+  }
+}

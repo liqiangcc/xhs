@@ -1,0 +1,38 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_9d94865ec7dae0be612a676246d7c62b",
+  "candidate_sha256": "68131010721af11cdd44eb154335e507a1b59e0748a35eac81a4489369b6d1a7",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "extract exact SQL candidate and execute independent SQLite adversarial fixture with two pass-score bindings",
+  "stdout": "PASS exact_candidate student-grain >=80-boundary exact-three stable-tie pass-score-independent",
+  "checks": [
+    "exact SQL candidate parses and executes",
+    "conditional aggregation occurs at student grain before ranking",
+    "score exactly 80 counts under the declared >=80 interpretation",
+    "ROW_NUMBER plus student_id gives deterministic exact-three output under the declared tie contract",
+    "changing pass_score changes displayed passed_subjects independently from the >=80 ranking metric"
+  ],
+  "boundary_tests": [
+    {
+      "case": "Bob has score exactly 80",
+      "expected": "80 counts toward high-score subject count under declared >=80 contract",
+      "passed": true
+    },
+    {
+      "case": "Cara and Eve tie at three high-score subjects",
+      "expected": "student_id tie-break deterministically orders Cara then Eve while returning exactly three students",
+      "passed": true
+    },
+    {
+      "case": "pass_score changes from 60 to 75",
+      "expected": "Alice passed_subjects changes from 3 to 2 while ranking by >=80 count is unchanged",
+      "passed": true
+    },
+    {
+      "case": "Finn has no score >=80",
+      "expected": "does not enter top three when higher student aggregates exist",
+      "passed": true
+    }
+  ]
+}
