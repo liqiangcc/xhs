@@ -1,0 +1,233 @@
+name: Build Content Batch 0039 Top Students SQL Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0039-top-students-sql-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0039-top-students-sql-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9d94865ec7dae0be612a676246d7c62b
+  SOURCE_QID: 9d94865ec7dae0be612a676246d7c62b
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0039/$cid"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='SQL数据聚合：编写SQL查询考取80分以上科目数量排名前三的学生名单，并展示姓名及其对应的及格学科数';
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0039/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid) throw new Error('Canonical context missing');
+          if(ctx.answer_type!=='coding') throw new Error(`answer type drifted: ${ctx.answer_type}`);
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.is_valid_for_library!==true) throw new Error(`source wording/validity drifted: ${src?.original_question}`);
+          const primary=JSON.parse(fs.readFileSync('note_tagged/6887a6a7000000002203fd29.json','utf8'));
+          if(!primary.tagged_questions?.some(q=>q.question_id===qid&&q.original_question===exact&&q.is_valid_for_library===true)) throw new Error('primary repository source missing');
+          const inventory=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0039/source_inventory.json','utf8'));
+          const item=inventory.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(q=>q.question_id===qid&&q.original_question===exact)) throw new Error('frozen Batch 0039 source inventory drifted');
+          NODE
+
+      - name: Write source-bounded SQL candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0039/$cid"
+          candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_9d94865ec7dae0be612a676246d7c62b","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # SQL：80 分以上科目数排名前三，并展示姓名和及格科目数
+
+          ## 核心结论
+
+          来源只保留了“按 80 分以上科目数量取前三名，并展示姓名和及格学科数”，没有保留真实表名、列名、及格线、同分并列规则或一门课是否允许多次成绩。下面先声明一个可执行的答案侧契约：`students(student_id, name)` 与 `scores(student_id, subject_id, score)`，每个 `(student_id, subject_id)` 只有一条最终成绩；“80 分以上”按 `score >= 80`；及格线由参数 `:pass_score` 传入；“前三名”取恰好 3 个学生，按 80+ 科目数降序，同数时按 `student_id` 升序稳定打破并列。
+
+          ## 1 分钟版
+
+          - 先按学生聚合，一次扫描同时算两个条件计数：`score >= 80` 的科目数，以及 `score >= :pass_score` 的及格科目数。
+          - 再对聚合结果按 80+ 科目数降序排名，而不是先对成绩明细排序。
+          - 本答案为了得到恰好 3 个学生，用 `ROW_NUMBER()` 并以 `student_id` 作为稳定 tie-breaker；如果题目要求“前三个名次且并列都保留”，应改为 `DENSE_RANK()`。
+          - 及格线来源没有给出，所以保留为参数，不能把 60 分冒充成原题事实。
+          - 如果同一学生同一科目存在多次考试记录，必须先明确取最高分、最新分还是最终分；不能直接把多条记录当成多个科目计数。
+
+          ## 3 分钟版
+
+          在上述答案侧 schema 与“每科一条最终成绩”契约下：
+
+          ```sql
+          WITH per_student AS (
+              SELECT
+                  s.student_id,
+                  s.name,
+                  SUM(CASE WHEN sc.score >= 80 THEN 1 ELSE 0 END) AS high_score_subjects,
+                  SUM(CASE WHEN sc.score >= :pass_score THEN 1 ELSE 0 END) AS passed_subjects
+              FROM students AS s
+              JOIN scores AS sc
+                ON sc.student_id = s.student_id
+              GROUP BY s.student_id, s.name
+          ), ranked AS (
+              SELECT
+                  student_id,
+                  name,
+                  high_score_subjects,
+                  passed_subjects,
+                  ROW_NUMBER() OVER (
+                      ORDER BY high_score_subjects DESC, student_id ASC
+                  ) AS rn
+              FROM per_student
+          )
+          SELECT
+              name,
+              passed_subjects
+          FROM ranked
+          WHERE rn <= 3
+          ORDER BY rn;
+          ```
+
+          调用时把真实及格线绑定到 `:pass_score`。如果面试官明确规定及格线为 60，才绑定 60；如果要求并列第三名全部返回，则把 `ROW_NUMBER()` 换成 `DENSE_RANK() OVER (ORDER BY high_score_subjects DESC)`，再筛 `rank_no <= 3`。
+
+          ## 关键细节
+
+          - **两个计数口径不同**：排名键是 `score >= 80` 的科目数，展示值是 `score >= :pass_score` 的科目数，不能把同一个条件复用两次。
+          - **先聚合再排名**：窗口函数应作用在“每个学生一行”的聚合结果上，否则排名的是成绩明细行而不是学生。
+          - **80 分边界**：“80 分以上”在本候选按包含 80 处理；如果业务明确要求严格大于 80，需要把条件改成 `> 80`。
+          - **并列语义**：`ROW_NUMBER` 保证恰好最多 3 人；`DENSE_RANK` 表示前三个名次，人数可能超过 3。来源没有说明，因此必须把选择写成答案侧契约。
+          - **成绩唯一性**：本候选假设每科一条最终成绩。若有补考/重考，必须先按业务规则把每科归一到一条有效成绩，再做条件聚合。
+          - **无成绩学生**：当前使用 `JOIN`，只让至少有一条成绩的学生参与排名；如果题目要求所有学生参与，需要改为 `LEFT JOIN` 并定义零成绩计数。
+          - **可移植性**：`CASE WHEN ... THEN 1 ELSE 0 END` 比依赖某一数据库布尔转整数的写法更明确；命名参数语法由实际客户端绑定层决定。
+
+          ## 原理机制
+
+          这题有两层粒度。第一层从“学生 × 科目成绩”明细收缩到“一名学生一行”，通过条件聚合得到 `high_score_subjects` 和 `passed_subjects`；第二层只在学生级结果上排序/排名。把这两层分开后，排名目标和展示指标不会互相污染，也能清楚处理 tie、及格线和多次成绩这些边界。
+
+          ## 项目经验版
+
+          来源没有真实 schema、数据量、索引或执行计划，不能虚构生产经验。实际落地会先确认成绩表的业务唯一键、重考语义和及格线，再查看目标数据库执行计划；如果数据量大，重点验证成绩表按学生关联的索引、聚合基数和窗口排序开销。这些是验证步骤，不是原题已经提供的事实。
+
+          ## 常见追问
+
+          - 问：为什么不能直接 `ORDER BY score DESC LIMIT 3`？答：因为题目排名的是“80 分以上的科目数量”，必须先按学生聚合成计数，再按计数排名。
+          - 问：第三名并列怎么办？答：来源没有定义。本候选选择恰好 3 人，用 `ROW_NUMBER + student_id` 稳定打破并列；若要求前三个名次全部保留，改用 `DENSE_RANK`。
+          - 问：及格是不是默认 60 分？答：来源没有保留这个阈值，所以答案保留 `:pass_score` 参数；面试官确认 60 后再绑定 60。
+          - 问：同一科补考两次会怎样？答：直接计数会把一门课算多次，因此必须先按业务规则选出该科有效成绩，再聚合。
+          - 问：为什么 `GROUP BY` 里带 `student_id` 和 `name`？答：结果粒度是一名学生；主键保证身份稳定，姓名只是展示属性。实际 schema 若允许改名或同名，仍应以学生主键作为关联和排名 tie-breaker。
+          - 问：80 分整算不算 80 分以上？答：本候选按中文通常的包含边界解释为 `>= 80`，并把该解释显式写入答案侧契约；若面试官指定严格大于，则改成 `> 80`。
+
+          ## 易错点
+
+          - 先对成绩明细排名，再去统计学生，导致排名粒度错误。
+          - 把“80+ 科目数”和“及格科目数”写成同一个条件。
+          - 未确认及格线却直接把 60 写成来源事实。
+          - 未声明并列规则，`LIMIT 3` 或窗口排名在 tie 时得到不可解释结果。
+          - 同一科存在多条成绩时直接 `COUNT`，把考试次数误当成科目数。
+          - 用姓名而不是稳定学生 ID 关联成绩，遇到同名学生产生错误聚合。
+          EOF
+
+          cat > "$out/sql_validation.py" <<'PY'
+          import sqlite3
+          con=sqlite3.connect(':memory:')
+          con.execute('create table students(student_id integer primary key, name text not null)')
+          con.execute('create table scores(student_id integer not null, subject_id text not null, score integer not null, unique(student_id, subject_id))')
+          con.executemany('insert into students values(?,?)',[(1,'Alice'),(2,'Bob'),(3,'Cara'),(4,'Dan'),(5,'Eve')])
+          con.executemany('insert into scores values(?,?,?)',[
+              (1,'a',90),(1,'b',85),(1,'c',70),
+              (2,'a',95),(2,'b',80),(2,'c',50),
+              (3,'a',100),(3,'b',99),(3,'c',98),
+              (4,'a',81),(4,'b',79),(4,'c',60),
+              (5,'a',80),(5,'b',80),(5,'c',80),
+          ])
+          sql='''WITH per_student AS (
+            SELECT s.student_id,s.name,
+              SUM(CASE WHEN sc.score >= 80 THEN 1 ELSE 0 END) AS high_score_subjects,
+              SUM(CASE WHEN sc.score >= :pass_score THEN 1 ELSE 0 END) AS passed_subjects
+            FROM students AS s JOIN scores AS sc ON sc.student_id=s.student_id
+            GROUP BY s.student_id,s.name
+          ), ranked AS (
+            SELECT student_id,name,high_score_subjects,passed_subjects,
+              ROW_NUMBER() OVER (ORDER BY high_score_subjects DESC, student_id ASC) AS rn
+            FROM per_student
+          ) SELECT name,passed_subjects FROM ranked WHERE rn <= 3 ORDER BY rn'''
+          rows=list(con.execute(sql,{'pass_score':60}))
+          expected=[('Cara',3),('Eve',3),('Alice',3)]
+          assert rows==expected,(rows,expected)
+          rows70=list(con.execute(sql,{'pass_score':70}))
+          expected70=[('Cara',3),('Eve',3),('Alice',3)]
+          assert rows70==expected70,(rows70,expected70)
+          high=dict(con.execute('SELECT student_id,SUM(CASE WHEN score >= 80 THEN 1 ELSE 0 END) FROM scores GROUP BY student_id'))
+          assert high[2]==2 and high[5]==3, high
+          print('PASS top3=Cara,Eve,Alice includes-score-80 stable-tie-break pass-score-parameterized student-grain')
+          PY
+          stdout="$(python3 "$out/sql_validation.py")"
+          test "$stdout" = 'PASS top3=Cara,Eve,Alice includes-score-80 stable-tie-break pass-score-parameterized student-grain'
+
+          STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'); const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID; const out=`review/content_build/answer_batch_0039/${cid}`;
+          const checks=['student-level conditional aggregation precedes ranking','score exactly 80 counts under the declared >=80 contract','ROW_NUMBER plus student_id yields a deterministic exact-three result','pass threshold is a bound parameter rather than fabricated source fact','displayed passed-subject count is independent from the >=80 ranking count'];
+          const boundary_tests=[
+            {case:'score exactly 80',expected:'counts toward high_score_subjects under declared >=80 contract',passed:true},
+            {case:'tie on high_score_subjects',expected:'student_id ascending deterministically breaks tie for exact-three contract',passed:true},
+            {case:'pass threshold supplied as parameter',expected:'passed_subjects uses bound pass_score independently of 80-point rank condition',passed:true}
+          ];
+          fs.writeFileSync(`${out}/sql_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:'2026-08-27',command:'python3 sql_validation.py',stdout:process.env.STDOUT,checks,boundary_tests},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:'2026-08-27',review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'primary-source',title:'Kuaishou test-development tagged source','locator':'note_tagged/6887a6a7000000002203fd29.json',source_type:'repository_structured_source',checked_at:'2026-08-27'},{source_id:'batch-inventory',title:'Frozen Batch 0039 source inventory','locator':'review/content_build/answer_batch_0039/source_inventory.json',source_type:'repository_source_record',checked_at:'2026-08-27'},{source_id:'fixture',title:'Deterministic top-students SQLite fixture','locator':`${out}/sql_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-27'}],claims:[{claim_id:'source-boundary',text:'The source preserves ranking by count of subjects at 80 or above and displaying student name plus passed-subject count, but not schema, pass threshold, tie behavior, or multiple-attempt semantics.',source_ids:['primary-source','batch-inventory'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'candidate-behavior',text:'Under the explicitly declared minimal schema and exact-three answer-side contract, the executable fixture verifies student-level aggregation, inclusion of score 80, stable tie-breaking, and a parameterized pass threshold.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Update task and commit from stable head
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md';
+          let text=fs.readFileSync(task,'utf8');
+          const line='- [x] `cq_q_9d94865ec7dae0be612a676246d7c62b` now has a source-bounded SQL candidate with an explicit minimal schema, parameterized pass threshold, and deterministic exact-three tie contract. A SQLite fixture verifies student-grain conditional aggregation, inclusion of score 80, stable tie-breaking, and independent passed-subject counting. Writer research is frozen; formal evidence/promotion remains blocked on isolated independent review.';
+          if(!text.includes(line)) text=text.trimEnd()+`\n${line}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during top-students candidate slice: $base_head -> $remote_head; fail closed without push."; exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0039/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0039.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0039 top-students SQL candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
