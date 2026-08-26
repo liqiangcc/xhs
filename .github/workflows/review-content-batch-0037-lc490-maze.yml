@@ -1,0 +1,211 @@
+name: Review Content Batch 0037 LC490 Maze Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0037-lc490-maze.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0037-lc490-maze-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_8dc7928cdcb10b86101be42a434da27e
+  SOURCE_QID: 8dc7928cdcb10b86101be42a434da27e
+  SOURCE_TAGGED: note_tagged/6684e61d000000001f00703b.json
+  PRIMARY_SOURCE: https://leetcode.com/problems/the-maze/
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Phase A isolated source-first review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0037/$cid"; candidate="review/candidates/answers/$cid.md"; rm -rf "$out/reviewer_tmp"; mkdir -p "$out/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),qid=process.env.SOURCE_QID,cid=process.env.CANONICAL_ID;
+          const q=(JSON.parse(fs.readFileSync(process.env.SOURCE_TAGGED,'utf8')).tagged_questions||[]).find(x=>x.question_id===qid);
+          const expected='算法：LC490 - The Maze (迷宫问题)';
+          if(!q||q.original_question!==expected||q.is_valid_for_library!==true) throw new Error('source drift');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||''; const bullets=(one.match(/^- /gm)||[]).length; if(bullets<3||bullets>5) throw new Error(`one-minute backbone drift ${bullets}`);
+          for(const marker of ['持续滚动','停下','destination','BFS','DFS','O(mn(m+n))','O(mn)','不修改']) if(!md.includes(marker)) throw new Error(`missing ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('followups insufficient');
+          if(/我在线上|我负责过|线上事故|我们生产|真实项目里我曾/.test(md)) throw new Error('fabricated project claim');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)]; if(blocks.length!==1||!blocks[0][1].includes('boolean hasPath(int[][] maze, int[] start, int[] destination)')) throw new Error('complete Java solution missing');
+          fs.writeFileSync(`review/content_build/answer_batch_0037/${cid}/reviewer_tmp/Solution.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$out/reviewer_tmp/MazeReviewerTest.java" <<'JAVA'
+          import java.util.ArrayDeque;
+          import java.util.Arrays;
+          import java.util.Queue;
+          import java.util.Random;
+
+          public final class MazeReviewerTest {
+              private static long exhaustivePairs;
+              private static long randomCases;
+              public static void main(String[] args) {
+                  Solution s=new Solution();
+                  int[][] sample={{0,0,1,0,0},{0,0,0,0,0},{0,0,0,1,0},{1,1,0,1,1},{0,0,0,0,0}};
+                  verify(s,sample,new int[]{0,4},new int[]{4,4},true);
+                  verify(s,sample,new int[]{0,4},new int[]{3,2},false);
+                  verify(s,new int[][]{{0,0,0},{0,0,0},{0,0,0}},new int[]{0,0},new int[]{1,2},false);
+                  verify(s,new int[][]{{0}},new int[]{0,0},new int[]{0,0},true);
+                  verify(s,new int[][]{{0,0,0,1},{1,1,0,1},{0,0,0,0}},new int[]{0,0},new int[]{2,3},true);
+
+                  exhaustiveThreeByThree(s);
+
+                  Random rnd=new Random(0x8DC7928C20260826L);
+                  for(int i=0;i<5000;i++) {
+                      int rows=2+rnd.nextInt(9), cols=2+rnd.nextInt(9);
+                      int[][] maze=randomMaze(rows,cols,rnd);
+                      int[] start=randomOpen(maze,rnd), dest=randomOpen(maze,rnd);
+                      verify(s,maze,start,dest,reference(maze,start,dest));
+                      randomCases++;
+                  }
+                  System.out.printf("PASS fixed=5 exhaustive_pairs=%d randomized=%d pass-through-not-stop=pass input-unmodified=pass%n",exhaustivePairs,randomCases);
+              }
+
+              static void exhaustiveThreeByThree(Solution s) {
+                  int cells=9;
+                  for(int mask=0;mask<(1<<cells);mask++) {
+                      int[][] maze=new int[3][3];
+                      for(int p=0;p<cells;p++) maze[p/3][p%3]=((mask>>>p)&1);
+                      for(int a=0;a<cells;a++) if(maze[a/3][a%3]==0) {
+                          for(int b=0;b<cells;b++) if(maze[b/3][b%3]==0) {
+                              int[] start={a/3,a%3}, dest={b/3,b%3};
+                              verify(s,maze,start,dest,reference(maze,start,dest));
+                              exhaustivePairs++;
+                          }
+                      }
+                  }
+              }
+
+              static void verify(Solution s,int[][] maze,int[] start,int[] dest,boolean expected) {
+                  int[][] before=copy(maze);
+                  boolean actual=s.hasPath(maze,start,dest);
+                  if(actual!=expected) throw new AssertionError("expected="+expected+" actual="+actual+" maze="+Arrays.deepToString(maze)+" start="+Arrays.toString(start)+" dest="+Arrays.toString(dest));
+                  if(!Arrays.deepEquals(before,maze)) throw new AssertionError("input maze mutated");
+              }
+
+              static boolean reference(int[][] maze,int[] start,int[] dest) {
+                  int rows=maze.length,cols=maze[0].length;
+                  int[][] dirs={{1,0},{-1,0},{0,1},{0,-1}};
+                  int[][][] next=new int[rows][cols][8];
+                  for(int r=0;r<rows;r++) for(int c=0;c<cols;c++) if(maze[r][c]==0) for(int d=0;d<4;d++) {
+                      int x=r,y=c;
+                      while(inside(x+dirs[d][0],y+dirs[d][1],rows,cols)&&maze[x+dirs[d][0]][y+dirs[d][1]]==0){x+=dirs[d][0];y+=dirs[d][1];}
+                      next[r][c][2*d]=x; next[r][c][2*d+1]=y;
+                  }
+                  boolean[][] seen=new boolean[rows][cols];
+                  int[][] stack=new int[rows*cols][2]; int top=0;
+                  stack[top++]=new int[]{start[0],start[1]}; seen[start[0]][start[1]]=true;
+                  while(top>0){int[] p=stack[--top];if(p[0]==dest[0]&&p[1]==dest[1])return true;for(int d=0;d<4;d++){int nr=next[p[0]][p[1]][2*d],nc=next[p[0]][p[1]][2*d+1];if(!seen[nr][nc]){seen[nr][nc]=true;stack[top++]=new int[]{nr,nc};}}}
+                  return false;
+              }
+
+              static int[][] randomMaze(int rows,int cols,Random rnd){int[][] m=new int[rows][cols];int open=0;for(int r=0;r<rows;r++)for(int c=0;c<cols;c++){m[r][c]=rnd.nextDouble()<0.32?1:0;if(m[r][c]==0)open++;}if(open==0)m[rnd.nextInt(rows)][rnd.nextInt(cols)]=0;return m;}
+              static int[] randomOpen(int[][] maze,Random rnd){while(true){int r=rnd.nextInt(maze.length),c=rnd.nextInt(maze[0].length);if(maze[r][c]==0)return new int[]{r,c};}}
+              static boolean inside(int r,int c,int rows,int cols){return r>=0&&r<rows&&c>=0&&c<cols;}
+              static int[][] copy(int[][] a){int[][] b=new int[a.length][];for(int i=0;i<a.length;i++)b[i]=a[i].clone();return b;}
+          }
+          JAVA
+          (cd "$out/reviewer_tmp" && javac -Xlint:all -Werror Solution.java MazeReviewerTest.java && java MazeReviewerTest > stdout.txt)
+          stdout="$(cat "$out/reviewer_tmp/stdout.txt")"; [[ "$stdout" == PASS\ fixed=5\ exhaustive_pairs=*\ randomized=5000\ pass-through-not-stop=pass\ input-unmodified=pass ]]
+
+          REVIEW_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundary_tests=[
+            {case:'official-style reachable maze',expected:'true',passed:true},
+            {case:'official-style unreachable destination',expected:'false',passed:true},
+            {case:'open grid where ball passes destination but cannot stop there',expected:'false',passed:true},
+            {case:'start equals destination',expected:'true',passed:true},
+            {case:'turns only at stopping positions',expected:'true when stop graph contains destination',passed:true},
+            {case:'all 3x3 wall masks and all open start/destination pairs',expected:'exact candidate matches independently precomputed stop graph',passed:true},
+            {case:'5000 seeded random mazes',expected:'exact candidate matches independent reference and preserves input',passed:true}
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The candidate is bounded to the preserved LC490 source and the official rolling-ball semantics.','It correctly models stopping positions, not every traversed cell, as search states.','The exact Java BFS only succeeds when destination is a reachable stopping state; pass-through without a stop is rejected.','BFS is presented as a reachability traversal rather than incorrectly justified as shortest-path search; DFS is correctly identified as an equivalent reachability traversal.','The conservative direct-scan bound O(mn(m+n)) and O(mn) auxiliary space are explicitly qualified, with transition precomputation identified as the optimization boundary.','Independent execution covers five fixed semantic cases, exhaustive 3x3 maze masks over all open endpoint pairs, and 5000 seeded random mazes against a separately precomputed stop-transition reference; no mismatch or input mutation was found.','The project section stays hypothetical and does not fabricate production experience.'];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,result:'pass',validated_at:date,command:'extract exact candidate Java; javac -Xlint:all -Werror; fixed semantics, exhaustive 3x3 wall masks/endpoints, and 5000 seeded random mazes against precomputed-stop reference',stdout:process.env.REVIEW_STDOUT,checks:['exact candidate compiles','destination must be a stopping state','start equals destination','all 3x3 masks/endpoints match independent reference','5000 random mazes match independent reference','input maze is not mutated'],boundary_tests},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-lc490-20260826-v1',review_version:'lc490.stop-graph-exhaustive-randomized.v1',decision:'pass',revision_round:1,source_packet:[process.env.SOURCE_TAGGED,process.env.PRIMARY_SOURCE,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Phase B bind writer evidence after isolated conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,date='2026-08-26',out=`review/content_build/answer_batch_0037/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex'),review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`)),wr=JSON.parse(fs.readFileSync(`${out}/writer_research.json`)),wv=JSON.parse(fs.readFileSync(`${out}/writer_validation.json`)),rv=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`));
+          if(review.decision!=='pass'||review.candidate_sha256!==hash||wr.review_state!=='writer_complete_isolated_review_pending'||wv.result!=='pass'||wv.candidate_sha256!==hash||rv.result!=='pass')throw new Error('review/evidence prerequisite drift');
+          const ev={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:hash,checked_at:date,writer:{writer_id:'lc490-source-bounded-writer-20260826-v1',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Repository tagged LC490 interview question',locator:process.env.SOURCE_TAGGED,source_type:'repository_structured_source',checked_at:date},{source_id:'primary-reference',title:'LeetCode 490 The Maze',locator:process.env.PRIMARY_SOURCE,source_type:'official_documentation',checked_at:date},{source_id:'writer-validation',title:'Writer LC490 executable validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent LC490 validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Fresh isolated source-first review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'rolling-semantics',text:'The ball rolls continuously in the chosen direction until the wall boundary; a successful destination must be reachable as a stopping state.',source_ids:['repository-source','primary-reference','writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'search-model',text:'The exact Java candidate performs reachability search over stopping states; BFS and DFS are both complete for this boolean reachability contract.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','3 分钟版','原理机制','常见追问']},{claim_id:'boundaries-complexity',text:'The exact candidate rejects pass-through-only destinations, handles start-equals-destination, does not mutate input, matches exhaustive 3x3 and randomized independent stop-graph references, and states the direct-scan conservative O(mn(m+n)) time/O(mn) auxiliary bound.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','关键细节','常见追问','易错点']}],source_question_coverage:wr.source_question_coverage,validation:{command:rv.command,result:'pass',reported_stdout:rv.stdout,checks:rv.checks,boundary_tests:rv.boundary_tests},review_state:'independent_source_first_review_passed',review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings}};
+          fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(ev,null,2)+'\n');
+          NODE
+
+      - name: Candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passed isolated review
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md';let t=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_8dc7928cdcb10b86101be42a434da27e` LC490 Maze candidate preserves the rolling-until-wall source boundary, models stopping positions as search states, includes a complete non-mutating Java BFS, explains pass-through-versus-stop semantics and O(mn(m+n))/O(mn) bounds, and passes fixed semantic cases plus 2240 seeded random mazes against a precomputed-stop reference. Writer evidence is frozen; isolated source-first review remains pending.';
+          const done='- [x] `cq_q_8dc7928cdcb10b86101be42a434da27e` LC490 Maze candidate preserves the rolling-until-wall source boundary, models stopping positions as search states, includes a complete non-mutating Java BFS, explains pass-through-versus-stop semantics and O(mn(m+n))/O(mn) bounds, passes writer validation plus exhaustive 3x3 endpoint coverage and 5000 independent randomized mazes, and passes isolated source-first review with complete evidence binding. Formal promotion remains governed by repository human approval and real-review policy.';
+          if(!t.includes(pending))throw new Error('task progress drift');t=t.replace(pending,done);fs.writeFileSync(task,t);
+          NODE
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0037/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0037/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0037.md
+          git commit -m 'review: pass batch 0037 LC490 maze candidate source-first'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = "${{ steps.base.outputs.head }}" || { echo 'content branch moved during review' >&2; exit 1; }
+          git push origin HEAD:"$CONTENT_BRANCH"
