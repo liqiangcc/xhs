@@ -1,0 +1,39 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_870fc85ff34de337bdcf1e05799217ca",
+  "result": "pass",
+  "validated_at": "2026-08-26",
+  "command": "extract candidate Java; javac DailyTemperatures.java DailyTemperaturesReviewer.java; java DailyTemperaturesReviewer",
+  "stdout": "PASS fixed=8 randomized=3000 oracle=quadratic-first-strictly-warmer duplicates=true decreasing=true increasing=true empty=true single=true checked-elements=143134",
+  "checks": [
+    "candidate code compiles directly",
+    "mixed example",
+    "duplicates",
+    "increasing/decreasing",
+    "empty/single under adopted local contract",
+    "3000 deterministic randomized arrays"
+  ],
+  "boundary_tests": [
+    {
+      "case": "canonical mixed example",
+      "expected": "[1,1,4,2,1,1,0,0]",
+      "passed": true
+    },
+    {
+      "case": "equal temperatures 70,70,71",
+      "expected": "strict > keeps first day pending for distance 2",
+      "passed": true
+    },
+    {
+      "case": "decreasing sequence",
+      "expected": "all zero because no future warmer day",
+      "passed": true
+    },
+    {
+      "case": "3000 deterministic randomized arrays",
+      "expected": "exact agreement with independent quadratic first-strictly-warmer oracle",
+      "passed": true
+    }
+  ],
+  "oracle": "independent quadratic first strictly-warmer scan"
+}
