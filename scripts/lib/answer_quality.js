@@ -314,7 +314,7 @@ function validateAnswerEvidence(evidence, candidate, context, config) {
 
 function extractCodeBlocks(content) {
     const blocks = [];
-    const regex = /(?:```|~~~)(java|sql|javascript|js|go|c|cpp|c\+\+|cc|cxx)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
+    const regex = /(?:```|~~~)(java|sql|javascript|js|go|c|cpp|c\+\+|cc|cxx|bash|sh|shell)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
     let match;
     while ((match = regex.exec(content))) blocks.push({ language: match[1].toLowerCase(), code: match[2].trim() });
     return blocks;
@@ -399,6 +399,31 @@ function parseJavaScript(code) {
 }
 
 
+
+function validateShell(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-shell-'));
+    try {
+        const filePath = path.join(tempDir, 'candidate.sh');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('bash', ['-n', filePath], {
+            encoding: 'utf8',
+            timeout: 10000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'bash_not_available' };
+        if (result.error) return { ok: false, error: 'shell_parse_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'shell_parse_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 1200),
+            };
+        }
+        return { ok: true };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
 function compileGo(code) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-go-'));
     try {
@@ -406,7 +431,7 @@ function compileGo(code) {
         fs.writeFileSync(filePath, code, 'utf8');
         const result = childProcess.spawnSync('go', ['test', filePath], {
             encoding: 'utf8',
-            timeout: 10000,
+            timeout: 30000,
         });
         if (result.error?.code === 'ENOENT') return { ok: false, error: 'go_not_available' };
         if (result.error) return { ok: false, error: 'go_compile_failed', detail: result.error.message };
@@ -491,7 +516,9 @@ function validateSpecializedCandidate(candidate, evidence, context) {
                             ? compileC(block.code)
                             : ['cpp', 'c++', 'cc', 'cxx'].includes(block.language)
                                 ? compileCpp(block.code)
-                                : parseJavaScript(block.code);
+                                : ['bash', 'sh', 'shell'].includes(block.language)
+                                    ? validateShell(block.code)
+                                    : parseJavaScript(block.code);
             if (!validation.ok) {
                 addHardFailure(hardFailures, /placeholder|required/.test(validation.error || '') ? 'placeholder_implementation' : 'unrunnable_implementation');
                 errors.push({ error: `${block.language}_validation_failed`, detail: validation.error });
@@ -867,6 +894,7 @@ module.exports = {
     compileJava,
     compileC,
     compileCpp,
+    validateShell,
     parseSql,
     validateAnswerEvidence,
     validateSpecializedCandidate,

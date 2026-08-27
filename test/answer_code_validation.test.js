@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { compileJava, compileC, compileCpp, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
+const { compileJava, compileC, compileCpp, validateShell, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
 
 test('Java validation compiles complete classes and rejects broken implementations', () => {
     assert.equal(compileJava('public class Solution { public static int add(int a, int b) { return a + b; } }').ok, true);
@@ -31,6 +31,29 @@ test('C++ validation compiles common fence aliases and rejects broken implementa
             '## 核心结论', '链表中点用快慢指针。',
             '## 常见追问', '- 问：空链表？答：空。', '- 问：奇数？答：唯一中点。', '- 问：偶数？答：契约决定。',
             '## 3 分钟版', `\`\`\`${language}`, 'struct Node { int v; Node* next; };', 'Node* middle(Node* h) { Node* s=h; Node* f=h; while (f && f->next) { s=s->next; f=f->next->next; } return s; }', '\`\`\`',
+        ].join('\n') };
+        const result = validateSpecializedCandidate(candidate, evidence, context);
+        assert.equal(result.errors.some((row) => row.error === 'coding_block_required'), false, language);
+        assert.equal(result.errors.some((row) => row.error.endsWith('_validation_failed')), false, language);
+    }
+});
+
+
+test('shell validation accepts bash/sh fences and rejects malformed scripts', () => {
+    assert.equal(validateShell("set -euo pipefail\nprintf '%s\\n' ok").ok, true);
+    assert.equal(validateShell('if true; then\n  echo ok').ok, false);
+    const context = { canonical: { canonical_title: 'Linux URL 计数' }, primary_entities: ['awk', 'sort', 'uniq'], source_variants: ['统计 URL 次数'] };
+    const evidence = { validation: { boundary_tests: [
+        { case: 'non-adjacent duplicates', expected: '3/2/1', passed: true },
+        { case: 'blank line', expected: 'ignored', passed: true },
+        { case: 'query variants', expected: 'distinct', passed: true },
+    ] } };
+    for (const language of ['bash', 'sh', 'shell']) {
+        const fence = '```' + language;
+        const candidate = { metadata: { answer_type: 'coding' }, content: [
+            '## 核心结论', 'awk、sort、uniq 组成 URL 计数流水线。',
+            '## 常见追问', '- 问：为何 sort？答：让重复行相邻。', '- 问：空行？答：过滤。', '- 问：query？答：按契约处理。',
+            '## 3 分钟版', fence, "awk 'NF {print $0}' urls.txt | sort | uniq -c", '```',
         ].join('\n') };
         const result = validateSpecializedCandidate(candidate, evidence, context);
         assert.equal(result.errors.some((row) => row.error === 'coding_block_required'), false, language);
