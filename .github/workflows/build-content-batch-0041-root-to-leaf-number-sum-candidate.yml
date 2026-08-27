@@ -1,0 +1,285 @@
+name: Build Content Batch 0041 Root-to-Leaf Number Sum Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0041-root-to-leaf-number-sum-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0041-root-to-leaf-number-sum-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a873b7b82bcca35bc35609aa914b70c9
+  SOURCE_QID: a873b7b82bcca35bc35609aa914b70c9
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Verify exact source and current ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法 1：计算二叉树中根节点到叶子节点路径所组成的数字之和';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67dccdb2000000000900ce21.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('root-to-leaf tagged source drifted');
+          const raw=fs.readFileSync('note_desc/67dccdb2000000000900ce21.txt','utf8');
+          if(!raw.includes('2道算法题，求根节点到叶子节点的数字之和,多线程打印a,b,c')) throw new Error('raw-note coding boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0041/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('answer context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`expected singleton ownership, got ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0041/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||item.answer_type!=='coding'||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('Batch 0041 frozen inventory drifted');
+          const rr=fs.readFileSync('review/content_build/answer_batch_0041/recoverability_review.md','utf8');
+          if(!rr.includes(`### \`${cid}\` — recoverable as Coding with declared digit assumption`)) throw new Error('recoverability decision missing');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a873b7b82bcca35bc35609aa914b70c9","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 二叉树：求根节点到叶子节点路径组成数字之和
+
+          ## 核心结论
+
+          仓库原始面经只保留了“求根节点到叶子节点的数字之和”。它没有明确节点值范围、空树返回值、整数溢出策略或函数签名。要形成可执行答案，必须把这些补充项标成实现假设，而不能冒充原题要求。
+
+          下面采用最小十进制契约：每个节点值是 `0..9` 的一位数字；从根到某个真实叶子的路径按十进制拼成一个数；答案是所有根到叶路径数字之和；空树返回 `0`。Java 参考实现使用 `long`，并用 `Math.multiplyExact` / `Math.addExact` 显式暴露溢出，而不是静默回绕。
+
+          ## 1 分钟版
+
+          - DFS 从根向下维护当前前缀 `prefix`。
+          - 到节点 `x` 时，新前缀是 `prefix * 10 + x.val`。
+          - 只有 `left == null && right == null` 才是真正叶子；到叶子时返回当前完整路径数字。
+          - 非叶子分别递归左右子树，再把两边结果相加。
+          - 时间复杂度 `O(n)`，每个节点访问一次；递归额外空间 `O(h)`，`h` 是树高。
+          - 节点是否一定是十进制单个数字并非来源事实；如果允许多位数或负数，拼接规则会改变，必须先重新定义契约。
+
+          ## 3 分钟版
+
+          ```java
+          static final class TreeNode {
+              final int val;
+              TreeNode left;
+              TreeNode right;
+
+              TreeNode(int val) {
+                  this.val = val;
+              }
+          }
+
+          static long sumRootToLeafNumbers(TreeNode root) {
+              if (root == null) return 0L;
+              return dfs(root, 0L);
+          }
+
+          private static long dfs(TreeNode node, long prefix) {
+              if (node.val < 0 || node.val > 9) {
+                  throw new IllegalArgumentException("node value must be a decimal digit");
+              }
+
+              long current = Math.addExact(
+                  Math.multiplyExact(prefix, 10L),
+                  node.val
+              );
+
+              if (node.left == null && node.right == null) {
+                  return current;
+              }
+
+              long left = node.left == null ? 0L : dfs(node.left, current);
+              long right = node.right == null ? 0L : dfs(node.right, current);
+              return Math.addExact(left, right);
+          }
+          ```
+
+          例如树 `1` 的左右孩子分别是 `2`、`3`，两条路径形成 `12` 和 `13`，结果为 `25`。前导 `0` 不需要特殊处理：路径 `0 -> 1 -> 3` 的数值自然是 `13`，因为十进制数值本身不会保留“013”的文本格式。
+
+          ## 关键细节
+
+          - **叶子判定**：只有两个孩子都为空才结束路径；不能在“缺一个孩子”时提前结算，否则会把未到叶子的前缀算进去。
+          - **前缀状态**：每层只需要父路径累积值，不需要构造字符串或保存整条路径。
+          - **前导零**：按数值语义自然处理；`0 -> 5` 就是 `5`。若题目要求保留字符串表示，则已经是另一种契约。
+          - **节点值边界**：当前实现主动拒绝 `<0` 或 `>9`，因为多位节点和负数的“拼接”没有被原始来源定义。
+          - **溢出**：即使节点只有一位数字，树很深或叶子很多也可能超过 `long`。这里 fail-fast；若输入规模允许更大，应改用 `BigInteger` 或明确模数规则。
+          - **递归深度**：极端退化链可能触发 JVM 栈深度限制；可以用显式栈保存 `(node, prefix)`，算法不变量不变。
+
+          ## 原理机制
+
+          这个问题的核心不变量是：进入 `dfs(node, prefix)` 时，`prefix` 恰好表示“从根到 `node` 的父节点”为止的十进制路径值；计算 `current = prefix * 10 + node.val` 后，`current` 就对应从根到当前节点的路径数字。
+
+          如果当前节点是叶子，这条路径已经完整，因此 `current` 就是该叶子的贡献；如果不是叶子，则所有完整路径必然落在左子树或右子树中，所以左右递归贡献之和就是当前子树的答案。这个分解保证每条根到叶路径恰好被计算一次。
+
+          ## 项目经验版
+
+          来源没有真实项目、线上树规模或生产故障数据，不能虚构使用经历。工程中如果路径可能很长，我会先明确数值上界，再决定 `long`、`BigInteger` 或模运算；如果树可能退化得很深，会把递归改成显式栈，并用边界测试覆盖叶子判定、前导零和溢出策略。
+
+          ## 常见追问
+
+          - 问：为什么不是把所有路径先存下来再求和？答：不需要。DFS 用一个前缀值就能在到叶子时得到完整数字，避免为每条路径额外分配字符串或列表。
+          - 问：只有左孩子或只有右孩子怎么办？答：继续沿存在的孩子走；缺失的一侧贡献 `0`，不能把当前非叶节点当成叶子。
+          - 问：节点值是 `12` 怎么办？答：原始来源没有定义多位节点的拼接语义。当前参考契约只接受 `0..9`；若允许 `12`，必须先决定它代表两位十进制片段还是一个普通数值节点，然后修改状态转移。
+          - 问：为什么用 `long` 而不是 `int`？答：路径拼接增长很快，`long` 只是提高可表达范围；它仍然可能溢出，所以代码使用 exact arithmetic 显式报错。
+          - 问：能否用 BFS？答：可以。队列保存 `(node, prefix)`，到叶子累加；DFS 和 BFS 的关键不变量相同，复杂度也都是 `O(n)`。
+
+          ## 易错点
+
+          - 把“只有一个孩子为空”误判为叶子。
+          - 每层用字符串拼接再解析，增加无必要分配并把数值边界隐藏起来。
+          - 默认节点一定 `0..9` 却不说明这是补充假设。
+          - 用 `int` 或普通 `long` 运算静默溢出，还把错误结果当正确答案。
+          - 只测满二叉树，不测单节点、非对称树、前导零和深链边界。
+          EOF
+
+          cat > "$out/RootToLeafNumberSum.java" <<'JAVA'
+          final class RootToLeafNumberSum {
+              static final class TreeNode {
+                  final int val;
+                  TreeNode left;
+                  TreeNode right;
+                  TreeNode(int val) { this.val = val; }
+              }
+
+              static long sumRootToLeafNumbers(TreeNode root) {
+                  if (root == null) return 0L;
+                  return dfs(root, 0L);
+              }
+
+              private static long dfs(TreeNode node, long prefix) {
+                  if (node.val < 0 || node.val > 9) {
+                      throw new IllegalArgumentException("node value must be a decimal digit");
+                  }
+                  long current = Math.addExact(Math.multiplyExact(prefix, 10L), node.val);
+                  if (node.left == null && node.right == null) return current;
+                  long left = node.left == null ? 0L : dfs(node.left, current);
+                  long right = node.right == null ? 0L : dfs(node.right, current);
+                  return Math.addExact(left, right);
+              }
+          }
+          JAVA
+
+          cat > "$out/RootToLeafNumberSumTest.java" <<'JAVA'
+          final class RootToLeafNumberSumTest {
+              static RootToLeafNumberSum.TreeNode n(int v) { return new RootToLeafNumberSum.TreeNode(v); }
+              static void eq(long expected, long actual, String name) {
+                  if (expected != actual) throw new AssertionError(name + ": expected=" + expected + " actual=" + actual);
+              }
+              public static void main(String[] args) {
+                  eq(0L, RootToLeafNumberSum.sumRootToLeafNumbers(null), "empty");
+                  eq(5L, RootToLeafNumberSum.sumRootToLeafNumbers(n(5)), "single");
+
+                  var r = n(1); r.left = n(2); r.right = n(3);
+                  eq(25L, RootToLeafNumberSum.sumRootToLeafNumbers(r), "two leaves");
+
+                  var z = n(0); z.left = n(1); z.left.right = n(3); z.right = n(2);
+                  eq(15L, RootToLeafNumberSum.sumRootToLeafNumbers(z), "leading zero asymmetric");
+
+                  var c = n(4); c.left = n(9); c.right = n(0); c.left.left = n(5); c.left.right = n(1);
+                  eq(1026L, RootToLeafNumberSum.sumRootToLeafNumbers(c), "multiple leaves");
+
+                  boolean bad = false;
+                  try { RootToLeafNumberSum.sumRootToLeafNumbers(n(10)); }
+                  catch (IllegalArgumentException expected) { bad = true; }
+                  if (!bad) throw new AssertionError("non-digit must fail closed");
+
+                  var deep = n(9); var p = deep;
+                  for (int i = 1; i < 19; i++) { p.left = n(9); p = p.left; }
+                  boolean overflow = false;
+                  try { RootToLeafNumberSum.sumRootToLeafNumbers(deep); }
+                  catch (ArithmeticException expected) { overflow = true; }
+                  if (!overflow) throw new AssertionError("overflow must be explicit");
+
+                  System.out.println("PASS empty single two-leaves asymmetric-leading-zero multiple-leaves non-digit-rejected overflow-explicit");
+              }
+          }
+          JAVA
+
+          stdout="$(cd "$out" && javac RootToLeafNumberSum.java RootToLeafNumberSumTest.java && java RootToLeafNumberSumTest)"
+          test "$stdout" = 'PASS empty single two-leaves asymmetric-leading-zero multiple-leaves non-digit-rejected overflow-explicit'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0041/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex');
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'javac RootToLeafNumberSum.java RootToLeafNumberSumTest.java && java RootToLeafNumberSumTest',stdout:process.env.STDOUT,checks:['empty tree','single node','multiple leaves','asymmetric tree','leading zero','non-digit rejection','explicit long overflow']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'raw-note',title:'Original Meituan interview note',locator:'note_desc/67dccdb2000000000900ce21.txt',source_type:'repository_source_record',checked_at:date},{source_id:'tagged-question',title:'Structured root-to-leaf number-sum Question',locator:`note_tagged/67dccdb2000000000900ce21.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'recoverability-review',title:'Batch 0041 pre-draft recoverability decision',locator:'review/content_build/answer_batch_0041/recoverability_review.md',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Deterministic Java boundary fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-operation',text:'The raw note preserves the operation of summing numbers formed by root-to-leaf paths.',source_ids:['raw-note','tagged-question','recoverability-review'],answer_locations:['核心结论','1 分钟版','原理机制']},{claim_id:'digit-boundary',text:'The source does not preserve node-value range; decimal digits 0..9 are an explicit reference-contract assumption, not a recovered source fact.',source_ids:['raw-note','tagged-question','recoverability-review'],answer_locations:['核心结论','关键细节','常见追问']},{claim_id:'reference-behavior',text:'Under the declared digit/long contract, deterministic Java tests verify leaf semantics, leading zero, asymmetric/multiple leaves, fail-closed non-digit input, and explicit overflow.',source_ids:['writer-validation'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_and_repository_human_S11_gates_pending'},null,2)+'\n');
+          NODE
+
+      - name: Candidate-local and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Record candidate progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0041.md'
+          note='- [x] `cq_q_a873b7b82bcca35bc35609aa914b70c9` candidate drafted source-first with the raw-note operation preserved, decimal-digit `0..9` explicitly labeled as a reference-contract assumption, and deterministic Java coverage for empty/single/asymmetric/leading-zero/multiple-leaf/non-digit/overflow boundaries; isolated review is still pending.'
+          grep -Fqx -- "$note" "$task" || printf '\n%s\n' "$note" >> "$task"
+
+      - name: Commit candidate artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0041/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0041.md
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft batch 0041 root-to-leaf number-sum candidate'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same candidate artifacts; fail closed without push.'
+              exit 0
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push candidate after safe retries.' >&2
+          exit 1
