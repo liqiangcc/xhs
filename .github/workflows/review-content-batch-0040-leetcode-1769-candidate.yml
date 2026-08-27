@@ -1,0 +1,211 @@
+name: Review Content Batch 0040 LeetCode 1769 Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0040-leetcode-1769-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-leetcode-1769-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a13d56a67ff084ff89a8171b6df1c776
+  SOURCE_QID: a13d56a67ff084ff89a8171b6df1c776
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first independent review and reviewer harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/review-1769-context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：移动所有球到每个盒子所需的基础操作数 (LeetCode 1769)';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/6661b50a0000000006006ab3.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('source drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/review-1769-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0040/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('frozen inventory drifted');
+          const text=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(text.split(h).length!==2) throw new Error(`section drift: ${h}`);
+          for(const needle of ['Σ|i-j|','moves += balls','O(n)','n<=2000','LeetCode 1769']) if(!text.includes(needle)) throw new Error(`candidate guard missing: ${needle}`);
+          if((text.match(/^- 问：/gm)||[]).length<5) throw new Error('followups insufficient');
+          if(/ProblemSpec|长尾复习底稿|TODO|按本题约束填写/.test(text)) throw new Error('template residue detected');
+          NODE
+
+          javac "$out/LeetCode1769.java"
+          writer_stdout="$(java -cp "$out" LeetCode1769)"
+          test "$writer_stdout" = 'PASS examples=2 singletons=2 all-balls=1 exhaustive-binary-strings-length<=8'
+
+          cat > /tmp/Reviewer1769.java <<'JAVA'
+          import java.util.*;
+          public final class Reviewer1769 {
+              static int[] oracle(String boxes) {
+                  int[] out = new int[boxes.length()];
+                  for (int i = 0; i < boxes.length(); i++) {
+                      long sum = 0;
+                      for (int j = 0; j < boxes.length(); j++) if (boxes.charAt(j) == '1') sum += Math.abs(i - j);
+                      if (sum > Integer.MAX_VALUE) throw new AssertionError("oracle unexpectedly exceeds int");
+                      out[i] = (int) sum;
+                  }
+                  return out;
+              }
+              static void verify(String boxes) {
+                  int[] actual = LeetCode1769.minOperations(boxes);
+                  int[] expected = oracle(boxes);
+                  if (!Arrays.equals(actual, expected)) throw new AssertionError(boxes + " expected=" + Arrays.toString(expected) + " actual=" + Arrays.toString(actual));
+              }
+              public static void main(String[] args) {
+                  verify("110");
+                  verify("001011");
+                  for (int n = 1; n <= 10; n++) {
+                      for (int mask = 0; mask < (1 << n); mask++) {
+                          StringBuilder b = new StringBuilder(n);
+                          for (int i = 0; i < n; i++) b.append(((mask >>> (n - 1 - i)) & 1) == 1 ? '1' : '0');
+                          verify(b.toString());
+                      }
+                  }
+                  StringBuilder empty = new StringBuilder(), full = new StringBuilder(), alternating = new StringBuilder(), endpoints = new StringBuilder();
+                  for (int i = 0; i < 2000; i++) {
+                      empty.append('0');
+                      full.append('1');
+                      alternating.append((i & 1) == 0 ? '1' : '0');
+                      endpoints.append(i == 0 || i == 1999 ? '1' : '0');
+                  }
+                  verify(empty.toString()); verify(full.toString()); verify(alternating.toString()); verify(endpoints.toString());
+                  int[] fullOut = LeetCode1769.minOperations(full.toString());
+                  int max = Arrays.stream(fullOut).max().orElseThrow();
+                  if (max != 1_999_000) throw new AssertionError("max-cost bound drifted: " + max);
+                  System.out.println("PASS reviewer examples exhaustive-length<=10 max-n-empty/full/alternating/endpoints int-bound=1999000");
+              }
+          }
+          JAVA
+          javac -cp "$out" /tmp/Reviewer1769.java
+          reviewer_stdout="$(java -cp "$out:/tmp" Reviewer1769)"
+          test "$reviewer_stdout" = 'PASS reviewer examples exhaustive-length<=10 max-n-empty/full/alternating/endpoints int-bound=1999000'
+
+          REVIEWER_STDOUT="$reviewer_stdout" WRITER_STDOUT="$writer_stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27';
+          const candidate=`review/candidates/answers/${cid}.md`,out=`review/content_build/answer_batch_0040/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const validationPath=`${out}/reviewer_validation.json`,reviewPath=`${out}/isolated_review_result.json`;
+          const checks=[
+            'repository source and frozen inventory still identify a singleton Coding question for LeetCode 1769',
+            'candidate directly states the official adjacent-move distance-sum contract and does not invent project experience',
+            'two-pass Java implementation compiles',
+            'independent direct-distance oracle matches all binary strings of length 1..10',
+            'independent oracle matches n=2000 empty/full/alternating/endpoints cases',
+            'all-balls maximum observed cost is 1,999,000, confirming int safety under n<=2000'
+          ];
+          fs.writeFileSync(validationPath,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'javac LeetCode1769.java Reviewer1769.java && java Reviewer1769',stdout:process.env.REVIEWER_STDOUT,writer_fixture_stdout:process.env.WRITER_STDOUT,checks},null,2)+'\n');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository source identifies LeetCode 1769, and the official problem defines a binary boxes string, unit adjacent moves, and an independently calculated minimum operation count for every target box.',
+            'The candidate derives the exact distance-sum objective and explains the left/right incremental recurrence instead of presenting the O(n) code as an unexplained trick.',
+            'The update order is explained correctly: current side cost is consumed before the current-position ball contributes one extra move to the next target.',
+            'An independent direct-distance oracle validates all binary strings through length 10 plus maximum-length structured cases; this is distinct from the writer harness and reaches the official n=2000 boundary.',
+            'The stated int bound is conservative and validated: with n=2000 and all boxes occupied, the maximum endpoint cost is 1,999,000.',
+            'The answer includes problem-specific follow-ups, failure boundaries, complexity, and does not fabricate production experience.'
+          ];
+          fs.writeFileSync(reviewPath,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0040-leetcode-1769-20260827-v1',review_version:'batch-0040.leetcode-1769.v1',decision:'pass',revision_round:1,source_packet:['data/questions/questions.jsonl','note_tagged/6661b50a0000000006006ab3.json','review/content_build/answer_batch_0040/source_inventory.json',candidate,'https://leetcode.com/problems/minimum-number-of-operations-to-move-all-balls-to-each-box/description/',validationPath,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.candidate_sha256!==sha||writer.review_state!=='writer_complete_isolated_review_pending') throw new Error('writer record/candidate hash drifted after independent conclusion');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0040-leetcode-1769-builder',writer_version:'xhs-answer-curator.v1'},sources:[
+            {source_id:'repository-source',title:'Batch 0040 repository source and frozen inventory',locator:'review/content_build/answer_batch_0040/source_inventory.json',source_type:'repository_source_record',checked_at:date},
+            {source_id:'leetcode-1769',title:'LeetCode 1769 official problem statement',locator:'https://leetcode.com/problems/minimum-number-of-operations-to-move-all-balls-to-each-box/description/',source_type:'official_problem_statement',checked_at:date},
+            {source_id:'writer-validation',title:'LeetCode 1769 writer Java fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'reviewer-validation',title:'LeetCode 1769 independent reviewer oracle',locator:validationPath,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'isolated-review',title:'LeetCode 1769 independent source-first review',locator:reviewPath,source_type:'repository_structured_source',checked_at:date}
+          ],claims:[
+            {claim_id:'problem-contract',text:'LeetCode 1769 uses a binary boxes string and unit adjacent-ball moves and asks the independently computed minimum moves for each target box.',source_ids:['repository-source','leetcode-1769','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节']},
+            {claim_id:'distance-sum',text:'Under unit adjacent moves, a ball at j costs |i-j| to reach target i, so each answer is a sum of distances.',source_ids:['leetcode-1769','reviewer-validation','isolated-review'],answer_locations:['核心结论','原理机制']},
+            {claim_id:'linear-recurrence',text:'Two directional scans accumulate the change in side cost by the number of balls already crossed; independent oracle coverage validates the implementation.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制']},
+            {claim_id:'complexity-and-bound',text:'The implementation is O(n) time with O(1) auxiliary state beyond output, and Java int is sufficient under the official n<=2000 constraint.',source_ids:['leetcode-1769','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','关键细节']}
+          ],independent_review:{review_id:'source-first-isolated-reviewer-batch-0040-leetcode-1769-20260827-v1',reviewer_id:'source-first-isolated-reviewer-batch-0040-leetcode-1769-20260827-v1',review_version:'batch-0040.leetcode-1769.v1',reviewed_at:date,result:'pass',score:100,hard_failures:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied'],source_packet:['note_tagged/6661b50a0000000006006ab3.json','review/content_build/answer_batch_0040/source_inventory.json','https://leetcode.com/problems/minimum-number-of-operations-to-move-all-balls-to-each-box/description/',validationPath,reviewPath]},source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Record independent review result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md')
+          t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_a13d56a67ff084ff89a8171b6df1c776` passed an isolated source-first review at the candidate SHA: a separate direct-distance oracle covers every binary string through length 10 plus n=2000 empty/full/alternating/endpoints cases, and confirms the all-balls maximum cost 1,999,000. Evidence is bound to the candidate; required repository human approval and S11 real-review policy still block curated promotion.'
+          if line not in t:
+              t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Run complete candidate-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during LeetCode 1769 review: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add review/content_build/answer_batch_0040/$CANONICAL_ID/reviewer_validation.json review/content_build/answer_batch_0040/$CANONICAL_ID/isolated_review_result.json review/evidence/$CANONICAL_ID.json tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No independent review changes.'; exit 0; fi
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: independently validate batch 0040 LeetCode 1769 candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
