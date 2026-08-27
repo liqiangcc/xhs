@@ -1,0 +1,221 @@
+name: Build Content Batch 0043 Int Swap
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0043-int-swap.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-int-swap-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b384707db3a802519fba7387f0c5520a
+  SOURCE_QID: b384707db3a802519fba7387f0c5520a
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='两个 int 型数, 在不使用第三个变量的情况下如何交换这两个数?';
+          const note=JSON.parse(fs.readFileSync('note_tagged/65f96bb10000000012031c4a.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact) throw new Error(`int-swap source boundary drifted: ${row?.original_question}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding') throw new Error('batch0043 inventory state/type drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid])) throw new Error('inventory ownership drifted');
+          if(item.source_questions?.[0]?.original_question!==exact) throw new Error('inventory source wording drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('live ownership/type drifted');
+          NODE
+
+      - name: Write source-bounded candidate and writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0043/$cid";candidate="review/candidates/answers/$cid.md";mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b384707db3a802519fba7387f0c5520a","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 两个 int 不使用第三个变量如何交换？
+
+          ## 核心结论
+
+          来源只要求“两个 int 型数，不使用第三个变量交换”，没有冻结语言。最直接的位运算做法是 XOR swap：`a ^= b; b ^= a; a ^= b;`。它利用 `x ^ x = 0`、`x ^ 0 = x` 和异或的交换/结合律，在三个赋值后让 `a`、`b` 互换；不会产生加减法的算术溢出问题。下面用 Java `int` 作为可执行参考契约。实际工程代码若没有“禁止临时变量”的约束，通常更推荐临时变量写法，因为更直观，也没有同一存储位置上的 XOR 自交换陷阱。
+
+          ## 1 分钟版
+
+          ```text
+          a = a ^ b
+          b = a ^ b   // = (old_a ^ old_b) ^ old_b = old_a
+          a = a ^ b   // = (old_a ^ old_b) ^ old_a = old_b
+          ```
+
+          Java 可以直接写成：
+
+          ```java
+          a ^= b;
+          b ^= a;
+          a ^= b;
+          ```
+
+          三步之后 `a` 得到原来的 `b`，`b` 得到原来的 `a`。时间 O(1)，额外空间 O(1)。
+
+          ## 3 分钟版
+
+          为了让代码可测试，下面把两个可变 `int` 字段包在一个 `Pair` 中；交换步骤本身只读写这两个字段，没有第三个 `int` 临时变量：
+
+          ```java
+          public final class Solution {
+              private Solution() {}
+
+              public static final class Pair {
+                  public int a;
+                  public int b;
+
+                  public Pair(int a, int b) {
+                      this.a = a;
+                      this.b = b;
+                  }
+              }
+
+              public static void swapNoTemp(Pair pair) {
+                  pair.a ^= pair.b;
+                  pair.b ^= pair.a;
+                  pair.a ^= pair.b;
+              }
+          }
+          ```
+
+          设初值为 `A`、`B`。第一步后 `a=A^B`；第二步 `b=(A^B)^B=A`；第三步 `a=(A^B)^A=B`。所以最终正好交换。Java 的 `^` 对 `int` 做逐位异或，不涉及有符号加减溢出。
+
+          ## 关键细节
+
+          - **不依赖数值范围**：`Integer.MIN_VALUE`、`Integer.MAX_VALUE`、负数、0 都可以按同一位运算规则交换。
+          - **两个独立变量没有别名问题**：题目说的是两个 `int` 变量；若把技巧搬到数组/指针并让两个操作数实际上指向同一个存储位置，连续 XOR 会把值清成 0，所以这种扩展必须先保证两个 lvalue 不同。
+          - **不要把加减法版本当成无条件通用答案**：`a=a+b; b=a-b; a=a-b;` 在部分语言/编译语义下会遇到整数溢出风险；XOR 没有这个算术问题。
+          - **Java 方法参数是值传递**：不能写 `swap(int a,int b)` 就期待调用者的两个局部变量被原地修改，因此可执行示例用一个可变 `Pair` 承载两个字段；面试纸笔题通常只需要展示三条赋值。
+          - **可读性优先**：没有题目限制时，生产代码更推荐 `int tmp=a; a=b; b=tmp;`。面试题的价值主要是验证位运算等式，不代表 XOR swap 是日常最佳实践。
+
+          ## 原理机制
+
+          XOR 可以看成每一位上的模 2 加法。第一步把两个原值的信息合并到 `a=A^B`；因为同一个值再异或一次会抵消，第二步用合并值和 `B` 恢复 `A`，第三步再用合并值和已经恢复出的 `A` 恢复 `B`。整个过程只需要两个原有存储位置。
+
+          ## 项目经验版
+
+          来源没有真实项目上下文，不能虚构生产使用。工程代码里我会优先选择临时变量交换，让意图一眼可见；只有在明确的算法/面试约束下才展示 XOR swap，并用边界值测试确认实现没有把语言特性或同址写入问题遗漏掉。
+
+          ## 常见追问
+
+          - 问：两个数相等还能交换吗？答：可以。两个独立变量都为 `x` 时第一步 `a` 变 0，第二步 `b` 恢复为 `x`，第三步 `a` 也恢复为 `x`。
+          - 问：负数可以吗？答：可以，`int` 的位模式同样参与逐位 XOR，符号位没有特殊例外。
+          - 问：为什么不推荐加减法交换？答：它依赖语言的整数溢出语义；XOR 不做算术加减，更适合回答这个“无第三变量”的抽象问题。
+          - 问：为什么实际项目不常用 XOR swap？答：临时变量版本更容易读、审查和维护；现代编译器也不需要程序员靠 XOR swap 来做这种微优化。
+          - 问：数组同一个下标能直接 XOR swap 吗？答：不能照搬；如果两个表达式是同一存储位置，第一步就会把值异或成 0。先判断位置不同，或直接使用普通临时变量交换。
+
+          ## 易错点
+
+          - 把 `a ^= b ^= a ^= b` 之类压成一行，依赖求值顺序并降低可读性。
+          - 忽略同一存储位置的 XOR 自交换问题。
+          - 说“加减法一定安全”，没有区分语言的整数溢出语义。
+          - 在 Java 中写一个 `swap(int a,int b)` 并误以为能修改调用者局部变量。
+          - 把面试技巧宣传成生产代码首选，而不说明可读性代价。
+          EOF
+
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p);const text=md.toString('utf8');
+          const blocks=[...text.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          const impl=blocks.map(x=>x[1]).find(x=>x.includes('public final class Solution'));
+          if(!impl||!impl.includes('swapNoTemp')) throw new Error('candidate Java implementation missing');
+          fs.writeFileSync('/tmp/Solution.java',impl+'\n');
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(md).digest('hex')+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/WriterValidation.java <<'JAVA'
+          import java.util.*;
+          public final class WriterValidation {
+              static void check(int a,int b){
+                  Solution.Pair p=new Solution.Pair(a,b);
+                  Solution.swapNoTemp(p);
+                  if(p.a!=b||p.b!=a) throw new AssertionError(a+","+b+" -> "+p.a+","+p.b);
+              }
+              public static void main(String[] args){
+                  int[][] fixed={{0,0},{1,2},{-1,7},{Integer.MIN_VALUE,Integer.MAX_VALUE},{42,42},{0,Integer.MIN_VALUE}};
+                  for(int[] x:fixed)check(x[0],x[1]);
+                  Random r=new Random(0x584f52535741504cL);
+                  for(int i=0;i<100000;i++)check(r.nextInt(),r.nextInt());
+                  System.out.println("PASS fixed=6 seeded-random=100000 min-max=covered equal-values=covered negatives=covered");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/WriterValidation.java
+          stdout="$(java -cp /tmp WriterValidation)";echo "$stdout";grep -E '^PASS fixed=6 seeded-random=100000 min-max=covered equal-values=covered negatives=covered$' <<<"$stdout";echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          fs.writeFileSync(`${out}/int_swap_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact Java candidate and run WriterValidation',stdout:process.env.WRITER_STDOUT,boundary_tests:[{case:'zero/equal/negative pairs',passed:true},{case:'Integer.MIN_VALUE and Integer.MAX_VALUE',passed:true},{case:'100,000 seeded random int pairs',passed:true}],environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'tagged-note',title:'Tagged interview note preserving the exact two-int swap prompt',locator:'note_tagged/65f96bb10000000012031c4a.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Deterministic Java XOR-swap validation',locator:`${out}/int_swap_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source freezes two int values and the no-third-variable constraint, but does not freeze a programming language or caller API.',source_ids:['tagged-note','source-inventory'],answer_locations:['核心结论','关键细节']},{claim_id:'xor-reference',text:'Under the declared Java int reference contract, three XOR assignments swap all fixed boundary pairs and 100,000 seeded random pairs.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Writer repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID/writer_research.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/int_swap_validation.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0043 int-swap candidate'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+            sleep 5
+          done
+          exit 1
