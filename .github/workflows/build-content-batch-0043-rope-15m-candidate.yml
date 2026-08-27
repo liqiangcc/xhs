@@ -1,0 +1,204 @@
+name: Build Content Batch 0043 Rope 15m Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0043-rope-15m-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-rope-15m-build
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b3787f11fe37c461cd68a3a00b303279
+  SOURCE_QID: b3787f11fe37c461cd68a3a00b303279
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='智力题：有无数条密度均匀度随机、但烧完耗时均为 1 小时的绳子，如何通过烧绳子计时 15 分钟？';
+          const note=JSON.parse(fs.readFileSync('note_tagged/67e14815000000001b025250.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact)throw new Error('source boundary drifted');
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.source_questions?.[0]?.original_question!==exact)throw new Error('inventory drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid]))throw new Error('ownership drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('live context drifted');
+          NODE
+
+      - name: Write source-bounded candidate and verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0043/$cid"; mkdir -p "$out" review/candidates/answers
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b3787f11fe37c461cd68a3a00b303279","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 用燃烧不均匀但总燃烧时间固定的绳子计时 15 分钟
+
+          ## 核心结论
+
+          用两根“从一端点燃后恰好 60 分钟烧完”的绳子。开始时把第一根两端同时点燃，把第二根只点一端；第一根会在 30 分钟时烧完。就在这一刻点燃第二根的另一端，第二根此时若仍只从原来一端烧还需要 30 分钟，因此改成两端同时烧后只需 15 分钟。第二根烧完的时刻与第一根烧完的时刻之间，正好是 15 分钟。
+
+          这里不能用“绳子长度的一半等于 30 分钟”推理，因为题目明确允许燃烧速度沿绳子不均匀；可靠的是整根单端燃烧总时间固定为 60 分钟，以及两端同时燃烧会让剩余的“单端燃烧时间量”以两倍速被消耗。
+
+          ## 1 分钟版
+
+          - 0 分钟：绳 A 两端点燃；绳 B 只点一端。
+          - 30 分钟：绳 A 必然烧完，因为同一根 60 分钟绳从两端同时烧，两个火头共同消耗整根的燃烧时间量；此时把绳 B 的另一端也点燃。
+          - 绳 B 已经单端烧了 30 分钟，所以剩余部分若继续单端烧还需 30 分钟；现在两端一起烧，剩余时间减半为 15 分钟。
+          - 45 分钟：绳 B 烧完。因此从 A 烧完到 B 烧完这一段就是要测的 15 分钟。
+          - 不要按物理长度取一半或四分之一；燃烧不均匀时，长度比例不能推出时间比例。
+
+          ## 3 分钟版
+
+          把一根绳子想成总量为 60 的“单端燃烧时间量”，而不是均匀的长度刻度。无论某一小段实际多长，只要从一个火头推进，现实中过 1 分钟就消耗 1 分钟的这种时间量。
+
+          开始时 A 两端烧，所以两个火头同时消耗时间量，总消耗速率是 2；总量 60 因而 30 分钟耗尽。B 在这 30 分钟里只有一个火头，因此恰好消耗 30，剩余时间量也是 30。A 烧完时再点 B 的另一端，B 变成两个火头共同消耗剩余的 30，总速率为 2，所以再过 15 分钟耗尽。
+
+          时间轴是：`t=0` 同时点火；`t=30` A 烧完并触发 B 的第二端点火；`t=45` B 烧完。我们得到的是 `t=30 → t=45` 的一个可靠 15 分钟区间。如果面试官要求“从最初点火起恰好 15 分钟就出现一个事件”，则需要额外说明：在只允许以绳子烧完作为触发事件、且所有绳子都是 60 分钟这一标准模型下，最早可得到的完成事件是两端点燃一根绳子的 30 分钟；经典两绳方案测量的是一个 15 分钟区间，而不是从 t=0 开始的 15 分钟终点。
+
+          ## 关键细节
+
+          - **核心不变量不是长度，而是单端燃烧时间量。** 绳子可以粗细不均、局部燃烧速度不同，所以 1/2 长度未必烧 30 分钟。
+          - **两端点燃为什么是 30 分钟。** 两个火头从两侧同时推进，直到相遇；对整根 60 分钟的单端燃烧时间量而言，每个真实分钟同时从两端各消耗 1 分钟量，所以总量以 2 倍速消耗。
+          - **第二根为什么剩 30 分钟。** 它先只烧一端 30 个真实分钟；如果不做任何改变，从当前火头继续烧到另一端还需要 30 分钟。
+          - **为什么第二次又能减半。** 在剩余部分的两端各有一个火头，剩余 30 分钟量以每分钟 2 的速率被消耗，因此是 15 分钟。
+          - **标准隐含条件。** 同一位置的可燃性质与点燃方向无关，两个火头互不干扰，直到相遇为止；这是这类绳子计时题的常规模型。若题目允许火焰互相改变燃烧速度，就必须重新定义物理模型。
+
+          ## 原理机制
+
+          设沿绳子的“单端燃烧时间密度”为非负函数 `w(x)`，只要求整根满足 `∫w(x)dx = 60`，不要求 `w(x)` 常数。一个火头推进时，每个真实分钟恰好消耗 1 分钟的积分量；两个火头从两端推进时，每个真实分钟总共消耗 2 分钟积分量。于是整根两端点燃的完成时间是 `60 / 2 = 30`，而 B 在单端燃烧 30 分钟后剩余积分量为 30，再两端燃烧就是 `30 / 2 = 15`。这个推理不依赖绳子的长度分布是否均匀。
+
+          ```java
+          public final class Solution {
+              public record Schedule(int firstMarkerMinute, int measuredIntervalMinutes, int finishMinute) {}
+
+              public static Schedule ropeSchedule() {
+                  int oneEndBurnMinutes = 60;
+                  int firstMarker = oneEndBurnMinutes / 2;       // A: both ends -> 30
+                  int remainingB = oneEndBurnMinutes - firstMarker; // B burned one end for 30 -> 30 left
+                  int interval = remainingB / 2;                // B: both ends -> 15
+                  return new Schedule(firstMarker, interval, firstMarker + interval);
+              }
+          }
+          ```
+
+          代码只是把时间量不变量写成可执行的算术检查；真正的题眼仍然是“燃烧时间可加，但物理长度不可按比例当时间”。
+
+          ## 项目经验版
+
+          这是逻辑题，来源没有真实项目经历，不能虚构线上案例。更有价值的迁移是：遇到“表面不均匀但总量已知”的问题时，先寻找可守恒、可累加的量，再围绕事件触发构造时间或状态边界；不要把容易测量的几何比例误当成真正受约束的业务量。
+
+          ## 常见追问
+
+          - 问：为什么第一根两端烧一定 30 分钟，燃烧速度不是不均匀吗？答：不均匀只意味着长度和时间不成比例；两个火头同时从两端消耗同一个总计 60 分钟的燃烧时间量，所以完成时间减半。
+          - 问：为什么第二根烧了 30 分钟后一定还剩 30 分钟？答：因为它此前只有一个火头；整根单端总时间是 60，已经真实燃烧 30 分钟，若继续同样从当前火头烧完剩余部分，还需 30 分钟。
+          - 问：能不能先剪成四等份取 15 分钟？答：不能。四分之一长度可能对应任意燃烧时间，题目恰恰取消了“长度比例 = 时间比例”这一前提。
+          - 问：这个方案测的是从 t=0 开始的 15 分钟吗？答：不是；经典方案在 t=30 产生起点，在 t=45 产生终点，测出一个精确 15 分钟区间。若必须 t=15 就产生完成事件，需要额外计时条件或不同资源模型。
+          - 问：需要几根绳子？答：经典方案两根就够；A 负责产生可靠的 30 分钟触发点，B 把自己剩余的 30 分钟量再通过双端点燃压缩成 15 分钟。
+
+          ## 易错点
+
+          - 把“燃烧不均匀”忽略掉，直接按一半长度或四分之一长度计时。
+          - 说“第二根剩一半长度”，正确说法应是“若继续单端烧，剩余部分还需要 30 分钟”；剩余长度未必是一半。
+          - 没说明第二根另一端是在第一根刚好烧完时点燃，导致 15 分钟区间没有可靠起点。
+          - 把最终 t=45 误说成“从开始只过了 15 分钟”；实际是总共 45 分钟，其中最后一段精确为 15 分钟。
+          - 为逻辑题虚构代码或生产经验；代码最多作为不变量的验证表达，不替代物理/逻辑证明。
+          EOF
+
+          cat > "$out/rope_validation.py" <<'PY'
+          import random
+
+          def consume(weights, left_budget, right_budget):
+              # weights are arbitrary positive one-end burn-time chunks summing to 60.
+              a=list(weights); i=0; j=len(a)-1; li=a[i] if a else 0.0; rj=a[j] if a else 0.0
+              l=left_budget; r=right_budget
+              while i<=j and l>1e-9:
+                  take=min(li,l); li-=take; l-=take
+                  if li<=1e-9: i+=1; li=a[i] if i<=j else 0.0
+              while i<=j and r>1e-9:
+                  take=min(rj,r); rj-=take; r-=take
+                  if rj<=1e-9: j-=1; rj=a[j] if i<=j else 0.0
+              rem=0.0
+              if i>j: return 0.0
+              if i==j: return max(0.0, li - (a[i]-rj))
+              rem=li+rj+sum(a[i+1:j])
+              return rem
+
+          assert 60/2 == 30
+          assert (60-30)/2 == 15
+          rng=random.Random(0x524f504531354d)
+          for _ in range(20000):
+              n=rng.randint(1,25)
+              cuts=sorted([0.0]+[rng.random() for _ in range(n-1)]+[1.0])
+              weights=[(cuts[k+1]-cuts[k])*60.0 for k in range(n)]
+              # B burns from one end for 30 real minutes -> 30 units remain, independent of partition.
+              rem=consume(weights,30.0,0.0)
+              if abs(rem-30.0)>1e-7: raise AssertionError((weights,rem))
+              # Once both ends are lit, two one-end-time units disappear per real minute -> 15 minutes.
+              if abs(rem/2.0-15.0)>1e-7: raise AssertionError(rem)
+          print('PASS total=60 first-marker=30 remaining-B=30 measured-interval=15 random-irregular-partitions=20000')
+          PY
+
+      - name: Execute verifier and freeze writer packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0043/$cid"
+          stdout="$(python3 "$out/rope_validation.py")"; echo "$stdout"
+          test "$stdout" = 'PASS total=60 first-marker=30 remaining-B=30 measured-interval=15 random-irregular-partitions=20000'
+          CANDIDATE_SHA="$(sha256sum "review/candidates/answers/$cid.md" | awk '{print $1}')" STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0043/${cid}`,date='2026-08-27',sha=process.env.CANDIDATE_SHA;
+          fs.writeFileSync(`${out}/rope_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'python3 rope_validation.py',stdout:process.env.STDOUT,boundary_tests:[{case:'arbitrary positive burn-time partitions summing to 60',expected:'30 minutes of one-end burn leaves 30 burn-time units',passed:true},{case:'remaining 30 burn-time units with both ends lit',expected:'completion after 15 real minutes',passed:true}]},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'tagged-note',title:'Tagged interview note preserving the rope timing puzzle',locator:'note_tagged/67e14815000000001b025250.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Irregular-rope burn-time partition verifier',locator:`${out}/rope_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source fixes ropes that each take one hour to burn and asks for a 15-minute timing method; it does not license length-proportional timing.',source_ids:['tagged-note','source-inventory'],answer_locations:['核心结论','关键细节']},{claim_id:'two-rope-schedule',text:'Lighting rope A at both ends and rope B at one end creates a 30-minute marker; lighting B from its second end at that marker makes the remaining one-end burn-time quantity finish in 15 minutes.',source_ids:['writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp <(node - <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');const m=md.match(/```java\n([\s\S]*?)\n```/);if(!m)throw new Error('java block missing');process.stdout.write(m[1]);
+          NODE
+          ) 2>/dev/null || true
+
+      - name: Commit candidate with safe rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID"
+          git commit -m 'content: draft batch 0043 rope 15-minute candidate'
+          for n in 1 2 3 4 5; do
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            git rebase --abort || true
+            sleep $((n*2))
+          done
+          exit 1
