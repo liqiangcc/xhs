@@ -69,7 +69,6 @@ jobs:
           fs.writeFileSync('/tmp/new-candidate-sha',next+'\n');
           NODE
 
-          # Compile the exact fenced Java snippet independently of the writer fixture.
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -82,7 +81,7 @@ jobs:
           javac "$out/IntegerBreak.java"
           test "$(java -cp "$out" IntegerBreak)" = 'PASS n=2..10 known n=2..16 brute n=2..53 math upper=258280326 invalid-range=rejected'
 
-      - name: Verify audit no longer reports placeholder or unrunnable implementation
+      - name: Verify code-specific audit errors are closed
         shell: bash
         run: |
           set -euo pipefail
@@ -93,8 +92,8 @@ jobs:
           STATUS="$status" node <<'NODE'
           const fs=require('fs'); const r=JSON.parse(fs.readFileSync('/tmp/audit.json','utf8')); const row=r.rows?.[0];
           if(!row) throw new Error('candidate audit row missing');
-          const hard=new Set(row.hard_failures||[]);
-          if(hard.has('placeholder_implementation')||hard.has('unrunnable_implementation')) throw new Error(`implementation still not auditable: ${JSON.stringify(row.errors)}`);
+          const implErrors=(row.errors||[]).filter(e=>e.error==='coding_block_required'||String(e.error||'').endsWith('_validation_failed'));
+          if(implErrors.length) throw new Error(`implementation still not auditable: ${JSON.stringify(implErrors)}`);
           if(Number(process.env.STATUS)===0) throw new Error('candidate unexpectedly passed without independent evidence; fail closed');
           NODE
           node scripts/content/check_question_coverage.js --check
