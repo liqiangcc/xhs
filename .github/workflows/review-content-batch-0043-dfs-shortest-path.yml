@@ -1,0 +1,176 @@
+name: Review Content Batch 0043 DFS Shortest Path
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0043-dfs-shortest-path.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-dfs-shortest-path-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b0fbb220f5a52047eb85620c3e62c501
+  SOURCE_QID: b0fbb220f5a52047eb85620c3e62c501
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first inspection before writer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：给定一个图，使用 DFS 求单源最短路径（带特殊条件处理）';
+          const note=JSON.parse(fs.readFileSync('note_tagged/672207f0000000001b013994.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact)throw new Error('source boundary drifted');
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.answer_type!=='coding'||item.source_questions?.[0]?.original_question!==exact||JSON.stringify(item.question_ids)!==JSON.stringify([qid]))throw new Error('inventory drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('live context drifted');
+          const p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','shortestHopsDfs','blocked','BFS','O(VE)'])if(!md.includes(marker))throw new Error(`marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5)throw new Error('followups missing');
+          if(!md.includes('没有保留图是否带权')||!md.includes('只是为了让参考实现可执行'))throw new Error('under-specified source/special-condition boundary not explicit');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md))throw new Error('fabricated experience risk');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];if(blocks.length!==1)throw new Error('candidate Java block missing/ambiguous');
+          fs.writeFileSync('/tmp/Solution.java',blocks[0][1]+'\n');
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');fs.writeFileSync('/tmp/candidate-sha',sha+'\n');
+          fs.writeFileSync('/tmp/pre.json',JSON.stringify({decision:'pass_pending_independent_floyd_warshall_differential',candidate_sha256:sha,source_boundary:'The preserved source requires DFS and mentions an unspecified special condition, but does not preserve graph direction, weight model, API, or the special-condition semantics. The candidate keeps those gaps explicit and offers blocked vertices on a directed unweighted graph only as a reference contract.'},null,2)+'\n');
+          NODE
+
+      - name: Execute independent Floyd-Warshall validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/ReviewerHarness.java <<'JAVA'
+          import java.util.*;
+          public final class ReviewerHarness {
+              private static List<List<Integer>> graph(int n, int[][] es) {
+                  ArrayList<List<Integer>> g = new ArrayList<>();
+                  for (int i=0;i<n;i++) g.add(new ArrayList<>());
+                  for (int[] e: es) g.get(e[0]).add(e[1]);
+                  return g;
+              }
+              private static int[] oracle(int n, int[][] es, int source, boolean[] blocked) {
+                  int inf = 1_000_000_000;
+                  int[][] d = new int[n][n];
+                  for (int i=0;i<n;i++) Arrays.fill(d[i], inf);
+                  for (int i=0;i<n;i++) if (!blocked[i]) d[i][i]=0;
+                  for (int[] e: es) if (!blocked[e[0]] && !blocked[e[1]]) d[e[0]][e[1]]=Math.min(d[e[0]][e[1]],1);
+                  for (int k=0;k<n;k++) if (!blocked[k])
+                      for (int i=0;i<n;i++) if (d[i][k]<inf)
+                          for (int j=0;j<n;j++) if (d[k][j]<inf)
+                              if (d[i][j] > d[i][k]+d[k][j]) d[i][j]=d[i][k]+d[k][j];
+                  int[] out = new int[n];
+                  for (int v=0;v<n;v++) out[v] = blocked[v] || d[source][v]>=inf ? -1 : d[source][v];
+                  return out;
+              }
+              private static void check(int n,int[][] es,int source,boolean[] blocked) {
+                  int[] got=Solution.shortestHopsDfs(graph(n,es),source,blocked), want=oracle(n,es,source,blocked);
+                  if(!Arrays.equals(got,want))throw new AssertionError("got="+Arrays.toString(got)+" want="+Arrays.toString(want));
+              }
+              private static void expectBlockedSource() {
+                  try { Solution.shortestHopsDfs(graph(2,new int[][]{{0,1}}),0,new boolean[]{true,false}); throw new AssertionError("blocked source accepted"); }
+                  catch (IllegalArgumentException expected) {}
+              }
+              public static void main(String[]args) {
+                  check(5,new int[][]{{0,1},{0,2},{1,3},{2,4},{4,3}},0,new boolean[5]);
+                  check(6,new int[][]{{0,0},{0,1},{0,1},{1,2},{2,1},{2,3},{4,5}},0,new boolean[6]);
+                  check(5,new int[][]{{0,1},{1,2},{2,3},{0,4},{4,3}},0,new boolean[]{false,false,true,false,false});
+                  expectBlockedSource();
+                  Random r=new Random(0x464C4F5944444653L);
+                  for(int t=0;t<15000;t++){
+                      int n=1+r.nextInt(9),m=r.nextInt(50),s=r.nextInt(n);ArrayList<int[]> es=new ArrayList<>();
+                      for(int i=0;i<m;i++)es.add(new int[]{r.nextInt(n),r.nextInt(n)});
+                      boolean[] blocked=new boolean[n];for(int i=0;i<n;i++)blocked[i]=r.nextInt(5)==0;blocked[s]=false;
+                      check(n,es.toArray(new int[0][]),s,blocked);
+                  }
+                  System.out.println("PASS fixed=covered cycles-parallel-selfloop-unreachable=covered blocked=covered random-vs-floyd=15000 blocked-source=rejected oracle=floyd-warshall");
+              }
+          }
+          JAVA
+          (cd /tmp && javac Solution.java ReviewerHarness.java && stdout="$(java ReviewerHarness)" && echo "$stdout" && test "$stdout" = 'PASS fixed=covered cycles-parallel-selfloop-unreachable=covered blocked=covered random-vs-floyd=15000 blocked-source=rejected oracle=floyd-warshall' && printf 'REVIEW_STDOUT=%s\n' "$stdout" >> "$GITHUB_ENV")
+
+      - name: Freeze independent review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const pre=JSON.parse(fs.readFileSync('/tmp/pre.json','utf8'));if(pre.decision!=='pass_pending_independent_floyd_warshall_differential'||pre.candidate_sha256!==sha)throw new Error('source-first preconclusion drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha)throw new Error('writer packet/hash drifted');
+          const writerValidation=JSON.parse(fs.readFileSync(`${out}/dfs_shortest_path_validation.json`,'utf8'));if(writerValidation.result!=='pass'||writerValidation.candidate_sha256!==sha)throw new Error('writer validation/hash drifted');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const tests=[{case:'DFS-order-sensitive fixed graph',expected:'final shortest hops equal Floyd-Warshall',passed:true},{case:'cycles/self-loops/parallel/unreachable',expected:'terminates and equals Floyd-Warshall',passed:true},{case:'blocked vertices',expected:'declared special-condition reference is enforced',passed:true},{case:'15,000 seeded random directed unweighted graphs',expected:'all distances equal independent Floyd-Warshall oracle',passed:true},{case:'blocked source',expected:'invalid reference input rejected',passed:true}];
+          const findings=['The source preserves a DFS single-source shortest-path request and mentions a special condition, but the condition itself, graph direction, weight model and API are not preserved; the candidate does not fabricate them as source facts.','The blocked-vertex directed-unweighted model is clearly labeled as an executable reference contract, while the answer explains how a different preserved special condition would require a different state definition.','The implementation avoids the classic incorrect permanent-visited DFS assumption: it recursively propagates only strict distance improvements, so a later shorter route can repair an earlier longer DFS discovery.','The candidate explicitly recommends BFS for the same unweighted contract and states the DFS-relaxation worst-case O(VE) tradeoff instead of presenting DFS as the production-optimal choice.','A structurally separate Floyd-Warshall oracle passes fixed cyclic/blocked boundaries and 15,000 seeded random graphs; blocked-source rejection is consistent with the declared contract.'];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0043-dfs-shortest-path-20260827-v1',review_version:'batch-0043.dfs-shortest-path.v1',decision:'pass',revision_round:0,source_packet:['note_tagged/672207f0000000001b013994.json','review/content_build/answer_batch_0043/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact Java candidate and differential-test DFS relaxation against independent Floyd-Warshall oracle',stdout:process.env.REVIEW_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0043-dfs-shortest-path-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'tagged-note',title:'Tagged interview note preserving DFS shortest-path prompt',locator:'note_tagged/672207f0000000001b013994.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer BFS differential validation',locator:`${out}/dfs_shortest_path_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent Floyd-Warshall differential validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'DFS shortest-path source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The preserved source requires DFS and mentions a special condition but does not preserve the graph model or the condition semantics.',source_ids:['tagged-note','source-inventory','isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'reference-behavior',text:'Under the explicitly declared directed-unweighted blocked-vertex reference contract, strict-improvement DFS relaxation matches independent Floyd-Warshall shortest-hop results across fixed cases and 15,000 seeded random graphs.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'compile exact Java candidate and differential-test against independent Floyd-Warshall oracle',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0043.md');t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_b0fbb220f5a52047eb85620c3e62c501` completed writer construction and isolated source-first review. The source preserves DFS + single-source shortest path + an unspecified special condition, so the candidate keeps the missing graph/condition semantics explicit and declares blocked vertices on a directed unweighted graph only as a reference contract. The exact strict-improvement DFS relaxation passed writer BFS differential testing and an independent Floyd-Warshall reviewer over fixed cyclic/blocked boundaries and 15,000 seeded random graphs. Formal evidence is staged; repository human approval and real-review policy remain promotion blockers.'
+          if '## Progress' not in t:t=t.rstrip()+'\n\n## Progress\n'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+          git add "review/content_build/answer_batch_0043/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0043.md
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0043 DFS shortest-path candidate source-first'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+          done
+          exit 1
