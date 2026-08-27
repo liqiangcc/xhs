@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Retire Batch 0045 singleton coding Questions whose executable contracts are not recoverable."""
+# Workflow registration trigger: 2026-08-28.
 
 from __future__ import annotations
 
