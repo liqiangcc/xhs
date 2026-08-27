@@ -63,22 +63,23 @@ jobs:
           if(target.answer_type!=='coding'||dup.answer_type!=='coding') throw new Error(`answer type drifted target=${target.answer_type} dup=${dup.answer_type}`);
           const targetSources=target.source_questions||[];
           const dupSources=dup.source_questions||[];
-          if(targetSources.length===0) throw new Error('target has no source Questions');
+          if(targetSources.length===0) throw new Error('target has no live source Questions');
           if(dupSources.length!==1||dupSources[0].question_id!==process.env.DUP_QID) throw new Error(`duplicate must remain source singleton: ${JSON.stringify(dupSources)}`);
           if(dupSources[0].original_question!=='算法 2：手写实现翻转链表') throw new Error(`duplicate source wording drifted: ${dupSources[0].original_question}`);
           if(!/Coding/.test(String(dupSources[0].question_type||''))) throw new Error('duplicate source is not Coding');
           const bad=targetSources.filter(q=>!(/反转.*链表|链表.*反转|reverse.*linked|linked.*reverse/i.test(String(q.original_question||'')))||!/Coding/.test(String(q.question_type||'')));
-          if(bad.length) throw new Error(`target Canonical contains source outside reverse-linked-list Coding operation: ${JSON.stringify(bad.map(q=>({id:q.question_id,text:q.original_question,type:q.question_type})))}`);
+          if(bad.length) throw new Error(`target live source context contains source outside reverse-linked-list Coding operation: ${JSON.stringify(bad.map(q=>({id:q.question_id,text:q.original_question,type:q.question_type})))}`);
           const owned=target.canonical?.question_ids||[];
           const sourceIds=targetSources.map(q=>q.question_id);
-          if(JSON.stringify([...owned].sort())!==JSON.stringify([...sourceIds].sort())) throw new Error('target ownership/source context mismatch');
+          if(sourceIds.some(id=>!owned.includes(id))) throw new Error(`target source context contains unowned Question: owned=${JSON.stringify(owned)} source=${JSON.stringify(sourceIds)}`);
           const bridge=[...sourceIds].sort()[0];
           fs.appendFileSync(process.env.GITHUB_OUTPUT,`bridge_qid=${bridge}\n`);
-          const facts=targetSources.map(q=>`- Survivor source \`${q.question_id}\`: “${q.original_question}”.`).join('\n');
+          const facts=targetSources.map(q=>`- Survivor live source \`${q.question_id}\`: “${q.original_question}”.`).join('\n');
           const review=`# Batch 0040 Reverse-Linked-List Source-First Relation Review\n\n`+
             `## Primary-source facts\n\n${facts}\n`+
             `- Batch 0040 singleton \`${process.env.DUP_QID}\`: “${dupSources[0].original_question}”.\n`+
-            `- Every live source Question under survivor \`${process.env.TARGET_CID}\` is a standalone Coding prompt whose observable operation is reversing a linked list; the Batch 0040 singleton preserves the same operation. No reviewed source adds a materially distinct contract such as reverse-between, k-group reversal, doubly-linked-list reversal, copying instead of in-place relinking, or a different output objective.\n\n`+
+            `- Every live source Question returned for survivor \`${process.env.TARGET_CID}\` is a standalone Coding prompt whose observable operation is reversing a linked list; the Batch 0040 singleton preserves the same operation. No reviewed live source adds a materially distinct contract such as reverse-between, k-group reversal, doubly-linked-list reversal, copying instead of in-place relinking, or a different output objective.\n`+
+            `- The survivor Canonical may retain historical/non-live ownership members that are not projected by answer context; this review does not infer relation facts from those absent members. The selected bridge is a current live survivor source Question.\n\n`+
             `No historical relation/remediation record was consulted before this conclusion.\n\n`+
             `## Decision\n\nRelation: \`same\`. Consolidate duplicate singleton \`${process.env.DUP_CID}\` into survivor \`${process.env.TARGET_CID}\`, preserving the new source Question under the survivor.\n\n`+
             `## Content consequence\n\nThe relation slice does not promote the survivor Answer. The existing survivor is still subject to source-bounded curation, isolated review, evidence/code gates, required human approval, and real-review policy.\n`;
@@ -113,7 +114,7 @@ jobs:
             --actor-type ai \
             --actor-id batch-0040-reverse-list-source-first-review \
             --actor-display-name 'Reverse linked list source-first reviewer' \
-            --rationale 'Current repository sources on both sides preserve the same standalone Coding operation: reverse a linked list. No reviewed source preserves a distinct reverse-between, k-group, doubly-linked-list, copy, or alternate-output contract.' > "$out/decide.json"
+            --rationale 'Current live repository sources on both sides preserve the same standalone Coding operation: reverse a linked list. No reviewed source preserves a distinct reverse-between, k-group, doubly-linked-list, copy, or alternate-output contract.' > "$out/decide.json"
           node scripts/xhs.js dedup apply \
             --relation-candidate-key "$key" \
             --canonical-id "$TARGET_CID" \
@@ -141,7 +142,7 @@ jobs:
             '- This normalization does not promote the survivor Answer.\n');
           const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md';
           let text=fs.readFileSync(task,'utf8');
-          const note='- [x] `cq_q_a674ac13e38ba3f81a2eb37d1ef5e5e9` was reviewed source-first against existing reverse-linked-list Canonical `cq_topic_77ee33f1`: all current repository sources on both sides preserve the same standalone Coding operation—reverse a linked list—without a distinct reverse-between, k-group, doubly-linked-list, copy, or alternate-output contract. Relation is `same`; the Batch 0040 duplicate singleton is retired and its Question is consolidated under the survivor. This normalization does not promote content.';
+          const note='- [x] `cq_q_a674ac13e38ba3f81a2eb37d1ef5e5e9` was reviewed source-first against existing reverse-linked-list Canonical `cq_topic_77ee33f1`: all current live repository sources reviewed on both sides preserve the same standalone Coding operation—reverse a linked list—without a distinct reverse-between, k-group, doubly-linked-list, copy, or alternate-output contract. Relation is `same`; the Batch 0040 duplicate singleton is retired and its Question is consolidated under the survivor. This normalization does not promote content.';
           if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
           fs.writeFileSync(task,text);
           NODE
