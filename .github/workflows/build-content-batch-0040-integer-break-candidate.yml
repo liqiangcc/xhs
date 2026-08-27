@@ -1,0 +1,274 @@
+name: Build Content Batch 0040 Integer Break Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0040-integer-break-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-integer-break-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a193569a39b993f4f71e524fae08295b
+  SOURCE_QID: a193569a39b993f4f71e524fae08295b
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify exact repository source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法 1：整数拆分。将正整数 n（2≤n≤53）拆分成 k（k≥2）个正整数的和，求这些整数乘积的最大值';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67e658a3000000001c003f7d.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('integer-break source drifted');
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const q=rows.find(x=>x.question_id===qid);
+          if(!q||q.canonical_id!==cid||q.is_valid_for_library!==true) throw new Error(`Question ownership/validity drifted: ${JSON.stringify(q)}`);
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0040/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('answer context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`expected singleton ownership, got ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0040/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('Batch 0040 frozen source inventory drifted');
+          // Nearby historical “算法：数字拆分” is explicitly invalid/incomplete and must not widen this contract.
+          const vague=JSON.parse(fs.readFileSync('note_tagged/680e66cb0000000023012aa3.json','utf8')).tagged_questions||[];
+          const old=vague.find(x=>x.question_id==='5b53dba65e5ceb49b026dad8fc1704cc');
+          if(!old||old.original_question!=='算法：数字拆分'||old.is_valid_for_library!==false||old.invalid_reason!=='incomplete_or_unreadable') throw new Error('nearby invalid vague source boundary drifted');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and Java fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a193569a39b993f4f71e524fae08295b","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 整数拆分：拆成至少两个正整数后乘积最大值
+
+          ## 核心结论
+
+          题目给定 `2≤n≤53`，要求把 `n` 拆成 `k≥2` 个正整数之和并最大化乘积。动态规划可以直接刻画“必须发生拆分”这一约束：令 `dp[i]` 表示整数 `i` 至少拆一次后的最大乘积；枚举第一段 `j`，剩余 `i-j` 可以选择不再拆，也可以继续按 `dp[i-j]` 拆，因此转移是 `dp[i] = max(dp[i], j*(i-j), j*dp[i-j])`。答案为 `dp[n]`，时间 O(n²)，空间 O(n)。
+
+          ## 1 分钟版
+
+          - `dp[i]` 的语义必须写清楚：`i` **至少拆成两个正整数**后的最大乘积，所以不能让 `dp[i]=i` 作为合法最终答案。
+          - 枚举第一段 `j∈[1,i-1]` 后，剩余的 `i-j` 有两种合法选择：到此为止，乘积 `j*(i-j)`；或者继续拆，乘积 `j*dp[i-j]`。
+          - 两种选择都要比较，否则会漏掉“剩余部分不拆反而更大”的小数值情形。
+          - 初始 `dp[2]=1`；按 `i=2..n` 递推即可。
+          - `n≤53` 时最大值为 `258280326`，Java `int` 也够；实现用 `long` 让乘法边界更直观。
+
+          ## 3 分钟版
+
+          ```java
+          public long integerBreak(int n) {
+              if (n < 2 || n > 53) {
+                  throw new IllegalArgumentException("n must be in [2, 53]");
+              }
+
+              long[] dp = new long[n + 1];
+              for (int i = 2; i <= n; i++) {
+                  for (int j = 1; j < i; j++) {
+                      long stop = (long) j * (i - j);
+                      long keepSplitting = (long) j * dp[i - j];
+                      dp[i] = Math.max(dp[i], Math.max(stop, keepSplitting));
+                  }
+              }
+              return dp[n];
+          }
+          ```
+
+          例如 `n=10`：最优拆法可得到 `3+3+4`，乘积 `36`。DP 不需要提前知道应该拆成几个数，也不依赖“尽量拆 3”的数学结论；它在每个切分点同时比较停止和继续拆，最终覆盖所有合法拆分。
+
+          ## 关键细节
+
+          - **至少拆一次**：`n=2` 必须得到 `1*1=1`，不能返回 2；这也是 `dp` 语义是否正确的最小测试。
+          - **为什么有 `j*(i-j)`**：`dp[i-j]` 自带“必须拆”的语义，但全局只要求 `i` 至少拆一次。第一刀已经满足约束，所以剩余部分可以保持完整。
+          - **为什么有 `j*dp[i-j]`**：剩余部分继续拆可能得到更大乘积，例如 10 的最优解不只是一刀两段。
+          - **正整数约束**：循环 `j=1..i-1`，两边始终大于 0，不会引入 0 或负数。
+          - **复杂度**：外层 `n` 个状态，每个状态枚举 O(n) 个第一段，时间 O(n²)；`dp` 数组 O(n)。
+          - **数值范围**：本题上界 53 的数学最优值是 `3^17*2 = 258280326`，小于 `Integer.MAX_VALUE`；`long` 仍可避免推导变化时过早绑定返回范围。
+
+          ## 原理机制
+
+          这道题的最优子结构来自“第一刀之后，剩余整数的最优处理方式只取决于剩余值本身”。对固定 `j`，剩余部分有两个分支：不拆，值就是 `i-j`；继续拆，最优值就是已经求出的 `dp[i-j]`。因此当前最优值可以从更小整数的最优值递推得到。
+
+          也可以从数学上证明最优拆分最终只需要 2 和 3，并优先使用 3；但面试手写时 DP 更直接对应题意、边界更容易验证。若追求 O(1) 额外空间和 O(1) 计算，再使用数学分解并单独证明为什么 3 最优、余数 1 要改成 2+2。
+
+          ## 项目经验版
+
+          来源是纯算法题，没有真实项目数据，不能虚构项目经历。可迁移的工程思路是：当问题含“至少做一次操作”之类约束时，要把它编码进状态语义，而不是靠最后补一个特殊判断；否则状态可能把原值这种非法方案混入最优值。
+
+          ## 常见追问
+
+          - 问：为什么不能直接写 `dp[i]=max(j,dp[j])*max(i-j,dp[i-j])`？答：可以，但必须明确两侧“拆或不拆”的语义，并保证当前 `i` 已经发生了这一刀。本文固定第一段 `j` 不再拆，只让右侧选择，状态更少且仍遍历所有有序第一刀。
+          - 问：为什么 `dp[1]` 可以是 0？答：状态只定义“至少拆一次后的最大乘积”，1 没有合法拆分；转移中的“剩余不拆”由 `i-j` 本身承担，不依赖 `dp[1]`。
+          - 问：`n=3` 为什么答案是 2 不是 3？答：必须 `k≥2`，3 不能保持原样；`1+2` 的乘积 2 最大。
+          - 问：能否做到 O(n) 或 O(1)？答：用数学结论可直接按 3 分解做到 O(1) 计算，但需要额外证明。DP 是 O(n²)，在 `n≤53` 下非常小且更容易现场解释正确性。
+          - 问：为什么余数 1 时数学法不能继续保留一个 1？答：`3*1 < 2*2`，因此应把一个 3 和余下的 1 合并改成 2+2；这也是数学法的关键边界。
+
+          ## 易错点
+
+          - 把 `dp[i]` 定义成“可拆可不拆”的最大值，然后直接返回 `dp[n]`，导致 `n=2/3` 返回原值。
+          - 只比较 `j*dp[i-j]`，忘记第一刀后剩余部分允许不再拆。
+          - 循环允许 `j=0` 或 `j=i`，违反正整数拆分。
+          - 数学法机械“全拆 3”，没有处理余数 1 的 `2+2` 修正。
+          - 只给一个样例，不验证 `n=2/3`、上界 53 和 DP 与独立枚举/数学解的一致性。
+          EOF
+
+          cat > "$out/IntegerBreak.java" <<'JAVA'
+          import java.util.*;
+
+          public final class IntegerBreak {
+              public static long solve(int n) {
+                  if (n < 2 || n > 53) throw new IllegalArgumentException("n must be in [2, 53]");
+                  long[] dp = new long[n + 1];
+                  for (int i = 2; i <= n; i++) {
+                      for (int j = 1; j < i; j++) {
+                          long stop = (long) j * (i - j);
+                          long keep = (long) j * dp[i - j];
+                          dp[i] = Math.max(dp[i], Math.max(stop, keep));
+                      }
+                  }
+                  return dp[n];
+              }
+
+              static long brute(int remaining, boolean alreadySplit, Map<String, Long> memo) {
+                  String key = remaining + ":" + alreadySplit;
+                  if (memo.containsKey(key)) return memo.get(key);
+                  long best = alreadySplit ? remaining : Long.MIN_VALUE;
+                  for (int first = 1; first < remaining; first++) {
+                      long rest = brute(remaining - first, true, memo);
+                      best = Math.max(best, first * rest);
+                  }
+                  memo.put(key, best);
+                  return best;
+              }
+
+              static long formula(int n) {
+                  if (n == 2) return 1;
+                  if (n == 3) return 2;
+                  long product = 1;
+                  while (n > 4) { product *= 3; n -= 3; }
+                  return product * n;
+              }
+
+              public static void main(String[] args) {
+                  long[] small = {0,0,1,2,4,6,9,12,18,27,36};
+                  for (int n = 2; n <= 10; n++) if (solve(n) != small[n]) throw new AssertionError("small n=" + n);
+                  for (int n = 2; n <= 16; n++) {
+                      long brute = brute(n, false, new HashMap<>());
+                      if (solve(n) != brute) throw new AssertionError("brute mismatch n=" + n + " dp=" + solve(n) + " brute=" + brute);
+                  }
+                  for (int n = 2; n <= 53; n++) if (solve(n) != formula(n)) throw new AssertionError("formula mismatch n=" + n);
+                  if (solve(53) != 258_280_326L) throw new AssertionError("n=53 bound mismatch " + solve(53));
+                  try { solve(1); throw new AssertionError("n=1 must reject"); } catch (IllegalArgumentException expected) {}
+                  try { solve(54); throw new AssertionError("n=54 must reject"); } catch (IllegalArgumentException expected) {}
+                  System.out.println("PASS n=2..10 known n=2..16 brute n=2..53 math upper=258280326 invalid-range=rejected");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          javac "$out/IntegerBreak.java"
+          stdout="$(java -cp "$out" IntegerBreak)"
+          test "$stdout" = 'PASS n=2..10 known n=2..16 brute n=2..53 math upper=258280326 invalid-range=rejected'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27';
+          const out=`review/content_build/answer_batch_0040/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'javac IntegerBreak.java && java IntegerBreak',stdout:process.env.STDOUT,checks:['known values n=2..10','independent recursive enumeration n=2..16','mathematical 3/2 decomposition oracle n=2..53','upper bound n=53=258280326','source range rejection n<2 or n>53']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[
+            {source_id:'repository-source',title:'Exact integer-break source and Batch 0040 frozen inventory',locator:'note_tagged/67e658a3000000001c003f7d.json',source_type:'repository_source_record',checked_at:date},
+            {source_id:'fixture',title:'Integer-break deterministic Java validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}
+          ],claims:[
+            {claim_id:'source-contract',text:'The source gives 2<=n<=53, requires k>=2 positive summands, and asks for the maximum product.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','关键细节']},
+            {claim_id:'dp-recurrence',text:'For a first summand j, the remainder may remain whole or be optimally split; the candidate recurrence covers both branches.',source_ids:['fixture'],answer_locations:['核心结论','3 分钟版','原理机制']},
+            {claim_id:'range-and-bound',text:'Fixture validation covers source range 2..53 and independently confirms n=53 maximum 258280326.',source_ids:['fixture'],answer_locations:['1 分钟版','关键细节']},
+            {claim_id:'nearby-invalid-boundary',text:'The unrelated vague source “算法：数字拆分” is explicitly invalid/incomplete and is not used to widen this Canonical contract.',source_ids:['repository-source'],answer_locations:['核心结论']}
+          ],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record writer-complete task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md')
+          t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_a193569a39b993f4f71e524fae08295b` integer-break writer slice is source-bounded and staged: DP encodes the mandatory k>=2 split, Java validation matches independent recursive enumeration for n=2..16 and an independent mathematical decomposition for every n=2..53, including n=53 -> 258280326. The nearby vague “算法：数字拆分” source remains explicitly invalid and does not widen the contract. Independent source-first review is still required.'
+          if line not in t: t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Run candidate-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during integer-break writer slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add review/candidates/answers/$CANONICAL_ID.md review/content_build/answer_batch_0040/$CANONICAL_ID tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0040 integer-break candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
