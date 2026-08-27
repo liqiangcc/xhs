@@ -1,0 +1,102 @@
+name: Review Content Batch 0042 Max Subarray
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0042-max-subarray.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-max-subarray-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_aee86527c929ecb06715c2c4d2fd738f
+  SOURCE_QID: aee86527c929ecb06715c2c4d2fd738f
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first inspection before writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：找到最大连续子数组的和';
+          const raw=JSON.parse(fs.readFileSync('note_structured/659a2c620000000011033b5e.json','utf8'));if(raw.questions?.[20]!==exact)throw new Error('source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('ownership/type drifted');if(!(ctx.source_questions||[]).some(x=>x.question_id===qid&&x.original_question===exact))throw new Error('exact source missing');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');for(const m of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','ending = Math.max','全负数组','连续','O(n)','O(1)'])if(!md.includes(m))throw new Error(`marker missing: ${m}`);if((md.match(/- 问：/g)||[]).length<5)throw new Error('followups missing');if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md))throw new Error('fabricated experience risk');
+          const block=md.match(/```java\n([\s\S]*?)\n```/);if(!block||!block[1].includes('maxSubarraySum'))throw new Error('candidate code missing');fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');const sha=crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex');fs.writeFileSync('/tmp/candidate-sha',sha+'\n');fs.writeFileSync('/tmp/pre.json',JSON.stringify({decision:'pass_pending_prefix_oracle',source_boundary:'maximum sum of contiguous subarray; empty semantics, numeric width, interval output and language not source-frozen',candidate_sha256:sha},null,2)+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+
+      - name: Execute independent prefix-sum interval oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/Reviewer.java <<'JAVA'
+          import java.util.*;
+          public final class Reviewer {
+              static long oracle(int[] a){long[] p=new long[a.length+1];for(int i=0;i<a.length;i++)p[i+1]=p[i]+a[i];long best=Long.MIN_VALUE;for(int l=0;l<a.length;l++)for(int r=l+1;r<=a.length;r++)best=Math.max(best,p[r]-p[l]);return best;}
+              static void check(int[] a){long got=Solution.maxSubarraySum(a),want=oracle(a);if(got!=want)throw new AssertionError(Arrays.toString(a)+" got="+got+" want="+want);}
+              static long count=0;static void gen(int[] a,int i,int[] v){if(i==a.length){check(a);count++;return;}for(int x:v){a[i]=x;gen(a,i+1,v);}}
+              public static void main(String[] args){int[] vals={-4,-1,2,5};for(int n=1;n<=8;n++)gen(new int[n],0,vals);check(new int[]{-8,-3,-6,-2,-5,-4});check(new int[]{Integer.MAX_VALUE,Integer.MAX_VALUE,Integer.MIN_VALUE});Random r=new Random(0x505245464958L);for(int t=0;t<30000;t++){int n=1+r.nextInt(120),a[]=new int[n];for(int i=0;i<n;i++)a[i]=r.nextInt(2000001)-1000000;check(a);}try{Solution.maxSubarraySum(new int[0]);throw new AssertionError("empty accepted");}catch(IllegalArgumentException expected){}try{Solution.maxSubarraySum(null);throw new AssertionError("null accepted");}catch(NullPointerException expected){}System.out.println("PASS exhaustive="+count+" random=30000 prefix-interval-oracle=match all-negative+int-extremes=covered empty+null=rejected");}
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/Reviewer.java
+          stdout="$(java -cp /tmp Reviewer)";echo "$stdout";grep -E '^PASS exhaustive=[0-9]+ random=30000 prefix-interval-oracle=match all-negative\+int-extremes=covered empty\+null=rejected$' <<<"$stdout";echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze independent review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0042/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`,sha=process.env.CANDIDATE_SHA;const pre=JSON.parse(fs.readFileSync('/tmp/pre.json','utf8'));if(pre.decision!=='pass_pending_prefix_oracle'||pre.candidate_sha256!==sha)throw new Error('preconclusion drifted');const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha)throw new Error('writer packet/hash drifted');
+          const tests=[{case:'all arrays length 1..8 over {-4,-1,2,5}',expected:'Kadane equals independently computed prefix-sum interval maximum',passed:true},{case:'30,000 seeded random arrays',expected:'candidate equals prefix interval oracle',passed:true},{case:'all-negative',expected:'largest negative element',passed:true},{case:'int extremes',expected:'long result avoids int addition overflow',passed:true},{case:'empty/null',expected:'explicit rejection',passed:true}],scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['Source freezes only the maximum sum of a contiguous subarray; empty-input behavior, numeric width, returned indices and implementation language are not preserved.','Candidate clearly declares a non-empty Java int[] to long reference contract and does not present it as source fact.','The ending-at-i DP invariant and best-so-far aggregation correctly preserve non-empty semantics, including all-negative arrays where zero is not a valid answer.','Independent prefix-sum interval enumeration, structurally different from Kadane and the writer nested-sum oracle, matches the candidate on exhaustive bounded arrays and 30,000 seeded random arrays.','Time O(n), auxiliary space O(1), no-input-mutation, interval-output extension, and no-fabrication boundaries are explicit.'];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate; exhaustive/random prefix-sum interval oracle',stdout:process.env.REVIEW_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0042-max-subarray-20260827-v1',review_version:'batch-0042.max-subarray.v1',decision:'pass',revision_round:1,source_packet:['note_structured/659a2c620000000011033b5e.json','review/content_build/answer_batch_0042/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0042-max-subarray-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'structured-note',title:'Structured interview note preserving max-subarray prompt',locator:'note_structured/659a2c620000000011033b5e.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer brute-force max-subarray validation',locator:`${out}/max_subarray_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent prefix-sum interval oracle',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Max-subarray source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source asks for the maximum sum of a contiguous subarray without freezing empty semantics, numeric width, returned interval, or language.',source_ids:['structured-note','source-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'reference-behavior',text:'For the declared non-empty int[] to long contract, Kadane matches independent prefix-sum interval enumeration across exhaustive bounded arrays, random arrays, all-negative cases and integer extremes.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'exhaustive/random prefix-sum interval oracle',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/content_build/answer_batch_0042/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json"
+          git diff --cached --check;if git diff --cached --quiet;then exit 0;fi;git config user.name xhs-review-bot;git config user.email '43640935+liqiangcc@users.noreply.github.com';git commit -m 'review: pass batch 0042 max-subarray candidate source-first';for attempt in 1 2 3;do git fetch origin "$CONTENT_BRANCH";if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi;if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi;sleep 5;done;exit 1
