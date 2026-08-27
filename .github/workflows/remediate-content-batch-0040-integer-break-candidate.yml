@@ -1,0 +1,130 @@
+name: Remediate Content Batch 0040 Integer Break Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0040-integer-break-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-integer-break-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a193569a39b993f4f71e524fae08295b
+  OLD_CANDIDATE_SHA: 7e32204e4fb4e49cb741f9e2100dfe6e7808c63b5df5e0d15ade443f442eea8a
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Repair standalone Java candidate and refresh writer binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; candidate="review/candidates/answers/$cid.md"; out="review/content_build/answer_batch_0040/$cid"
+          test -f "$candidate"; test -f "$out/IntegerBreak.java"; test -f "$out/writer_research.json"; test -f "$out/code_validation.json"
+          CID="$cid" CANDIDATE="$candidate" OUT="$out" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const candidate=process.env.CANDIDATE,out=process.env.OUT,old=process.env.OLD_CANDIDATE_SHA;
+          let md=fs.readFileSync(candidate,'utf8');
+          const before=crypto.createHash('sha256').update(md).digest('hex');
+          if(before!==old) throw new Error(`unexpected candidate hash ${before}`);
+          const oldBlock=`\`\`\`java\npublic long integerBreak(int n) {\n    if (n < 2 || n > 53) {\n        throw new IllegalArgumentException("n must be in [2, 53]");\n    }\n\n    long[] dp = new long[n + 1];\n    for (int i = 2; i <= n; i++) {\n        for (int j = 1; j < i; j++) {\n            long stop = (long) j * (i - j);\n            long keepSplitting = (long) j * dp[i - j];\n            dp[i] = Math.max(dp[i], Math.max(stop, keepSplitting));\n        }\n    }\n    return dp[n];\n}\n\`\`\``;
+          const newBlock=`\`\`\`java\npublic final class Solution {\n    public long integerBreak(int n) {\n        if (n < 2 || n > 53) {\n            throw new IllegalArgumentException("n must be in [2, 53]");\n        }\n\n        long[] dp = new long[n + 1];\n        for (int i = 2; i <= n; i++) {\n            for (int j = 1; j < i; j++) {\n                long stop = (long) j * (i - j);\n                long keepSplitting = (long) j * dp[i - j];\n                dp[i] = Math.max(dp[i], Math.max(stop, keepSplitting));\n            }\n        }\n        return dp[n];\n    }\n}\n\`\`\``;
+          if(!md.includes(oldBlock)) throw new Error('expected unwrapped Java block not found');
+          md=md.replace(oldBlock,newBlock);
+          fs.writeFileSync(candidate,md);
+          const next=crypto.createHash('sha256').update(md).digest('hex');
+          for(const name of ['writer_research.json','code_validation.json']){
+            const path=`${out}/${name}`; const obj=JSON.parse(fs.readFileSync(path,'utf8'));
+            if(obj.candidate_sha256!==old) throw new Error(`${name} old hash drifted`);
+            obj.candidate_sha256=next; fs.writeFileSync(path,JSON.stringify(obj,null,2)+'\n');
+          }
+          fs.writeFileSync('/tmp/new-candidate-sha',next+'\n');
+          NODE
+
+          # Compile the exact fenced Java snippet independently of the writer fixture.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          md=Path('review/candidates/answers/cq_q_a193569a39b993f4f71e524fae08295b.md').read_text(encoding='utf-8')
+          blocks=re.findall(r'```java\n([\s\S]*?)\n```',md)
+          assert len(blocks)==1, len(blocks)
+          Path('/tmp/Solution.java').write_text(blocks[0]+'\n',encoding='utf-8')
+          PY
+          javac -encoding UTF-8 /tmp/Solution.java
+          javac "$out/IntegerBreak.java"
+          test "$(java -cp "$out" IntegerBreak)" = 'PASS n=2..10 known n=2..16 brute n=2..53 math upper=258280326 invalid-range=rejected'
+
+      - name: Verify audit no longer reports placeholder or unrunnable implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-code --noWrite --noManifest > /tmp/audit.json
+          status=$?
+          set -e
+          STATUS="$status" node <<'NODE'
+          const fs=require('fs'); const r=JSON.parse(fs.readFileSync('/tmp/audit.json','utf8')); const row=r.rows?.[0];
+          if(!row) throw new Error('candidate audit row missing');
+          const hard=new Set(row.hard_failures||[]);
+          if(hard.has('placeholder_implementation')||hard.has('unrunnable_implementation')) throw new Error(`implementation still not auditable: ${JSON.stringify(row.errors)}`);
+          if(Number(process.env.STATUS)===0) throw new Error('candidate unexpectedly passed without independent evidence; fail closed');
+          NODE
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          npm run ci:answer:code
+
+      - name: Record audit remediation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md')
+          t=p.read_text(encoding='utf-8')
+          line='- [x] Integer-break candidate audit remediation: the Java answer block is now a standalone compilable `Solution` class rather than an orphan method; candidate hash bindings in writer research/code validation were refreshed after rerunning the deterministic fixture. Independent review remains required.'
+          if line not in t: t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit remediation from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0040/$cid"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = '${{ steps.base.outputs.head }}' || { echo 'Content branch advanced during remediation; fail closed.'; exit 1; }
+          git add "review/candidates/answers/$cid.md" "$out/writer_research.json" "$out/code_validation.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git diff --cached --check
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: make batch 0040 integer-break candidate audit-runnable'
+          git push origin "HEAD:$CONTENT_BRANCH"
