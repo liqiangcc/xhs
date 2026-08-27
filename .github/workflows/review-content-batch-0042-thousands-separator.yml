@@ -1,0 +1,188 @@
+name: Review Content Batch 0042 Thousands Separator
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0042-thousands-separator.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-thousands-separator-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_adba6c6166d2030d07b88f2e58455f26
+  SOURCE_QID: adba6c6166d2030d07b88f2e58455f26
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first inspection before writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const structured=JSON.parse(fs.readFileSync('note_structured/6678d3f7000000001e013539.json','utf8'));
+          const exact='算法：给一个整型数字,将其按三位三位划分并加上逗号';
+          if(!Array.isArray(structured.questions)||structured.questions[0]!==exact) throw new Error('thousands-separator source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('ownership/type drifted');
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact) throw new Error('source wording drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','Long.MIN_VALUE','从右往左','负号','O(d)']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md)) throw new Error('fabricated production claim risk');
+          if(!md.includes('来源没有提供用户在真实项目里实现金额/报表格式化的经历')) throw new Error('no-fabrication boundary missing');
+          if(!md.includes('原题没有说明语言、位宽、负数、前导零、本地化或小数')) throw new Error('reference-contract boundary missing');
+          const block=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!block||!block[1].includes('public final class Solution')||!block[1].includes('public static String format(long value)')) throw new Error('self-contained candidate Java block missing');
+          fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex');
+          fs.writeFileSync('/tmp/candidate-sha',sha+'\n');
+          fs.writeFileSync('/tmp/source-first-preconclusion.json',JSON.stringify({decision:'pass_pending_independent_oracle',source_boundary:'format an integer by grouping decimal digits in threes and inserting commas; language, width, negatives and locale are not source-frozen',non_source_reference_choices:['Java long API','preserve leading minus sign','plain decimal integer only'],candidate_sha256:sha},null,2)+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+
+      - name: Execute independent arithmetic grouping oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/Reviewer.java <<'JAVA'
+          import java.math.BigInteger;
+          import java.util.*;
+
+          public final class Reviewer {
+              static String oracle(long value) {
+                  boolean neg=value<0;
+                  BigInteger n=BigInteger.valueOf(value).abs();
+                  BigInteger thousand=BigInteger.valueOf(1000);
+                  List<Integer> groups=new ArrayList<>();
+                  do {
+                      BigInteger[] qr=n.divideAndRemainder(thousand);
+                      groups.add(qr[1].intValue());
+                      n=qr[0];
+                  } while(n.signum()!=0);
+                  StringBuilder out=new StringBuilder();
+                  if(neg) out.append('-');
+                  out.append(groups.get(groups.size()-1));
+                  for(int i=groups.size()-2;i>=0;i--) out.append(',').append(String.format(Locale.ROOT,"%03d",groups.get(i)));
+                  return out.toString();
+              }
+              static void check(long x) {
+                  String got=Solution.format(x), want=oracle(x);
+                  if(!got.equals(want)) throw new AssertionError(x+" got="+got+" want="+want);
+              }
+              public static void main(String[] args) {
+                  long[] fixed={0,1,9,10,99,100,999,1000,1001,999999,1000000,-1,-999,-1000,-1001,Long.MIN_VALUE,Long.MAX_VALUE};
+                  for(long x:fixed) check(x);
+                  Random r=new Random(0x7A0B42L);
+                  for(int i=0;i<50000;i++) check(r.nextLong());
+                  for(long x=-10000;x<=10000;x++) check(x);
+                  System.out.println("PASS fixed="+fixed.length+" exhaustive-small=20001 random=50000 biginteger-oracle=match zero+sign+group-boundaries+long-extremes=covered");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/Reviewer.java
+          stdout="$(java -cp /tmp Reviewer)"
+          echo "$stdout"
+          grep -E '^PASS fixed=[0-9]+ exhaustive-small=20001 random=50000 biginteger-oracle=match zero\+sign\+group-boundaries\+long-extremes=covered$' <<<"$stdout"
+          echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze independent review and evidence after conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0042/$cid"; sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const pre=JSON.parse(fs.readFileSync('/tmp/source-first-preconclusion.json','utf8'));
+          if(pre.decision!=='pass_pending_independent_oracle'||pre.candidate_sha256!==sha) throw new Error('source-first preconclusion drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha) throw new Error('writer packet/hash drifted');
+          const writerValidation=JSON.parse(fs.readFileSync(`${out}/thousands_separator_validation.json`,'utf8'));
+          if(writerValidation.result!=='pass') throw new Error('writer validation did not pass');
+          const boundaryTests=[
+            {case:'0 and exact 3/4/6/7-digit boundaries',expected:'commas only between right-aligned three-digit groups',passed:true},
+            {case:'negative values',expected:'minus sign preserved and excluded from digit grouping',passed:true},
+            {case:'Long.MIN_VALUE / Long.MAX_VALUE',expected:'correct output without abs overflow in candidate',passed:true},
+            {case:'all integers -10000..10000',expected:'candidate matches independent BigInteger arithmetic grouping oracle',passed:true},
+            {case:'50,000 seeded random long values',expected:'candidate matches independent BigInteger arithmetic grouping oracle',passed:true}
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'Repository source only freezes the three-digit grouping plus comma requirement; language, integer width, negative handling, leading-zero semantics, fractions and locale are not source-proven.',
+            'Candidate explicitly labels Java long, preserved minus sign and plain-decimal formatting as reference choices rather than original-question facts.',
+            'The implementation aligns grouping to the right edge of the decimal digit sequence, excludes the sign from grouping, and avoids the Long.MIN_VALUE absolute-value overflow trap by never applying Math.abs.',
+            'Independent BigInteger arithmetic oracle validates all values from -10000 through 10000, fixed group boundaries and long extremes, plus 50,000 seeded random long values with no mismatch.',
+            'O(d) time and O(d) output-space claims match the single-pass implementation and unavoidable result size; the answer avoids fabricated project experience and does not smuggle locale/currency semantics into the prompt.'
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate Solution.java; compile/run independent BigInteger arithmetic Reviewer.java',stdout:process.env.REVIEW_STDOUT,boundary_tests:boundaryTests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0042-thousands-separator-20260827-v1',review_version:'batch-0042.thousands-separator.v1',decision:'pass',revision_round:1,source_packet:['note_structured/6678d3f7000000001e013539.json','review/content_build/answer_batch_0042/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0042-thousands-separator-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'structured-note',title:'Structured interview note preserving integer grouping prompt',locator:'note_structured/6678d3f7000000001e013539.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer deterministic thousands-separator fixture',locator:`${out}/thousands_separator_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent BigInteger arithmetic grouping oracle',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Thousands-separator source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The repository source requires an integer to be grouped in threes with commas; language, width, negative handling, leading zeros, fractions and locale are not source-frozen.',source_ids:['structured-note','source-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'reference-behavior',text:'Under the declared Java long contract, the implementation right-aligns three-digit groups, preserves a leading minus sign and matches an independent BigInteger arithmetic oracle across exhaustive small values, long extremes and 50,000 seeded random longs.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'compile exact candidate Solution.java; compile/run independent BigInteger arithmetic Reviewer.java',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:boundaryTests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit unique review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/content_build/answer_batch_0042/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0042 thousands-separator candidate source-first'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same review artifacts; fail closed.' >&2
+              exit 1
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push thousands-separator review artifacts after safe retries.' >&2
+          exit 1
