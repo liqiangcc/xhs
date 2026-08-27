@@ -1,0 +1,211 @@
+name: Review Content Batch 0042 Inorder Traversal
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0042-inorder-traversal.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-inorder-traversal-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_af04033d46af9a331ad55c6bbf12d9b6
+  SOURCE_QID: af04033d46af9a331ad55c6bbf12d9b6
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first inspection before writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：手撕二叉树的中序遍历（递归与非递归实现）。';
+          const raw=JSON.parse(fs.readFileSync('note_structured/67ed2207000000001c03db4e.json','utf8'));
+          if(raw.questions?.[1]!==exact)throw new Error('inorder source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('ownership/type drifted');
+          if(!(ctx.source_questions||[]).some(x=>x.question_id===qid&&x.original_question===exact))throw new Error('exact source missing');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const m of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','inorderRecursive','inorderIterative','左子树','右子树','O(n)','O(h)','Morris'])if(!md.includes(m))throw new Error(`marker missing: ${m}`);
+          if((md.match(/- 问：/g)||[]).length<5)throw new Error('followups missing');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md))throw new Error('fabricated experience risk');
+          const block=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!block||!block[1].includes('public final class Solution'))throw new Error('candidate code missing');
+          fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex');
+          fs.writeFileSync('/tmp/candidate-sha',sha+'\n');
+          fs.writeFileSync('/tmp/pre.json',JSON.stringify({decision:'pass_pending_morris_oracle',source_boundary:'binary-tree inorder traversal with both recursive and non-recursive implementations; node API, return shape, empty semantics and language are not source-frozen',candidate_sha256:sha},null,2)+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+
+      - name: Execute independent Morris traversal oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/Reviewer.java <<'JAVA'
+          import java.util.*;
+          public final class Reviewer {
+              static List<Integer> morris(Solution.TreeNode root) {
+                  List<Integer> out=new ArrayList<>();
+                  Solution.TreeNode cur=root;
+                  while(cur!=null){
+                      if(cur.left==null){out.add(cur.val);cur=cur.right;continue;}
+                      Solution.TreeNode pred=cur.left;
+                      while(pred.right!=null&&pred.right!=cur)pred=pred.right;
+                      if(pred.right==null){pred.right=cur;cur=cur.left;}
+                      else{pred.right=null;out.add(cur.val);cur=cur.right;}
+                  }
+                  return out;
+              }
+              static String shape(Solution.TreeNode root){
+                  if(root==null)return "#";
+                  StringBuilder sb=new StringBuilder();
+                  ArrayList<Solution.TreeNode> q=new ArrayList<>();q.add(root);
+                  for(int i=0;i<q.size();i++){
+                      Solution.TreeNode n=q.get(i);sb.append(n.val).append(':');
+                      if(n.left==null)sb.append('#');else{sb.append('L');q.add(n.left);}sb.append(',');
+                      if(n.right==null)sb.append('#');else{sb.append('R');q.add(n.right);}sb.append(';');
+                  }
+                  return sb.toString();
+              }
+              static void check(Solution.TreeNode root){
+                  String before=shape(root);
+                  List<Integer> rec=Solution.inorderRecursive(root);
+                  if(!before.equals(shape(root)))throw new AssertionError("recursive mutated tree");
+                  List<Integer> iter=Solution.inorderIterative(root);
+                  if(!before.equals(shape(root)))throw new AssertionError("iterative mutated tree");
+                  List<Integer> oracle=morris(root);
+                  if(!before.equals(shape(root)))throw new AssertionError("Morris oracle failed to restore tree");
+                  if(!rec.equals(oracle)||!iter.equals(oracle))throw new AssertionError("mismatch rec="+rec+" iter="+iter+" oracle="+oracle);
+              }
+              static Solution.TreeNode randomTree(Random r,int n){
+                  if(n==0)return null;
+                  Solution.TreeNode root=new Solution.TreeNode(r.nextInt(21)-10);
+                  ArrayList<Solution.TreeNode> available=new ArrayList<>();available.add(root);
+                  for(int i=1;i<n;i++){
+                      Solution.TreeNode child=new Solution.TreeNode(r.nextInt(21)-10);
+                      int pi=r.nextInt(available.size());Solution.TreeNode p=available.get(pi);
+                      if(p.left==null&&p.right==null){if(r.nextBoolean())p.left=child;else p.right=child;}
+                      else if(p.left==null)p.left=child;else p.right=child;
+                      if(p.left!=null&&p.right!=null){int last=available.size()-1;available.set(pi,available.get(last));available.remove(last);}
+                      available.add(child);
+                  }
+                  return root;
+              }
+              static Solution.TreeNode balanced(){
+                  Solution.TreeNode n4=new Solution.TreeNode(4),n2=new Solution.TreeNode(2),n6=new Solution.TreeNode(6),n1=new Solution.TreeNode(1),n3=new Solution.TreeNode(3),n5=new Solution.TreeNode(5),n7=new Solution.TreeNode(7);
+                  n4.left=n2;n4.right=n6;n2.left=n1;n2.right=n3;n6.left=n5;n6.right=n7;return n4;
+              }
+              public static void main(String[] args){
+                  check(null);check(new Solution.TreeNode(7));check(balanced());
+                  Solution.TreeNode left=new Solution.TreeNode(0),p=left;for(int i=1;i<300;i++){p.left=new Solution.TreeNode(i%9-4);p=p.left;}check(left);
+                  Solution.TreeNode right=new Solution.TreeNode(0);p=right;for(int i=1;i<300;i++){p.right=new Solution.TreeNode(i%7-3);p=p.right;}check(right);
+                  Random r=new Random(0x494E4F52444552L);long nodes=0;
+                  for(int t=0;t<30000;t++){int n=r.nextInt(180);Solution.TreeNode root=randomTree(r,n);check(root);nodes+=n;}
+                  Solution.TreeNode deep=new Solution.TreeNode(0);p=deep;for(int i=1;i<50000;i++){p.right=new Solution.TreeNode(i);p=p.right;}
+                  List<Integer> deepOut=Solution.inorderIterative(deep);if(deepOut.size()!=50000||deepOut.get(0)!=0||deepOut.get(49999)!=49999)throw new AssertionError("deep iterative boundary failed");
+                  System.out.println("PASS fixed=5 random=30000 random-nodes="+nodes+" morris-oracle=match tree-restoration=verified duplicates=covered deep-iterative=50000 null=empty");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/Reviewer.java
+          stdout="$(java -cp /tmp Reviewer)"
+          echo "$stdout"
+          grep -E '^PASS fixed=5 random=30000 random-nodes=[0-9]+ morris-oracle=match tree-restoration=verified duplicates=covered deep-iterative=50000 null=empty$' <<<"$stdout"
+          echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze independent review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0042/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const pre=JSON.parse(fs.readFileSync('/tmp/pre.json','utf8'));if(pre.decision!=='pass_pending_morris_oracle'||pre.candidate_sha256!==sha)throw new Error('preconclusion drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha)throw new Error('writer packet/hash drifted');
+          const tests=[
+            {case:'null, single, balanced, left-skew and right-skew trees',expected:'recursive and iterative traversals equal independent Morris inorder oracle',passed:true},
+            {case:'30,000 seeded random trees with duplicate values',expected:'both candidate methods equal Morris oracle and preserve tree structure',passed:true},
+            {case:'Morris oracle restoration',expected:'temporary threads are fully removed and original tree shape is restored',passed:true},
+            {case:'50,000-node right-skew tree',expected:'iterative traversal completes with ordered full output without relying on JVM recursion depth',passed:true}
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The frozen source explicitly requires binary-tree inorder traversal in both recursive and non-recursive forms; node representation, return type, empty-tree result and implementation language are not preserved source constraints.',
+            'The candidate declares those missing details as a Java reference contract instead of presenting them as source facts, and it supplies both required implementations.',
+            'The recursive left-root-right implementation and the explicit left-chain stack implementation satisfy the same inorder ordering invariant.',
+            'An independent Morris-traversal oracle, structurally different from both candidate implementations and the writer fixture, matches both methods across fixed/skewed cases and 30,000 seeded random trees with duplicate values; temporary Morris threads are verified to restore the original tree.',
+            'Time O(n), auxiliary O(h) for recursion/explicit stack, deep-recursion risk, no-mutation behavior, Morris O(1) tradeoff, and the no-fabricated-project-experience boundary are explicit and consistent with the executable evidence.'
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate; independent Morris traversal oracle over fixed/skewed/random trees plus deep iterative boundary',stdout:process.env.REVIEW_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0042-inorder-20260827-v1',review_version:'batch-0042.inorder.v1',decision:'pass',revision_round:1,source_packet:['note_structured/67ed2207000000001c03db4e.json','review/content_build/answer_batch_0042/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0042-inorder-traversal-builder',writer_version:'xhs-answer-curator.v1'},sources:[
+            {source_id:'structured-note',title:'Structured interview note preserving recursive/non-recursive inorder prompt',locator:'note_structured/67ed2207000000001c03db4e.json',source_type:'repository_source_record',checked_at:date},
+            {source_id:'source-inventory',title:'Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_structured_source',checked_at:date},
+            {source_id:'writer-validation',title:'Writer recursive/iterative deterministic validation',locator:`${out}/inorder_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'reviewer-validation',title:'Independent Morris inorder oracle validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+            {source_id:'isolated-review',title:'Inorder traversal source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}
+          ],claims:[
+            {claim_id:'source-contract',text:'The source requires both recursive and non-recursive binary-tree inorder traversal, while node API, return shape, empty-tree behavior and language are not source-frozen.',source_ids:['structured-note','source-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},
+            {claim_id:'reference-behavior',text:'Under the declared Java TreeNode/List contract, both candidate traversals match an independent Morris inorder oracle over fixed, skewed and random trees, preserve the tree, and the iterative form handles a 50,000-node skew boundary.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}
+          ],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'independent Morris traversal oracle and deep iterative boundary',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/content_build/answer_batch_0042/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0042 inorder traversal candidate source-first'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+            sleep 5
+          done
+          exit 1
