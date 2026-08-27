@@ -1,0 +1,128 @@
+name: Remediate Content Batch 0042 Merge Lists Java Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0042-merge-lists-java-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-merge-lists-java-candidate-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_aaec8b46cd3d79fe404075828be32744
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Make candidate Java block self-contained and rebind writer hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json, re
+
+          cid='cq_q_aaec8b46cd3d79fe404075828be32744'
+          candidate=Path(f'review/candidates/answers/{cid}.md')
+          writer=Path(f'review/content_build/answer_batch_0042/{cid}/writer_research.json')
+          text=candidate.read_text(encoding='utf-8')
+          payload=json.loads(writer.read_text(encoding='utf-8'))
+          current=hashlib.sha256(text.encode()).hexdigest()
+          if payload.get('candidate_sha256') != current:
+              raise SystemExit(f'writer/candidate hash drift before remediation: writer={payload.get("candidate_sha256")} candidate={current}')
+          m=re.search(r'```java\n([\s\S]*?)\n```', text)
+          if not m:
+              raise SystemExit('candidate Java block missing')
+          code=m.group(1)
+          if 'public class Solution {' not in code:
+              indented='\n'.join(('    '+line if line else '') for line in code.splitlines())
+              wrapped='public class Solution {\n'+indented+'\n}'
+              text=text[:m.start(1)]+wrapped+text[m.end(1):]
+              candidate.write_text(text,encoding='utf-8')
+          new_hash=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          payload['candidate_sha256']=new_hash
+          payload['review_state']='writer_complete_isolated_review_pending'
+          payload['promotion_blocker']='isolated_independent_review_not_yet_performed'
+          writer.write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(new_hash)
+          PY
+          git diff --check
+
+      - name: Compile exact candidate Java and rerun deterministic writer fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          out="review/content_build/answer_batch_0042/$cid"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const m=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!m) throw new Error('candidate Java block missing');
+          fs.writeFileSync('/tmp/Solution.java',m[1]+'\n');
+          NODE
+          javac -encoding UTF-8 /tmp/Solution.java
+          cp "$out/MergeSortedListsValidation.java" /tmp/MergeSortedListsValidation.java
+          javac -encoding UTF-8 /tmp/MergeSortedListsValidation.java
+          stdout="$(java -cp /tmp MergeSortedListsValidation)"
+          test "$stdout" = 'PASS cases=15877 recursive=sorted+reuses-nodes iterative=sorted+reuses-nodes nulls+duplicates+extremes=covered'
+          echo "$stdout"
+          node --test test/answer_code_validation.test.js
+
+      - name: Repository consistency gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Commit candidate remediation with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0042/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: make batch 0042 merge-lists Java candidate auditable'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed in merge-lists candidate artifacts; fail closed.' >&2
+              exit 1
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push merge-lists candidate remediation after safe retries.' >&2
+          exit 1
