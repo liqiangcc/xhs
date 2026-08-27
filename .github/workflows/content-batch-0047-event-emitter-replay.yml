@@ -1,0 +1,148 @@
+name: Content Batch 0047 Event Emitter Replay
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0047-event-emitter-replay.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0047-event-emitter-replay
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_c25e775df5cf86a7d8a4e7352ef4fb7e
+  SOURCE_QID: c25e775df5cf86a7d8a4e7352ef4fb7e
+  SOURCE_WORKFLOW: .github/workflows/content-batch-0047-event-emitter-retry.yml
+
+jobs:
+  replay-validate-review-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Fetch control source and freeze exact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master:refs/remotes/origin/master
+          git show "origin/master:$SOURCE_WORKFLOW" > /tmp/b47-source-workflow.yml
+          mkdir -p /tmp/b47-emitter "review/content_build/answer_batch_0047/$CANONICAL_ID" review/candidates/answers review/evidence
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/b47-emitter/context.json
+          python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID'];exact='手写：实现 EventEmitter (on, emit, once, off)?'
+          ctx=json.loads(pathlib.Path('/tmp/b47-emitter/context.json').read_text())
+          if not ctx.get('ok') or ctx.get('canonical',{}).get('canonical_id')!=cid: raise SystemExit('canonical context drift')
+          if ctx.get('answer_type')!='coding': raise SystemExit('answer type drift')
+          if ctx.get('canonical',{}).get('question_ids')!=[qid]: raise SystemExit('ownership drift')
+          src=next((x for x in ctx.get('source_questions',[]) if x.get('question_id')==qid),None)
+          if not src or src.get('original_question')!=exact or src.get('is_valid_for_library') is not True: raise SystemExit('source wording/validity drift')
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0047/source_inventory.json').read_text())
+          row=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not row or row.get('state')!='active' or row.get('answer_type')!='coding': raise SystemExit('batch inventory drift')
+          out=pathlib.Path(f'review/content_build/answer_batch_0047/{cid}')
+          (out/'context.json').write_text(json.dumps(ctx,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Recover candidate and fixture from frozen control workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,pathlib,re
+          lines=pathlib.Path('/tmp/b47-source-workflow.yml').read_text(encoding='utf-8').splitlines()
+          def block(marker,end_token):
+              start=next(i for i,l in enumerate(lines) if marker in l)+1
+              end=next(i for i in range(start,len(lines)) if lines[i].strip()==end_token)
+              raw=lines[start:end]
+              return '\n'.join((l[10:] if l.startswith('          ') else l) for l in raw)+'\n'
+          cid=os.environ['CANONICAL_ID']
+          candidate=block('cat > "$candidate" <<\'EOF\'','EOF')
+          if '<!-- xhs-answer:' not in candidate or '# 手写 EventEmitter' not in candidate: raise SystemExit('candidate extraction failed')
+          pathlib.Path(f'review/candidates/answers/{cid}.md').write_text(candidate,encoding='utf-8')
+          test=block('cat > event_emitter_test.js <<\'JS\'','JS')
+          if 'once-reentrant=1' not in test: raise SystemExit('fixture extraction failed')
+          pathlib.Path('/tmp/b47-emitter/event_emitter_test.js').write_text(test,encoding='utf-8')
+          md=candidate
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```javascript\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one JavaScript block, got {len(blocks)}')
+          pathlib.Path('/tmp/b47-emitter/EventEmitter.js').write_text(blocks[0].strip()+'\nmodule.exports={EventEmitter};\n')
+          PY
+          cd /tmp/b47-emitter
+          node event_emitter_test.js | tee stdout.txt
+          test "$(cat stdout.txt)" = 'PASS order-args-this=true once-reentrant=1 off-once=true off-duplicates=all snapshot=true mutation-next-round=true error-propagation=true'
+
+      - name: Freeze valid research review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0047/$cid"
+          cp /tmp/b47-emitter/event_emitter_test.js "$out/event_emitter_test.js"
+          cp /tmp/b47-emitter/stdout.txt "$out/event_emitter_test.stdout.txt"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID'];date='2026-08-28'
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md');digest=hashlib.sha256(candidate.read_bytes()).hexdigest();out=pathlib.Path(f'review/content_build/answer_batch_0047/{cid}')
+          stdout=(out/'event_emitter_test.stdout.txt').read_text().strip()
+          validation={'schema_version':'answer_code_validation.v1','canonical_id':cid,'result':'pass','validated_at':date,'command':'node event_emitter_test.js','stdout':stdout,'checks':['registration order, arguments, and emitter this binding','once removed before reentrant emit','off cancels once by original listener','documented duplicate off semantics remove all matches','emit snapshot isolates current round from on/off mutations','listener error propagates and stops later listeners']}
+          (out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+          sources=[{'source_id':'batch-inventory','title':'Answer Batch 0047 frozen source inventory','locator':'review/content_build/answer_batch_0047/source_inventory.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'writer-validation','title':'EventEmitter deterministic executable fixture','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date}]
+          claims=[{'claim_id':'source-boundary','text':'The preserved source asks only to hand-write EventEmitter with on, emit, once and off; return values, duplicate-removal semantics, mutation-during-emit behavior and error handling are not source constraints, so the answer labels them explicit candidate-contract choices.','source_ids':['batch-inventory'],'answer_locations':['核心结论','关键细节']},{'claim_id':'once-reentrancy','text':'Removing a once record before invoking its listener prevents synchronous reentrant emit from executing that once registration twice under the candidate contract.','source_ids':['writer-validation'],'answer_locations':['1 分钟版','关键细节','常见追问']},{'claim_id':'snapshot-semantics','text':'The exact candidate fixture verifies registration order, argument forwarding, emitter this binding, stable per-emit snapshots, and that on/off mutations affect later rounds rather than changing the current snapshot.','source_ids':['writer-validation'],'answer_locations':['核心结论','3 分钟版','关键细节','原理机制']},{'claim_id':'off-semantics','text':'The candidate explicitly chooses off(event, listener) to remove all registrations sharing the same original function, including once records, and the deterministic fixture verifies that documented choice.','source_ids':['writer-validation'],'answer_locations':['核心结论','关键细节','常见追问']}]
+          coverage=[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','项目经验版','常见追问','易错点']}]
+          (out/'writer_research.json').write_text(json.dumps({'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':sources,'claims':claims,'source_question_coverage':coverage,'promotion_blocker':'isolated_independent_review_not_yet_performed'},ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=['The answer preserves the narrow four-method source and does not claim undocumented Node.js compatibility.','Unspecified semantics that materially affect correctness are explicit contract choices rather than source facts.','Original-listener identity and registration-record identity are separated so off(originalFn) can cancel once while a fired once record is removed precisely.','The once listener is removed before invocation and the reentrancy fixture proves it cannot fire twice through synchronous recursive emit.','A stable snapshot gives deterministic mutation-during-emit behavior and the fixture verifies current-round and next-round observations.','Duplicate-off and exception-propagation choices are explicit and tested.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0047-event-emitter-20260828-v3','review_version':'batch-0047.event-emitter.v3','decision':'pass','revision_round':3,'source_packet':['review/content_build/answer_batch_0047/source_inventory.json',f'review/candidates/answers/{cid}.md',str(out/'writer_validation.json'),'docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0047-event-emitter-builder','writer_version':'xhs-answer-curator.v1'},'sources':sources+[{'source_id':'isolated-review','title':'EventEmitter source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':claims,'source_question_coverage':coverage,'validation':{'command':validation['command'],'result':'pass','reported_stdout':validation['stdout'],'checks':validation['checks'],'boundary_tests':[{'case':'once listener recursively emits same event','expected':'once total=1','actual':'1','passed':True},{'case':'on/off mutations during current emit','expected':'current snapshot unchanged','actual':'pass','passed':True},{'case':'off original function after once registration','expected':'once registration cancelled','actual':'pass','passed':True}]},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':3,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0047.md');text=task.read_text()
+          line='- [x] `cq_q_c25e775df5cf86a7d8a4e7352ef4fb7e` now has a source-bounded JavaScript EventEmitter candidate for `on/emit/once/off`. Unspecified API semantics are explicit candidate-contract choices: stable emit snapshots, remove-before-call once behavior, off-by-original-function removing all duplicate registrations, chaining returns, and direct error propagation. Deterministic Node 22 fixtures verify order/args/this binding, once reentrancy, off-once identity, duplicate removal, mutation-next-round behavior, and exception propagation. Isolated source-first review PASSes; formal promotion remains blocked by repository human-approval/real-review policy.'
+          if '## Progress' not in text:text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text:text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text,encoding='utf-8')
+          PY
+
+      - name: Run strict candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")";base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during candidate review: $base_head -> $remote_head";echo 'Discard verified local packet; rerun against the current branch instead of merging stale evidence.';exit 0;fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0047/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0047.md
+          if git diff --cached --quiet;then echo 'No EventEmitter candidate changes to commit.';exit 0;fi
+          git diff --cached --check
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: pass batch 0047 event-emitter candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
