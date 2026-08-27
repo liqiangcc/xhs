@@ -28,23 +28,14 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('.github/workflows/build-content-batch-0040-integer-break-candidate.yml')
-          s=p.read_text(encoding='utf-8')
+          p = Path('.github/workflows/build-content-batch-0040-integer-break-candidate.yml')
+          s = p.read_text(encoding='utf-8')
           if 'uses: actions/setup-go@v5' not in s:
-              needle="""      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-"""
-              replacement=needle+"""      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
-          cache: false
-"""
+              needle = "      - uses: actions/setup-java@v5\n        with:\n          distribution: temurin\n          java-version: '21'\n"
+              addition = "      - uses: actions/setup-go@v5\n        with:\n          go-version: '1.23.x'\n          cache: false\n"
               if needle not in s:
                   raise SystemExit('setup-java anchor drifted')
-              s=s.replace(needle,replacement,1)
-              p.write_text(s,encoding='utf-8')
+              p.write_text(s.replace(needle, needle + addition, 1), encoding='utf-8')
           PY
           git diff --check
           if git diff --quiet; then
