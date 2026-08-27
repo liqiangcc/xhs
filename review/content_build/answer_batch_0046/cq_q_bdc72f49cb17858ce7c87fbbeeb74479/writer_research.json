@@ -1,0 +1,115 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_bdc72f49cb17858ce7c87fbbeeb74479",
+  "candidate_sha256": "f43879062fdcdb0799b521f91749d7b56552ee776b1ab9a113d2aefce395987b",
+  "checked_at": "2026-08-28",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "batch-inventory",
+      "title": "Batch 0046 source-first inventory",
+      "locator": "review/content_build/answer_batch_0046/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "jls-memory",
+      "title": "Java Language Specification Chapter 17 Threads and Locks",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "jdk-atomic",
+      "title": "Java SE 21 java.util.concurrent.atomic package/API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "bytecode",
+      "title": "javap decomposition of exact unsafeIncrement candidate",
+      "locator": "review/content_build/answer_batch_0046/cq_q_bdc72f49cb17858ce7c87fbbeeb74479/unsafe_increment_bytecode.txt",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Exact i++ race candidate validation",
+      "locator": "review/content_build/answer_batch_0046/cq_q_bdc72f49cb17858ce7c87fbbeeb74479/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved Java-concurrency Question initializes i to 0 and asks what final values are possible when two threads execute i++ and why; it does not specify extra synchronization, volatile, or atomic wrappers. The answer states the minimal completion/join assumptions explicitly.",
+      "source_ids": [
+        "batch-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "data-race",
+      "text": "Without synchronization, conflicting shared-variable accesses are not ordered by happens-before and constitute a data race; join establishes visibility to the joining thread after worker completion but does not serialize the two worker increments.",
+      "source_ids": [
+        "jls-memory"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "rmw-decomposition",
+      "text": "The exact unsafeIncrement candidate compiles into distinct shared-field load, integer add, and shared-field store bytecode operations; deterministic legal read/write interleavings demonstrate terminal 1 (lost update) and 2 (serialized updates).",
+      "source_ids": [
+        "bytecode",
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "safe-fixes",
+      "text": "Same-monitor synchronized increments and AtomicInteger atomic increments both produce 2 under the candidate contract in repeated validation.",
+      "source_ids": [
+        "jdk-atomic",
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "bdc72f49cb17858ce7c87fbbeeb74479",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}

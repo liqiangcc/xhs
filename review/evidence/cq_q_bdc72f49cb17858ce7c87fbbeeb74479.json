@@ -1,0 +1,185 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_bdc72f49cb17858ce7c87fbbeeb74479",
+  "candidate_sha256": "f43879062fdcdb0799b521f91749d7b56552ee776b1ab9a113d2aefce395987b",
+  "checked_at": "2026-08-28",
+  "writer": {
+    "writer_id": "content-batch-0046-i-plus-plus-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "batch-inventory",
+      "title": "Batch 0046 source-first inventory",
+      "locator": "review/content_build/answer_batch_0046/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "jls-memory",
+      "title": "Java Language Specification Chapter 17 Threads and Locks",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "jdk-atomic",
+      "title": "Java SE 21 java.util.concurrent.atomic package/API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "bytecode",
+      "title": "javap decomposition of exact unsafeIncrement candidate",
+      "locator": "review/content_build/answer_batch_0046/cq_q_bdc72f49cb17858ce7c87fbbeeb74479/unsafe_increment_bytecode.txt",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Exact i++ race candidate validation",
+      "locator": "review/content_build/answer_batch_0046/cq_q_bdc72f49cb17858ce7c87fbbeeb74479/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "i++ race source-first isolated review",
+      "locator": "review/content_build/answer_batch_0046/cq_q_bdc72f49cb17858ce7c87fbbeeb74479/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved Java-concurrency Question initializes i to 0 and asks what final values are possible when two threads execute i++ and why; it does not specify extra synchronization, volatile, or atomic wrappers. The answer states the minimal completion/join assumptions explicitly.",
+      "source_ids": [
+        "batch-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "data-race",
+      "text": "Without synchronization, conflicting shared-variable accesses are not ordered by happens-before and constitute a data race; join establishes visibility to the joining thread after worker completion but does not serialize the two worker increments.",
+      "source_ids": [
+        "jls-memory"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "rmw-decomposition",
+      "text": "The exact unsafeIncrement candidate compiles into distinct shared-field load, integer add, and shared-field store bytecode operations; deterministic legal read/write interleavings demonstrate terminal 1 (lost update) and 2 (serialized updates).",
+      "source_ids": [
+        "bytecode",
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "safe-fixes",
+      "text": "Same-monitor synchronized increments and AtomicInteger atomic increments both produce 2 under the candidate contract in repeated validation.",
+      "source_ids": [
+        "jdk-atomic",
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "bdc72f49cb17858ce7c87fbbeeb74479",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac --release 21; javap -c IncrementRace; java IncrementRaceTest",
+    "result": "pass",
+    "reported_stdout": "PASS synchronized=2 atomic=2 repeats=500 lost-update-interleaving=1 serialized-interleaving=2",
+    "checks": [
+      "unsafeIncrement bytecode contains separate getstatic/iadd/putstatic steps",
+      "deterministic lost-update decomposition yields 1",
+      "serialized decomposition yields 2",
+      "same-monitor synchronized increments yield 2 in 500 runs",
+      "AtomicInteger increments yield 2 in 500 runs"
+    ],
+    "boundary_tests": [
+      {
+        "case": "both logical reads see 0 before either write",
+        "expected": "lost update final 1",
+        "actual": "1",
+        "passed": true
+      },
+      {
+        "case": "serialized two increments",
+        "expected": "2",
+        "actual": "2",
+        "passed": true
+      },
+      {
+        "case": "synchronized/AtomicInteger repeated",
+        "expected": "2 every run",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0046-i-plus-plus-20260828-v1",
+    "review_version": "batch-0046.i-plus-plus-race.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer directly states the 1-or-2 result under explicit ordinary-int/two-completed-thread assumptions instead of hiding prerequisites.",
+      "It distinguishes atomic single int access from non-atomic compound i++ and gives both lost-update and serialized interleavings.",
+      "The Java memory-model explanation correctly separates worker-worker data race from join-based main-thread completion visibility.",
+      "The exact candidate bytecode independently shows load/add/store decomposition; deterministic fixtures witness the two result interleavings without relying on probabilistic scheduler reproduction.",
+      "Repeated synchronized and AtomicInteger checks validate both safe alternatives.",
+      "The answer avoids the common overclaim that data races permit literally arbitrary int results or that volatile makes compound increment atomic."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}

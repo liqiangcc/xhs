@@ -1,0 +1,16 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_bdc72f49cb17858ce7c87fbbeeb74479",
+  "candidate_sha256": "f43879062fdcdb0799b521f91749d7b56552ee776b1ab9a113d2aefce395987b",
+  "result": "pass",
+  "validated_at": "2026-08-28",
+  "command": "javac --release 21; javap -c IncrementRace; java IncrementRaceTest",
+  "stdout": "PASS synchronized=2 atomic=2 repeats=500 lost-update-interleaving=1 serialized-interleaving=2",
+  "checks": [
+    "unsafeIncrement bytecode contains separate getstatic/iadd/putstatic steps",
+    "deterministic lost-update decomposition yields 1",
+    "serialized decomposition yields 2",
+    "same-monitor synchronized increments yield 2 in 500 runs",
+    "AtomicInteger increments yield 2 in 500 runs"
+  ]
+}
