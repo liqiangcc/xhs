@@ -1,0 +1,97 @@
+name: Patch Answer Quality SQL DDL Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/patch-answer-quality-sql-ddl-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-answer-quality-sql-ddl-validation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Patch SQL validator and regression test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          quality = Path('scripts/lib/answer_quality.js')
+          text = quality.read_text(encoding='utf-8')
+          old = r"|SELECT\b|INSERT\b|UPDATE\b|DELETE\b)/i.test(stripped))"
+          new = r"|SELECT\b|INSERT\b|UPDATE\b|DELETE\b|CREATE\s+TABLE\b)/i.test(stripped))"
+          if old not in text:
+              if new in text:
+                  print('SQL DDL validator patch already present')
+              else:
+                  raise SystemExit('parseSql statement allowlist shape drifted')
+          else:
+              if text.count(old) != 1:
+                  raise SystemExit(f'unexpected parseSql replacement count: {text.count(old)}')
+              quality.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          test_file = Path('test/answer_code_validation.test.js')
+          tests = test_file.read_text(encoding='utf-8')
+          anchor = "    assert.equal(parseSql('SELECT department_id, COUNT(*) FROM employee GROUP BY department_id').ok, true);\n"
+          assertion = "    assert.equal(parseSql('CREATE TABLE students (student_id INTEGER PRIMARY KEY, name TEXT NOT NULL)').ok, true);\n"
+          if assertion not in tests:
+              if anchor not in tests:
+                  raise SystemExit('SQL validation test anchor drifted')
+              tests = tests.replace(anchor, anchor + assertion, 1)
+              test_file.write_text(tests, encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- scripts/lib/answer_quality.js test/answer_code_validation.test.js
+
+      - name: Run targeted regression and repository tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test test/answer_code_validation.test.js
+          npm test
+          npm run ci:check
+
+      - name: Commit patch with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add scripts/lib/answer_quality.js test/answer_code_validation.test.js
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-ci-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'ci: accept auditable SQL CREATE TABLE snippets'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed in SQL validator files; fail closed.' >&2
+              exit 1
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push SQL validator patch after safe retries.' >&2
+          exit 1
