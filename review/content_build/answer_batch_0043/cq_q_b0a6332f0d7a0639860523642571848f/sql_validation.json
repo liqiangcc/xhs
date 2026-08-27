@@ -1,0 +1,34 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_b0a6332f0d7a0639860523642571848f",
+  "candidate_sha256": "4d0c5641f110778c48542176f059005a44437676095e4d9cf0f32511f1b22977",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "python3 sql_validation.py against SQLite in-memory fixtures",
+  "stdout": "PASS above-global-average=exact equal-valued-course-facts=preserved equality-excluded one-course=covered no-score=excluded empty-scores=empty",
+  "boundary_tests": [
+    {
+      "case": "three-table fixture with student averages above/equal/below global average",
+      "expected": "only strictly above-global-average student is returned",
+      "passed": true
+    },
+    {
+      "case": "two distinct courses with equal score values",
+      "expected": "both fact rows participate and course_count remains two",
+      "passed": true
+    },
+    {
+      "case": "one-course student plus no-score student",
+      "expected": "valid one-course group participates; no-score student excluded by explicit inner-join reference contract",
+      "passed": true
+    },
+    {
+      "case": "empty scores table",
+      "expected": "result is empty without fabricated aggregate row",
+      "passed": true
+    }
+  ],
+  "environment": {
+    "sqlite": "Python sqlite3"
+  }
+}
