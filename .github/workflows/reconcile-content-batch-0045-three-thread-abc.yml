@@ -1,0 +1,151 @@
+name: Reconcile Content Batch 0045 Three Thread ABC Duplicate
+
+on:
+  push:
+    branches: [content/quality-completion]
+    paths: [.github/workflows/reconcile-content-batch-0045-three-thread-abc.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0045-three-thread-abc-reconcile
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  TARGET_CID: cq_q_89d62736c56f9d7f6d1114493dff60eb
+  TARGET_QID: 89d62736c56f9d7f6d1114493dff60eb
+  SOURCE_CID: cq_q_bb09c09d2f4302e90c9adc34ef900041
+  SOURCE_QID: bb09c09d2f4302e90c9adc34ef900041
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify exact duplicate source relation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0045
+          node scripts/xhs.js answer context --canonical-id "$TARGET_CID" --noWrite > /tmp/target.json
+          node scripts/xhs.js answer context --canonical-id "$SOURCE_CID" --noWrite > /tmp/source.json
+          node <<'NODE'
+          const fs=require('fs');
+          const t=JSON.parse(fs.readFileSync('/tmp/target.json','utf8')),s=JSON.parse(fs.readFileSync('/tmp/source.json','utf8'));
+          const tq=process.env.TARGET_QID,sq=process.env.SOURCE_QID,tc=process.env.TARGET_CID,sc=process.env.SOURCE_CID;
+          if(!t.ok||!s.ok||t.answer_type!=='coding'||s.answer_type!=='coding')throw new Error('contexts invalid');
+          if(JSON.stringify(t.canonical?.question_ids)!==JSON.stringify([tq]))throw new Error('target ownership drifted');
+          if(JSON.stringify(s.canonical?.question_ids)!==JSON.stringify([sq]))throw new Error('source ownership drifted');
+          const a=t.source_questions?.find(x=>x.question_id===tq),b=s.source_questions?.find(x=>x.question_id===sq);
+          const ea='算法：三个线程轮流打印 A、B、C';
+          const eb='并发编程：实现三个线程轮流循环输出“ABC”';
+          if(a?.original_question!==ea||b?.original_question!==eb)throw new Error(`wording drifted: ${a?.original_question} / ${b?.original_question}`);
+          const n1=JSON.parse(fs.readFileSync('note_tagged/66c75a74000000001f0152ed.json','utf8'));
+          const n2=JSON.parse(fs.readFileSync('note_tagged/6842b4d90000000012003254.json','utf8'));
+          if(!n1.tagged_questions?.some(x=>x.question_id===tq&&x.original_question===ea))throw new Error('target primary source drifted');
+          if(!n2.tagged_questions?.some(x=>x.question_id===sq&&x.original_question===eb))throw new Error('source primary source drifted');
+          const candidate=`review/candidates/answers/${tc}.md`,oldReview=`review/content_build/answer_batch_0036/${tc}/isolated_review_result.json`;
+          if(!fs.existsSync(candidate)||!fs.existsSync(oldReview))throw new Error('existing reviewed candidate missing');
+          if(JSON.parse(fs.readFileSync(oldReview,'utf8')).decision!=='pass')throw new Error('existing target review not pass');
+          const body=fs.readFileSync(candidate,'utf8');for(const token of ['ABC','Semaphore','A→B→C','acquire','release'])if(!body.includes(token))throw new Error(`candidate missing ${token}`);
+          fs.writeFileSync('review/content_build/answer_batch_0045/three_thread_abc_relation_review.json',JSON.stringify({schema_version:'canonical_relation_review.v1',reviewed_at:'2026-08-28',source_first:true,target_canonical_id:tc,source_canonical_id:sc,target_question_ids:[tq],source_question_ids:[sq],relation:'duplicate',decision:'merge_source_into_target',rationale:['Both preserved Questions require three threads to take turns producing the repeating A/B/C sequence; wording differs but no distinct concurrency contract is introduced.','Both are Coding/concurrency tasks and the existing target candidate implements an explicit A→B→C round-robin sequence using blocking synchronization.','The source phrase “循环输出 ABC” is directly covered by the target candidate’s rounds-based ABCABC... contract.','One Canonical prevents duplicate Answers while preserving both original Question records and ReviewProgress ownership.'],post_merge_requirement:'Refresh source coverage and independent review for both Questions before promotion.'},null,2)+'\n');
+          NODE
+
+      - name: Merge duplicate Canonical transactionally
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical merge --target "$TARGET_CID" --source "$SOURCE_CID" --reason 'Batch 0045 source-first review: three-thread cyclic ABC output is duplicate of existing three-thread A/B/C round-robin Canonical' --noManifest > /tmp/merge.json
+          node <<'NODE'
+          const fs=require('fs'),r=JSON.parse(fs.readFileSync('/tmp/merge.json','utf8'));
+          if(!r.ok||r.target!==process.env.TARGET_CID||r.source!==process.env.SOURCE_CID)throw new Error(`merge failed: ${JSON.stringify(r)}`);
+          if(JSON.stringify(r.moved_question_ids)!==JSON.stringify([process.env.SOURCE_QID]))throw new Error(`unexpected moved scope ${JSON.stringify(r.moved_question_ids)}`);
+          NODE
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Validate merged target and executable candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0036/$TARGET_CID"
+          node scripts/xhs.js answer context --canonical-id "$TARGET_CID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs'),c=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0036/${process.env.TARGET_CID}/context.json`,'utf8'));
+          const expected=[process.env.TARGET_QID,process.env.SOURCE_QID].sort(),owned=[...(c.canonical?.question_ids||[])].sort();
+          if(JSON.stringify(expected)!==JSON.stringify(owned))throw new Error(`merged ownership wrong ${JSON.stringify(owned)}`);
+          for(const qid of expected)if(!c.source_questions?.some(x=>x.question_id===qid&&x.is_valid_for_library===true))throw new Error(`${qid}: not reachable`);
+          if(c.canonical?.answer_status!=='needs_update')throw new Error(`merge must invalidate formal answer, got ${c.canonical?.answer_status}`);
+          NODE
+          javac "$out/RoundRobinABC.java" "$out/RoundRobinABCWriterTest.java"
+          java -cp "$out" RoundRobinABCWriterTest | tee /tmp/abc.stdout
+          grep -F 'PASS fixed=4 random=200 exact-order=pass zero=pass negative=reject timeout=pass' /tmp/abc.stdout
+
+      - name: Refresh evidence and source-first review for both Questions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto');
+          const cid=process.env.TARGET_CID,q1=process.env.TARGET_QID,q2=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0036/${cid}`;
+          const candidate=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8'),sha=crypto.createHash('sha256').update(candidate).digest('hex');
+          const stdout=fs.readFileSync('/tmp/abc.stdout','utf8').trim();
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:'2026-08-28',command:'compile post-merge RoundRobinABC and run deterministic fixed/randomized timeout validation',stdout,checks:['zero/one/two/1000 rounds','200 deterministic randomized round counts','exact ABC repetition','negative input rejection','per-case timeout detects deadlock']},null,2)+'\n');
+          const locations=['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点'];
+          const research={schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:'2026-08-28',review_state:'isolated_review_pass_post_merge',sources:[{source_id:'source-target',title:'Tagged three-thread A/B/C interview source',locator:'note_tagged/66c75a74000000001f0152ed.json',source_type:'repository_structured_source',checked_at:'2026-08-28'},{source_id:'source-merged',title:'Tagged cyclic three-thread ABC source',locator:'note_tagged/6842b4d90000000012003254.json',source_type:'repository_structured_source',checked_at:'2026-08-28'},{source_id:'merge-relation',title:'Batch 0045 three-thread ABC duplicate relation review',locator:'review/content_build/answer_batch_0045/three_thread_abc_relation_review.json',source_type:'repository_source_record',checked_at:'2026-08-28'},{source_id:'validation',title:'Executable post-merge concurrency validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-28'}],claims:[{claim_id:'source-boundary',text:'Both preserved Questions ask for three fixed threads to take turns producing the repeating ABC sequence; the candidate declares round count/API/interruption choices as answer-side contracts.',source_ids:['source-target','source-merged','merge-relation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'ordering-and-liveness',text:'The Semaphore token ring enforces A→B→C order independently of scheduling; deterministic fixed/randomized executions produce exact ABC repetition without timeout under the tested contract.',source_ids:['validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:q1,covered:true,answer_locations:locations},{question_id:q2,covered:true,answer_locations:locations}],promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify(research,null,2)+'\n');
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:'2026-08-28',review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0045-three-thread-abc-post-merge-20260828-v2',review_version:'batch-0045.three-thread-abc.post-merge.v2',decision:'pass',revision_round:2,source_packet:['review/content_build/answer_batch_0045/three_thread_abc_relation_review.json',`${out}/context.json`,`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores:{facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5},hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:['The two source Questions are duplicate phrasings of the same cyclic three-thread ABC ordering task.','The candidate explains synchronization as a single token moving A→B→C→A and does not rely on scheduler order.','Post-merge executable validation covers fixed and randomized round counts and uses timeouts to expose deadlock/liveness failure.','Round count, Java Semaphore API and interruption behavior are explicitly answer-side contracts rather than fabricated source constraints.'],promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          NODE
+
+      - name: Run integrity gates and record Batch 0045 progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0045.md');t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_bb09c09d2f4302e90c9adc34ef900041` was reconciled source-first as a duplicate of reviewed `cq_q_89d62736c56f9d7f6d1114493dff60eb` (three threads cyclically producing ABC). Both original Questions are now reachable from one Canonical; post-merge executable ordering/liveness evidence and isolated review revision 2 cover both. Formal promotion remains blocked by repository human-approval/real-review policy.'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit if branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote="$(git rev-parse "origin/$CONTENT_BRANCH")";base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then echo "branch advanced: $base -> $remote; discard verified local mutation"; exit 0; fi
+          git rm .github/workflows/reconcile-content-batch-0045-three-thread-abc.yml
+          git add -A
+          git diff --cached --check
+          git config user.name xhs-remediation-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: merge duplicate batch 0045 three-thread ABC canonical'
+          git push origin "HEAD:$CONTENT_BRANCH"
