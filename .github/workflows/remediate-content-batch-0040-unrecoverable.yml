@@ -1,0 +1,166 @@
+name: Remediate Content Batch 0040 Unrecoverable Coding Sources
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0040-unrecoverable.yml
+      - scripts/content/remediate_batch_0040_unrecoverable.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-unrecoverable
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply source-first fail-closed retirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/remediate_batch_0040_unrecoverable.py > /tmp/remediate_batch_0040_unrecoverable.py
+          python3 -m py_compile /tmp/remediate_batch_0040_unrecoverable.py
+          python3 /tmp/remediate_batch_0040_unrecoverable.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-06-30 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify explainable invalid projections and retired reachability
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.')
+          targets={
+            'a53dd025bbdbfb8d46f36e82e4941af1': {
+              'cid':'cq_q_a53dd025bbdbfb8d46f36e82e4941af1',
+              'expected':'算法：自选 LeetCode 中等或困难题目现场完成',
+              'tokens':['自选 LeetCode','题号','输入输出','strict-valid Coding'],
+            },
+            'a64d35ce4f90aa4b9addd876cac99df6': {
+              'cid':'cq_q_a64d35ce4f90aa4b9addd876cac99df6',
+              'expected':'SQL 实战：编写一个涵盖复杂关联（Join）与时间窗口聚合的大数据查询语句。',
+              'tokens':['表结构','关联键','窗口','输入输出','strict-valid Coding'],
+            },
+            'a65a65d6ea6cb59d8a43c748dff80fa6': {
+              'cid':'cq_q_a65a65d6ea6cb59d8a43c748dff80fa6',
+              'expected':'算法：涉及“状态变换”的复杂题目（推测为动态规划或有限状态自动机相关）',
+              'tokens':['推测','状态定义','转移规则','输入输出','strict-valid Coding'],
+            },
+          }
+          canon={json.loads(x)['canonical_id'] for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()}
+          questions={row['question_id']:row for row in (json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip())}
+          progress_ids={row.get('canonical_id') for row in json.loads((root/'review/progress.json').read_text(encoding='utf-8')).get('items',[])}
+          audit=json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8'))
+          decisions={row.get('question_id'):row for row in audit.get('decisions',[])}
+          for qid,t in targets.items():
+              cid=t['cid']
+              if cid in canon: raise SystemExit(f'{qid}: retired Canonical still active')
+              row=questions.get(qid)
+              if not row: raise SystemExit(f'{qid}: invalid Question projection missing')
+              if row.get('original_question')!=t['expected']: raise SystemExit(f'{qid}: wording drifted: {row.get("original_question")!r}')
+              if row.get('canonical_id') is not None or row.get('is_valid_for_library') is not False or row.get('exclusion_reason')!='incomplete_or_unreadable':
+                  raise SystemExit(f'{qid}: invalid projection incorrect: {row}')
+              if cid in progress_ids: raise SystemExit(f'{qid}: ReviewProgress still active')
+              if (root/'review/answers'/f'{cid}.md').exists(): raise SystemExit(f'{qid}: active Answer still exists')
+              if not (root/'review/archive/answers'/f'{cid}.md').exists(): raise SystemExit(f'{qid}: archived baseline Answer missing')
+              if (root/'review/candidates/answers'/f'{cid}.md').exists(): raise SystemExit(f'{qid}: unexpected candidate exists')
+              decision=decisions.get(qid)
+              if not decision or decision.get('decision')!='exclude' or decision.get('exclusion_reason')!='incomplete_or_unreadable':
+                  raise SystemExit(f'{qid}: validity audit exclusion missing')
+              note=decision.get('exclusion_note') or ''
+              for token in t['tokens']:
+                  if token not in note: raise SystemExit(f'{qid}: exclusion explanation missing {token}')
+          print('PASS batch0040 unrecoverable Coding sources retired fail-closed and remain explainable')
+          PY
+
+      - name: Verify complete repository gates after retirement
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Record bounded batch progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md')
+          t=p.read_text(encoding='utf-8')
+          lines=[
+            '- [x] Source-unrecoverable singleton `cq_q_a53dd025bbdbfb8d46f36e82e4941af1` is excluded fail-closed: the original tagged source only says the candidate could choose an unspecified medium/hard LeetCode problem and is itself marked invalid; no chosen problem, contract, I/O, constraints, samples, or expected result are preserved.',
+            '- [x] Source-unrecoverable singleton `cq_q_a64d35ce4f90aa4b9addd876cac99df6` is excluded fail-closed: the repository preserves only a generic complex-Join/time-window SQL exercise without business objective, schema, keys, time/window semantics, aggregate metric, I/O, samples, or expected result.',
+            '- [x] Source-unrecoverable singleton `cq_q_a65a65d6ea6cb59d8a43c748dff80fa6` is excluded fail-closed: the repository preserves only a “state transformation” problem summary whose DP/FSM classification is explicitly speculative; state definition, transitions, objective, I/O, constraints, samples, and expected result are absent.',
+          ]
+          if '## Progress' not in t:
+              t=t.rstrip()+'\n\n## Progress\n\n'
+          for line in lines:
+              if line not in t:
+                  t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during remediation: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; a later run may retry against current state.'
+            exit 0
+          fi
+          git add -A
+          if git diff --cached --quiet; then echo 'No batch 0040 unrecoverable-source changes.'; exit 0; fi
+          git diff --cached --check
+          git config user.name xhs-remediation-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: retire unrecoverable batch 0040 coding questions'
+          git push origin "HEAD:$CONTENT_BRANCH"
