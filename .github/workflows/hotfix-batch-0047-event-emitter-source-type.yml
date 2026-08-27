@@ -1,0 +1,51 @@
+name: Hotfix Batch 0047 Event Emitter Evidence Source Type
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/hotfix-batch-0047-event-emitter-source-type.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hotfix-batch-0047-event-emitter-source-type
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - name: Replace unsupported evidence source type
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=.github/workflows/content-batch-0047-event-emitter.yml
+          grep -q "source_type':'repository_normative_document'" "$file"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/content-batch-0047-event-emitter.yml')
+          t=p.read_text(encoding='utf-8')
+          old="source_type':'repository_normative_document'"
+          new="source_type':'repository_structured_source'"
+          if t.count(old)!=1: raise SystemExit(f'expected exactly one unsupported source type, found {t.count(old)}')
+          p.write_text(t.replace(old,new),encoding='utf-8')
+          PY
+          git diff --check
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add .github/workflows/content-batch-0047-event-emitter.yml
+          git diff --cached --check
+          git config user.name xhs-ci-fix-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'ci: use valid evidence source type for batch 0047 event emitter'
+          git push origin HEAD:master
