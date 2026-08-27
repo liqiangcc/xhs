@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Retire Batch 0045 singleton coding Questions whose executable contracts are not recoverable."""
-# Workflow registration trigger: 2026-08-28.
 
 from __future__ import annotations
 
@@ -20,6 +19,8 @@ SPECS = [
         'source_note_id': '66d046c9000000001f01cde0',
         'tagged_blob': '1525bc9b8b2f84361e92b3d839d1268b113370c3',
         'desc_blob': 'addb120d96630a454bf373959cd00071f307b185',
+        'image_blob': None,
+        'image_required_tokens': [],
         'explanation': (
             '仓库现存材料只保留“编程题：涉及到 HashMap 累加应用。”以及紧随其后的追问：刚刚的 HashMap 在累加过程中若 Integer 溢出会如何处理。'
             '这些信息只能证明原编程题使用了 HashMap 做某种累加，无法唯一恢复输入结构、Map 的 key/value 含义、累加目标、返回值、边界条件、样例或复杂度约束。'
@@ -34,10 +35,12 @@ SPECS = [
         'expected': '场景：一维数组转二维数组',
         'source_note_id': '6803483d000000001d019393',
         'tagged_blob': '6ea4f29e6f02ce731e10e84f1cc81d48051b66bb',
-        'desc_blob': 'bcf3d499376fe6082cb09a9f452a71f229c74bba',
+        'desc_blob': 'bcf3d499376fe6082cb09a2f452a71f229c74bba',
+        'image_blob': 'd5c51371af6e91393f650733b63620a2e6390c63',
+        'image_required_tokens': ['12.手撕代码', '场景题：一维数组转二维', '算法题：版本号比较'],
         'explanation': (
-            '仓库现存材料只保留“场景：一维数组转二维数组”。它没有给二维形状、行数/列数、每组长度、是否允许末组不足、填充值、索引映射规则、输入输出示例或语言/API 契约。'
-            '一维转二维可以按固定列数分块、按固定行数分配、按矩阵尺寸 reshape、按业务 key 分组等，结果互不等价；仅凭当前文本无法恢复唯一可执行 contract。'
+            '仓库现存结构化题目和图片转写都只保留“场景：一维数组转二维（数组）”。图片转写进一步确认它只是京东一面“手撕代码”下的场景题，紧邻另一个独立的版本号比较算法题，并未补充二维形状、行数/列数、每组长度、末组处理、填充值、索引映射、输入输出样例或 API 契约。'
+            '一维转二维可以按固定列数分块、按固定行数分配、按矩阵尺寸 reshape、按业务 key 分组等，结果互不等价；仅凭当前完整仓库证据无法恢复唯一可执行 contract。'
             '继续生成某一种 reshape/chunk 实现会把假设冒充成原题，因此该 singleton 应以 incomplete_or_unreadable fail-closed，并保留可解释排除原因。'
         ),
         'required_note_tokens': ['一面问的问题都是根据项目来的', '二面总体在聊天'],
@@ -86,9 +89,19 @@ def validate_sources(spec: dict) -> None:
     for token in spec['required_note_tokens']:
         if token not in desc:
             raise SystemExit(f"{spec['question_id']}: expected provenance token missing: {token}")
+
     image_text = ROOT / f'note_img_txt/{note_id}.txt'
-    if image_text.exists() and image_text.read_text(encoding='utf-8').strip():
-        raise SystemExit(f"{spec['question_id']}: image-text evidence exists; reassess before fail-closed exclusion")
+    expected_image_blob = spec.get('image_blob')
+    if expected_image_blob is None:
+        if image_text.exists() and image_text.read_text(encoding='utf-8').strip():
+            raise SystemExit(f"{spec['question_id']}: unexpected image-text evidence exists; reassess before fail-closed exclusion")
+    else:
+        if not image_text.exists() or git_blob(image_text) != expected_image_blob:
+            raise SystemExit(f"{spec['question_id']}: image-text evidence missing or changed; reassess source-first")
+        image = image_text.read_text(encoding='utf-8')
+        for token in spec.get('image_required_tokens', []):
+            if token not in image:
+                raise SystemExit(f"{spec['question_id']}: expected image provenance token missing: {token}")
 
 
 def main() -> int:
