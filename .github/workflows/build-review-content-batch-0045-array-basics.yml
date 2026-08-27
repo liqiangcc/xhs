@@ -1,0 +1,361 @@
+name: Build Review Content Batch 0045 Array Basics
+
+on:
+  push:
+    branches: [content/quality-completion]
+    paths: [.github/workflows/build-review-content-batch-0045-array-basics.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0045-array-basics
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  MINMAX_CID: cq_q_bab03aa33b9f64e0af7410e65144f9b2
+  MINMAX_QID: bab03aa33b9f64e0af7410e65144f9b2
+  XOR_CID: cq_q_bab3118b9f0f571a4e69bf5f27b3eb3a
+  XOR_QID: bab3118b9f0f571a4e69bf5f27b3eb3a
+
+jobs:
+  build-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify exact source boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "review/content_build/answer_batch_0045/$MINMAX_CID" "review/content_build/answer_batch_0045/$XOR_CID" review/candidates/answers
+          node scripts/xhs.js answer context --canonical-id "$MINMAX_CID" --noWrite > "review/content_build/answer_batch_0045/$MINMAX_CID/context.json"
+          node scripts/xhs.js answer context --canonical-id "$XOR_CID" --noWrite > "review/content_build/answer_batch_0045/$XOR_CID/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const specs=[
+            {cid:process.env.MINMAX_CID,qid:process.env.MINMAX_QID,text:'算法：一个数组找出最大值和最小值，并优化比较次数？',note:'note_tagged/68837e4e000000001100116a.json'},
+            {cid:process.env.XOR_CID,qid:process.env.XOR_QID,text:'算法：数组中有一个数字出现了奇数次，其他数字均出现偶数次，如何找出该数字？',note:'note_tagged/678bb5fd000000001b008919.json'},
+          ];
+          for(const x of specs){
+            const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0045/${x.cid}/context.json`,'utf8'));
+            if(!ctx.ok||ctx.canonical?.canonical_id!==x.cid||ctx.answer_type!=='coding')throw new Error(`${x.cid}: context/type drift`);
+            if(JSON.stringify(ctx.canonical?.question_ids)!==JSON.stringify([x.qid]))throw new Error(`${x.cid}: ownership drift`);
+            const q=ctx.source_questions?.find(q=>q.question_id===x.qid);if(!q||q.original_question!==x.text||q.is_valid_for_library!==true)throw new Error(`${x.cid}: source wording drift`);
+            const tagged=JSON.parse(fs.readFileSync(x.note,'utf8'));if(!tagged.tagged_questions?.some(q=>q.question_id===x.qid&&q.original_question===x.text&&q.is_valid_for_library===true))throw new Error(`${x.cid}: primary tagged source drift`);
+            if(fs.existsSync(`review/candidates/answers/${x.cid}.md`))throw new Error(`${x.cid}: candidate already exists; refuse overwrite`);
+          }
+          NODE
+
+      - name: Write pairwise min-max candidate and executable validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$MINMAX_CID";out="review/content_build/answer_batch_0045/$cid"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_bab03aa33b9f64e0af7410e65144f9b2","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # 一个数组同时找最大值和最小值：怎样减少比较次数？
+
+          ## 核心结论
+
+          如果分别扫一遍求最小值和最大值，需要 `2(n-1)` 次元素比较。可以把元素两两成对：每对先比较一次决定较小/较大，再让较小者只和当前 `min` 比、较大者只和当前 `max` 比，因此每两个新元素只用 3 次比较。偶数长度总比较次数是 `3n/2 - 2`；奇数长度先用第一个元素同时初始化 `min/max`，总比较次数是 `3(n-1)/2`。
+
+          来源只要求“找最大值和最小值，并优化比较次数”，没有固定语言、API、空数组策略或元素类型。下面选择 Java `int[]`；`null` 或空数组抛出 `IllegalArgumentException`，返回 `[min, max]`。这些是答案侧明确声明的契约，不冒充原题条件。
+
+          ## 1 分钟版
+
+          - 朴素方法中，每个新元素通常既跟 `min` 比、又跟 `max` 比，约 2 次比较。
+          - 两两分组后，一对元素先内部比较 1 次，确定谁更可能刷新最小值、谁更可能刷新最大值。
+          - 然后小的只比较 `min`，大的只比较 `max`，所以一对共 3 次，而不是 4 次。
+          - 偶数 `n`：首对初始化花 1 次，其余 `(n-2)/2` 对各 3 次，合计 `1 + 3(n-2)/2 = 3n/2 - 2`。
+          - 奇数 `n`：首元素直接初始化，不比较；剩余 `(n-1)/2` 对各 3 次，合计 `3(n-1)/2`。
+          - 时间仍是 O(n)，额外空间 O(1)，优化的是比较次数常数。
+
+          ## 3 分钟版
+
+          ```java
+          public static int[] minMax(int[] a) {
+              if (a == null || a.length == 0) {
+                  throw new IllegalArgumentException("array must be non-empty");
+              }
+
+              int min;
+              int max;
+              int i;
+              if ((a.length & 1) == 0) {
+                  if (a[0] <= a[1]) {
+                      min = a[0];
+                      max = a[1];
+                  } else {
+                      min = a[1];
+                      max = a[0];
+                  }
+                  i = 2;
+              } else {
+                  min = max = a[0];
+                  i = 1;
+              }
+
+              while (i < a.length) {
+                  int small;
+                  int large;
+                  if (a[i] <= a[i + 1]) {
+                      small = a[i];
+                      large = a[i + 1];
+                  } else {
+                      small = a[i + 1];
+                      large = a[i];
+                  }
+                  if (small < min) min = small;
+                  if (large > max) max = large;
+                  i += 2;
+              }
+              return new int[]{min, max};
+          }
+          ```
+
+          关键不变量是：一对元素内部比较之后，较小者不可能成为这一对中更值得检查的最大值候选，较大者也不可能成为这一对中更值得检查的最小值候选。因此可以把原来“两个元素各做 min/max 两次比较”的 4 次，压成“对内 1 次 + 对外 2 次”的 3 次。
+
+          ## 关键细节
+
+          - 长度为 1 时 `min == max == a[0]`，比较次数为 0。
+          - 偶数长度必须先用首对初始化；否则若拿一个哨兵值初始化，可能额外增加比较，破坏精确比较次数公式。
+          - 相等元素放在哪一侧都不影响正确性；示例统一用 `<=` 把左元素视为 `small`。
+          - 这是比较模型下的常数优化，渐进时间复杂度仍是 O(n)。
+          - 如果题目只问代码而不要求精确比较次数，也应能解释“为什么两两分组能从每两元素 4 次降到 3 次”。
+
+          ## 原理机制
+
+          同时求最小值和最大值时，每个元素并不需要同时承担两个方向的竞争。先在局部的一对元素中建立一次大小关系，就得到一条信息：小者无需再参与“这对中的最大候选”竞争，大者无需再参与“这对中的最小候选”竞争。之后每个方向只做一次全局比较。这个方法用一次局部比较复用了信息，因此减少总比较次数，而不是改变遍历数量级。
+
+          ## 项目经验版
+
+          来源没有真实项目上下文，不能虚构线上使用经历。工程代码里通常更重要的是可读性和标准库能力；只有在比较本身昂贵、数据规模大或面试明确要求最少比较时，才值得强调这种 pairwise 技巧。落地前仍应先确认空输入策略、数据类型和返回形式。
+
+          ## 常见追问
+
+          - 问：为什么不是 `3n/2`？答：偶数长度首对只需 1 次比较就同时初始化 `min/max`，所以比每对 3 次少 2 次，得到 `3n/2-2`。
+          - 问：奇数长度怎么算？答：第一个元素无需比较即可同时作为初始最小/最大值，剩下 `(n-1)/2` 对每对 3 次，共 `3(n-1)/2`。
+          - 问：复杂度是不是从 O(n) 变成 O(n/2)？答：不是，O(n/2) 仍然是 O(n)；优化的是元素比较次数常数。
+          - 问：有重复值会错吗？答：不会；相等值在对内比较时任选 small/large 方向都保持最小值和最大值不变量。
+          - 问：能不能排序后取首尾？答：可以得到结果，但比较排序通常要 O(n log n)，为这个目标反而更差。
+
+          ## 易错点
+
+          - 忘记奇偶长度不同的初始化，导致 `i+1` 越界。
+          - 只说“一对 3 次比较”，却把首对也按 3 次计算，给错精确公式。
+          - 把 O(n/2) 当作不同于 O(n) 的渐进复杂度。
+          - 为了统一初始化引入额外比较，却仍宣称达到精确的 `3n/2-2` 上界。
+          EOF
+          cat > "$out/MinMaxPairwise.java" <<'JAVA'
+          public final class MinMaxPairwise {
+              public static int[] minMax(int[] a) {
+                  if (a == null || a.length == 0) throw new IllegalArgumentException("array must be non-empty");
+                  int min,max,i;
+                  if ((a.length & 1) == 0) {
+                      if (a[0] <= a[1]) { min=a[0]; max=a[1]; } else { min=a[1]; max=a[0]; }
+                      i=2;
+                  } else { min=max=a[0]; i=1; }
+                  while (i < a.length) {
+                      int small,large;
+                      if (a[i] <= a[i+1]) { small=a[i]; large=a[i+1]; } else { small=a[i+1]; large=a[i]; }
+                      if (small < min) min=small;
+                      if (large > max) max=large;
+                      i+=2;
+                  }
+                  return new int[]{min,max};
+              }
+          }
+          JAVA
+          cat > "$out/MinMaxPairwiseTest.java" <<'JAVA'
+          import java.util.*;
+          public final class MinMaxPairwiseTest {
+              static void check(int[] a){int[] g=MinMaxPairwise.minMax(a);int lo=a[0],hi=a[0];for(int x:a){lo=Math.min(lo,x);hi=Math.max(hi,x);}if(g[0]!=lo||g[1]!=hi)throw new AssertionError(Arrays.toString(a)+" -> "+Arrays.toString(g)+" expected="+lo+","+hi);}
+              static int counted(int[] a){int c=0,min,max,i;if((a.length&1)==0){c++;if(a[0]<=a[1]){min=a[0];max=a[1];}else{min=a[1];max=a[0];}i=2;}else{min=max=a[0];i=1;}while(i<a.length){int s,l;c++;if(a[i]<=a[i+1]){s=a[i];l=a[i+1];}else{s=a[i+1];l=a[i];}c++;if(s<min)min=s;c++;if(l>max)max=l;i+=2;}return c;}
+              public static void main(String[] args){
+                  int[][] fixed={{7},{1,2},{2,1},{3,1,2},{4,4,4,4},{Integer.MIN_VALUE,0,Integer.MAX_VALUE,-1,9}};for(int[] a:fixed)check(a);
+                  Random r=new Random(20260828L);int random=0;for(int n=1;n<=101;n++)for(int t=0;t<100;t++){int[] a=new int[n];for(int i=0;i<n;i++)a[i]=r.nextInt();check(a);int expected=(n==1?0:((n&1)==0?3*n/2-2:3*(n-1)/2));if(counted(a)!=expected)throw new AssertionError("count n="+n+" got="+counted(a)+" expected="+expected);random++;}
+                  try{MinMaxPairwise.minMax(null);throw new AssertionError("null accepted");}catch(IllegalArgumentException ok){}try{MinMaxPairwise.minMax(new int[0]);throw new AssertionError("empty accepted");}catch(IllegalArgumentException ok){}
+                  System.out.println("PASS fixed="+fixed.length+" random="+random+" comparison-formulas=verified null-empty=rejected");
+              }
+          }
+          JAVA
+          javac "$out/MinMaxPairwise.java" "$out/MinMaxPairwiseTest.java"
+          java -cp "$out" MinMaxPairwiseTest | tee "$out/writer_stdout.txt"
+          grep -F 'PASS fixed=6 random=10100 comparison-formulas=verified null-empty=rejected' "$out/writer_stdout.txt"
+
+      - name: Write odd-frequency XOR candidate and executable validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$XOR_CID";out="review/content_build/answer_batch_0045/$cid"
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_bab3118b9f0f571a4e69bf5f27b3eb3a","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # 一个数字出现奇数次、其他数字出现偶数次：怎样 O(n)/O(1) 找出来？
+
+          ## 核心结论
+
+          把数组所有元素做按位异或即可。因为 `x ^ x = 0`、`x ^ 0 = x`，并且异或满足交换律和结合律，所以所有出现偶数次的数字最终两两抵消为 0；唯一出现奇数次的数字会剩下一份，最终异或结果就是它。
+
+          来源已经明确给出关键前提：“有一个数字出现奇数次，其他数字均出现偶数次”。它没有固定语言、整数位宽、空输入行为或是否需要校验前提。下面选择 Java `int[]`；`null`/空数组抛 `IllegalArgumentException`。算法本身不额外用 HashMap 验证频次，因为那会把额外空间从 O(1) 提升到 O(k)。
+
+          ## 1 分钟版
+
+          - 初始化 `ans = 0`，依次做 `ans ^= x`。
+          - 偶数次出现的值会完全抵消：两次是 0，四次等价于两组 0。
+          - 奇数次出现的目标值抵消掉偶数份之后还剩一份，所以最后 `ans` 就是目标值。
+          - 数组顺序不重要，因为异或满足交换律/结合律。
+          - 时间 O(n)，额外空间 O(1)。
+          - 如果“不止一个奇数次值”或题目前提不成立，单个总异或值就不再保证等于某个目标元素；要先重新确认问题模型。
+
+          ## 3 分钟版
+
+          ```java
+          public static int findOddFrequency(int[] a) {
+              if (a == null || a.length == 0) {
+                  throw new IllegalArgumentException("array must be non-empty");
+              }
+              int ans = 0;
+              for (int x : a) {
+                  ans ^= x;
+              }
+              return ans;
+          }
+          ```
+
+          设目标数字是 `v`，出现 `2k+1` 次；其它每个数字 `u` 都出现 `2m` 次。由于异或可以任意重排和分组，所有 `u` 都能配成 `u ^ u = 0`，目标 `v` 的前 `2k` 份也能配掉，最后只剩 `0 ^ v = v`。这就是算法正确性的完整不变量，不依赖元素在数组中的位置。
+
+          ## 关键细节
+
+          - 负数也可以按 Java `int` 的位表示直接异或；这里没有算术加法溢出问题。
+          - 重复次数不要求“偶数值恰好出现两次”，只要是任意偶数次都能完全抵消。
+          - 目标也不要求只出现一次；3、5、7 等任意奇数次都等价于“若干对 + 剩一份”。
+          - 不需要排序；排序会把 O(n) 变成通常 O(n log n)，也不是必要条件。
+          - 若题目改成“有两个数字出现奇数次”，需要使用总异或结果中的某个置位把数字分组，再分别异或；那是不同契约。
+
+          ## 原理机制
+
+          异或把“频次奇偶性”编码进了每一位：相同位模式出现偶数次时成对抵消，出现奇数次时保留一份。因此这道题不是在求次数本身，而是在利用群式的抵消性质，把所有不需要的偶数频次信息压缩掉。相比 HashMap 计数，异或只保留一个累积状态，所以额外空间保持 O(1)。
+
+          ## 项目经验版
+
+          来源没有真实项目场景，不能虚构线上使用经验。工程代码如果输入前提并不可信，通常要用计数或额外校验来发现脏数据；但那是数据校验需求，不能和这道“前提已保证、求目标数字”的算法复杂度混为一谈。
+
+          ## 常见追问
+
+          - 问：目标出现 3 次还能用吗？答：能，`v ^ v ^ v = v`，任意奇数次都只剩一份。
+          - 问：其他数字出现 4 次呢？答：能，四次可以配成两对，每对异或为 0。
+          - 问：为什么顺序不影响结果？答：异或满足交换律和结合律，可以把相同值重新分组配对。
+          - 问：为什么不用 HashMap？答：HashMap 当然能计数，但需要 O(k) 额外空间；题目的奇偶频次结构允许用一个 XOR 累积值做到 O(1)。
+          - 问：如果有两个奇数次数字？答：总异或会得到两者的 XOR，不再直接是答案；要基于其中一个置位分组后各自异或，这是另一道题。
+
+          ## 易错点
+
+          - 把前提误读成“其他数字都只出现两次”；实际上任意偶数次都可以。
+          - 为了验证前提而偷偷引入 HashMap，却仍宣称额外空间 O(1)。
+          - 当前提不成立时仍把总异或结果解释成“唯一目标数字”。
+          - 把异或 `^` 写成逻辑或/幂运算，或混淆 Java 中 `^` 的位运算语义。
+          EOF
+          cat > "$out/OddFrequencyXor.java" <<'JAVA'
+          public final class OddFrequencyXor {
+              public static int findOddFrequency(int[] a) {
+                  if (a == null || a.length == 0) throw new IllegalArgumentException("array must be non-empty");
+                  int ans=0; for(int x:a) ans^=x; return ans;
+              }
+          }
+          JAVA
+          cat > "$out/OddFrequencyXorTest.java" <<'JAVA'
+          import java.util.*;
+          public final class OddFrequencyXorTest {
+              static void check(int[] a,int expected){int got=OddFrequencyXor.findOddFrequency(a);if(got!=expected)throw new AssertionError(Arrays.toString(a)+" got="+got+" expected="+expected);}
+              public static void main(String[] args){
+                  check(new int[]{7},7);check(new int[]{1,2,1},2);check(new int[]{-3,4,4,-3,-3},-3);check(new int[]{5,5,5,9,9,2,2},5);
+                  Random r=new Random(0xBAB3118BL);int random=0;
+                  for(int round=0;round<5000;round++){
+                      int target=r.nextInt();int targetPairs=r.nextInt(4);List<Integer> xs=new ArrayList<>();for(int i=0;i<2*targetPairs+1;i++)xs.add(target);
+                      int others=1+r.nextInt(8);Set<Integer> used=new HashSet<>();used.add(target);
+                      for(int j=0;j<others;j++){int v;do{v=r.nextInt();}while(!used.add(v));int pairs=1+r.nextInt(4);for(int k=0;k<2*pairs;k++)xs.add(v);}
+                      Collections.shuffle(xs,r);int[] a=xs.stream().mapToInt(Integer::intValue).toArray();check(a,target);random++;
+                  }
+                  try{OddFrequencyXor.findOddFrequency(null);throw new AssertionError("null accepted");}catch(IllegalArgumentException ok){}try{OddFrequencyXor.findOddFrequency(new int[0]);throw new AssertionError("empty accepted");}catch(IllegalArgumentException ok){}
+                  System.out.println("PASS fixed=4 random="+random+" negatives=pass arbitrary-even-counts=pass null-empty=rejected");
+              }
+          }
+          JAVA
+          javac "$out/OddFrequencyXor.java" "$out/OddFrequencyXorTest.java"
+          java -cp "$out" OddFrequencyXorTest | tee "$out/writer_stdout.txt"
+          grep -F 'PASS fixed=4 random=5000 negatives=pass arbitrary-even-counts=pass null-empty=rejected' "$out/writer_stdout.txt"
+
+      - name: Freeze writer research and isolated reviews
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto');
+          const specs=[
+            {cid:process.env.MINMAX_CID,qid:process.env.MINMAX_QID,note:'note_tagged/68837e4e000000001100116a.json',validation:'MinMaxPairwiseTest.java',stdout:'PASS fixed=6 random=10100 comparison-formulas=verified null-empty=rejected',claim:'Pairwise processing uses one within-pair comparison plus one min and one max comparison; executable tests verify correctness and exact even/odd comparison-count formulas.',findings:['The source explicitly asks to find both extrema and optimize comparison count; the candidate directly targets that requirement without inventing a hidden API.','The pairwise information-reuse argument is correct: each pair costs three comparisons after initialization, yielding 3n/2-2 for even n and 3(n-1)/2 for odd n.','Executable validation covers fixed boundaries, 10100 randomized arrays, and independently instruments the exact comparison formulas.','Null/empty handling is clearly declared as answer-side API policy.']},
+            {cid:process.env.XOR_CID,qid:process.env.XOR_QID,note:'note_tagged/678bb5fd000000001b008919.json',validation:'OddFrequencyXorTest.java',stdout:'PASS fixed=4 random=5000 negatives=pass arbitrary-even-counts=pass null-empty=rejected',claim:'XOR cancellation finds the unique odd-frequency value under the source premise; executable tests cover arbitrary odd/even multiplicities, negative ints, and 5000 randomized valid inputs.',findings:['The source premise is explicit: exactly one value has odd frequency and all others have even frequency; the candidate does not weaken or expand it silently.','The XOR proof correctly uses x^x=0 plus associativity/commutativity to cancel every even-frequency value and all but one copy of the odd-frequency value.','Executable validation covers fixed cases, negative ints, arbitrary even multiplicities and 5000 randomized arrays with an independently constructed expected target.','The answer explicitly states that if the source premise is violated, a single aggregate XOR is not guaranteed to be a meaningful target.']},
+          ];
+          for(const x of specs){
+            const out=`review/content_build/answer_batch_0045/${x.cid}`,candidate=fs.readFileSync(`review/candidates/answers/${x.cid}.md`,'utf8'),sha=crypto.createHash('sha256').update(candidate).digest('hex');
+            const stdout=fs.readFileSync(`${out}/writer_stdout.txt`,'utf8').trim();if(stdout!==x.stdout)throw new Error(`${x.cid}: writer validation stdout drifted ${stdout}`);
+            fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:x.cid,candidate_sha256:sha,result:'pass',validated_at:'2026-08-28',command:`javac/java ${x.validation}`,stdout,checks:['fixed boundary cases','deterministic randomized differential/property cases','declared input contract']},null,2)+'\n');
+            const locations=['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点'];
+            const research={schema_version:'answer_writer_research.v1',canonical_id:x.cid,candidate_sha256:sha,checked_at:'2026-08-28',review_state:'isolated_review_pass',sources:[{source_id:'repository-source',title:'Repository tagged interview Question',locator:x.note,source_type:'repository_structured_source',checked_at:'2026-08-28'},{source_id:'validation',title:'Executable deterministic candidate validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-28'}],claims:[{claim_id:'source-boundary',text:'The candidate is bounded to the exact preserved Question and marks language/API/input choices as answer-side contracts.',source_ids:['repository-source'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'algorithm-correctness',text:x.claim,source_ids:['validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:x.qid,covered:true,answer_locations:locations}],promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+            fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify(research,null,2)+'\n');
+            const review={schema_version:'isolated_review.v1',canonical_id:x.cid,candidate_sha256:sha,reviewed_at:'2026-08-28',review_mode:'source_first_isolated',reviewer_id:`source-first-isolated-reviewer-batch-0045-${x.qid}-20260828-v1`,review_version:'batch-0045.array-basics.v1',decision:'pass',revision_round:1,source_packet:[x.note,`review/candidates/answers/${x.cid}.md`,`${out}/writer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores:{facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5},hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:x.findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+            fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          }
+          NODE
+
+      - name: Run gates and record Batch 0045 progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer validate --strict --include-candidates --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0045.md');t=p.read_text(encoding='utf-8')
+          lines=[
+          '- [x] `cq_q_bab03aa33b9f64e0af7410e65144f9b2` now has a source-bounded pairwise min/max Coding candidate with executable randomized correctness tests, exact even/odd comparison-count instrumentation, writer evidence, and source-first isolated review PASS. Promotion remains gated by repository human-approval/real-review policy.',
+          '- [x] `cq_q_bab3118b9f0f571a4e69bf5f27b3eb3a` now has a source-bounded odd-frequency XOR Coding candidate with executable fixed/randomized validation across arbitrary valid multiplicities and negative ints, writer evidence, and source-first isolated review PASS. Promotion remains gated by repository human-approval/real-review policy.'
+          ]
+          for line in lines:
+              if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit if branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote="$(git rev-parse "origin/$CONTENT_BRANCH")";base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then echo "branch advanced: $base -> $remote; discard verified local batch"; exit 0; fi
+          git rm .github/workflows/build-review-content-batch-0045-array-basics.yml
+          git add -A
+          git diff --cached --check
+          git config user.name xhs-content-builder
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: build reviewed batch 0045 array candidates'
+          git push origin "HEAD:$CONTENT_BRANCH"
