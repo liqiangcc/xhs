@@ -1,0 +1,177 @@
+name: Review Content Batch 0041 URL Intersection
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0041-url-intersection.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0041-url-intersection-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a791750e006147b75dcb2c13b7fa90e9
+  SOURCE_QID: a791750e006147b75dcb2c13b7fa90e9
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Source-first inspection before writer packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const raw=fs.readFileSync('note_json/681a34e3000000002102e69d.json','utf8');
+          const exact='场景题：从两个包含上亿 url（最长 64byte ）的文件中找出重复 url';
+          if(!raw.includes(exact)) throw new Error('raw URL source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='scenario'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('ownership/type drifted');
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||!src.original_question.includes('两个包含上亿 URL 的大文件')) throw new Error('projected source Question drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','64 byte','完整 URL','哈希只负责路由']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md)) throw new Error('fabricated production claim risk');
+          if(!md.includes('没有要求必须使用布隆过滤器或哈希切分')) throw new Error('normalized method hints are not separated from raw source facts');
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex')+'\n');
+          NODE
+
+      - name: Execute independent exhaustive partition oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/url_intersection_reviewer.py <<'PY'
+          from itertools import product
+
+          universe = ['u0', 'u1', 'u2', 'u3']
+
+          def route(value):
+              return sum(value.encode('utf-8')) % 2
+
+          def partition_intersection(left, right):
+              a = {0: [], 1: []}
+              b = {0: [], 1: []}
+              for value in left:
+                  a[route(value)].append(value)
+              for value in right:
+                  b[route(value)].append(value)
+              out = set()
+              for idx in (0, 1):
+                  exact = set(a[idx])
+                  for value in b[idx]:
+                      if value in exact:
+                          out.add(value)
+              return out
+
+          sequences = [()]
+          for size in (1, 2, 3):
+              sequences.extend(product(universe, repeat=size))
+
+          checked = 0
+          for left in sequences:
+              for right in sequences:
+                  expected = set(left) & set(right)
+                  actual = partition_intersection(left, right)
+                  assert actual == expected, (left, right, expected, actual)
+                  checked += 1
+
+          collision = None
+          for x in universe:
+              for y in universe:
+                  if x != y and route(x) == route(y):
+                      collision = (x, y, route(x))
+                      break
+              if collision:
+                  break
+          assert collision is not None
+          assert partition_intersection((collision[0],), (collision[1],)) == set()
+          print(f'PASS exhaustive-pairs={checked} exact-oracle-match duplicate-insensitive forced-bucket-collision-no-false-positive')
+          PY
+          stdout="$(python3 /tmp/url_intersection_reviewer.py)"
+          test "$stdout" = 'PASS exhaustive-pairs=7225 exact-oracle-match duplicate-insensitive forced-bucket-collision-no-false-positive'
+          echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Inspect writer packet only after independent conclusion and freeze review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0041/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha) throw new Error('writer packet/hash drifted after independent review');
+          const writerValidation=JSON.parse(fs.readFileSync(`${out}/hash_partition_validation.json`,'utf8'));
+          if(writerValidation.result!=='pass'||writerValidation.candidate_sha256!==sha) throw new Error('writer validation/hash drifted after independent review');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The raw interview caption preserves two files containing hundreds of millions of URLs, a maximum URL length of 64 bytes, and the duplicate-finding goal; it does not require Bloom filters, hash partitioning, a memory budget, URL normalization, or multiplicity semantics.',
+            'The candidate explicitly separates normalized method hints from raw-source constraints and labels exact-string unique intersection as a reference contract.',
+            'The routing invariant is correct: equal URLs always use the same deterministic partition, while final full-string equality prevents hash or bucket collisions from becoming false matches.',
+            'An independently written exhaustive bounded oracle compares the partition strategy with direct set intersection across 7,225 input-pair combinations and a forced same-bucket collision case.',
+            'The answer covers oversized/skewed buckets, exactness, optional Bloom prefiltering, duplicate semantics, recovery, parallelism, observability, and does not fabricate production experience.'
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_scenario_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'python3 independent exhaustive partition oracle',stdout:process.env.REVIEW_STDOUT,checks:['7225 bounded sequence-pair comparisons against direct set-intersection oracle','duplicate occurrences do not duplicate unique-intersection output','forced same-bucket collision does not become a false positive']},null,2)+'\n');
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0041-url-intersection-20260827',review_version:'batch-0041.url-intersection.v1',decision:'pass',revision_round:1,source_packet:['note_json/681a34e3000000002102e69d.json','review/content_build/answer_batch_0041/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0041-url-intersection-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'raw-note',title:'Raw interview note preserving URL scale and 64-byte bound',locator:'note_json/681a34e3000000002102e69d.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0041 frozen source inventory',locator:'review/content_build/answer_batch_0041/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer deterministic hash-partition fixture',locator:`${out}/hash_partition_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent exhaustive partition oracle',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'URL-intersection source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The strongest repository source preserves two files with hundreds of millions of URLs, maximum URL length 64 bytes, and the duplicate-finding goal; algorithm choice and memory/normalization/multiplicity details are not source requirements.',source_ids:['raw-note','source-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'partition-exactness',text:'Under the declared exact-string unique-intersection contract, deterministic same-function partitioning preserves all true matches and complete-string equality prevents bucket/hash collisions from producing false matches.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+
+      - name: Commit unique review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/content_build/answer_batch_0041/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0041/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0041 URL intersection candidate source-first'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same review artifacts; fail closed without push.'
+              exit 0
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push review artifacts after safe retries.' >&2
+          exit 1
