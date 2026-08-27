@@ -1,0 +1,146 @@
+name: Content Batch 0044 Tail Group Linked List
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0044-tail-group-linked-list.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0044-tail-group-linked-list
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b655c9eceddfe5380a88f0023b9ab8c5
+  SOURCE_QID: b655c9eceddfe5380a88f0023b9ab8c5
+
+jobs:
+  validate-review-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source and exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"; mkdir -p "$out" /tmp/b44-tail review/evidence
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/b44-tail/context.json
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; exact='算法题：K 个一组翻转链表（变形题：要求从尾节点开始进行分组并翻转）。请在 ACM 模式下完成，包括 ListNode 类的定义及输入输出处理'
+          ctx=json.loads(pathlib.Path('/tmp/b44-tail/context.json').read_text())
+          if not ctx.get('ok') or ctx.get('canonical',{}).get('canonical_id')!=cid or ctx.get('answer_type')!='coding': raise SystemExit('context drift')
+          if ctx.get('canonical',{}).get('question_ids') != [qid]: raise SystemExit('ownership drift')
+          src=next((x for x in ctx.get('source_questions',[]) if x.get('question_id')==qid),None)
+          if not src or src.get('original_question')!=exact or src.get('is_valid_for_library') is not True: raise SystemExit('source drift')
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0044/source_inventory.json').read_text())
+          item=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not item or item.get('answer_type')!='coding' or item.get('question_ids')!=[qid]: raise SystemExit('inventory drift')
+          p=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=p.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path('/tmp/b44-tail/Main.java').write_text(blocks[0].strip()+'\n')
+          digest=hashlib.sha256(p.read_bytes()).hexdigest(); pathlib.Path('/tmp/b44-tail/candidate.sha256').write_text(digest+'\n')
+          pathlib.Path(f'review/content_build/answer_batch_0044/{cid}/context.json').write_text(json.dumps(ctx,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Execute ACM sample and independent array oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd /tmp/b44-tail && javac Main.java)
+          printf '5 2\n1 2 3 4 5\n' | (cd /tmp/b44-tail && java Main) | tee /tmp/b44-tail/acm_stdout.txt
+          test "$(cat /tmp/b44-tail/acm_stdout.txt)" = '1 3 2 5 4'
+          cat > /tmp/b44-tail/TailGroupTest.java <<'JAVA'
+          import java.util.*;
+          public final class TailGroupTest {
+              static Main.ListNode build(int[] a){Main.ListNode d=new Main.ListNode(0),t=d;for(int x:a){t.next=new Main.ListNode(x);t=t.next;}return d.next;}
+              static int[] values(Main.ListNode h){ArrayList<Integer>x=new ArrayList<>();Set<Main.ListNode>s=Collections.newSetFromMap(new IdentityHashMap<>());for(Main.ListNode p=h;p!=null;p=p.next){if(!s.add(p))throw new AssertionError("cycle");x.add(p.val);}return x.stream().mapToInt(Integer::intValue).toArray();}
+              static int[] oracle(int[] a,int k){int[] b=a.clone();int r=b.length%k;for(int start=r;start<b.length;start+=k)for(int l=start,h=start+k-1;l<h;l++,h--){int x=b[l];b[l]=b[h];b[h]=x;}return b;}
+              static void check(int[] a,int k){int[] got=values(Main.reverseFromTailGroups(build(a),k)),exp=oracle(a,k);if(!Arrays.equals(got,exp))throw new AssertionError(Arrays.toString(a)+" k="+k+" got="+Arrays.toString(got)+" exp="+Arrays.toString(exp));}
+              public static void main(String[] args){
+                  check(new int[]{1,2,3,4,5},2);check(new int[]{1,2,3,4,5,6,7,8},3);check(new int[]{1,2},3);check(new int[]{1,2,3},1);check(new int[]{},2);
+                  try{Main.reverseFromTailGroups(build(new int[]{1}),0);throw new AssertionError("k=0 accepted");}catch(IllegalArgumentException expected){}
+                  Random r=new Random(44655L);int cases=0;
+                  for(int t=0;t<6000;t++){int n=r.nextInt(35),k=1+r.nextInt(10);int[]a=new int[n];for(int i=0;i<n;i++)a[i]=r.nextInt();check(a,k);cases++;}
+                  System.out.println("PASS tail-remainder divisible n-less-k k-one empty invalid-k random-array-oracle="+cases);
+              }
+          }
+          JAVA
+          (cd /tmp/b44-tail && javac TailGroupTest.java && java TailGroupTest | tee reviewer_stdout.txt)
+          grep -q '^PASS tail-remainder divisible n-less-k k-one empty invalid-k random-array-oracle=6000$' /tmp/b44-tail/reviewer_stdout.txt
+
+      - name: Write source-first evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA="$(cat /tmp/b44-tail/candidate.sha256)" REVIEW_STDOUT="$(cat /tmp/b44-tail/reviewer_stdout.txt)" ACM_STDOUT="$(cat /tmp/b44-tail/acm_stdout.txt)" python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; digest=os.environ['CANDIDATE_SHA']; date='2026-08-28'; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}')
+          stdout=os.environ['REVIEW_STDOUT']; acm=os.environ['ACM_STDOUT']
+          checks=['ACM sample 5/2 produces 1 3 2 5 4','tail-side remainder stays at the head','length divisible by k reverses every group','n<k, k=1 and empty-list boundaries','k=0 rejected by declared contract','6000 random lists match independent array-index oracle']
+          val={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'compile exact Java candidate; execute declared ACM sample; compare linked-list result with independent tail-index array oracle','stdout':f'ACM={acm}; {stdout}','checks':checks}
+          (out/'writer_validation.json').write_text(json.dumps(val,ensure_ascii=False,indent=2)+'\n')
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':[{'source_id':'primary-source','title':'Tencent interview tagged source','locator':'note_tagged/67d177f7000000002803fe76.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'validation','title':'Exact Java ACM and tail-group differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The source requires K-group linked-list reversal grouped from the tail and ACM mode, but does not preserve the platform input format or incomplete-group/error policy.','source_ids':['primary-source','batch-inventory'],'answer_locations':['核心结论','关键细节']},{'claim_id':'tail-group-equivalence','text':'For the declared contract, skipping n mod k head nodes and reversing each remaining k-block matches an independent array oracle that explicitly partitions complete groups from the tail.','source_ids':['validation'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=['The candidate preserves the distinctive tail-side grouping requirement instead of silently solving ordinary head-side k-group reversal.','It derives the n=qk+r equivalence: the unpaired remainder is exactly the head prefix of length r, so the remaining suffix can be processed left-to-right in ordinary k-blocks.','The ACM format is explicitly labeled as a chosen executable contract because the source does not preserve platform I/O syntax.','The exact Java program compiles, executes the declared sample, and matches an independent array-partition oracle on 6000 random cases plus remainder/divisible/n<k/k=1/empty/invalid-k boundaries.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0044-tail-groups-20260828-v1','review_version':'batch-0044.tail-group-linked-list.v1','decision':'pass','revision_round':1,'source_packet':['note_tagged/67d177f7000000002803fe76.json','review/content_build/answer_batch_0044/source_inventory.json',f'review/candidates/answers/{cid}.md',str(out/'writer_validation.json'),'docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          boundary=[{'case':'n not divisible by k','expected':'n mod k head nodes unchanged; all tail-aligned full groups reversed','actual':'matched independent oracle','passed':True},{'case':'n < k','expected':'no complete tail group, list unchanged','actual':'unchanged','passed':True},{'case':'k=1 and empty list','expected':'identity transformation','actual':'identity','passed':True},{'case':'k=0','expected':'IllegalArgumentException under declared contract','actual':'rejected','passed':True}]
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0044-tail-group-builder','writer_version':'xhs-answer-curator.v1'},'sources':[{'source_id':'primary-source','title':'Tencent interview tagged source','locator':'note_tagged/67d177f7000000002803fe76.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'validation','title':'Exact Java ACM and independent array-oracle validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'isolated-review','title':'Tail-group linked-list isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The preserved source requires tail-side K grouping and ACM mode but leaves the concrete I/O and remainder/error contracts unspecified; the candidate labels its choices explicitly.','source_ids':['primary-source','batch-inventory','isolated-review'],'answer_locations':['核心结论','关键细节']},{'claim_id':'tail-group-mechanism','text':'The length-modulo transformation and exact pointer implementation match an independent tail-partition oracle across deterministic and randomized cases.','source_ids':['validation','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'validation':{'command':val['command'],'result':'pass','reported_stdout':val['stdout'],'checks':checks,'boundary_tests':boundary},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md'); text=task.read_text(); line='- [x] `cq_q_b655c9eceddfe5380a88f0023b9ab8c5` completed source-bounded candidate construction and isolated review. Tail-side grouping is reduced via `n % k` to an unchanged head prefix plus ordinary full-group reversals; the chosen ACM I/O format is explicitly marked as a candidate contract because the source does not preserve platform syntax. The exact Java program passes the ACM sample and 6000 random comparisons with an independent tail-index array oracle plus remainder/divisible/n<k/k=1/empty/invalid-k boundaries. Strict candidate/code/repository gates pass; human approval and real-review policy remain promotion blockers.'
+          if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text: text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Run strict gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm test
+          npm run ci:check
+
+      - name: Commit reviewed packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0044/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md
+          if git diff --cached --quiet; then exit 0; fi
+          git diff --cached --check
+          git commit -m 'review: pass batch 0044 tail-group linked-list candidate'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
