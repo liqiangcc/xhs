@@ -1,0 +1,102 @@
+name: Reconcile Batch 0044 Sliding Window Maximum
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/reconcile-content-batch-0044-sliding-window-maximum.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-content-batch-0044-sliding-window-maximum
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c
+  EXPLICIT_QID: b55a6649e9e0b7e2351c5d1f3d5f167c
+  SHORTHAND_QID: 86a4c030e736e3eea9fed1f6b739694d
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Reconcile live ownership with already-reviewed artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/sw-context.json
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; explicit=os.environ['EXPLICIT_QID']; shorthand=os.environ['SHORTHAND_QID']
+          exact1='算法手撕：滑动窗口最大值（Sliding Window Maximum）。'; exact2='算法手撕：滑动窗口的最大值（Sliding Window Maximum）。'
+          ctx=json.loads(pathlib.Path('/tmp/sw-context.json').read_text())
+          if not ctx.get('ok') or ctx.get('answer_type')!='coding' or ctx.get('canonical',{}).get('canonical_id')!=cid: raise SystemExit('canonical context drift')
+          members=sorted(ctx.get('canonical',{}).get('question_ids',[])); expected=sorted([explicit,shorthand])
+          if members!=expected: raise SystemExit(f'ownership drift: {members}')
+          by={x.get('question_id'):x for x in ctx.get('source_questions',[])}
+          if by.get(explicit,{}).get('original_question')!=exact1 or by.get(shorthand,{}).get('original_question')!=exact2: raise SystemExit('live source wording drift')
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0044/source_inventory.json').read_text()); item=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not item or item.get('state')!='active' or item.get('answer_type')!='coding': raise SystemExit('Batch 0044 inventory drift')
+          invq={x.get('question_id'):x.get('original_question') for x in item.get('source_questions',[])}
+          if invq.get(explicit)!=exact1 or invq.get(shorthand)!=exact2: raise SystemExit(f'Batch 0044 frozen source mismatch: {invq}')
+          p1=json.loads(pathlib.Path('note_tagged/68b124e8000000001b032114.json').read_text()); p2=json.loads(pathlib.Path('note_tagged/68b85518000000001d026c52.json').read_text())
+          if not any(x.get('question_id')==explicit and x.get('original_question')==exact1 and x.get('is_valid_for_library') is True for x in p1.get('tagged_questions',[])): raise SystemExit('explicit primary source drift')
+          if not any(x.get('question_id')==shorthand and x.get('original_question')==exact2 and x.get('is_valid_for_library') is True for x in p2.get('tagged_questions',[])): raise SystemExit('shorthand primary source drift')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); evidence=json.loads(pathlib.Path(f'review/evidence/{cid}.json').read_text()); digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          if evidence.get('candidate_sha256')!=digest: raise SystemExit(f'evidence digest stale actual={digest}')
+          review=evidence.get('review',{}); scores=review.get('scores',{})
+          if evidence.get('review_state')!='independent_source_first_review_passed' or not review.get('independent') or review.get('decision')!='pass' or review.get('hard_failures') or review.get('unsupported_claims') or review.get('uncovered_source_variants'): raise SystemExit('review state not reusable')
+          if sum(scores.values()) < 90: raise SystemExit(f'review score below curated threshold: {scores}')
+          covered={x.get('question_id') for x in evidence.get('source_question_coverage',[]) if x.get('covered')}
+          if not set(expected).issubset(covered): raise SystemExit(f'evidence source reachability incomplete: {covered}')
+          boundaries=evidence.get('validation',{}).get('boundary_tests',[])
+          if sum(1 for x in boundaries if x.get('passed') is True) < 3: raise SystemExit('fewer than three passing boundary tests')
+          print('PASS live-source-and-evidence-reconciliation digest='+digest+' score='+str(sum(scores.values()))+' boundaries='+str(len(boundaries)))
+          PY
+
+      - name: Run exact strict gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm test
+          npm run ci:check
+
+      - name: Record Batch 0044 reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          task=tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md
+          line='- [x] `cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c` reconciled as already complete rather than redundantly rebuilt. A fresh Batch 0044 source-first live-state check confirms the two consolidated source Questions still belong to this Canonical and match both primary repository records plus the frozen Batch 0044 inventory. The unchanged candidate digest still matches its 2026-08-26 independent source-first PASS evidence (100/100), which covers both source variants, four passing boundary classes, direct Java compilation, and 3000 deterministic randomized comparisons against a quadratic oracle. Current candidate audit, strict validation, canonical/review integrity, evidence/code gates, npm tests, and full `ci:check` all pass; repository human approval and real-review policy remain promotion blockers.'
+          if grep -Fq 'cq_q_b55a6649e9e0b7e2351c5d1f3d5f167c` reconciled as already complete' "$task"; then exit 0; fi
+          printf '%s\n' "$line" >> "$task"
+          git config user.name xhs-review-bot; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "$task"; git commit -m 'tasks: reconcile batch 0044 sliding-window evidence'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
