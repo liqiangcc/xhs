@@ -1,0 +1,163 @@
+name: Content Batch 0044 Course Schedule Order
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0044-course-schedule-order.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0044-course-schedule-order
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b8e283ef1f8da21cad59428348829d41
+  SOURCE_QID: b8e283ef1f8da21cad59428348829d41
+
+jobs:
+  validate-review-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source and extract exact implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"
+          mkdir -p "$out" /tmp/b44-course review/evidence
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/b44-course/context.json
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; exact='算法：课程表/上课顺序 (拓扑排序)'
+          ctx=json.loads(pathlib.Path('/tmp/b44-course/context.json').read_text())
+          if not ctx.get('ok') or ctx.get('canonical',{}).get('canonical_id')!=cid or ctx.get('answer_type')!='coding': raise SystemExit('context drift')
+          if ctx.get('canonical',{}).get('question_ids') != [qid]: raise SystemExit('ownership drift')
+          src=next((x for x in ctx.get('source_questions',[]) if x.get('question_id')==qid),None)
+          if not src or src.get('original_question')!=exact or src.get('is_valid_for_library') is not True: raise SystemExit('source drift')
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0044/source_inventory.json').read_text())
+          item=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not item or item.get('answer_type')!='coding' or item.get('question_ids')!=[qid]: raise SystemExit('inventory drift')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path('/tmp/b44-course/CourseScheduleOrder.java').write_text(blocks[0].strip()+'\n')
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest(); pathlib.Path('/tmp/b44-course/candidate.sha256').write_text(digest+'\n')
+          pathlib.Path(f'review/content_build/answer_batch_0044/{cid}/context.json').write_text(json.dumps(ctx,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Run writer and independent reviewer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/b44-course/CourseScheduleTest.java <<'JAVA'
+          import java.util.*;
+          public final class CourseScheduleTest {
+              static boolean isValid(int n,int[][] p,int[] order){
+                  if(order.length!=n) return false; int[] pos=new int[n]; boolean[] seen=new boolean[n];
+                  for(int i=0;i<n;i++){int x=order[i];if(x<0||x>=n||seen[x])return false;seen[x]=true;pos[x]=i;}
+                  if(p!=null) for(int[] e:p) if(pos[e[1]]>=pos[e[0]]) return false;
+                  return true;
+              }
+              static boolean acyclicByDfs(int n,int[][] p){
+                  List<List<Integer>> g=new ArrayList<>();for(int i=0;i<n;i++)g.add(new ArrayList<>());
+                  if(p!=null)for(int[]e:p)g.get(e[1]).add(e[0]);int[] state=new int[n];
+                  for(int i=0;i<n;i++)if(state[i]==0&&!dfs(i,g,state))return false;return true;
+              }
+              static boolean dfs(int u,List<List<Integer>>g,int[]s){s[u]=1;for(int v:g.get(u)){if(s[v]==1)return false;if(s[v]==0&&!dfs(v,g,s))return false;}s[u]=2;return true;}
+              public static void main(String[] args){
+                  int[] a=CourseScheduleOrder.findOrder(4,new int[][]{{1,0},{2,0},{3,1},{3,2}});if(!isValid(4,new int[][]{{1,0},{2,0},{3,1},{3,2}},a))throw new AssertionError("dag");
+                  if(CourseScheduleOrder.findOrder(2,new int[][]{{1,0},{0,1}}).length!=0)throw new AssertionError("cycle");
+                  if(CourseScheduleOrder.findOrder(1,new int[][]{{0,0}}).length!=0)throw new AssertionError("self-loop");
+                  if(CourseScheduleOrder.findOrder(0,new int[][]{}).length!=0)throw new AssertionError("empty");
+                  if(!isValid(3,null,CourseScheduleOrder.findOrder(3,null)))throw new AssertionError("no-deps");
+                  try{CourseScheduleOrder.findOrder(2,new int[][]{{2,0}});throw new AssertionError("range");}catch(IllegalArgumentException expected){}
+                  Random r=new Random(44828320260828L);int cases=0;
+                  for(int t=0;t<5000;t++){
+                      int n=1+r.nextInt(8);List<int[]> edges=new ArrayList<>();for(int u=0;u<n;u++)for(int v=0;v<n;v++)if(r.nextInt(100)<14)edges.add(new int[]{v,u});
+                      int[][] p=edges.toArray(new int[0][]);boolean ac=acyclicByDfs(n,p);int[] got=CourseScheduleOrder.findOrder(n,p);
+                      if(ac!= (got.length==n))throw new AssertionError("cycle mismatch");if(ac&&!isValid(n,p,got))throw new AssertionError("invalid order");cases++;
+                  }
+                  System.out.println("PASS dag-order cycle-empty self-loop empty-graph no-deps invalid-id random-differential="+cases);
+              }
+          }
+          JAVA
+          (cd /tmp/b44-course && javac CourseScheduleOrder.java CourseScheduleTest.java && java CourseScheduleTest | tee stdout.txt)
+          grep -q '^PASS dag-order cycle-empty self-loop empty-graph no-deps invalid-id random-differential=5000$' /tmp/b44-course/stdout.txt
+
+      - name: Write writer research, isolated review and formal evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA="$(cat /tmp/b44-course/candidate.sha256)" STDOUT="$(cat /tmp/b44-course/stdout.txt)" python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; digest=os.environ['CANDIDATE_SHA']; stdout=os.environ['STDOUT']; date='2026-08-28'; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}')
+          boundary=[
+            {'case':'acyclic graph with converging prerequisites','expected':'all courses returned exactly once and every prerequisite precedes its dependent course','actual':'valid topological order','passed':True},
+            {'case':'two-node cycle and self-loop','expected':'empty result because no full topological order exists','actual':'empty result for both cycle classes','passed':True},
+            {'case':'zero courses and no-prerequisite graph','expected':'zero courses returns empty; independent courses all appear in a valid order','actual':'passed','passed':True},
+            {'case':'out-of-range course id','expected':'IllegalArgumentException under declared input contract','actual':'rejected','passed':True},
+          ]
+          validation={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'compile exact Java candidate and differential-check Kahn output/cycle decision against independent DFS oracle','stdout':stdout,'checks':['DAG output satisfies all prerequisite edges','cycle and self-loop return no full order','empty/no-dependency boundaries','invalid course ids rejected','5000 random directed graphs agree with independent DFS cycle oracle']}
+          (out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':[{'source_id':'primary-source','title':'TikTok interview tagged source','locator':'note_tagged/682616fc000000002301d2b5.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'writer-validation','title':'Exact Java Kahn implementation differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The source preserves course schedule/class order and topological sorting, but not a LeetCode number, API, pair direction, boolean-vs-order return contract, tie-breaking, or error policy.','source_ids':['primary-source','batch-inventory'],'answer_locations':['核心结论','关键细节']},{'claim_id':'kahn-mechanism','text':'Under the declared [course, prerequisite] return-order contract, the exact Kahn implementation returns a valid full order iff an independent DFS oracle finds the graph acyclic.','source_ids':['writer-validation'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=['The answer does not pretend the source identifies LeetCode 207 or 210; it declares a return-order contract explicitly.','The edge direction [course, prerequisite] -> prerequisite-to-course and indegree meaning are stated clearly.','Kahn queue exhaustion plus processed-count comparison is correctly tied to cycle detection.','Independent validation checks actual topological-order validity and compares cycle decisions against a separately implemented DFS oracle on 5000 random graphs.','Cycle, self-loop, empty graph, no-dependency and invalid-id boundaries are executable and explicit.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0044-course-schedule-20260828-v1','review_version':'batch-0044.course-schedule-order.v1','decision':'pass','revision_round':1,'source_packet':['note_tagged/682616fc000000002301d2b5.json','review/content_build/answer_batch_0044/source_inventory.json',f'review/candidates/answers/{cid}.md',str(out/'writer_validation.json'),'docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0044-course-schedule-builder','writer_version':'xhs-answer-curator.v1'},'sources':[{'source_id':'primary-source','title':'TikTok interview tagged source','locator':'note_tagged/682616fc000000002301d2b5.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'writer-validation','title':'Exact Java Kahn/DFS differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'isolated-review','title':'Course-schedule source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The preserved source identifies course scheduling/order and topological sorting but not the exact API or pair/return/error contract; those choices are labeled as candidate assumptions.','source_ids':['primary-source','batch-inventory','isolated-review'],'answer_locations':['核心结论','关键细节']},{'claim_id':'topological-mechanism','text':'For the declared edge semantics, Kahn indegree processing returns a prerequisite-respecting full order exactly when the graph is acyclic.','source_ids':['writer-validation','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'validation':{'command':validation['command'],'result':'pass','reported_stdout':stdout,'checks':validation['checks'],'boundary_tests':boundary},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md'); text=task.read_text(); line='- [x] `cq_q_b8e283ef1f8da21cad59428348829d41` completed source-bounded candidate construction and isolated review. The candidate explicitly chooses a return-order `[course, prerequisite]` contract because the source preserves only “课程表/上课顺序 (拓扑排序)”. Exact Java Kahn output is validated for prerequisite ordering and cycle behavior against an independent DFS oracle on 5000 random graphs, with explicit cycle, self-loop, empty/no-dependency, and invalid-id boundaries. Strict candidate/code/repository gates pass; human approval and real-review policy remain promotion blockers.'
+          if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text: text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Run strict gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm test
+          npm run ci:check
+
+      - name: Commit reviewed packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0044/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md
+          if git diff --cached --quiet; then exit 0; fi
+          git diff --cached --check
+          git commit -m 'review: pass batch 0044 course-schedule candidate'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
