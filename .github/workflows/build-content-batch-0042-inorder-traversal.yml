@@ -1,0 +1,203 @@
+name: Build Content Batch 0042 Inorder Traversal
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0042-inorder-traversal.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-inorder-traversal-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_af04033d46af9a331ad55c6bbf12d9b6
+  SOURCE_QID: af04033d46af9a331ad55c6bbf12d9b6
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：手撕二叉树的中序遍历（递归与非递归实现）。';
+          const raw=JSON.parse(fs.readFileSync('note_structured/67ed2207000000001c03db4e.json','utf8'));if(raw.questions?.[1]!==exact)throw new Error('inorder source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('ownership/type drifted');if(!(ctx.source_questions||[]).some(x=>x.question_id===qid&&x.original_question===exact))throw new Error('exact source missing');
+          NODE
+
+      - name: Write source-bounded candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0042/$cid";candidate="review/candidates/answers/$cid.md";mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_af04033d46af9a331ad55c6bbf12d9b6","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 二叉树中序遍历：递归与非递归实现
+
+          ## 核心结论
+
+          中序遍历的顺序是 **左子树 → 当前节点 → 右子树**。来源明确要求同时手撕“递归与非递归实现”，但没有保存节点类型、返回形式、空树语义或语言。下面用 Java 定义最小参考契约：`TreeNode` 持有 `int val/left/right`，两种方法都返回新的 `List<Integer>`，`root == null` 返回空列表，并且不修改树。
+
+          递归实现直接把定义翻译成调用顺序；非递归实现用显式栈模拟递归调用栈：不断把当前链的左节点压栈，走到空后弹出最近一个节点访问，再转向它的右子树。两者时间都是 O(n)；额外空间都与树高 h 相关，递归使用 JVM 调用栈 O(h)，迭代使用显式栈 O(h)。
+
+          ## 1 分钟版
+
+          - 中序不变量：一个节点只有在它的左子树已经处理完后才能输出，输出后才进入右子树。
+          - 递归：`dfs(left) -> add(node) -> dfs(right)`。
+          - 迭代：`current != null` 时持续压左链；到空后 `pop`、输出，再令 `current = node.right`。
+          - 外层条件必须是 `current != null || !stack.isEmpty()`，否则走到最左边的空指针时会提前结束，栈里的祖先还没访问。
+          - 空树返回空列表；两种实现都只读节点，不修改结构。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.ArrayDeque;
+          import java.util.ArrayList;
+          import java.util.Deque;
+          import java.util.List;
+
+          public final class Solution {
+              public static final class TreeNode {
+                  public int val;
+                  public TreeNode left;
+                  public TreeNode right;
+                  public TreeNode(int val) { this.val = val; }
+              }
+
+              private Solution() {}
+
+              public static List<Integer> inorderRecursive(TreeNode root) {
+                  List<Integer> out = new ArrayList<>();
+                  dfs(root, out);
+                  return out;
+              }
+
+              private static void dfs(TreeNode node, List<Integer> out) {
+                  if (node == null) return;
+                  dfs(node.left, out);
+                  out.add(node.val);
+                  dfs(node.right, out);
+              }
+
+              public static List<Integer> inorderIterative(TreeNode root) {
+                  List<Integer> out = new ArrayList<>();
+                  Deque<TreeNode> stack = new ArrayDeque<>();
+                  TreeNode current = root;
+                  while (current != null || !stack.isEmpty()) {
+                      while (current != null) {
+                          stack.push(current);
+                          current = current.left;
+                      }
+                      TreeNode node = stack.pop();
+                      out.add(node.val);
+                      current = node.right;
+                  }
+                  return out;
+              }
+          }
+          ```
+
+          迭代版可以理解为手动保存“递归返回后还要访问谁”。当沿左链下降时，每个被压栈的节点都处于“左子树还没处理完，所以自己暂时不能输出”的状态；一旦 `current == null`，说明最深左子树结束，弹出的节点就是下一位应该访问的节点。访问后转向右子树，再重复完全相同的规则。
+
+          ## 关键细节
+
+          - **来源要求两种实现**：不能只给递归或只给栈实现。
+          - **空树**：本参考契约返回空列表；来源没有保存空树返回值约定。
+          - **栈类型**：`ArrayDeque` 适合做栈；这里只存非 `null` 节点。
+          - **循环条件**：外层是“当前节点还没走完 **或** 栈里还有待访问祖先”，内层只负责压完整左链。
+          - **不修改树**：两种实现都不改 `left/right`。Morris 中序可以做到 O(1) 额外空间，但会临时建立线索并恢复结构；来源没有要求 O(1)，这里优先清晰实现。
+          - **复杂度**：每个节点恰好输出一次，时间 O(n)。递归调用深度和显式栈峰值都为 O(h)；平衡树 h=O(log n)，极端单链树 h=O(n)。
+          - **递归风险**：极深偏斜树可能触发 Java 栈溢出；迭代版用堆上的容器承载待访问节点，更适合深树。
+
+          ## 原理机制
+
+          递归和迭代并不是两套不同算法，而是同一个状态机的两种栈实现。递归时，JVM 调用帧隐式保存“处理完左子树后回到当前节点，再去右子树”的续点；迭代时，把这些尚未访问的当前节点显式放进 `Deque`。
+
+          中序遍历最核心的顺序约束是：任一节点 `x` 的左子树所有节点先于 `x`，`x` 又先于右子树所有节点。递归调用顺序直接满足它；迭代算法通过“先压尽左链，空了才弹栈访问”的不变量满足同一约束。
+
+          ## 项目经验版
+
+          来源没有提供用户在真实项目中实现树遍历的经历，不能虚构。工程里如果要在很深的语法树、目录树或索引结构上遍历，我会先评估最大深度和是否允许修改结构：深度不可控时倾向显式栈；若有严格 O(1) 额外空间要求才考虑 Morris，并补结构恢复测试。
+
+          ## 常见追问
+
+          - 问：为什么迭代版要先一直向左压栈？答：因为中序要求左子树先于当前节点；只要还有左孩子，当前节点就不能输出。
+          - 问：外层为什么是 `current != null || !stack.isEmpty()`？答：`current` 为空只代表左链走到底，栈里仍可能有尚未访问的祖先；两者都为空才真正结束。
+          - 问：递归和迭代空间复杂度一样吗？答：渐进上都是 O(h)，一个用调用栈，一个用显式容器；但递归受线程调用栈上限影响，极深树更容易 StackOverflowError。
+          - 问：能做到 O(1) 额外空间吗？答：Morris 遍历可以，通过临时线索复用空右指针并恢复树；代价是实现更复杂且会短暂修改结构。
+          - 问：如果是二叉搜索树，中序有什么额外性质？答：在 BST 排序不变量成立且比较规则一致时，中序输出按键有序；但本题只要求一般二叉树遍历，代码不依赖 BST 性质。
+          - 问：如何证明每个节点只访问一次？答：节点被沿左链压栈一次，弹栈并输出一次；弹出后只进入其右子树，不会再次把该节点压回去。
+
+          ## 易错点
+
+          - 递归顺序写成“根左右”或“左右根”，变成前序/后序。
+          - 迭代循环只写 `while (current != null)`，到最左空节点时提前退出。
+          - 弹栈输出后忘记转向 `node.right`，漏掉右子树。
+          - 为了声称 O(1) 空间临时改树，却没有恢复指针。
+          - 忽略极深偏斜树的递归栈溢出风险。
+          EOF
+
+          cat > "$out/InorderWriterValidation.java" <<'JAVA'
+          import java.util.*;
+          public final class InorderWriterValidation {
+              static List<Integer> oracle(Solution.TreeNode n){List<Integer> out=new ArrayList<>();oracle(n,out);return out;}static void oracle(Solution.TreeNode n,List<Integer> out){if(n==null)return;oracle(n.left,out);out.add(n.val);oracle(n.right,out);}
+              static Solution.TreeNode fromMask(int mask,int slots){Solution.TreeNode[] n=new Solution.TreeNode[slots];for(int i=0;i<slots;i++)if(((mask>>>i)&1)!=0)n[i]=new Solution.TreeNode(i*17-31);if(n[0]==null)return null;for(int i=0;i<slots;i++)if(n[i]!=null){int l=2*i+1,r=2*i+2;if(l<slots)n[i].left=n[l];if(r<slots)n[i].right=n[r];}return n[0];}
+              static int count(Solution.TreeNode n){return n==null?0:1+count(n.left)+count(n.right);}static void check(Solution.TreeNode root){List<Integer>want=oracle(root),a=Solution.inorderRecursive(root),b=Solution.inorderIterative(root);if(!a.equals(want)||!b.equals(want)||a.size()!=count(root))throw new AssertionError("mismatch want="+want+" rec="+a+" iter="+b);}
+              static Solution.TreeNode randomTree(Random r,int n){if(n==0)return null;List<Solution.TreeNode> nodes=new ArrayList<>();Solution.TreeNode root=new Solution.TreeNode(r.nextInt());nodes.add(root);for(int i=1;i<n;i++){Solution.TreeNode x=new Solution.TreeNode(r.nextInt());for(;;){Solution.TreeNode p=nodes.get(r.nextInt(nodes.size()));if(r.nextBoolean()){if(p.left==null){p.left=x;break;}}else if(p.right==null){p.right=x;break;}}nodes.add(x);}return root;}
+              public static void main(String[] args){check(null);Solution.TreeNode root=new Solution.TreeNode(1);root.left=new Solution.TreeNode(2);root.right=new Solution.TreeNode(3);root.left.right=new Solution.TreeNode(4);check(root);long masks=0;for(int mask=1;mask<(1<<11);mask++){check(fromMask(mask,11));masks++;}Random r=new Random(0x1A0D3EL);for(int t=0;t<10000;t++)check(randomTree(r,r.nextInt(100)));System.out.println("PASS fixed=2 masks="+masks+" random=10000 recursive=iterative=oracle null+balanced+skew-capable=covered");}
+          }
+          JAVA
+          node <<'NODE'
+          const fs=require('fs'),md=fs.readFileSync(`review/candidates/answers/${process.env.CANONICAL_ID}.md`,'utf8'),block=md.match(/```java\n([\s\S]*?)\n```/);if(!block||!block[1].includes('inorderRecursive')||!block[1].includes('inorderIterative'))throw new Error('both candidate implementations missing');fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java "$out/InorderWriterValidation.java";stdout="$(java -cp /tmp InorderWriterValidation)";echo "$stdout";grep -E '^PASS fixed=2 masks=[0-9]+ random=10000 recursive=iterative=oracle null\+balanced\+skew-capable=covered$' <<<"$stdout";echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0042/$cid"
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`,candidate=`review/candidates/answers/${cid}.md`,sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');const tests=[{case:'null/fixed tree',expected:'both methods match left-root-right oracle',passed:true},{case:'2,047 heap-mask shapes',expected:'recursive and iterative outputs equal independent oracle and visited node count',passed:true},{case:'10,000 seeded random trees',expected:'both implementations equal oracle',passed:true}];fs.writeFileSync(`${out}/inorder_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate; mask/random tree oracle validation',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'structured-note',title:'Structured interview note 67ed2207000000001c03db4e',locator:'note_structured/67ed2207000000001c03db4e.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_source_record',checked_at:date},{source_id:'writer-validation',title:'Inorder recursive/iterative deterministic Java fixture',locator:`${out}/inorder_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source explicitly requires both recursive and non-recursive binary-tree inorder traversal; node API, return shape, empty-tree behavior and language are not source-frozen.',source_ids:['structured-note','source-inventory'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'reference-behavior',text:'Under the declared Java TreeNode/List contract, recursive left-root-right and explicit-stack traversal produce identical inorder sequences over fixed, mask-derived and seeded random trees.',source_ids:['writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed',candidate_sha256:sha},null,2)+'\n');
+          NODE
+
+      - name: Writer-side repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate and writer packet with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0042/$CANONICAL_ID/InorderWriterValidation.java" "review/content_build/answer_batch_0042/$CANONICAL_ID/inorder_validation.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/writer_research.json";git diff --cached --check;if git diff --cached --quiet;then exit 0;fi;git config user.name xhs-content-builder;git config user.email '43640935+liqiangcc@users.noreply.github.com';git commit -m 'content: stage batch 0042 inorder traversal candidate';for attempt in 1 2 3;do git fetch origin "$CONTENT_BRANCH";if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi;if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi;sleep 5;done;exit 1
