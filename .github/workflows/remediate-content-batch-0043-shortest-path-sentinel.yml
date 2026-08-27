@@ -1,0 +1,118 @@
+name: Remediate Content Batch 0043 Shortest Path Sentinel
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0043-shortest-path-sentinel.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-shortest-path-sentinel-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b4585610b9994d240a2ec669176946c4
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Tighten sentinel and representability contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          cid='cq_q_b4585610b9994d240a2ec669176946c4'
+          p=Path(f'review/candidates/answers/{cid}.md')
+          t=p.read_text(encoding='utf-8')
+          old='下面给出一个可执行参考契约：有向图、`n` 个点编号 `0..n-1`、边权为非负 `long`，返回源点到所有点的最短距离；不可达记为 `Long.MAX_VALUE`。'
+          new='下面给出一个可执行参考契约：有向图、`n` 个点编号 `0..n-1`、边权为非负 `long`；`Long.MAX_VALUE` 专门作为“不可达/超出本返回类型可表示范围”的哨兵，因此本实现只承诺严格小于 `Long.MAX_VALUE` 的有限最短距离。达到或超过该哨兵的路径成本不作为可表示有限距离参与松弛。'
+          if old not in t: raise SystemExit('core reference-contract text drifted')
+          t=t.replace(old,new)
+          old2='- **溢出**：做 `dist[u]+w` 前检查 `dist[u] > Long.MAX_VALUE - w`，避免 long 回绕产生假最短路。'
+          new2='- **哨兵与溢出**：`Long.MAX_VALUE` 被保留为哨兵，所以有限结果域明确限制为 `< Long.MAX_VALUE`。做 `dist[u]+w` 前先检查是否会越过 `long` 上界；和恰好等于哨兵的候选也不会被写入 `dist`。若业务必须区分“不可达”和“真实最短距离恰为 `Long.MAX_VALUE`/更大”，就不能用这个返回契约，应改用更宽的表示（例如显式 reachability + 大整数/受约束权重域）。'
+          if old2 not in t: raise SystemExit('overflow detail text drifted')
+          t=t.replace(old2,new2)
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Re-run exact implementation including sentinel boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0043/$cid"
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const p=`review/candidates/answers/${process.env.CANONICAL_ID}.md`,md=fs.readFileSync(p,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];if(blocks.length!==1)throw new Error('candidate Java block missing/ambiguous');
+          fs.writeFileSync('/tmp/Solution.java',blocks[0][1]+'\n');fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/SentinelValidation.java <<'JAVA'
+          import java.util.*;
+          public final class SentinelValidation {
+            static List<List<Solution.Edge>> g(int n,long[][] es){ArrayList<List<Solution.Edge>> g=new ArrayList<>();for(int i=0;i<n;i++)g.add(new ArrayList<>());for(long[]e:es)g.get((int)e[0]).add(new Solution.Edge((int)e[1],e[2]));return g;}
+            static void eq(long[]a,long[]b){if(!Arrays.equals(a,b))throw new AssertionError(Arrays.toString(a)+" != "+Arrays.toString(b));}
+            public static void main(String[]args){
+              eq(Solution.dijkstra(g(3,new long[][]{{0,1,Long.MAX_VALUE},{0,2,7}}),0),new long[]{0,Long.MAX_VALUE,7});
+              eq(Solution.dijkstra(g(3,new long[][]{{0,1,Long.MAX_VALUE-2},{1,2,3},{0,2,9}}),0),new long[]{0,Long.MAX_VALUE-2,9});
+              eq(Solution.dijkstra(g(3,new long[][]{{0,1,Long.MAX_VALUE-2},{1,2,1}}),0),new long[]{0,Long.MAX_VALUE-2,Long.MAX_VALUE-1});
+              System.out.println("PASS sentinel-equal=not-finite overflow-path=ignored representable-near-max=preserved");
+            }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/SentinelValidation.java
+          stdout="$(java -cp /tmp SentinelValidation)";echo "$stdout";test "$stdout" = 'PASS sentinel-equal=not-finite overflow-path=ignored representable-near-max=preserved';echo "SENTINEL_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Refresh writer packet hash and boundary tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const v=JSON.parse(fs.readFileSync(`${out}/shortest_path_validation.json`,'utf8'));v.candidate_sha256=sha;v.validated_at='2026-08-27';v.boundary_tests.push({case:'sentinel and near-long-maximum representation boundary',expected:'Long.MAX_VALUE is reserved sentinel; overflowing/sentinel-equal candidates are not represented as finite distances, while Long.MAX_VALUE-1 remains representable',passed:true});v.stdout=`${v.stdout}; ${process.env.SENTINEL_STDOUT}`;fs.writeFileSync(`${out}/shortest_path_validation.json`,JSON.stringify(v,null,2)+'\n');
+          const w=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));w.candidate_sha256=sha;w.checked_at='2026-08-27';const claim=w.claims.find(x=>x.claim_id==='reference-behavior');claim.text='Under the declared directed nonnegative-weight reference contract with Long.MAX_VALUE reserved as an unreachable/out-of-range sentinel, the exact Dijkstra implementation matches an independent Floyd-Warshall oracle across fixed and 12,000 seeded random graphs, rejects negative edges, preserves finite distances through Long.MAX_VALUE-1, and does not mislabel sentinel-equal/overflowing candidates as representable finite values.';fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify(w,null,2)+'\n');
+          NODE
+
+      - name: Remediation gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+          git diff --check
+
+      - name: Commit remediation with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID/shortest_path_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/writer_research.json"
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-remediation
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: tighten shortest-path sentinel contract'
+          for attempt in 1 2 3;do git fetch origin "$CONTENT_BRANCH";if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi;if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi;done
+          exit 1
