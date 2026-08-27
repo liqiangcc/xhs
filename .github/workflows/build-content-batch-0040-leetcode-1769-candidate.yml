@@ -1,0 +1,295 @@
+name: Build Content Batch 0040 LeetCode 1769 Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0040-leetcode-1769-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-leetcode-1769-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a13d56a67ff084ff89a8171b6df1c776
+  SOURCE_QID: a13d56a67ff084ff89a8171b6df1c776
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify source boundary and frozen inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：移动所有球到每个盒子所需的基础操作数 (LeetCode 1769)';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/6661b50a0000000006006ab3.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('LeetCode 1769 repository source drifted');
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const q=rows.find(x=>x.question_id===qid);
+          if(!q||q.canonical_id!==cid||q.is_valid_for_library!==true) throw new Error(`Question ownership/validity drifted: ${JSON.stringify(q)}`);
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0040/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('answer context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`expected singleton ownership, got ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0040/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('Batch 0040 frozen source inventory drifted');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and executable Java fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a13d56a67ff084ff89a8171b6df1c776","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # LeetCode 1769：移动所有球到每个盒子的最少操作数
+
+          ## 核心结论
+
+          LeetCode 1769 给定长度为 `n` 的二进制字符串 `boxes`：`boxes[i]='1'` 表示第 `i` 个盒子有一个球；一次操作只能把一个球移动到相邻盒子。对每个目标盒子 `i`，答案就是所有初始球位置 `j` 到 `i` 的距离和 `Σ|i-j|`。直接枚举是 O(n²)；利用相邻目标位置之间的增量关系，左右各扫一遍即可在 O(n) 时间、除答案外 O(1) 空间内求完全部位置。
+
+          ## 1 分钟版
+
+          - 对固定 `i`，每个球从 `j` 移到 `i` 至少且恰好需要 `|i-j|` 次相邻移动，所以总成本是距离和。
+          - 左扫时维护 `balls` = 当前点左侧（含已处理点）的球数，`moves` = 这些球移动到当前点的总代价；把 `moves` 加到 `answer[i]`。
+          - 从 `i` 走到 `i+1`，左侧每个球都多走一步，因此下一位置成本增加 `balls`：`moves += balls`。
+          - 右扫完全对称，把右侧球贡献再加到 `answer[i]`。
+          - 每个位置只处理常数次，总时间 O(n)。官方约束 `n<=2000`，最大距离和远小于 Java `int` 上限。
+
+          ## 3 分钟版
+
+          ```java
+          public int[] minOperations(String boxes) {
+              int n = boxes.length();
+              int[] answer = new int[n];
+
+              int balls = 0;
+              int moves = 0;
+              for (int i = 0; i < n; i++) {
+                  answer[i] += moves;
+                  if (boxes.charAt(i) == '1') {
+                      balls++;
+                  }
+                  moves += balls;
+              }
+
+              balls = 0;
+              moves = 0;
+              for (int i = n - 1; i >= 0; i--) {
+                  answer[i] += moves;
+                  if (boxes.charAt(i) == '1') {
+                      balls++;
+                  }
+                  moves += balls;
+              }
+              return answer;
+          }
+          ```
+
+          左扫进入位置 `i` 时，`moves` 只表示所有严格位于 `i` 左侧的球移动到 `i` 的成本；先写入 `answer[i]`，再把当前位置的球加入 `balls`，最后执行 `moves += balls`，得到这些球移动到 `i+1` 的成本。右扫建立镜像不变量，因此两次贡献相加就是所有球到 `i` 的距离和。
+
+          ## 关键细节
+
+          - **为什么可以逐球相加**：题目要求每个 `answer[i]` 都从同一初始状态独立计算；球之间不会改变彼此的最短距离，因此总最少操作数就是各球最短移动次数之和。
+          - **更新顺序**：必须先 `answer[i] += moves`，再统计当前位置球并为下一格更新 `moves`。否则会把当前位置的球错误计入“移动到自己”的成本。
+          - **空盒/单球**：没有球时结果全 0；只有一个球时答案就是各位置到该球的距离。
+          - **多球可同盒**：题目允许移动后一个盒子出现多个球，所以不需要处理容量冲突或匹配问题。
+          - **整数范围**：官方约束 `n<=2000`。极端情况下至多 `n` 个球，每个距离小于 `n`，总成本小于 `n²<=4,000,000`，`int` 足够。
+          - **空间**：返回数组本身是题目输出；算法额外只维护 `balls/moves` 两个整数，因此额外空间 O(1)。
+
+          ## 原理机制
+
+          关键是把“每个目标点重新算一遍距离和”改写成“相邻目标点之间如何增量更新”。目标从 `i` 右移到 `i+1` 时，位于左侧的每个球距离都增加 1，因此左侧总贡献增加“左侧球数量”；相反，若单独从右往左观察，目标左移一格时右侧每个球距离增加 1。两次线性扫描分别累计左右贡献，就不需要为每个目标重新遍历所有球。
+
+          也可以把它理解成前缀统计：左贡献由“左侧球数 + 上一个位置左贡献”递推，右贡献对称。这里把两个方向直接累加进同一个 `answer`，省掉两个额外数组。
+
+          ## 项目经验版
+
+          来源是一道明确的算法题，没有真实项目背景，不能虚构“线上用过”。工程上值得迁移的是增量思想：当一批目标位置的代价彼此只差一个可维护的局部增量时，优先寻找前缀/后缀累计，而不是重复做全量扫描。
+
+          ## 常见追问
+
+          - 问：为什么不是 BFS？答：一维相邻移动的最短距离已经是 `|i-j|`，没有障碍和不同边权；BFS 只会重复求已知距离，无法利用所有目标点之间的增量关系。
+          - 问：为什么两次扫描就能覆盖全部球？答：左扫只累计目标左侧球贡献，右扫只累计目标右侧球贡献；当前位置的球到自己距离为 0，两侧互不重叠且合起来覆盖所有球。
+          - 问：`moves += balls` 为什么放在循环最后？答：当前 `moves` 是“到当前位置”的成本；只有准备移动目标到下一位置时，每个已统计球才额外增加一步。
+          - 问：能不能只扫一遍？答：单方向扫描只能直接得到一侧贡献；若预先计算全部球数量和初始总距离，可以用一个全局递推做单次主扫描，但本质上仍依赖同一个距离增量关系。双扫描更直观且仍是 O(n)。
+          - 问：如果一次操作允许跨多个盒子怎么办？答：成本模型就不再是单位相邻距离 `|i-j|`；必须根据新的边权/跳跃规则重新定义最短成本，当前递推不再自动成立。
+
+          ## 易错点
+
+          - 为每个目标盒子再次遍历所有球，写成 O(n²) 后就停止优化。
+          - 在把 `moves` 写入当前答案前就把当前位置球的下一步成本加进去，导致 off-by-one。
+          - 左右两次扫描都把当前位置球计成 1 步，破坏“移动到自己成本为 0”。
+          - 忘记题目每个 `answer[i]` 都基于初始状态独立计算，错误地把前一个目标的实际移动结果带到下一个目标。
+          - 把返回数组算作“额外 O(n) 空间”而忽略它本身是必需输出；应区分输出空间和辅助空间。
+          EOF
+
+          cat > "$out/LeetCode1769.java" <<'JAVA'
+          import java.util.*;
+
+          public final class LeetCode1769 {
+              public static int[] minOperations(String boxes) {
+                  int n = boxes.length();
+                  int[] answer = new int[n];
+                  int balls = 0;
+                  int moves = 0;
+                  for (int i = 0; i < n; i++) {
+                      answer[i] += moves;
+                      if (boxes.charAt(i) == '1') balls++;
+                      moves += balls;
+                  }
+                  balls = 0;
+                  moves = 0;
+                  for (int i = n - 1; i >= 0; i--) {
+                      answer[i] += moves;
+                      if (boxes.charAt(i) == '1') balls++;
+                      moves += balls;
+                  }
+                  return answer;
+              }
+
+              static int[] brute(String boxes) {
+                  int n = boxes.length();
+                  int[] out = new int[n];
+                  for (int i = 0; i < n; i++) {
+                      for (int j = 0; j < n; j++) {
+                          if (boxes.charAt(j) == '1') out[i] += Math.abs(i - j);
+                      }
+                  }
+                  return out;
+              }
+
+              static void check(String boxes, int[] expected) {
+                  int[] actual = minOperations(boxes);
+                  if (!Arrays.equals(actual, expected)) {
+                      throw new AssertionError(boxes + " expected=" + Arrays.toString(expected) + " actual=" + Arrays.toString(actual));
+                  }
+                  if (!Arrays.equals(actual, brute(boxes))) {
+                      throw new AssertionError(boxes + " disagrees with brute force");
+                  }
+              }
+
+              public static void main(String[] args) {
+                  check("0", new int[]{0});
+                  check("1", new int[]{0});
+                  check("110", new int[]{1, 1, 3});
+                  check("001011", new int[]{11, 8, 5, 4, 3, 4});
+                  check("111", new int[]{3, 2, 3});
+                  for (int n = 1; n <= 8; n++) {
+                      for (int mask = 0; mask < (1 << n); mask++) {
+                          StringBuilder b = new StringBuilder(n);
+                          for (int i = 0; i < n; i++) b.append(((mask >>> i) & 1) == 1 ? '1' : '0');
+                          String boxes = b.toString();
+                          int[] actual = minOperations(boxes);
+                          int[] brute = brute(boxes);
+                          if (!Arrays.equals(actual, brute)) throw new AssertionError("exhaustive mismatch " + boxes);
+                      }
+                  }
+                  System.out.println("PASS examples=2 singletons=2 all-balls=1 exhaustive-binary-strings-length<=8");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          javac "$out/LeetCode1769.java"
+          stdout="$(java -cp "$out" LeetCode1769)"
+          test "$stdout" = 'PASS examples=2 singletons=2 all-balls=1 exhaustive-binary-strings-length<=8'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27';
+          const out=`review/content_build/answer_batch_0040/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'javac LeetCode1769.java && java LeetCode1769',stdout:process.env.STDOUT,checks:['official examples 110 and 001011','single empty/occupied box','all balls','exhaustive comparison against O(n^2) distance-sum oracle for every binary string of length 1..8']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[
+            {source_id:'repository-source',title:'Batch 0040 repository source and frozen inventory',locator:'review/content_build/answer_batch_0040/source_inventory.json',source_type:'repository_source_record',checked_at:date},
+            {source_id:'leetcode-1769',title:'LeetCode 1769 - Minimum Number of Operations to Move All Balls to Each Box',locator:'https://leetcode.com/problems/minimum-number-of-operations-to-move-all-balls-to-each-box/description/',source_type:'official_problem_statement',checked_at:date},
+            {source_id:'fixture',title:'LeetCode 1769 deterministic and exhaustive Java fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}
+          ],claims:[
+            {claim_id:'problem-contract',text:'The identified LeetCode 1769 problem uses a binary boxes string, adjacent single-ball moves, and independently asks the minimum operations needed to move all balls to every target box.',source_ids:['repository-source','leetcode-1769'],answer_locations:['核心结论','1 分钟版','关键细节']},
+            {claim_id:'distance-sum',text:'Moving a ball from j to i under unit adjacent moves costs |i-j|, so each target answer is the sum of distances from all initial ball positions.',source_ids:['leetcode-1769','fixture'],answer_locations:['核心结论','原理机制']},
+            {claim_id:'linear-recurrence',text:'The two-pass implementation maintains side-specific ball counts and move totals; exhaustive comparison against a direct distance-sum oracle validates the recurrence for all binary strings up to length 8.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制']},
+            {claim_id:'constraint-bound',text:'The official constraint n<=2000 makes Java int sufficient for the maximum possible distance sum.',source_ids:['leetcode-1769'],answer_locations:['1 分钟版','关键细节']}
+          ],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record writer-complete batch progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md')
+          t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_a13d56a67ff084ff89a8171b6df1c776` LeetCode 1769 writer slice is source-bounded and staged: official problem contract is linked, the O(n) two-pass distance recurrence is implemented in Java, and examples plus exhaustive binary strings of length 1..8 match an O(n^2) oracle. Writer research is frozen; independent source-first review is still required before any promotion.'
+          if line not in t:
+              t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Run repository gates without promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during LeetCode 1769 writer slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add review/candidates/answers/$CANONICAL_ID.md review/content_build/answer_batch_0040/$CANONICAL_ID tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0040 LeetCode 1769 candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
