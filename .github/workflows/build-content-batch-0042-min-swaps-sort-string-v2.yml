@@ -1,0 +1,285 @@
+name: Build Content Batch 0042 Min Swaps Sort String V2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0042-min-swaps-sort-string-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-min-swaps-sort-string-writer-v2
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_ae26e919521a374b27e6632b2969aa13
+  SOURCE_QID: ae26e919521a374b27e6632b2969aa13
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const structured=JSON.parse(fs.readFileSync('note_structured/67de17c2000000001a005fa3.json','utf8'));
+          const exact='算法 7：交换字符串中的任意两个字符，求使其有序的最小操作次数';
+          if(!Array.isArray(structured.questions)||structured.questions[6]!==exact) throw new Error('min-swaps source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('ownership/type drifted');
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact) throw new Error('source wording drifted');
+          NODE
+
+      - name: Write corrected source-bounded candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0042/$cid"; candidate="review/candidates/answers/$cid.md"
+          mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_ae26e919521a374b27e6632b2969aa13","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 任意交换两个字符，使字符串有序的最少操作次数
+
+          ## 核心结论
+
+          先把“有序”和重复字符说清楚。来源只保存了“任意交换两个字符，使字符串有序，求最少次数”，没有给排序规则、重复字符语义或接口。下面采用一个可严格验证的参考契约：Java `String` 非 `null`，所有 UTF-16 `char` **互不相同**，目标是按 `char` 自然升序排列；一次操作可以交换任意两个位置。此时原位置到目标位置形成一个置换，每个长度为 `L` 的置换环恰好需要 `L-1` 次交换，因此答案是所有环的 `L-1` 之和，也就是 `n - 环数`（把长度 1 的环也计入环数）。
+
+          如果允许重复字符，某个相同字符可以对应多个目标位置，映射不再唯一；随便给重复字符编号后再数环，可能不是全局最优。因此本参考实现对重复字符显式拒绝，不把“字符互异”伪装成原题条件。
+
+          ## 1 分钟版
+
+          - 复制并排序字符串，得到唯一目标序列；本参考契约要求字符互异。
+          - 建立“字符 -> 排序后目标下标”，于是每个原下标 `i` 唯一指向它应该去的位置 `p[i]`。
+          - `p` 是一个置换，可以拆成互不相交的环。
+          - 一个长度 `L` 的环至少要 `L-1` 次交换，也能用 `L-1` 次把整个环归位，所以正好是 `L-1`。
+          - 遍历所有未访问位置，统计每个环长度并累加 `L-1`；排序 O(n log n)，环遍历 O(n)，额外空间 O(n)。
+
+          ## 3 分钟版
+
+          例如 `dcab` 排序后是 `abcd`。每个字符的目标位置唯一：`d->3, c->2, a->0, b->1`，所以位置映射是 `[3,2,0,1]`。沿映射走是一个长度 4 的环 `0 -> 3 -> 1 -> 2 -> 0`，因此最少交换数是 `4-1=3`。例如可以依次把 `d` 与 `a`、再把当前位置上的 `d` 与 `b`、最后与 `c` 交换，得到有序结果；具体交换顺序可以不同，但少于 3 次无法把这个 4 环拆成 4 个单点环。
+
+          ```java
+          import java.util.Arrays;
+          import java.util.HashMap;
+          import java.util.Map;
+
+          public final class Solution {
+              private Solution() {}
+
+              public static int minSwapsToSort(String s) {
+                  if (s == null) {
+                      throw new NullPointerException("s");
+                  }
+                  char[] target = s.toCharArray();
+                  Arrays.sort(target);
+
+                  Map<Character, Integer> targetIndex = new HashMap<>();
+                  for (int i = 0; i < target.length; i++) {
+                      if (targetIndex.put(target[i], i) != null) {
+                          throw new IllegalArgumentException("reference contract requires distinct chars");
+                      }
+                  }
+
+                  int[] next = new int[s.length()];
+                  for (int i = 0; i < s.length(); i++) {
+                      next[i] = targetIndex.get(s.charAt(i));
+                  }
+
+                  boolean[] visited = new boolean[s.length()];
+                  int swaps = 0;
+                  for (int i = 0; i < s.length(); i++) {
+                      if (visited[i]) continue;
+                      int len = 0;
+                      for (int p = i; !visited[p]; p = next[p]) {
+                          visited[p] = true;
+                          len++;
+                      }
+                      swaps += len - 1;
+                  }
+                  return swaps;
+              }
+          }
+          ```
+
+          为什么 `L-1` 既是下界又可达到？长度 `L` 的环里有 `L` 个位置处在同一置换环中；一次交换最多把一个环分裂成两个环，也就是最多让置换环数增加 1。要把一个环变成 `L` 个单点环至少要 `L-1` 次。反过来，固定环内任意一个位置，依次把应该放到当前位置的字符交换进来，每次都能确定一个位置，`L-1` 次后整个环归位。
+
+          ## 关键细节
+
+          - **来源边界**：原题没有保存升序比较器、大小写规则、Unicode code point/UTF-16 语义、重复字符是否存在或具体语言；这些都不能冒充题目已给条件。
+          - **重复字符**：这是本题最容易被忽略的边界。字符重复时，“这个 `a` 应该去哪个 `a` 的目标位置”并不唯一，固定一种 occurrence 映射再数环可能多算交换。因此参考代码直接拒绝重复字符。
+          - **空串/单字符**：都没有非平凡环，返回 0。
+          - **已经有序**：所有位置都是长度 1 的环，返回 0。
+          - **任意位置交换**：环公式依赖一次操作可以交换任意两个下标；如果只能交换相邻字符，问题会变成逆序对计数，答案完全不同。
+          - **复杂度**：排序 O(n log n)，构造映射和环遍历 O(n)，额外数组/映射 O(n)。
+          - **字符模型**：Java `char` 是 UTF-16 code unit；若题目要求按 Unicode code point 或 locale 排序，需要重新定义目标序列和索引单位。
+
+          ## 原理机制
+
+          排序后，每个互异字符都有唯一目标下标，因此“当前位置 -> 目标位置”天然是一张置换图：每个节点出度和入度都恰好为 1，整张图只能由若干互不相交的环组成。
+
+          最少交换问题就转成“把这些环拆成单点环”。一次任意交换相当于交换两个位置的去向；对一个非平凡环，可以选择合适的两个位置让环数增加 1。初始若有 `c` 个环，最终有 `n` 个单点环，每次最多增加 1 个环，所以至少要 `n-c` 次；逐环做 `L-1` 次又正好达到这个下界，因此它就是最优解。
+
+          ## 项目经验版
+
+          来源没有提供用户真实项目中做字符串置换优化的经历，不能虚构。工程里如果出现类似问题，我会先确认“任意交换”还是“相邻交换”、排序比较器、重复元素和输入规模，因为这些条件直接决定模型：互异元素 + 任意交换适合置换环；相邻交换通常转向逆序对；重复元素则需要先解决目标 occurrence 匹配，而不能机械套唯一置换公式。
+
+          ## 常见追问
+
+          - 问：为什么一个长度 `L` 的环是 `L-1` 次？答：每次交换最多让环数增加 1，从一个环变成 `L` 个单点环至少 `L-1` 次；同时可以通过逐个固定位置在 `L-1` 次内完成，所以界是紧的。
+          - 问：已经排好序怎么办？答：每个位置都是长度 1 的环，每个贡献 0，总答案为 0。
+          - 问：如果只能交换相邻字符呢？答：就不能用任意交换的环公式；对互异元素，最少相邻交换与相对目标顺序的逆序对数量相关。
+          - 问：有重复字符还能直接 `n - cycles` 吗？答：不能先随便给重复 occurrence 配目标下标再宣称最优，因为 occurrence 匹配本身会影响环结构；必须额外解决匹配问题。本参考契约因此明确要求字符互异。
+          - 问：为什么不直接模拟把每个位置换成正确字符？答：在字符互异时可以，那种模拟本质上也在逐步拆置换环；显式环分解更容易证明最优性和复杂度。
+          - 问：Java `char` 会不会拆开 emoji？答：会，很多补充字符由两个 UTF-16 code unit 组成。本参考契约按 `char` 排序；若题目说“Unicode 字符”，应改成 code point 数组再建置换。
+
+          ## 易错点
+
+          - 没澄清“任意交换”还是“相邻交换”，直接套错模型。
+          - 把有重复字符的输入随意编号成唯一置换，却没有证明该 occurrence 匹配最优。
+          - 环遍历忘记标记访问，重复计数甚至死循环。
+          - 只给 `n - cycles` 结论，却没有说明环数为何提供下界且可达到。
+          - 把 Java `char` 当成所有 Unicode 字符的一一对应单位。
+          EOF
+
+          cat > "$out/MinSwapsWriterValidation.java" <<'JAVA'
+          import java.util.*;
+
+          public final class MinSwapsWriterValidation {
+              static int constructive(String s) {
+                  char[] a=s.toCharArray(), target=s.toCharArray();
+                  Arrays.sort(target);
+                  int swaps=0;
+                  for(int i=0;i<a.length;i++) {
+                      if(a[i]==target[i]) continue;
+                      int j=i+1;
+                      while(j<a.length && a[j]!=target[i]) j++;
+                      if(j==a.length) throw new AssertionError("target char missing");
+                      char t=a[i]; a[i]=a[j]; a[j]=t; swaps++;
+                  }
+                  if(!Arrays.equals(a,target)) throw new AssertionError("not sorted");
+                  return swaps;
+              }
+              static void permute(char[] a, int i, List<String> out) {
+                  if(i==a.length){out.add(new String(a));return;}
+                  for(int j=i;j<a.length;j++){
+                      char t=a[i]; a[i]=a[j]; a[j]=t;
+                      permute(a,i+1,out);
+                      t=a[i]; a[i]=a[j]; a[j]=t;
+                  }
+              }
+              static void check(String s) {
+                  int got=Solution.minSwapsToSort(s), want=constructive(s);
+                  if(got!=want) throw new AssertionError(s+" got="+got+" want="+want);
+              }
+              public static void main(String[] args) {
+                  check(""); check("a"); check("abc"); check("bac"); check("dcab"); check("fedcba");
+                  if(Solution.minSwapsToSort("dcab")!=3) throw new AssertionError("dcab expected 3");
+                  if(Solution.minSwapsToSort("fedcba")!=3) throw new AssertionError("reverse 6 expected 3");
+                  try { Solution.minSwapsToSort("aab"); throw new AssertionError("duplicates accepted"); } catch(IllegalArgumentException expected) {}
+                  try { Solution.minSwapsToSort(null); throw new AssertionError("null accepted"); } catch(NullPointerException expected) {}
+                  int checked=0;
+                  for(int n=1;n<=7;n++) {
+                      char[] base=new char[n]; for(int i=0;i<n;i++) base[i]=(char)('a'+i);
+                      List<String> ps=new ArrayList<>(); permute(base,0,ps);
+                      for(String s:ps){check(s);checked++;}
+                  }
+                  System.out.println("PASS fixed=8 exhaustive-distinct-permutations="+checked+" duplicates=rejected null=rejected constructive-oracle=match corrected-dcab=3");
+              }
+          }
+          JAVA
+
+          node <<'NODE'
+          const fs=require('fs');
+          const md=fs.readFileSync(`review/candidates/answers/${process.env.CANONICAL_ID}.md`,'utf8');
+          const block=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!block||!block[1].includes('public final class Solution')) throw new Error('candidate Java block missing');
+          fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java "$out/MinSwapsWriterValidation.java"
+          stdout="$(java -cp /tmp MinSwapsWriterValidation)"
+          echo "$stdout"
+          grep -E '^PASS fixed=8 exhaustive-distinct-permutations=[0-9]+ duplicates=rejected null=rejected constructive-oracle=match corrected-dcab=3$' <<<"$stdout"
+          echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0042/$cid"
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const boundaryTests=[
+            {case:'empty/single/already-sorted strings',expected:'zero swaps',passed:true},
+            {case:'dcab full four-cycle and reverse-even cases',expected:'3 swaps for both reference cases',passed:true},
+            {case:'all distinct permutations for lengths 1..7',expected:'cycle implementation matches direct target-fixing constructive oracle',passed:true},
+            {case:'duplicate chars',expected:'explicitly rejected because occurrence mapping is not source-defined',passed:true},
+            {case:'null',expected:'explicit NullPointerException reference contract',passed:true}
+          ];
+          fs.writeFileSync(`${out}/min_swaps_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact corrected candidate Solution.java; run MinSwapsWriterValidation.java',stdout:process.env.WRITER_STDOUT,boundary_tests:boundaryTests,environment:{java:'OpenJDK 21'},remediation:'v1 validation rejected the incorrect dcab=2 prose assertion; candidate corrected to the actual four-cycle result dcab=3 before staging'},null,2)+'\n');
+          const research={schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'structured-note',title:'Structured interview note 67de17c2000000001a005fa3',locator:'note_structured/67de17c2000000001a005fa3.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Answer Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_source_record',checked_at:date},{source_id:'writer-validation',title:'Corrected min-swaps deterministic Java fixture',locator:`${out}/min_swaps_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-contract',text:'The repository source requires the minimum number of arbitrary character swaps needed to make a string ordered, but does not preserve comparator, duplicate-character semantics, Unicode unit, or implementation language.',source_ids:['structured-note','source-inventory'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'reference-behavior',text:'Under the explicit distinct-Java-char ascending-order contract, source positions map uniquely to target positions, the permutation decomposes into cycles, and summing L-1 matches a separate constructive target-fixing implementation over every permutation of sizes 1 through 7; the dcab example is a four-cycle and requires 3 swaps.',source_ids:['writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed',candidate_sha256:sha,remediation_note:'Initial pre-staging v1 fixture caught an incorrect dcab=2 example; v2 corrected the prose and assertion before any candidate was committed to the content branch.'};
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify(research,null,2)+'\n');
+          NODE
+
+      - name: Writer-side repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate and writer packet with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0042/$CANONICAL_ID/MinSwapsWriterValidation.java" "review/content_build/answer_batch_0042/$CANONICAL_ID/min_swaps_validation.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage corrected batch 0042 min-swaps string candidate'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same writer artifacts; fail closed.' >&2
+              exit 1
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push corrected min-swaps writer artifacts after safe retries.' >&2
+          exit 1
