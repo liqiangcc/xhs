@@ -1,0 +1,173 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_a7ba6548994bab4e4412f98bf4a8dee2",
+  "candidate_sha256": "ee54ee2e48bb1e690bdc7fc7a5eb939f46c92cded5fe3ede2520ac88cc5c3782",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0041-setinterval-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-caption",
+      "title": "Original interview caption preserving only the coding-question boundary",
+      "locator": "note_desc/6668131f00000000060061b3.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "repository-tagged-question",
+      "title": "Image-derived setInterval/clearInterval source Question",
+      "locator": "note_tagged/6668131f00000000060061b3.json#question_id=a7ba6548994bab4e4412f98bf4a8dee2",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "recoverability-review",
+      "title": "Batch 0041 pre-draft recoverability decision",
+      "locator": "review/content_build/answer_batch_0041/recoverability_review.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic fake-timer validation",
+      "locator": "review/content_build/answer_batch_0041/cq_q_a7ba6548994bab4e4412f98bf4a8dee2/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent timer-state reviewer fixture",
+      "locator": "review/content_build/answer_batch_0041/cq_q_a7ba6548994bab4e4412f98bf4a8dee2/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "setInterval source-first isolated review",
+      "locator": "review/content_build/answer_batch_0041/cq_q_a7ba6548994bab4e4412f98bf4a8dee2/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "Strongest surviving source asks to implement setInterval and clearInterval while the caption does not preserve detailed timer semantics.",
+      "source_ids": [
+        "repository-caption",
+        "repository-tagged-question",
+        "recoverability-review",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版"
+      ]
+    },
+    {
+      "claim_id": "source-boundary",
+      "text": "Runtime, handle shape, exact timing, forwarding, this binding, delay normalization and error semantics are not source-preserved and remain explicitly outside the source contract.",
+      "source_ids": [
+        "repository-caption",
+        "repository-tagged-question",
+        "recoverability-review",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "reference-implementation",
+      "text": "Under the declared recursive-setTimeout contract, writer and independent reviewer fixtures verify repeated scheduling and cancellation state-machine boundaries without real-time sleeps.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "a7ba6548994bab4e4412f98bf4a8dee2",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract candidate JavaScript; node interval_reviewer_test.js",
+    "result": "pass",
+    "reported_stdout": "PASS independent-two-handle-isolation clear-before-first clear-inside-callback throw-finally-reschedules idempotent-clear unknown-handle callback-type delay-forwarding",
+    "boundary_tests": [
+      {
+        "case": "two interval handles remain isolated",
+        "expected": "clearing one leaves the other scheduled",
+        "passed": true
+      },
+      {
+        "case": "clear before first fire",
+        "expected": "callback never executes",
+        "passed": true
+      },
+      {
+        "case": "clear from inside callback",
+        "expected": "no next timer is scheduled",
+        "passed": true
+      },
+      {
+        "case": "callback throws while still active",
+        "expected": "finally schedules next timer before error propagates",
+        "passed": true
+      },
+      {
+        "case": "unknown and repeated clear",
+        "expected": "no-op",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0041-setinterval-20260827",
+    "review_version": "batch-0041.setinterval.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The strongest surviving question text asks only to implement setInterval and clearInterval; the repository caption does not preserve native runtime semantics.",
+      "The candidate explicitly separates its minimal recursive-setTimeout contract from browser/Node specification guarantees and calls out drift, opaque-handle choice, argument/this/delay-normalization boundaries and host differences.",
+      "An independently written fake-timer reviewer verifies two-handle isolation, cancellation before the first fire, self-cancellation from the callback, active rescheduling through finally after a callback throw, idempotent clear and unknown-handle behavior.",
+      "The active-state invariant directly explains why cancellation cannot create a new timer after clear.",
+      "The project section does not fabricate production ownership or metrics."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}

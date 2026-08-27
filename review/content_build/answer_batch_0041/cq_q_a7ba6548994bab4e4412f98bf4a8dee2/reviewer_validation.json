@@ -1,0 +1,36 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_a7ba6548994bab4e4412f98bf4a8dee2",
+  "candidate_sha256": "ee54ee2e48bb1e690bdc7fc7a5eb939f46c92cded5fe3ede2520ac88cc5c3782",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "extract candidate JavaScript; node interval_reviewer_test.js",
+  "stdout": "PASS independent-two-handle-isolation clear-before-first clear-inside-callback throw-finally-reschedules idempotent-clear unknown-handle callback-type delay-forwarding",
+  "boundary_tests": [
+    {
+      "case": "two interval handles remain isolated",
+      "expected": "clearing one leaves the other scheduled",
+      "passed": true
+    },
+    {
+      "case": "clear before first fire",
+      "expected": "callback never executes",
+      "passed": true
+    },
+    {
+      "case": "clear from inside callback",
+      "expected": "no next timer is scheduled",
+      "passed": true
+    },
+    {
+      "case": "callback throws while still active",
+      "expected": "finally schedules next timer before error propagates",
+      "passed": true
+    },
+    {
+      "case": "unknown and repeated clear",
+      "expected": "no-op",
+      "passed": true
+    }
+  ]
+}
