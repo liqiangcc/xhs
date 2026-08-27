@@ -1,0 +1,219 @@
+name: Build Content Batch 0043 Shortest Path
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0043-shortest-path.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-shortest-path-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b4585610b9994d240a2ec669176946c4
+  SOURCE_QID: b4585610b9994d240a2ec669176946c4
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：最短路径';
+          const note=JSON.parse(fs.readFileSync('note_tagged/67d3a6b10000000006029b65.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact)throw new Error(`source wording drifted: ${row?.original_question}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||item.source_questions?.[0]?.original_question!==exact)throw new Error('batch0043 inventory drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid]))throw new Error('inventory ownership drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('live ownership/type drifted');
+          NODE
+
+      - name: Write source-bounded candidate and writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0043/$cid";candidate="review/candidates/answers/$cid.md";mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b4585610b9994d240a2ec669176946c4","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 最短路径：先判断图的权重约束，再选算法
+
+          ## 核心结论
+
+          来源只保留“算法：最短路径”，没有保留图是有向/无向、是否带权、是否允许负权、输入输出和目标节点，因此不存在唯一实现。面试时先把权重模型问清：无权图/等权图用 BFS；边权非负可用 Dijkstra；存在负权边要考虑 Bellman-Ford 等能处理负权的算法，若有可达负环则最短距离本身可能没有有限定义。下面给出一个可执行参考契约：有向图、`n` 个点编号 `0..n-1`、边权为非负 `long`，返回源点到所有点的最短距离；不可达记为 `Long.MAX_VALUE`。
+
+          ## 1 分钟版
+
+          - Dijkstra 的关键前提是边权非负；否则“当前最小距离已确定”这个贪心不变量会失效。
+          - `dist[source]=0`，其余无穷大；优先队列每次取当前已知距离最小的节点。
+          - 若弹出的距离和 `dist[u]` 不一致，说明是旧的 stale entry，直接跳过，不需要支持 decrease-key。
+          - 遍历 `u` 的出边 `(u,v,w)`，若 `dist[u]+w < dist[v]` 就松弛并把新状态入队。
+          - 邻接表 + 二叉堆复杂度约为 `O((V+E) log V)`；无权图则 BFS 更简单并能做到 `O(V+E)`。
+
+          ## 3 分钟版
+
+          下面 Java 实现只对应“非负有向权图”的参考契约，不声称这是来源唯一要求：
+
+          ```java
+          import java.util.*;
+
+          public final class Solution {
+              private Solution() {}
+
+              public record Edge(int to, long weight) {}
+              private record State(int node, long distance) {}
+
+              public static long[] dijkstra(List<List<Edge>> graph, int source) {
+                  int n = graph.size();
+                  if (source < 0 || source >= n) throw new IllegalArgumentException("bad source");
+                  long[] dist = new long[n];
+                  Arrays.fill(dist, Long.MAX_VALUE);
+                  dist[source] = 0L;
+
+                  PriorityQueue<State> pq = new PriorityQueue<>(Comparator.comparingLong(State::distance));
+                  pq.add(new State(source, 0L));
+
+                  while (!pq.isEmpty()) {
+                      State cur = pq.poll();
+                      int u = cur.node();
+                      if (cur.distance() != dist[u]) continue;
+
+                      for (Edge edge : graph.get(u)) {
+                          if (edge.weight() < 0) throw new IllegalArgumentException("negative edge");
+                          if (edge.to() < 0 || edge.to() >= n) throw new IllegalArgumentException("bad endpoint");
+                          if (dist[u] > Long.MAX_VALUE - edge.weight()) continue;
+                          long next = dist[u] + edge.weight();
+                          if (next < dist[edge.to()]) {
+                              dist[edge.to()] = next;
+                              pq.add(new State(edge.to(), next));
+                          }
+                      }
+                  }
+                  return dist;
+              }
+          }
+          ```
+
+          示例：`0→1(4), 0→2(1), 2→1(2), 1→3(1), 2→3(5)`，从 0 出发的最短距离为 `[0,3,1,4]`。节点 1 先可能以距离 4 入队，后来经 2 松弛成 3；旧的 `(1,4)` 被弹出时因为不等于 `dist[1]` 而跳过。
+
+          ## 关键细节
+
+          - **为什么非负很重要**：Dijkstra 一旦从优先队列取出当前最小的有效 `dist[u]`，非负边保证以后绕经其他未确定节点不会得到更短路径；负边会破坏这个单调性。
+          - **stale entry**：Java `PriorityQueue` 没有方便的 decrease-key，所以每次改善距离都新增状态；用 `cur.distance()!=dist[u]` 丢弃旧状态即可。
+          - **不可达点**：保持 `Long.MAX_VALUE`，不要和真实大距离混在一起；调用方可再映射成 `-1` 等业务展示值。
+          - **溢出**：做 `dist[u]+w` 前检查 `dist[u] > Long.MAX_VALUE - w`，避免 long 回绕产生假最短路。
+          - **平行边与自环**：非负平行边自然由松弛保留更优路径；非负自环不会改善距离。
+          - **算法选择**：等权边不要机械套 Dijkstra；BFS 按层扩展就是最短边数。存在负边也不要“加一个 visited”硬跑 Dijkstra，应换算法并继续确认负环语义。
+
+          ## 原理机制
+
+          最短路算法围绕“松弛”工作：若已经知道到 `u` 的某条路径长度 `dist[u]`，那么经过边 `(u,v,w)` 可以构造到 `v` 的候选长度 `dist[u]+w`。Dijkstra 的贪心点在于：在所有尚未处理的候选中拿最小者；由于所有未来新增边权都非负，这个最小有效候选不可能再被一条从更大前缀距离出发的路径击败，因此可以安全向外传播。
+
+          ## 项目经验版
+
+          来源没有真实图规模、延迟或内存指标，不能虚构线上表现。实际落地会先确认图是否稀疏、权重范围、是否重复查询和是否动态更新，再决定邻接表、预计算或其他方案；同时用随机小图和独立算法（如 Floyd-Warshall/Bellman-Ford）做差分测试，比只跑几个手写样例更可靠。
+
+          ## 常见追问
+
+          - 问：为什么无权图用 BFS 就够？答：每条边代价相同，BFS 第一次到达节点时使用的边数最少，所以按层遍历天然给出最短边数。
+          - 问：有负权边为什么不能直接用 Dijkstra？答：负边可能让一个已经以较小前缀距离取出的节点后来经其他路径继续变短，破坏贪心确定性。
+          - 问：为什么不用 visited 数组？答：可以在严格实现里标记最终确定节点，但“stale entry + dist 校验”已经足以处理重复入队；不要在尚未验证当前状态是否最新前就错误屏蔽后续改善。
+          - 问：怎么验证实现？答：对大量小型随机非负图，把 Dijkstra 输出和 Floyd-Warshall 或 Bellman-Ford 的独立结果逐点比较，并加入不可达、零权、平行边、溢出边界。
+          - 问：如果只求 source 到 target 呢？答：当 target 以当前有效最小距离弹出时可提前结束，因为该距离在非负权前提下已经确定。
+
+          ## 易错点
+
+          - 来源只有“最短路径”就直接假定无权/非负权/某种输入格式。
+          - 在有负权边时仍使用 Dijkstra。
+          - 优先队列里存在旧状态却不校验，导致重复工作甚至错误配合 visited。
+          - 忽略不可达点和整数溢出。
+          - 把 BFS、Dijkstra、Bellman-Ford 的适用条件混成“都能求最短路”。
+          EOF
+
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const p=`review/candidates/answers/${process.env.CANONICAL_ID}.md`,md=fs.readFileSync(p,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('long[] dijkstra'))throw new Error('exact executable Java candidate missing/ambiguous');
+          fs.writeFileSync('/tmp/Solution.java',blocks[0][1]+'\n');
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/WriterValidation.java <<'JAVA'
+          import java.util.*;
+          public final class WriterValidation {
+              static List<List<Solution.Edge>> graph(int n,long[][] es){ArrayList<List<Solution.Edge>> g=new ArrayList<>();for(int i=0;i<n;i++)g.add(new ArrayList<>());for(long[] e:es)g.get((int)e[0]).add(new Solution.Edge((int)e[1],e[2]));return g;}
+              static long[] floyd(int n,long[][] es,int s){long INF=Long.MAX_VALUE/4;long[][] d=new long[n][n];for(int i=0;i<n;i++){Arrays.fill(d[i],INF);d[i][i]=0;}for(long[]e:es)d[(int)e[0]][(int)e[1]]=Math.min(d[(int)e[0]][(int)e[1]],e[2]);for(int k=0;k<n;k++)for(int i=0;i<n;i++)for(int j=0;j<n;j++)if(d[i][k]<INF&&d[k][j]<INF)d[i][j]=Math.min(d[i][j],d[i][k]+d[k][j]);long[] out=new long[n];for(int v=0;v<n;v++)out[v]=d[s][v]>=INF?Long.MAX_VALUE:d[s][v];return out;}
+              static void check(int n,long[][] es,int s){long[] got=Solution.dijkstra(graph(n,es),s),want=floyd(n,es,s);if(!Arrays.equals(got,want))throw new AssertionError("got="+Arrays.toString(got)+" want="+Arrays.toString(want));}
+              public static void main(String[]args){check(4,new long[][]{{0,1,4},{0,2,1},{2,1,2},{1,3,1},{2,3,5}},0);check(5,new long[][]{{0,1,0},{0,1,5},{1,1,0},{1,2,2}},0);check(3,new long[][]{},1);Random r=new Random(0xD1A57A);for(int c=0;c<12000;c++){int n=1+r.nextInt(8);ArrayList<long[]> es=new ArrayList<>();int m=r.nextInt(n*n*2+1);for(int i=0;i<m;i++)es.add(new long[]{r.nextInt(n),r.nextInt(n),r.nextInt(21)});check(n,es.toArray(new long[0][]),r.nextInt(n));}boolean neg=false;try{Solution.dijkstra(graph(2,new long[][]{{0,1,-1}}),0);}catch(IllegalArgumentException e){neg=true;}if(!neg)throw new AssertionError("negative edge not rejected");System.out.println("PASS sample=exact zero-parallel-selfloop=covered unreachable=covered random-vs-floyd=12000 negative-edge=rejected");}
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/WriterValidation.java
+          stdout="$(java -cp /tmp WriterValidation)";echo "$stdout";test "$stdout" = 'PASS sample=exact zero-parallel-selfloop=covered unreachable=covered random-vs-floyd=12000 negative-edge=rejected';echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const tests=[{case:'fixed weighted sample',expected:'distances [0,3,1,4]',passed:true},{case:'zero weights, parallel edges, self-loop and unreachable vertices',expected:'matches independent all-pairs oracle and preserves unreachable sentinel',passed:true},{case:'12,000 seeded random nonnegative directed graphs',expected:'all source-to-vertex distances equal Floyd-Warshall oracle',passed:true},{case:'negative edge',expected:'reference contract rejects unsupported input',passed:true}];
+          fs.writeFileSync(`${out}/shortest_path_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact Java candidate and differential-test against Floyd-Warshall',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'tagged-note',title:'Tagged interview note preserving generic shortest-path coding prompt',locator:'note_tagged/67d3a6b10000000006029b65.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Differential shortest-path validation against Floyd-Warshall',locator:`${out}/shortest_path_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source preserves only a generic shortest-path coding prompt; graph direction, weight model, negative-edge policy, API and target are not preserved.',source_ids:['tagged-note','source-inventory'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'reference-behavior',text:'Under the declared directed nonnegative-weight reference contract, the exact Dijkstra implementation matches an independent Floyd-Warshall oracle across fixed and 12,000 seeded random graphs and rejects negative edges.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Writer repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID/shortest_path_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft batch 0043 shortest-path candidate'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+          done
+          exit 1
