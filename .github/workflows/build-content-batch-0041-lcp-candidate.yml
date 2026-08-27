@@ -1,0 +1,267 @@
+name: Build Content Batch 0041 Longest Common Prefix Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0041-lcp-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0041-lcp-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a735fdca7e7f00dbb5349db43e5f3987
+  SOURCE_QID: a735fdca7e7f00dbb5349db43e5f3987
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Verify exact source and current ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：最长公共前缀（Longest Common Prefix）。';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67492ea90000000007032789.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('LCP tagged source drifted');
+          const raw=fs.readFileSync('note_desc/67492ea90000000007032789.txt','utf8');
+          if(!raw.includes('最长公共前缀')||!raw.includes('暴力做的')) throw new Error('original note LCP wording drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0041/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('answer context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`expected singleton ownership, got ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0041/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||item.answer_type!=='coding'||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('Batch 0041 frozen inventory drifted');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and executable fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0041/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a735fdca7e7f00dbb5349db43e5f3987","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 最长公共前缀（Longest Common Prefix）
+
+          ## 核心结论
+
+          原始面经只保留了“最长公共前缀，暴力做的”，没有保存具体语言、输入规模、`null` 语义或空数组规则。面试现场可以先确认这些边界，再给一个直接的纵向扫描：拿第一个字符串作为长度上界，逐列比较所有字符串；某一列第一次出现越界或字符不同，就返回此前已经确认的前缀。
+
+          下面给一个可执行的 Java 参考契约：输入数组与数组元素都非 `null`；空数组返回空字符串；允许空字符串。这个边界是本文实现选择，不是原始面经额外保存下来的要求。
+
+          ## 1 分钟版
+
+          - 公共前缀必须从每个字符串的下标 `0` 开始连续相同，不是公共子串。
+          - 以第一个字符串为基准，从左到右检查第 `i` 个字符；对其余字符串，只要 `i` 已越界或字符不同，答案就是 `first.substring(0, i)`。
+          - 如果所有列都通过，答案就是整个第一个字符串。
+          - 时间复杂度可写成 O(S)，`S` 是实际比较到的字符总量，上界是 O(n·m)，其中 `m` 是最短相关扫描长度；额外空间 O(1)（不计返回字符串）。
+          - 原始面经写了“暴力做的”，因此没有必要为了这道题强行引入 Trie；除非后续问题变成大量动态字符串上的重复前缀查询。
+
+          ## 3 分钟版
+
+          ```java
+          class Solution {
+              public String longestCommonPrefix(String[] strs) {
+                  if (strs == null) throw new IllegalArgumentException("strs must not be null");
+                  if (strs.length == 0) return "";
+                  for (String s : strs) {
+                      if (s == null) throw new IllegalArgumentException("element must not be null");
+                  }
+
+                  String first = strs[0];
+                  for (int i = 0; i < first.length(); i++) {
+                      char expected = first.charAt(i);
+                      for (int j = 1; j < strs.length; j++) {
+                          if (i >= strs[j].length() || strs[j].charAt(i) != expected) {
+                              return first.substring(0, i);
+                          }
+                      }
+                  }
+                  return first;
+              }
+          }
+          ```
+
+          循环不变量是：进入外层第 `i` 轮时，区间 `[0, i)` 已经被证明是所有字符串的公共前缀。当前列如果任何一个字符串缺少该位置，或者字符不同，就无法把公共前缀再延长；如果所有字符串都通过，则不变量扩展到 `[0, i+1)`。因此第一次失败的位置正好给出最长公共前缀长度。
+
+          ## 关键细节
+
+          - **先处理越界再取字符**：短字符串可能先结束，必须先判断 `i >= strs[j].length()`，否则会数组/字符串越界。
+          - **第一个字符串可以直接当扫描上界**：如果它比其它字符串长，短字符串会触发越界并提前返回；如果它最短，全部字符通过后它本身就是最长可能前缀。
+          - **空字符串**：只要数组中有空字符串，公共前缀必然为空；当前实现会自然在第一个需要比较的位置返回 `""`，若首元素本身为空则直接结束外层循环。
+          - **Unicode 语义**：代码按 Java UTF-16 `char` 单元比较。普通面试字母字符串通常足够；如果题目要求按 Unicode code point 比较，需要改用 code point 迭代。来源没有保存这类要求。
+          - **复杂度**：最坏情况下所有字符串共享很长前缀，需要逐列检查；算法不会额外复制中间前缀，只在最终返回时构造结果。
+
+          ## 原理机制
+
+          最长公共前缀可以看成一个单调判定：如果长度为 `k` 的前缀不是所有字符串共有的，那么任何更长前缀也不可能共有。纵向扫描从 `k=1` 逐步扩张，一旦第一处失败就可以立刻停止。这里不需要回溯，也不需要额外状态结构。
+
+          另一种常见写法是“横向收缩”：先把第一个字符串当候选前缀，再与第二、第三个字符串逐步缩短。两种方法都正确；纵向扫描更容易直接说明“第一次不同的位置就是答案长度”。Trie 更适合大量字符串插入后反复查询前缀，不是这道一次性题目的必要复杂度。
+
+          ## 项目经验版
+
+          来源是纯算法题，没有真实项目数据或线上经历，不能虚构。可迁移的工程习惯是先把字符串语义和输入边界确定下来：例如是否允许 `null`、大小写是否敏感、是否需要 Unicode code point 级比较；这些契约一旦不同，实现和测试都可能变化。
+
+          ## 常见追问
+
+          - 问：为什么这是 O(n·m) 而不是 O(m)？答：每一列最多要检查 `n` 个字符串；若共同前缀长度接近 `m`，比较次数是两者乘积量级。也可以用所有被访问字符数 `S` 表达得更精确。
+          - 问：如果第一个字符串不是最短的会不会错？答：不会。其它字符串先结束时，越界判断会立即返回，因而扫描不可能超过真正的公共前缀边界。
+          - 问：为什么不用排序？答：排序后比较字典序首尾字符串也能求公共前缀，但排序引入 O(n log n) 比较成本；一次性求解没有必要。
+          - 问：什么时候适合 Trie？答：当字符串集合长期维护、需要反复做前缀查询或统计时才可能值得；单次求所有字符串公共前缀时，线性扫描更直接。
+          - 问：空数组和 `null` 怎么处理？答：原始面经没有保存规则；本文参考实现选择空数组返回空串、`null` 输入显式拒绝，实际面试按题目契约调整。
+
+          ## 易错点
+
+          - 把“公共前缀”写成任意位置的公共子串。
+          - 先访问 `strs[j].charAt(i)` 再检查短字符串越界。
+          - 每轮都创建新的前缀字符串，制造没有必要的中间对象。
+          - 没有区分原始题干和自己补充的 `null`/空数组语义。
+          - 为一次性简单题过度设计 Trie，却没有先给清楚可验证的基础解法。
+          EOF
+
+          cat > "$out/Solution.java" <<'JAVA'
+          public final class Solution {
+              public String longestCommonPrefix(String[] strs) {
+                  if (strs == null) throw new IllegalArgumentException("strs must not be null");
+                  if (strs.length == 0) return "";
+                  for (String s : strs) if (s == null) throw new IllegalArgumentException("element must not be null");
+                  String first = strs[0];
+                  for (int i = 0; i < first.length(); i++) {
+                      char expected = first.charAt(i);
+                      for (int j = 1; j < strs.length; j++) {
+                          if (i >= strs[j].length() || strs[j].charAt(i) != expected) return first.substring(0, i);
+                      }
+                  }
+                  return first;
+              }
+          }
+          JAVA
+          cat > "$out/LcpWriterTest.java" <<'JAVA'
+          import java.util.*;
+          public final class LcpWriterTest {
+              static String oracle(String[] a) {
+                  if (a.length == 0) return "";
+                  int k=0;
+                  outer: while (true) {
+                      Character c=null;
+                      for (String s:a) {
+                          if (k>=s.length()) break outer;
+                          if (c==null) c=s.charAt(k); else if (s.charAt(k)!=c) break outer;
+                      }
+                      k++;
+                  }
+                  return a[0].substring(0,k);
+              }
+              static void enumerateWords(List<String> words,String prefix,int depth){
+                  words.add(prefix);
+                  if(depth==3)return;
+                  for(char c:new char[]{'a','b','c'}) enumerateWords(words,prefix+c,depth+1);
+              }
+              public static void main(String[] args){
+                  Solution s=new Solution();
+                  Map<String[],String> known=new LinkedHashMap<>();
+                  known.put(new String[]{"flower","flow","flight"},"fl");
+                  known.put(new String[]{"dog","racecar","car"},"");
+                  known.put(new String[]{"","abc"},"");
+                  known.put(new String[]{"same"},"same");
+                  for(var e:known.entrySet()) if(!s.longestCommonPrefix(e.getKey()).equals(e.getValue())) throw new AssertionError();
+                  List<String> words=new ArrayList<>(); enumerateWords(words,"",0);
+                  for(String a:words) for(String b:words) for(String c:words){
+                      String[] in={a,b,c}; String got=s.longestCommonPrefix(in),want=oracle(in);
+                      if(!got.equals(want)) throw new AssertionError(Arrays.toString(in)+" got="+got+" want="+want);
+                  }
+                  if(!s.longestCommonPrefix(new String[0]).equals("")) throw new AssertionError();
+                  try{s.longestCommonPrefix(null);throw new AssertionError();}catch(IllegalArgumentException ok){}
+                  try{s.longestCommonPrefix(new String[]{"a",null});throw new AssertionError();}catch(IllegalArgumentException ok){}
+                  System.out.println("PASS known-cases exhaustive-3word-alphabet-abc-depth-3 independent-oracle empty-array null-rejected");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; candidate="review/candidates/answers/$cid.md"
+          javac "$out/Solution.java" "$out/LcpWriterTest.java"
+          stdout="$(java -cp "$out" LcpWriterTest)"
+          test "$stdout" = 'PASS known-cases exhaustive-3word-alphabet-abc-depth-3 independent-oracle empty-array null-rejected'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0041/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'javac Solution.java LcpWriterTest.java && java LcpWriterTest',stdout:process.env.STDOUT,checks:['known LCP cases','single and empty string cases','exhaustive 3-word tuples over all {a,b,c} strings through length 3 against independent oracle','empty array contract','null input/element rejection contract']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-original-note',title:'Original interview note preserving longest-common-prefix and brute-force wording',locator:'note_desc/67492ea90000000007032789.txt',source_type:'repository_source_record',checked_at:date},{source_id:'repository-tagged-question',title:'Exact normalized LCP Coding Question',locator:`note_tagged/67492ea90000000007032789.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Longest-common-prefix deterministic Java validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-contract',text:'The original repository note preserves a longest-common-prefix algorithm question and states it was solved by a brute/direct method.',source_ids:['repository-original-note','repository-tagged-question'],answer_locations:['核心结论','1 分钟版']},{claim_id:'source-boundary',text:'Language, data scale, null semantics, empty-array behavior and Unicode comparison semantics are not preserved; the answer labels its Java boundary choices as reference-contract choices.',source_ids:['repository-original-note','repository-tagged-question'],answer_locations:['核心结论','关键细节','常见追问']},{claim_id:'reference-implementation',text:'Under the declared Java contract, vertical scanning matches an independent common-prefix oracle across exhaustive bounded string tuples and known cases.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record writer-complete task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0041.md'); t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_a735fdca7e7f00dbb5349db43e5f3987` longest-common-prefix writer slice is staged source-first: the original note preserves “最长公共前缀 / 暴力做的”; null/empty-array/Unicode semantics remain explicitly non-source. A vertical-scan Java reference implementation passes known cases and exhaustive bounded tuples against an independent oracle. Independent source-first review is still required.'
+          if line not in t: t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Run candidate-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during LCP writer slice: $base_head -> $remote_head; fail closed without push."; exit 0; fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0041/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0041.md
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0041 longest-common-prefix candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
