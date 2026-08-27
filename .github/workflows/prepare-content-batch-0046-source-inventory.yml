@@ -1,0 +1,118 @@
+name: Prepare Content Batch 0046 Source Inventory
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/prepare-content-batch-0046-source-inventory.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0046-source-inventory
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Extract live contexts and classify stale scheduled entries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/batch0046-context
+          node <<'NODE'
+          const fs=require('fs');const {spawnSync}=require('child_process');
+          const ids=['cq_q_bd698ddf9e43e3ba654176921e45bb21','cq_q_bdc72f49cb17858ce7c87fbbeeb74479','cq_q_be29baab7752845753187e3ffd082282','cq_q_be737d9f169167e0e031e1b5379c1e77','cq_q_bfa2e6338d984efa71b8fa61821b4c33','cq_q_bfcc770bed44745c89171a30433df36a','cq_q_c04b3d83e3ebd82ac3f1389bcffcda75','cq_q_c15785367b4320372120773503f98ed1','cq_q_c1a50dac1f36951cda5113fc7eb158f9','cq_q_c209f8ebf1be8439a10b7008c60b1d77'];
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicalSet=new Set(canonicals.map(x=>x.canonical_id));const schedule=[];
+          for(const cid of ids){
+            if(canonicalSet.has(cid)){
+              const r=spawnSync(process.execPath,['scripts/xhs.js','answer','context','--canonical-id',cid,'--noWrite'],{encoding:'utf8'});
+              if(r.status!==0)throw new Error(`${cid}: context failed: ${r.stderr||r.stdout}`);
+              fs.writeFileSync(`/tmp/batch0046-context/${cid}.json`,r.stdout);schedule.push({canonical_id:cid,state:'active'});
+            }else{
+              const qid=cid.replace(/^cq_q_/,'');const q=questions.find(x=>x.question_id===qid)||null;
+              if(q?.is_valid_for_library===true&&q?.canonical_id===cid)throw new Error(`${cid}: missing Canonical while active Question still points to it`);
+              schedule.push({canonical_id:cid,state:'stale_task_entry_absent_from_canonical_ssot',source_question:q?{question_id:q.question_id,original_question:q.original_question,is_valid_for_library:q.is_valid_for_library,canonical_id:q.canonical_id,invalid_reason:q.invalid_reason||q.exclusion_reason||null}:null});
+            }
+          }
+          fs.writeFileSync('/tmp/batch0046-schedule.json',JSON.stringify(schedule,null,2)+'\n');
+          console.log(`PASS active=${schedule.filter(x=>x.state==='active').length} stale=${schedule.filter(x=>x.state!=='active').length}`);
+          NODE
+
+      - name: Freeze bounded source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0046
+          node <<'NODE'
+          const fs=require('fs'),schedule=JSON.parse(fs.readFileSync('/tmp/batch0046-schedule.json','utf8')),allowedTypes=new Set(['coding','concept','mechanism','scenario','project','behavior']),items=[];
+          for(const scheduled of schedule){
+            if(scheduled.state!=='active'){items.push(scheduled);continue;}
+            const cid=scheduled.canonical_id,ctx=JSON.parse(fs.readFileSync(`/tmp/batch0046-context/${cid}.json`,'utf8'));
+            if(!ctx.ok||ctx.canonical?.canonical_id!==cid)throw new Error(`${cid}: invalid context`);
+            if(!allowedTypes.has(ctx.answer_type))throw new Error(`${cid}: unsupported answer type ${ctx.answer_type}`);
+            const sourceQuestions=Array.isArray(ctx.source_questions)?ctx.source_questions:[],owned=Array.isArray(ctx.canonical?.question_ids)?ctx.canonical.question_ids:[],sourceIds=sourceQuestions.map(q=>q.question_id).filter(Boolean);
+            if(sourceQuestions.length===0)throw new Error(`${cid}: no source questions`);
+            if(JSON.stringify([...owned].sort())!==JSON.stringify([...sourceIds].sort()))throw new Error(`${cid}: ownership/source mismatch`);
+            items.push({canonical_id:cid,state:'active',answer_type:ctx.answer_type,canonical_title:ctx.canonical?.canonical_title??null,question_ids:owned,source_questions:sourceQuestions,active_answer_metadata:ctx.answer?.metadata??ctx.answer_metadata??null});
+          }
+          const active=items.filter(x=>x.state==='active'),stale=items.filter(x=>x.state!=='active');
+          fs.writeFileSync('review/content_build/answer_batch_0046/source_inventory.json',JSON.stringify({schema_version:'answer_batch_source_inventory.v1',batch:'0046',frozen_at:'2026-08-28',scheduled_count:items.length,active_canonical_count:active.length,stale_scheduled_count:stale.length,source_first:true,note:'Live-state-aware inventory. Stale scheduled IDs are not resurrected. Active entries freeze exact Question ownership and answer type before drafting.',items},null,2)+'\n');
+          console.log(`PASS frozen scheduled=${items.length} active=${active.length} stale=${stale.length}`);
+          NODE
+
+      - name: Validate inventory and start bounded task
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          inv=json.loads(Path('review/content_build/answer_batch_0046/source_inventory.json').read_text(encoding='utf-8'))
+          if inv['scheduled_count']!=10: raise SystemExit('expected 10 scheduled entries')
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0046.md');t=p.read_text(encoding='utf-8')
+          t=t.replace('- Status: `pending`','- Status: `in_progress`',1)
+          t=t.replace('- Canonical count: `10`',f"- Scheduled canonical count: `10`; live active count after prior remediation: `{inv['active_canonical_count']}`",1)
+          line=f"- [x] Live-state-aware source-first inventory frozen in `review/content_build/answer_batch_0046/source_inventory.json`: {inv['active_canonical_count']} scheduled Canonicals remain active and {inv['stale_scheduled_count']} stale scheduled entries are preserved as explicit non-resurrected history. Active entries freeze exact source Questions and current answer types before drafting."
+          if '## Progress' not in t:t=t.rstrip()+'\n\n## Progress\n'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")";base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during inventory: $base_head -> $remote_head";echo 'Discard verified local inventory; retry on a later current snapshot.';exit 0;fi
+          git add review/content_build/answer_batch_0046/source_inventory.json tasks/answer-batches/TASK-20260711-0313-answer-batch-0046.md
+          if git diff --cached --quiet;then echo 'No batch0046 inventory changes.';exit 0;fi
+          git diff --cached --check
+          git config user.name xhs-source-audit-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: freeze batch 0046 live source inventory'
+          git push origin "HEAD:$CONTENT_BRANCH"
