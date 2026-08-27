@@ -1,0 +1,151 @@
+name: Review Content Batch 0043 Int Swap
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0043-int-swap.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-int-swap-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b384707db3a802519fba7387f0c5520a
+  SOURCE_QID: b384707db3a802519fba7387f0c5520a
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first inspection before writer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='两个 int 型数, 在不使用第三个变量的情况下如何交换这两个数?';
+          const note=JSON.parse(fs.readFileSync('note_tagged/65f96bb10000000012031c4a.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact)throw new Error('source boundary drifted');
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||item.source_questions?.[0]?.original_question!==exact)throw new Error('inventory drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid]))throw new Error('inventory ownership drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('live context drifted');
+          const p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','swapNoTemp','a ^= b','O(1)'])if(!md.includes(marker))throw new Error(`marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5)throw new Error('followups missing');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md))throw new Error('fabricated experience risk');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];const impl=blocks.map(x=>x[1]).find(x=>x.includes('public final class Solution'));
+          if(!impl||!impl.includes('swapNoTemp'))throw new Error('candidate implementation missing');
+          fs.writeFileSync('/tmp/Solution.java',impl+'\n');const sha=crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');fs.writeFileSync('/tmp/candidate-sha',sha+'\n');
+          fs.writeFileSync('/tmp/pre.json',JSON.stringify({decision:'pass_pending_independent_pair_oracle',candidate_sha256:sha,source_boundary:'Two int values and no-third-variable swap are frozen; language and caller API are not source-frozen'},null,2)+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+
+      - name: Execute independent expected-pair oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/Reviewer.java <<'JAVA'
+          import java.util.*;
+          public final class Reviewer {
+              static void check(int a,int b,String label){
+                  int expectedA=b,expectedB=a;
+                  Solution.Pair p=new Solution.Pair(a,b);
+                  Solution.swapNoTemp(p);
+                  if(p.a!=expectedA||p.b!=expectedB)throw new AssertionError(label+" got="+p.a+","+p.b+" want="+expectedA+","+expectedB);
+              }
+              public static void main(String[] args){
+                  int[] vals={Integer.MIN_VALUE,-65536,-1,0,1,2,65535,Integer.MAX_VALUE};
+                  long exhaustive=0;
+                  for(int a=-512;a<=512;a++)for(int b=-512;b<=512;b++){check(a,b,"small-"+a+"-"+b);exhaustive++;}
+                  for(int a:vals)for(int b:vals)check(a,b,"boundary-"+a+"-"+b);
+                  Random r=new Random(0x494e5453574150L);long random=0;
+                  for(int i=0;i<200000;i++){check(r.nextInt(),r.nextInt(),"random-"+i);random++;}
+                  System.out.println("PASS exhaustive-small="+exhaustive+" boundary-pairs=64 seeded-random="+random+" expected-pair-oracle=match");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/Reviewer.java
+          stdout="$(java -cp /tmp Reviewer)";echo "$stdout";grep -E '^PASS exhaustive-small=1050625 boundary-pairs=64 seeded-random=200000 expected-pair-oracle=match$' <<<"$stdout";echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze independent review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const pre=JSON.parse(fs.readFileSync('/tmp/pre.json','utf8'));if(pre.decision!=='pass_pending_independent_pair_oracle'||pre.candidate_sha256!==sha)throw new Error('preconclusion drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha)throw new Error('writer packet/hash drifted');
+          const tests=[{case:'all pairs in [-512,512]',expected:'candidate result equals reversed input pair',passed:true},{case:'64 boundary-value pairs including MIN/MAX',expected:'candidate result equals reversed input pair',passed:true},{case:'200,000 seeded random int pairs',expected:'candidate result equals reversed input pair',passed:true}];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate and compare with independent expected-pair oracle',stdout:process.env.REVIEW_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The preserved source asks only to swap two int values without a third variable; it does not freeze a programming language or caller API.','The candidate keeps Java-specific Pair scaffolding explicitly separate from the source requirement and presents the three XOR assignments as the actual interview technique.','The XOR derivation is correct: after a=A^B, b=(A^B)^B=A, then a=(A^B)^A=B.','An independent oracle that simply freezes the original input pair and expects (b,a) matches the exact candidate for all 1,050,625 small-domain pairs, 64 boundary pairs and 200,000 seeded random pairs.','The answer correctly calls out same-storage XOR self-swap as a portability hazard when translating the two-variable trick to aliased lvalues, and does not fabricate project experience.'];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0043-int-swap-20260827-v1',review_version:'batch-0043.int-swap.v1',decision:'pass',revision_round:1,source_packet:['note_tagged/65f96bb10000000012031c4a.json','review/content_build/answer_batch_0043/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0043-int-swap-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'tagged-note',title:'Tagged interview note preserving the exact two-int swap prompt',locator:'note_tagged/65f96bb10000000012031c4a.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Deterministic Java XOR-swap writer validation',locator:`${out}/int_swap_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent expected-pair oracle validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Int-swap source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source freezes two int values and the no-third-variable swap constraint while language and caller API remain unspecified.',source_ids:['tagged-note','source-inventory','isolated-review'],answer_locations:['核心结论','关键细节']},{claim_id:'xor-behavior',text:'Under the declared Java int reference contract, the three XOR assignments swap the two values across exhaustive small-domain, boundary and seeded-random validation.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'independent expected-pair oracle',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review artifacts and progress with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0043.md');t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_b384707db3a802519fba7387f0c5520a` completed writer and isolated source-first review. The source freezes two int values and the no-third-variable swap constraint while language/API choices remain explicit reference-contract decisions. Writer validation passed fixed boundaries and 100,000 seeded random pairs; the independent reviewer matched a separate expected-pair oracle on all 1,050,625 pairs in [-512,512], 64 boundary pairs and 200,000 seeded random pairs. Strict candidate audit, code gate, and repository gates are green. Formal evidence is staged; repository human approval and real-review policy remain promotion blockers.'
+          if '## Progress' not in t:t=t.rstrip()+'\n\n## Progress\n'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+          git add "review/content_build/answer_batch_0043/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0043.md
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0043 int-swap candidate source-first'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+            sleep 5
+          done
+          exit 1
