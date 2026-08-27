@@ -35,7 +35,7 @@ SPECS = [
         'expected': '场景：一维数组转二维数组',
         'source_note_id': '6803483d000000001d019393',
         'tagged_blob': '6ea4f29e6f02ce731e10e84f1cc81d48051b66bb',
-        'desc_blob': 'bcf3d499376fe6082cb09a2f452a71f229c74bba',
+        'desc_blob': 'bcf3d499376fe6082cb09a9f452a71f229c74bba',
         'image_blob': 'd5c51371af6e91393f650733b63620a2e6390c63',
         'image_required_tokens': ['12.手撕代码', '场景题：一维数组转二维', '算法题：版本号比较'],
         'explanation': (
