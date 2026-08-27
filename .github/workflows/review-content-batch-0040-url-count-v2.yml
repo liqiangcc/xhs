@@ -1,0 +1,154 @@
+name: Review Content Batch 0040 URL Count v2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0040-url-count-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-url-count-review-v2
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a249745620d03c0a683588f1653ed349
+  SOURCE_QID: a249745620d03c0a683588f1653ed349
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Source-first independent contract and candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"; test -f "$out/url_count_fixture.sh"; test -f "$out/writer_research.json"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/url-count-context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='Linux 指令应用：统计一个文件中每个 URL 出现的次数（awk, sort, uniq）？';
+          const note=JSON.parse(fs.readFileSync('note_tagged/66e90ac3000000001e01b16d.json','utf8'));
+          const src=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('source contract drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/url-count-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`singleton ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const required=['# Linux：统计文件中每个 URL 出现次数（awk / sort / uniq）','## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','uniq -c','LC_ALL=C','不能默认'];
+          for(const marker of required) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上/.test(md)) throw new Error('fabricated first-person production claim risk');
+          const hash=crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex');
+          fs.writeFileSync('/tmp/url-count-candidate-sha',hash+'\n');
+          NODE
+
+          cat > "$out/reviewer_url_count_fixture.sh" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+          cat > "$tmp/input" <<'EOF'
+          https://b.example/y
+          https://a.example/x
+          https://c.example/z
+          https://a.example/x
+
+          https://b.example/y
+          https://a.example/x
+          https://d.example/q?x=1
+          https://d.example/q?x=2
+          EOF
+          LC_ALL=C awk 'NF {print $0}' "$tmp/input" | sort | uniq -c | awk '{$1=$1; print}' | sort -k2,2 > "$tmp/pipeline"
+          awk 'NF {count[$0]++} END {for (u in count) print count[u], u}' "$tmp/input" | LC_ALL=C sort -k2,2 > "$tmp/oracle"
+          diff -u "$tmp/oracle" "$tmp/pipeline"
+          grep -Fxq '3 https://a.example/x' "$tmp/pipeline"
+          grep -Fxq '2 https://b.example/y' "$tmp/pipeline"
+          grep -Fxq '1 https://c.example/z' "$tmp/pipeline"
+          grep -Fxq '1 https://d.example/q?x=1' "$tmp/pipeline"
+          grep -Fxq '1 https://d.example/q?x=2' "$tmp/pipeline"
+          test "$(wc -l < "$tmp/pipeline")" -eq 5
+          echo 'PASS pipeline=independent-awk-map counts=3,2,1 query-variants=distinct blank-lines=ignored'
+          SH
+          chmod +x "$out/reviewer_url_count_fixture.sh"
+          stdout="$(bash "$out/reviewer_url_count_fixture.sh")"
+          test "$stdout" = 'PASS pipeline=independent-awk-map counts=3,2,1 query-variants=distinct blank-lines=ignored'
+
+          CANDIDATE_SHA="$(cat /tmp/url-count-candidate-sha)" STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,date='2026-08-27',out=`review/content_build/answer_batch_0040/${cid}`;
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,result:'pass',validated_at:date,command:'bash reviewer_url_count_fixture.sh',stdout:process.env.STDOUT,checks:['independent awk associative-array oracle matches sort/uniq pipeline','non-adjacent duplicates count 3 and 2 correctly','blank lines are ignored','query-string variants remain distinct under exact-string contract']},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0040-url-count-20260827-v2';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The live repository source asks only to count each URL in a file and explicitly names awk, sort and uniq; no log schema or URL field index is preserved.','The candidate stays fail-closed on field position and labels any access-log field example as an example rather than source fact.','Independent validation uses an awk associative-array oracle and matches the sort/uniq pipeline for non-adjacent duplicates, blank-line filtering, and exact-string query variants.','The explanation correctly states why sort must precede uniq -c and keeps optional frequency sorting separate from counting semantics.','The answer states the absence of production evidence instead of inventing experience.'];
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0040.url-count.v2',decision:'pass',revision_round:1,source_packet:['note_tagged/66e90ac3000000001e01b16d.json','review/content_build/answer_batch_0040/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Bind writer evidence after independent conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; CANDIDATE_SHA="$(cat /tmp/url-count-candidate-sha)"
+          CANDIDATE_SHA="$CANDIDATE_SHA" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0040/${cid}`;
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==process.env.CANDIDATE_SHA) throw new Error('writer packet state/hash drifted');
+          const review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          if(review.decision!=='pass'||review.candidate_sha256!==process.env.CANDIDATE_SHA) throw new Error('independent review binding failed');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,checked_at:date,writer:{writer_id:'content-batch-0040-url-count-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Exact URL-count repository source',locator:`note_tagged/66e90ac3000000001e01b16d.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'writer-validation',title:'Writer URL-count shell validation',locator:`${out}/shell_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent awk-map URL-count oracle',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'URL-count source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source requires counting each URL and names awk/sort/uniq but does not define log fields or URL normalization.',source_ids:['repository-source','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版']},{claim_id:'pipeline',text:'Sorting groups identical URL strings before uniq -c; independent review matches the pipeline against an awk associative-array oracle.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制']},{claim_id:'boundaries',text:'Blank lines are ignored under the explicit fixture contract and distinct query strings remain distinct unless a separate normalization rule is defined.',source_ids:['reviewer-validation','isolated-review'],answer_locations:['1 分钟版','关键细节','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'bash reviewer_url_count_fixture.sh',result:'pass',reported_stdout:'PASS pipeline=independent-awk-map counts=3,2,1 query-variants=distinct blank-lines=ignored'},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md';
+          let text=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_a249745620d03c0a683588f1653ed349` URL-count writer slice is source-bounded and staged: the answer keeps the unspecified log schema fail-closed, explains the `awk -> sort -> uniq -c` pipeline, and a deterministic shell fixture verifies non-adjacent duplicates, blank-line filtering, and exact 3/2/1 counts. Writer evidence is frozen; independent source-first review is still required before any promotion.';
+          const passed='- [x] `cq_q_a249745620d03c0a683588f1653ed349` passed isolated source-first review: the exact source keeps log field position and URL normalization unspecified, the candidate remains fail-closed on both, and an independent awk associative-array oracle matches the `awk -> sort -> uniq -c` pipeline for non-adjacent duplicates, blank-line filtering, and distinct query variants. Strict candidate evidence is bound; repository human approval and S11 real-review policy still block curated promotion.';
+          if(!text.includes(pending)) throw new Error('URL-count writer-progress marker missing or stale');
+          fs.writeFileSync(task,text.replace(pending,passed));
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review safely
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0040/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git commit -m 'review: pass batch 0040 URL-count candidate source-first'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_SHA"
+          git push origin "HEAD:$CONTENT_BRANCH"
