@@ -1,0 +1,138 @@
+name: Finalize Content Batch 0041 URL and Spiral Writer Packets
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/finalize-content-batch-0041-url-spiral-writer-packets.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0041-url-spiral-writer-finalize
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  URL_CID: cq_q_a791750e006147b75dcb2c13b7fa90e9
+  URL_QID: a791750e006147b75dcb2c13b7fa90e9
+  SPIRAL_CID: cq_q_aa5412e581a46db5a2dbf3f5bc6262eb
+  SPIRAL_QID: aa5412e581a46db5a2dbf3f5bc6262eb
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Recheck source boundaries before freezing writer packets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$URL_CID" --noWrite > /tmp/url-context.json
+          node scripts/xhs.js answer context --canonical-id "$SPIRAL_CID" --noWrite > /tmp/spiral-context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const urlCtx=JSON.parse(fs.readFileSync('/tmp/url-context.json','utf8'));
+          const spiralCtx=JSON.parse(fs.readFileSync('/tmp/spiral-context.json','utf8'));
+          if(!urlCtx.ok||urlCtx.answer_type!=='scenario'||JSON.stringify(urlCtx.canonical?.question_ids||[])!==JSON.stringify([process.env.URL_QID])) throw new Error('URL scenario ownership/type drifted');
+          if(!spiralCtx.ok||spiralCtx.answer_type!=='coding'||JSON.stringify(spiralCtx.canonical?.question_ids||[])!==JSON.stringify([process.env.SPIRAL_QID])) throw new Error('spiral ownership/type drifted');
+          const raw=fs.readFileSync('note_json/681a34e3000000002102e69d.json','utf8');
+          if(!raw.includes('场景题：从两个包含上亿 url（最长 64byte ）的文件中找出重复 url')) throw new Error('raw URL source boundary drifted');
+          const structured=JSON.parse(fs.readFileSync('note_structured/681055de000000000900d6df.json','utf8'));
+          if(!Array.isArray(structured.questions)||structured.questions[0]!=='算法：手撕螺旋矩阵（Spiral Matrix）。') throw new Error('spiral source boundary drifted');
+          NODE
+
+      - name: Execute writer fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          url_out="review/content_build/answer_batch_0041/$URL_CID"
+          spiral_out="review/content_build/answer_batch_0041/$SPIRAL_CID"
+          url_stdout="$(python3 "$url_out/hash_partition_validation.py")"
+          test "$url_stdout" = 'PASS exact-intersection=2 duplicates-deduped same-url-same-bucket collision-does-not-match'
+          spiral_stdout="$(cd "$spiral_out" && go run spiral_order_validation.go)"
+          test "$spiral_stdout" = 'PASS cases=8 empty/single-row/single-column/rectangular/square no-duplicate-center'
+          echo "URL_STDOUT=$url_stdout" >> "$GITHUB_ENV"
+          echo "SPIRAL_STDOUT=$spiral_stdout" >> "$GITHUB_ENV"
+
+      - name: Bind candidate hashes into writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const date='2026-08-27';
+          for(const item of [
+            {cid:process.env.URL_CID, stdout:process.env.URL_STDOUT, validation:'hash_partition_validation.json'},
+            {cid:process.env.SPIRAL_CID, stdout:process.env.SPIRAL_STDOUT, validation:'spiral_order_validation.json'}
+          ]){
+            const candidate=`review/candidates/answers/${item.cid}.md`;
+            const out=`review/content_build/answer_batch_0041/${item.cid}`;
+            const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+            const writerPath=`${out}/writer_research.json`;
+            const writer=JSON.parse(fs.readFileSync(writerPath,'utf8'));
+            writer.candidate_sha256=sha;
+            writer.checked_at=date;
+            writer.review_state='writer_complete_isolated_review_pending';
+            writer.promotion_blocker='isolated_independent_review_not_yet_performed';
+            fs.writeFileSync(writerPath,JSON.stringify(writer,null,2)+'\n');
+            const validationPath=`${out}/${item.validation}`;
+            const validation=JSON.parse(fs.readFileSync(validationPath,'utf8'));
+            validation.candidate_sha256=sha;
+            validation.validated_at=date;
+            validation.stdout=item.stdout;
+            fs.writeFileSync(validationPath,JSON.stringify(validation,null,2)+'\n');
+          }
+          NODE
+
+      - name: Writer-stage repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "review/content_build/answer_batch_0041/$URL_CID/hash_partition_validation.py"
+          (cd "review/content_build/answer_batch_0041/$SPIRAL_CID" && go run spiral_order_validation.go)
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit writer packet hashes with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            "review/content_build/answer_batch_0041/$URL_CID/writer_research.json" \
+            "review/content_build/answer_batch_0041/$URL_CID/hash_partition_validation.json" \
+            "review/content_build/answer_batch_0041/$SPIRAL_CID/writer_research.json" \
+            "review/content_build/answer_batch_0041/$SPIRAL_CID/spiral_order_validation.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: freeze batch 0041 URL and spiral writer packets'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same writer packet artifacts; fail closed without push.'
+              exit 0
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push writer packet update after safe retries.' >&2
+          exit 1
