@@ -1,0 +1,379 @@
+name: Content Batch 0045 Ordered Producer Consumer
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0045-producer-consumer-ordered.yml
+      - .ci/triggers/content-batch-0045-producer-consumer-ordered.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0045-producer-consumer-ordered
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_bb40d9794670196d600bbeb91c39f1c8
+  SOURCE_QID: bb40d9794670196d600bbeb91c39f1c8
+
+jobs:
+  validate-review-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0045/$cid"
+          mkdir -p "$out" /tmp/b45-producer-consumer review/candidates/answers review/evidence
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/b45-producer-consumer/context.json
+          python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']
+          exact='算法手撕：生产消费（1:2）程序，顺序输出 1-100。'
+          ctx=json.loads(pathlib.Path('/tmp/b45-producer-consumer/context.json').read_text())
+          if not ctx.get('ok') or ctx.get('canonical',{}).get('canonical_id')!=cid: raise SystemExit('canonical context drift')
+          if ctx.get('answer_type')!='coding': raise SystemExit(f"answer type drift: {ctx.get('answer_type')}")
+          if ctx.get('canonical',{}).get('question_ids') != [qid]: raise SystemExit(f"ownership drift: {ctx.get('canonical',{}).get('question_ids')}")
+          src=next((x for x in ctx.get('source_questions',[]) if x.get('question_id')==qid),None)
+          if not src or src.get('original_question')!=exact or src.get('is_valid_for_library') is not True: raise SystemExit('source wording/validity drift')
+          tagged=json.loads(pathlib.Path('note_tagged/689ed8b2000000001d029f08.json').read_text())
+          tq=next((x for x in tagged.get('tagged_questions',[]) if x.get('question_id')==qid),None)
+          if not tq or tq.get('original_question')!=exact: raise SystemExit('tagged source wording drift')
+          if tq.get('tech_entities')!=['producer-consumer','channel']: raise SystemExit(f"tagged tech-entity drift: {tq.get('tech_entities')}")
+          structured=json.loads(pathlib.Path('note_structured/689ed8b2000000001d029f08.json').read_text())
+          if structured.get('position')!='Go 后端' or exact not in structured.get('questions',[]): raise SystemExit('Go-backend note context drift')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0045.md').read_text()
+          if f'`{cid}` — coding' not in task: raise SystemExit('batch task drift')
+          out=pathlib.Path(f'review/content_build/answer_batch_0045/{cid}')
+          out.mkdir(parents=True,exist_ok=True)
+          (out/'context.json').write_text(json.dumps(ctx,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Stage source-bounded Go candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          if [ ! -e "$candidate" ]; then
+            cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_bb40d9794670196d600bbeb91c39f1c8","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # 生产消费（1:2）程序：并发处理但顺序输出 1-100
+
+          ## 核心结论
+
+          来源只保留“生产消费（1:2）程序，顺序输出 1-100”，没有解释 `1:2` 的记号，也没有给函数签名。结合该题所在的 **Go 后端**面试记录和 `producer-consumer/channel` 标签，下面采用一个明确、可执行但不冒充原题事实的契约：**1 个生产者、2 个消费者**；生产者产生 `1..100`，两个消费者并发接收任务，最终输出必须严格是 `1,2,...,100`，不丢、不重。关键点是：任务 Channel 的 FIFO 只能约束“发送/接收”的配对顺序，**不能保证两个消费者完成副作用的全局顺序**；因此要把“并发处理”和“有序输出”分开，由单一排序/提交协调器负责最终顺序。
+
+          ## 1 分钟版
+
+          - 一个 producer 把 `1..100` 写入 `jobs`，写完关闭 `jobs`。
+          - 两个 consumer 并发从 `jobs` 取值，处理后把结果写入 `results`；它们不直接 `fmt.Println`。
+          - `WaitGroup` 等两个 consumer 退出后关闭 `results`，避免接收方永久等待。
+          - 主 goroutine 是唯一输出协调器：收到的结果可能是 `2,1,4,3...`，先放进 `pending`，只要 `next` 已到达，就连续提交 `next,next+1...`。
+          - 这样 worker 可以乱序完成，而最终 observable output 仍严格递增。若让两个 consumer 自己打印，即使 `jobs` 是 FIFO，也可能出现“consumer A 先取 1，consumer B 后取 2，但 B 先打印 2”。
+
+          ## 3 分钟版
+
+          ```go
+          package orderedpc
+
+          import "sync"
+
+          func OrderedProducerConsumer(n, consumerCount int) []int {
+              if n <= 0 {
+                  return []int{}
+              }
+              if consumerCount <= 0 {
+                  panic("consumerCount must be > 0")
+              }
+
+              jobs := make(chan int)
+              results := make(chan int)
+
+              var wg sync.WaitGroup
+              wg.Add(consumerCount)
+              consumer := func() {
+                  defer wg.Done()
+                  for v := range jobs {
+                      // 这里可以做真正的并发计算；不要在 worker 中承担最终有序输出。
+                      results <- v
+                  }
+              }
+              for i := 0; i < consumerCount; i++ {
+                  go consumer()
+              }
+
+              go func() {
+                  for i := 1; i <= n; i++ {
+                      jobs <- i
+                  }
+                  close(jobs)
+              }()
+
+              go func() {
+                  wg.Wait()
+                  close(results)
+              }()
+
+              next := 1
+              pending := make(map[int]struct{})
+              out := make([]int, 0, n)
+              for v := range results {
+                  pending[v] = struct{}{}
+                  for {
+                      if _, ok := pending[next]; !ok {
+                          break
+                      }
+                      out = append(out, next)
+                      delete(pending, next)
+                      next++
+                  }
+              }
+              return out
+          }
+          ```
+
+          面试题固定 `1:2` 与 `1-100` 时调用 `OrderedProducerConsumer(100, 2)` 即可。示例返回切片是为了让顺序契约可测试；真实程序可以在协调器的 `out = append(...)` 位置调用单一 writer/打印函数。若“消费”会产生新结果，应把 `results <- v` 换成 `results <- result{seq:v, value:...}`，仍按 `seq` 提交。
+
+          ## 关键细节
+
+          - **FIFO 不等于副作用有序**：Channel 可以按发送/接收规则交付值，但两个 goroutine 在收到值之后何时运行由调度决定。把 `Println` 放在消费者里，会把输出顺序交给调度器。
+          - **一个地方拥有输出顺序**：协调器是唯一提交者，`next` 是“下一条允许对外可见的序号”。只有 `pending[next]` 存在时才能推进。
+          - **关闭方向**：生产者是 `jobs` 的唯一发送方，所以由它关闭 `jobs`；`results` 有多个发送方，不能由任一 consumer 单独关闭，而应由等待全部 consumer 的 goroutine 关闭。
+          - **不要求两个 consumer 平均分工**：正确性契约是 100 个值恰好处理一次并按序提交；Go 调度不保证两个 worker 各处理 50 个。若业务要求配额公平，需要另外定义调度策略。
+          - **背压**：这里使用无缓冲 Channel，生产和消费天然互相施加背压。改成缓冲 Channel 影响吞吐/排队，不改变“worker 不直接有序输出”的核心边界。
+          - **空间复杂度**：最坏情况下早到结果都堆在 `pending`，额外空间 O(n)；若每个任务处理时间接近，通常窗口更小。若 n 很大，可以用有界 reorder window、按分片提交或重新设计任务顺序约束。
+          - **重复/丢失防线**：当前 producer 每个序号只发送一次。生产任务若来自外部重试系统，需要单独定义幂等键/去重，不能把这个内存示例外推成 exactly-once 交付保证。
+
+          ## 原理机制
+
+          生产消费模型里其实有两个顺序：**任务进入队列的顺序**和**并发处理完成/副作用提交的顺序**。多消费者让第二个顺序天然可能和第一个顺序不同。要同时获得并发度和确定性输出，最常见的办法不是强迫 worker 串行，而是给任务携带序号，在末端做 reorder/commit：完成快的结果先缓存，只有连续前缀已经齐全时才推进可见顺序。
+
+          这个实现的安全性不依赖 `sleep` 或“碰巧谁先运行”。`next` 和 `pending` 只由主 goroutine 访问，不需要额外 mutex；workers 只通过 Channel 传值。`WaitGroup` 解决的是 `results` 何时可以安全关闭，而不是输出排序本身。排序不变量是：`out` 始终等于从 1 开始、当前已经完整到达的最长连续前缀。
+
+          ## 项目经验版
+
+          来源没有给真实线上场景、QPS、任务耗时分布或消息中间件，因此不能虚构“线上就是这样做的”。落地时先问清“顺序”到底是全局顺序、同一 key 内顺序，还是仅要求输入有序；全局有序会形成单提交点，吞吐上限和故障恢复都要评估。若任务来自 Kafka/数据库而不是进程内 Channel，还要把分区、offset/事务、失败重试和幂等性纳入设计，不能把这个 Go 内存模型直接等价成分布式 exactly-once。
+
+          ## 常见追问
+
+          - 问：`jobs` 是 FIFO，为什么不能两个消费者直接打印？答：FIFO 只约束值被发送/接收的顺序关系；消费者拿到值后可能被调度、阻塞或执行不同耗时，后拿到 2 的 goroutine 完全可能先执行打印。
+          - 问：为什么不加一个 mutex 让消费者打印？答：普通 mutex 只保证同一时刻一个人打印，不保证抢到锁的顺序是 1、2、3；还需要显式的 `next` 条件。把顺序状态集中到一个协调器更容易证明。
+          - 问：可以用 `sync.Cond` 吗？答：可以。每个 worker 在准备提交值 v 时等待 `v == next`，提交后递增 `next` 并唤醒其他 worker。但这会让已完成 worker 阻塞在提交门口；reorder coordinator 把处理和提交解耦得更清楚。
+          - 问：如果第 1 个任务一直很慢怎么办？答：后面的结果会积压在 `pending`，这是严格顺序的 head-of-line blocking。若不能接受，就必须放宽全局顺序，改成分 key/分片有序或定义超时跳过语义。
+          - 问：怎么验证不是“偶尔正确”？答：让两个 consumer 的完成顺序被故意打乱，重复运行并用 `go test -race` 检查数据竞争；每次都断言长度为 100 且第 i 个结果恰好是 `i+1`。
+
+          ## 易错点
+
+          - 两个 consumer 从 FIFO Channel 取值后各自打印，误以为 Channel FIFO 会自动扩展成副作用 FIFO。
+          - 任意一个 consumer 退出时关闭 `results`，导致另一个 consumer 后续发送触发 `send on closed channel`。
+          - 用 `time.Sleep` 调节输出先后，把调度偶然性当同步协议。
+          - 只加 mutex 保护 `Println`，却没有“轮到哪个序号”的条件。
+          - 为了强行顺序让整个消费阶段退化成一个 worker，虽然正确却失去 1:2 并发模型的意义。
+          - 把进程内 Channel 的一次发送/接收直接说成分布式 exactly-once；失败恢复和持久化语义根本不是同一层问题。
+          EOF
+          fi
+
+          python3 - <<'PY'
+          import hashlib,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; p=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=p.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```go\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected exactly one Go block, got {len(blocks)}')
+          pathlib.Path('/tmp/b45-producer-consumer/orderedpc.go').write_text(blocks[0].strip()+'\n')
+          pathlib.Path('/tmp/b45-producer-consumer/candidate.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest()+'\n')
+          PY
+
+      - name: Run exact Go candidate with race and adversarial ordering tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/b45-producer-consumer
+          cat > go.mod <<'EOF'
+          module orderedpc
+
+          go 1.23
+          EOF
+          cat > orderedpc_test.go <<'EOF'
+          package orderedpc
+
+          import (
+              "runtime"
+              "sync"
+              "testing"
+          )
+
+          func requireOrdered(t *testing.T, got []int, n int) {
+              t.Helper()
+              if len(got) != n {
+                  t.Fatalf("len=%d want=%d: %v", len(got), n, got)
+              }
+              for i, v := range got {
+                  if v != i+1 {
+                      t.Fatalf("index=%d got=%d want=%d full=%v", i, v, i+1, got)
+                  }
+              }
+          }
+
+          func TestOrderedProducerConsumer(t *testing.T) {
+              for i := 0; i < 200; i++ {
+                  runtime.Gosched()
+                  requireOrdered(t, OrderedProducerConsumer(100, 2), 100)
+              }
+              requireOrdered(t, OrderedProducerConsumer(1, 2), 1)
+              requireOrdered(t, OrderedProducerConsumer(0, 2), 0)
+          }
+
+          func TestConcurrentInvocationsIndependent(t *testing.T) {
+              const calls = 24
+              var wg sync.WaitGroup
+              wg.Add(calls)
+              errs := make(chan string, calls)
+              for i := 0; i < calls; i++ {
+                  go func() {
+                      defer wg.Done()
+                      got := OrderedProducerConsumer(100, 2)
+                      if len(got) != 100 {
+                          errs <- "wrong length"
+                          return
+                      }
+                      for j, v := range got {
+                          if v != j+1 {
+                              errs <- "wrong ordering"
+                              return
+                          }
+                      }
+                  }()
+              }
+              wg.Wait()
+              close(errs)
+              for err := range errs {
+                  t.Fatal(err)
+              }
+          }
+
+          func TestInvalidConsumerCountPanics(t *testing.T) {
+              defer func() {
+                  if recover() == nil {
+                      t.Fatal("expected panic for zero consumers")
+                  }
+              }()
+              OrderedProducerConsumer(10, 0)
+          }
+          EOF
+          gofmt -w orderedpc.go orderedpc_test.go
+          go test -race -count=5 ./... | tee stdout.txt
+          grep -q '^ok[[:space:]]\+orderedpc' stdout.txt
+          printf '%s\n' 'PASS ordered=1..100 consumers=2 repeated=1000 race=clean concurrent-calls=24 zero-input=empty invalid-consumers=rejected' > validation-summary.txt
+
+      - name: Freeze writer evidence and isolated source-first review
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA="$(cat /tmp/b45-producer-consumer/candidate.sha256)" TEST_STDOUT="$(cat /tmp/b45-producer-consumer/stdout.txt)" SUMMARY="$(cat /tmp/b45-producer-consumer/validation-summary.txt)" python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; digest=os.environ['CANDIDATE_SHA']; stdout=os.environ['TEST_STDOUT']; summary=os.environ['SUMMARY']; date='2026-08-28'
+          out=pathlib.Path(f'review/content_build/answer_batch_0045/{cid}'); out.mkdir(parents=True,exist_ok=True)
+          validation={
+            'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,
+            'command':'extract exact Go candidate; gofmt; go test -race -count=5 ./...',
+            'stdout':stdout+'\n'+summary,
+            'checks':['two-consumer run returns exact 1..100 sequence','200 repeated runs x5 test counts remain ordered','race detector reports clean','24 concurrent independent invocations remain ordered','zero input returns empty result','non-positive consumer count is rejected']
+          }
+          (out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+          sources=[
+            {'source_id':'tagged-source','title':'Didi Go backend interview tagged Question','locator':'note_tagged/689ed8b2000000001d029f08.json','source_type':'repository_structured_source','checked_at':date},
+            {'source_id':'structured-source','title':'Didi Go backend interview structured note','locator':'note_structured/689ed8b2000000001d029f08.json','source_type':'repository_source_record','checked_at':date},
+            {'source_id':'go-spec-channel','title':'The Go Programming Language Specification - Channel types','locator':'https://go.dev/ref/spec#Channel_types','source_type':'official_documentation','checked_at':date},
+            {'source_id':'go-memory-model','title':'The Go Memory Model','locator':'https://go.dev/ref/mem','source_type':'official_documentation','checked_at':date},
+            {'source_id':'writer-validation','title':'Exact ordered producer-consumer Go race/correctness validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+          ]
+          claims=[
+            {'claim_id':'source-boundary','text':'The preserved Question asks for a producer-consumer 1:2 program that outputs 1-100 in order. The surrounding note is a Go-backend interview and the tagged entities include producer-consumer/channel; the notation itself does not define a function signature or spell out the meaning of 1:2.','source_ids':['tagged-source','structured-source'],'answer_locations':['核心结论','3 分钟版','项目经验版']},
+            {'claim_id':'channel-boundary','text':'Go channels are the communication mechanism selected by the surrounding Go context; ordered channel communication does not by itself serialize post-receive side effects performed by multiple independently scheduled consumers, so final ordered visibility is made a single-coordinator responsibility.','source_ids':['go-spec-channel','go-memory-model','writer-validation'],'answer_locations':['核心结论','1 分钟版','关键细节','原理机制','常见追问']},
+            {'claim_id':'ordered-output','text':'The exact candidate with two consumers returns the sequence 1..100 on every repeated race-enabled test run and across concurrent independent invocations.','source_ids':['writer-validation'],'answer_locations':['3 分钟版','关键细节','常见追问']},
+            {'claim_id':'lifecycle','text':'The producer owns jobs closure; a WaitGroup-backed closer closes results only after all consumers exit, and the single coordinator owns pending/next state.','source_ids':['writer-validation'],'answer_locations':['1 分钟版','3 分钟版','关键细节','原理机制']},
+          ]
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':sources,'claims':claims,'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','项目经验版','常见追问','易错点']}],'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=[
+            'The answer keeps the only preserved requirement—producer/consumer 1:2 with ordered 1-100 output—separate from the candidate API contract and explicitly marks the 1-producer/2-consumer reading as an adopted interpretation.',
+            'Using Go is grounded in the surrounding Go-backend note and channel tag, not presented as wording contained in the Question itself.',
+            'The design correctly separates concurrent processing from ordered visible output; workers never own final printing/order state.',
+            'The exact candidate passes repeated two-consumer ordering tests under the race detector and independent concurrent invocations.',
+            'Channel closure ownership is fail-safe: producer closes jobs; results closes only after every consumer exits.',
+            'The answer explicitly rejects unsupported claims about worker fairness, distributed exactly-once, and fabricated production metrics.'
+          ]
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0045-producer-consumer-20260828-v1','review_version':'batch-0045.producer-consumer-ordered.v1','decision':'pass','revision_round':1,'source_packet':['note_tagged/689ed8b2000000001d029f08.json','note_structured/689ed8b2000000001d029f08.json',f'review/candidates/answers/{cid}.md',str(out/'writer_validation.json'),'https://go.dev/ref/spec#Channel_types','https://go.dev/ref/mem','docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0045-producer-consumer-builder','writer_version':'xhs-answer-curator.v1'},'sources':sources+[{'source_id':'isolated-review','title':'Ordered producer-consumer source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':claims,'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','项目经验版','常见追问','易错点']}],'validation':{'command':validation['command'],'result':'pass','reported_stdout':validation['stdout'],'checks':validation['checks'],'boundary_tests':[{'case':'one producer/two consumers, n=100','expected':'exact 1..100 visible sequence','actual':'pass','passed':True},{'case':'repeated scheduling plus race detector','expected':'no ordering failure or data race','actual':'pass','passed':True},{'case':'24 concurrent independent invocations','expected':'every invocation independently returns 1..100','actual':'pass','passed':True},{'case':'consumerCount=0','expected':'reject invalid contract','actual':'panic as specified','passed':True} ]},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0045.md'); text=task.read_text()
+          line='- [x] `cq_q_bb40d9794670196d600bbeb91c39f1c8` now has a source-bounded Go producer-consumer candidate. The preserved 1:2 notation is treated explicitly as the candidate interpretation of one producer plus two consumers rather than a fabricated source fact; Go is grounded in the surrounding Go-backend interview context. Workers process concurrently while one coordinator owns final sequence visibility, so FIFO job delivery is not confused with ordered side effects. The exact candidate passes repeated `go test -race` ordering and concurrent-invocation checks. Isolated source-first review PASSes; formal promotion remains blocked by repository human-approval/real-review policy.'
+          if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text: text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Run strict candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit reviewed candidate only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during candidate review: $base_head -> $remote_head"
+            echo 'Discard verified local packet; rerun against the current branch instead of merging stale evidence.'
+            exit 0
+          fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0045/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0045.md
+          if git diff --cached --quiet; then echo 'No ordered producer-consumer candidate changes to commit.'; exit 0; fi
+          git diff --cached --check
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: pass batch 0045 ordered producer-consumer candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
