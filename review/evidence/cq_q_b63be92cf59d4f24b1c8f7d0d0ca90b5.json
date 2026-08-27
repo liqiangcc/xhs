@@ -1,0 +1,178 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_b63be92cf59d4f24b1c8f7d0d0ca90b5",
+  "candidate_sha256": "1ad875c29f44e9ca05aa1411cf027f4cf61b7bdb01d1543eca535314bb7726a4",
+  "checked_at": "2026-08-28",
+  "writer": {
+    "writer_id": "content-batch-0044-coin-change-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "primary-source",
+      "title": "Kuaishou tagged source",
+      "locator": "note_tagged/67e13c24000000000302a976.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "batch-inventory",
+      "title": "Frozen Batch 0044 source inventory",
+      "locator": "review/content_build/answer_batch_0044/source_inventory.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer two-dimensional DP differential validation",
+      "locator": "review/content_build/answer_batch_0044/cq_q_b63be92cf59d4f24b1c8f7d0d0ca90b5/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent recursive enumeration and boundary validation",
+      "locator": "review/content_build/answer_batch_0044/cq_q_b63be92cf59d4f24b1c8f7d0d0ca90b5/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Coin-change source-first isolated review",
+      "locator": "review/content_build/answer_batch_0044/cq_q_b63be92cf59d4f24b1c8f7d0d0ca90b5/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks for a total coin-change combination count but does not preserve unlimited-use, input-validation or numeric-width constraints; the candidate marks these as its executable contract.",
+      "source_ids": [
+        "primary-source",
+        "batch-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "combination-dp-mechanism",
+      "text": "Coin-outer iteration avoids counting denomination order as separate arrangements, while ascending amount permits repeated use of the current denomination; exact execution matches independent enumeration and is invariant to denomination input order.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "base-and-boundaries",
+      "text": "The empty-combination seed, empty denomination boundaries, invalid denominations and exact large-count behavior are covered by deterministic executable validation under the declared contract.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "b63be92cf59d4f24b1c8f7d0d0ca90b5",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "compile exact candidate Java block and compare with independent recursive enumeration and boundary assertions",
+    "result": "pass",
+    "reported_stdout": "PASS independent recursive=2400 permutations=7200 zero-empty=1 positive-empty=0 invalid-denominations=rejected",
+    "checks": [
+      "known 5/[1,2,5], 11/[1,2,5] and unreachable cases",
+      "2400 deterministic small cases match independent recursive enumeration",
+      "7200 denomination-order permutations preserve unordered-combination count",
+      "zero amount with no coins returns one empty combination",
+      "positive amount with no coins returns zero",
+      "duplicate and zero denominations are rejected by the declared contract"
+    ],
+    "boundary_tests": [
+      {
+        "case": "amount zero with no denominations",
+        "expected": "one empty combination",
+        "actual": "1",
+        "passed": true
+      },
+      {
+        "case": "positive amount with no denominations",
+        "expected": "zero combinations",
+        "actual": "0",
+        "passed": true
+      },
+      {
+        "case": "duplicate and non-positive denominations",
+        "expected": "IllegalArgumentException under declared contract",
+        "actual": "rejected",
+        "passed": true
+      },
+      {
+        "case": "denomination input order permutations",
+        "expected": "same unordered-combination count for all permutations",
+        "actual": "7200 permutations matched",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0044-coin-change-20260828-v2",
+    "review_version": "batch-0044.coin-change-combinations.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The preserved source asks only for total combination count for an amount and coin denominations; unlimited reuse, denomination uniqueness, invalid-input policy and numeric bounds are not preserved source facts.",
+      "The candidate labels those missing conditions as an explicit executable contract.",
+      "Coin-outer iteration prevents denomination order from creating duplicate arrangements, while ascending amount permits unlimited reuse of the current denomination.",
+      "The dp[0]=1 empty-combination seed and complete-knapsack versus 0/1 traversal boundary are explained.",
+      "Independent execution matches recursive enumeration on 2400 deterministic cases and 7200 input-order permutations, including explicit zero/empty and invalid-denomination boundaries.",
+      "BigInteger avoids an unsupported fixed-width result bound."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
