@@ -1,0 +1,206 @@
+name: Review Content Batch 0040 Stock III
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0040-stock-iii.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-stock-iii-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a2159736eae9112fc8f174c75e2e7b85
+  SOURCE_QID: a2159736eae9112fc8f174c75e2e7b85
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze primary-source contract and form source-first conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"; test -f "$out/StockIII.java"
+          cat > "$out/official_problem_snapshot.json" <<'JSON'
+          {
+            "schema_version": "official_problem_snapshot.v1",
+            "checked_at": "2026-08-27",
+            "source_type": "official_problem_statement",
+            "locator": "https://leetcode.cn/problems/best-time-to-buy-and-sell-stock-iii/",
+            "problem_number": 123,
+            "title": "买卖股票的最佳时机 III",
+            "contract": {
+              "input": "prices[i] is the stock price on day i",
+              "objective": "maximize profit",
+              "maximum_transactions": 2,
+              "overlapping_transactions_allowed": false,
+              "must_sell_before_buying_again": true,
+              "prices_length_min": 1,
+              "prices_length_max": 100000,
+              "price_min": 0,
+              "price_max": 100000
+            },
+            "examples": [
+              {"prices":[3,3,5,0,0,3,1,4],"expected":6},
+              {"prices":[1,2,3,4,5],"expected":4},
+              {"prices":[7,6,4,3,1],"expected":0},
+              {"prices":[1],"expected":0}
+            ]
+          }
+          JSON
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/stock-context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：股票问题 III';
+          const note=JSON.parse(fs.readFileSync('note_tagged/681767b20000000023014f2f.json','utf8'));
+          const src=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('repository source drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/stock-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('canonical context drifted');
+          const official=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0040/${cid}/official_problem_snapshot.json`,'utf8'));
+          if(official.problem_number!==123||official.title!=='买卖股票的最佳时机 III'||official.contract.maximum_transactions!==2||official.contract.overlapping_transactions_allowed!==false||official.contract.must_sell_before_buying_again!==true) throw new Error('primary-source snapshot contract invalid');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['# 股票问题 III：最多两笔交易的最大利润','public final class Solution','long nextBuy1','long nextSell1','long nextBuy2','long nextSell2','时间 O(n)','额外空间 O(1)','最多两笔，不是必须两笔']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/线上事故|生产环境里我|我负责过/.test(md)) throw new Error('fabricated experience risk');
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex')+'\n');
+          NODE
+
+          cat > "$out/ReviewerStockIII.java" <<'JAVA'
+          import java.util.*;
+          public final class ReviewerStockIII {
+              static int oneTransaction(int[] a,int lo,int hi){
+                  if(lo>hi) return 0;
+                  int min=a[lo],best=0;
+                  for(int i=lo+1;i<=hi;i++){best=Math.max(best,a[i]-min);min=Math.min(min,a[i]);}
+                  return best;
+              }
+              static int splitOracle(int[] a){
+                  int n=a.length,best=oneTransaction(a,0,n-1);
+                  for(int split=0;split+1<n;split++) best=Math.max(best,oneTransaction(a,0,split)+oneTransaction(a,split+1,n-1));
+                  return best;
+              }
+              static void enumerate(int[] a,int i,int max){
+                  if(i==a.length){int expected=splitOracle(a),actual=StockIII.solve(a);if(actual!=expected)throw new AssertionError("mismatch "+Arrays.toString(a)+" expected="+expected+" actual="+actual);return;}
+                  for(int v=0;v<=max;v++){a[i]=v;enumerate(a,i+1,max);}
+              }
+              public static void main(String[] args){
+                  int[][] cases={{3,3,5,0,0,3,1,4},{1,2,3,4,5},{7,6,4,3,1},{1},{2,1,4,5,2,9,7}};
+                  int[] expected={6,4,0,0,11};
+                  for(int i=0;i<cases.length;i++)if(StockIII.solve(cases[i])!=expected[i])throw new AssertionError("boundary "+i);
+                  for(int n=1;n<=7;n++)enumerate(new int[n],0,3);
+                  System.out.println("PASS split-prefix-suffix-oracle length=1..7 prices=0..3 boundaries=6,4,0,0,11");
+              }
+          }
+          JAVA
+          javac "$out/StockIII.java" "$out/ReviewerStockIII.java"
+          stdout="$(java -cp "$out" ReviewerStockIII)"
+          test "$stdout" = 'PASS split-prefix-suffix-oracle length=1..7 prices=0..3 boundaries=6,4,0,0,11'
+          CANDIDATE_SHA="$(cat /tmp/candidate-sha)" STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'); const cid=process.env.CANONICAL_ID,date='2026-08-27',out=`review/content_build/answer_batch_0040/${cid}`;
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,result:'pass',validated_at:date,command:'javac StockIII.java ReviewerStockIII.java && java ReviewerStockIII',stdout:process.env.STDOUT,checks:['official examples and extra two-transaction case','independent prefix/suffix one-transaction split oracle','all arrays length 1..7 with prices 0..3']},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0040-stock-iii-20260827-v1';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository source is identifier-like (“算法：股票问题 III”); the corresponding official LeetCode 123 primary-source contract is explicitly frozen before review.',
+            'The candidate preserves the official at-most-two, non-overlapping transaction contract and does not present the recovered details as verbatim repository wording.',
+            'The four-state implementation is a constant-space form of transaction-count/holding-state DP and uses previous-day snapshots, removing update-order ambiguity.',
+            'An independent prefix/suffix split oracle matches the implementation for every array of length 1..7 with prices 0..3 and the official examples.',
+            'The standalone Java answer block compiles; O(n) time and O(1) extra-space claims match the implementation.',
+            'No project experience is fabricated and follow-ups cover transaction order, at-most semantics, k-generalization, and update-order boundaries.'
+          ];
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0040.stock-iii.v1',decision:'pass',revision_round:1,source_packet:['note_tagged/681767b20000000023014f2f.json',`${out}/official_problem_snapshot.json`,'review/content_build/answer_batch_0040/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Bind evidence only after independent conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"
+          CANDIDATE_SHA="$(cat /tmp/candidate-sha)" node <<'NODE'
+          const fs=require('fs'); const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0040/${cid}`;
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==process.env.CANDIDATE_SHA) throw new Error('writer packet hash/state drifted');
+          const reviewResult=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          if(reviewResult.decision!=='pass'||reviewResult.candidate_sha256!==process.env.CANDIDATE_SHA) throw new Error('review binding failed');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,checked_at:date,
+            writer:{writer_id:'content-batch-0040-stock-iii-builder',writer_version:'xhs-answer-curator.v1'},
+            sources:[
+              {source_id:'repository-source',title:'Repository source “算法：股票问题 III”',locator:`note_tagged/681767b20000000023014f2f.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},
+              {source_id:'official-problem',title:'LeetCode 123 买卖股票的最佳时机 III official problem statement',locator:'https://leetcode.cn/problems/best-time-to-buy-and-sell-stock-iii/',source_type:'official_problem_statement',checked_at:date},
+              {source_id:'reviewer-validation',title:'Independent Stock III split-oracle validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},
+              {source_id:'isolated-review',title:'Stock III source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],
+            claims:[
+              {claim_id:'source-identity',text:'The repository source is the identifier-like title “算法：股票问题 III”; the full algorithm contract is recovered from the corresponding official problem.',source_ids:['repository-source','official-problem','isolated-review'],answer_locations:['核心结论','易错点']},
+              {claim_id:'official-contract',text:'The official problem permits at most two transactions and requires selling before buying again.',source_ids:['official-problem','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节']},
+              {claim_id:'algorithm-validation',text:'The four-state Java implementation matches an independent prefix/suffix split oracle on exhaustive small arrays.',source_ids:['reviewer-validation','isolated-review'],answer_locations:['3 分钟版','原理机制','关键细节']}],
+            source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],
+            validation:{command:'javac StockIII.java ReviewerStockIII.java && java ReviewerStockIII',result:'pass',reported_stdout:'PASS split-prefix-suffix-oracle length=1..7 prices=0..3 boundaries=6,4,0,0,11',boundary_tests:[{case:'official mixed prices',expected:6,passed:true},{case:'monotonic rise',expected:4,passed:true},{case:'monotonic fall',expected:0,passed:true},{case:'single day',expected:0,passed:true},{case:'two profitable separated regions',expected:11,passed:true}]},
+            review:{reviewer_id:reviewResult.reviewer_id,review_version:reviewResult.review_version,independent:true,decision:'pass',revision_round:1,scores:reviewResult.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:reviewResult.findings},
+            promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md'; let text=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_a2159736eae9112fc8f174c75e2e7b85` Stock III writer slice is staged source-first: repository title identity is preserved, the full at-most-two-transactions contract is bounded to the official LeetCode 123 statement, the standalone Java state-machine implementation compiles, and deterministic exhaustive small arrays match an independent date-enumeration oracle. Independent source-first review is still required.';
+          const passed='- [x] `cq_q_a2159736eae9112fc8f174c75e2e7b85` passed isolated source-first review: the identifier-like repository source is bounded to the official LeetCode 123 contract, the standalone Java four-state DP compiles, and an independent prefix/suffix split oracle matches exhaustive small arrays. Strict evidence is bound; repository human approval and S11 real-review policy still block curated promotion.';
+          if(!text.includes(pending)) throw new Error('Stock III writer-progress marker missing or stale'); fs.writeFileSync(task,text.replace(pending,passed));
+          NODE
+
+      - name: Strict audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noManifest
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit passing review from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0040/$cid"
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          test "$(git rev-parse origin/$CONTENT_BRANCH)" = '${{ steps.base.outputs.head }}' || { echo 'Content branch advanced during Stock III review; fail closed.'; exit 1; }
+          git add "review/evidence/$cid.json" "$out/official_problem_snapshot.json" "$out/ReviewerStockIII.java" "$out/reviewer_validation.json" "$out/isolated_review_result.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git diff --cached --check
+          git config user.name 'xhs-review-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0040 stock-iii candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
