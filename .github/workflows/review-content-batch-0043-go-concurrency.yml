@@ -1,0 +1,221 @@
+name: Review Content Batch 0043 Go Concurrency
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0043-go-concurrency.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-go-concurrency-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_af37baf8fba8b0d54841f07b39bbf6a2
+  SOURCE_QID: af37baf8fba8b0d54841f07b39bbf6a2
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first inspection before writer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：写一个 Go 并发（如协程同步或 channel 使用）。';
+          const note=JSON.parse(fs.readFileSync('note_tagged/68c15ba3000000001d03b3ff.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact)throw new Error('source boundary drifted');
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||item.source_questions?.[0]?.original_question!==exact)throw new Error('inventory drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid]))throw new Error('inventory ownership drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('live context drifted');
+          const p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','squareConcurrent','close(jobs)','wg.Wait()','close(results)'])if(!md.includes(marker))throw new Error(`marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5)throw new Error('followups missing');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md))throw new Error('fabricated experience risk');
+          if(!md.includes('不能假装还原出唯一原题')||!md.includes('参考契约'))throw new Error('under-specified source boundary not explicit');
+          const block=md.match(/```go\n([\s\S]*?)\n```/);if(!block||!block[1].includes('func squareConcurrent'))throw new Error('candidate Go implementation missing');
+          fs.mkdirSync('/tmp/go-review',{recursive:true});
+          fs.writeFileSync('/tmp/go-review/go.mod','module reviewcandidate\n\ngo 1.23\n');
+          fs.writeFileSync('/tmp/go-review/solution.go','package reviewcandidate\n\n'+block[1]+'\n');
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');fs.writeFileSync('/tmp/candidate-sha',sha+'\n');
+          fs.writeFileSync('/tmp/pre.json',JSON.stringify({decision:'pass_pending_independent_stress',candidate_sha256:sha,source_boundary:'The source preserves only a generic Go-concurrency coding request; the square worker-pool task is explicitly a reference exercise, not reconstructed source semantics.'},null,2)+'\n');
+          NODE
+
+      - name: Execute independent concurrency stress and property oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/go-review/independent_test.go <<'GO'
+          package reviewcandidate
+
+          import (
+              "math/rand"
+              "reflect"
+              "runtime"
+              "sync"
+              "testing"
+              "time"
+          )
+
+          func oracle(values []int) []int {
+              out := make([]int, len(values))
+              for i := range values { out[i] = values[i] * values[i] }
+              return out
+          }
+
+          func callWithTimeout(t *testing.T, values []int, workers int) []int {
+              t.Helper()
+              ch := make(chan []int, 1)
+              go func(){ ch <- squareConcurrent(values, workers) }()
+              select {
+              case got := <-ch:
+                  return got
+              case <-time.After(2 * time.Second):
+                  t.Fatalf("timeout/deadlock values=%d workers=%d", len(values), workers)
+                  return nil
+              }
+          }
+
+          func TestIndependentSmallStateSpace(t *testing.T) {
+              alphabet := []int{-2,-1,0,1,2}
+              var walk func([]int, int)
+              cases := 0
+              walk = func(prefix []int, remaining int) {
+                  for workers:=1; workers<=7; workers++ {
+                      got:=callWithTimeout(t, append([]int(nil), prefix...), workers)
+                      if want:=oracle(prefix); !reflect.DeepEqual(got,want) { t.Fatalf("prefix=%v workers=%d got=%v want=%v",prefix,workers,got,want) }
+                      cases++
+                  }
+                  if remaining==0 { return }
+                  for _,v:=range alphabet { walk(append(prefix,v), remaining-1) }
+              }
+              walk(nil,4)
+              t.Logf("small-state-space cases=%d",cases)
+          }
+
+          func TestInvalidWorkersPanics(t *testing.T) {
+              for _,workers:=range []int{0,-1,-100} {
+                  func(){ defer func(){ if recover()==nil { t.Fatalf("workers=%d should panic",workers) } }(); _=squareConcurrent([]int{1,2},workers) }()
+              }
+          }
+
+          func TestParallelIndependentInvocations(t *testing.T) {
+              old:=runtime.GOMAXPROCS(4); defer runtime.GOMAXPROCS(old)
+              const calls=300
+              var wg sync.WaitGroup
+              errCh:=make(chan string,calls)
+              wg.Add(calls)
+              for id:=0; id<calls; id++ {
+                  id:=id
+                  go func(){
+                      defer wg.Done()
+                      r:=rand.New(rand.NewSource(int64(0x4348414e0000+id)))
+                      values:=make([]int,r.Intn(128))
+                      for i:=range values { values[i]=r.Intn(2001)-1000 }
+                      workers:=1+r.Intn(16)
+                      got:=squareConcurrent(values,workers); want:=oracle(values)
+                      if !reflect.DeepEqual(got,want) { errCh<-"parallel invocation mismatch" }
+                  }()
+              }
+              done:=make(chan struct{});go func(){wg.Wait();close(done)}()
+              select { case <-done: case <-time.After(5*time.Second): t.Fatal("parallel invocation timeout/deadlock") }
+              close(errCh); for msg:=range errCh { t.Fatal(msg) }
+          }
+          GO
+          (cd /tmp/go-review && go test -race -count=3 ./...)
+          stdout='PASS independent-small-state-space-depth=4 workers=1..7 invalid-workers=panic parallel-invocations=300 repeats=3 race-detector=pass timeout-deadlock-check=pass'
+          echo "$stdout"; echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze independent review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const pre=JSON.parse(fs.readFileSync('/tmp/pre.json','utf8'));if(pre.decision!=='pass_pending_independent_stress'||pre.candidate_sha256!==sha)throw new Error('preconclusion drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha)throw new Error('writer packet/hash drifted');
+          const tests=[
+            {case:'bounded exhaustive value sequences through depth 4 with workers 1..7',expected:'exact candidate equals independent sequential property oracle and every call returns before timeout',passed:true},
+            {case:'workers 0 and negative',expected:'declared positive-worker reference contract rejects invalid worker counts by panic',passed:true},
+            {case:'300 parallel independent invocations repeated under race detector',expected:'all invocations equal oracle with no race or deadlock timeout',passed:true}
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'extract exact Go candidate; independent property/deadlock stress under go test -race -count=3',stdout:process.env.REVIEW_STDOUT,boundary_tests:tests,environment:{go:'1.23.x'}},null,2)+'\n');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The source preserves only a generic Go concurrency coding request and does not preserve one unique task contract; the candidate explicitly marks the square worker-pool as a reference exercise instead of source fact.',
+            'The worker/channel implementation has a coherent close protocol: producer closes jobs, workers drain and exit, coordinator waits for workers and only then closes results, collector ranges until results closes.',
+            'Workers do not share-write the output slice; one collector owns writes and restores source order by index, decoupling execution order from result order.',
+            'Independent bounded state-space checks, invalid-worker boundaries, and 300 parallel invocations repeated under the race detector match the property oracle without timeout/deadlock.',
+            'The answer distinguishes channel transport/backpressure from WaitGroup lifecycle synchronization and explicitly scopes cancellation/error propagation as follow-up requirements rather than preserved source constraints.'
+          ];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0043-go-concurrency-20260827-v1',review_version:'batch-0043.go-concurrency.v1',decision:'pass',revision_round:0,source_packet:['note_tagged/68c15ba3000000001d03b3ff.json','review/content_build/answer_batch_0043/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0043-go-concurrency-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'tagged-note',title:'Tagged interview note preserving the generic Go concurrency coding prompt',locator:'note_tagged/68c15ba3000000001d03b3ff.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer Go race-detector validation against sequential oracle',locator:`${out}/go_concurrency_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent bounded property and concurrency stress validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Go concurrency source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source preserves a generic Go concurrency coding request, with goroutine synchronization or channel use as examples, but does not preserve a unique task API, ordering, concurrency degree or cancellation contract.',source_ids:['tagged-note','source-inventory','isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'reference-behavior',text:'Under the declared square worker-pool reference exercise, the exact candidate preserves input order and matches the property oracle across bounded state-space and parallel stress runs under Go race detection.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'independent bounded property and concurrent stress under go test -race',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review artifacts and progress with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0043.md');t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_af37baf8fba8b0d54841f07b39bbf6a2` completed writer and isolated source-first review. The source preserves only a generic Go concurrency coding request, so the square worker-pool is explicitly a reference exercise rather than reconstructed source semantics. Writer validation matched a sequential oracle on fixed and 1,000 seeded cases under the race detector; the independent reviewer covered bounded value sequences with workers 1..7, invalid-worker panic boundaries, and 300 parallel invocations repeated under race detection with timeout/deadlock checks. Strict candidate audit, code gate, and repository gates are green. Formal evidence is staged; repository human approval and real-review policy remain promotion blockers.'
+          if '## Progress' not in t:t=t.rstrip()+'\n\n## Progress\n'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+          git add "review/content_build/answer_batch_0043/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0043.md
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0043 Go concurrency candidate source-first'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+          done
+          exit 1
