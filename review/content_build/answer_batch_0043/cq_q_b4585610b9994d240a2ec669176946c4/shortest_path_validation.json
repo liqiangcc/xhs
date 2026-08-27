@@ -1,11 +1,11 @@
 {
   "schema_version": "answer_code_validation.v1",
   "canonical_id": "cq_q_b4585610b9994d240a2ec669176946c4",
-  "candidate_sha256": "10cd62748af15a446b3f7e018ff2c175f4966d9b96f86d2ae97c3c18c7792d6d",
+  "candidate_sha256": "fff623aaa8338a354999131939fb0cd90d60c5891747b586f38c4242b69124ab",
   "result": "pass",
   "validated_at": "2026-08-27",
   "command": "compile exact Java candidate and differential-test against Floyd-Warshall",
-  "stdout": "PASS sample=exact zero-parallel-selfloop=covered unreachable=covered random-vs-floyd=12000 negative-edge=rejected",
+  "stdout": "PASS sample=exact zero-parallel-selfloop=covered unreachable=covered random-vs-floyd=12000 negative-edge=rejected; PASS sentinel-equal=not-finite overflow-path=ignored representable-near-max=preserved",
   "boundary_tests": [
     {
       "case": "fixed weighted sample",
@@ -25,6 +25,11 @@
     {
       "case": "negative edge",
       "expected": "reference contract rejects unsupported input",
+      "passed": true
+    },
+    {
+      "case": "sentinel and near-long-maximum representation boundary",
+      "expected": "Long.MAX_VALUE is reserved sentinel; overflowing/sentinel-equal candidates are not represented as finite distances, while Long.MAX_VALUE-1 remains representable",
       "passed": true
     }
   ],
