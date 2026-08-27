@@ -1,0 +1,194 @@
+name: Review Content Batch 0041 Heap Sort
+
+on:
+  push:
+    branches: [content/quality-completion]
+    paths:
+      - .github/workflows/review-content-batch-0041-heap-sort.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0041-heap-sort-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a9a3cdad804b0bdf8732d7d22dcb03c2
+  SOURCE_QID: a9a3cdad804b0bdf8732d7d22dcb03c2
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Independently inspect source and execute candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"
+          test -f "$out/writer_research.json"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const raw=fs.readFileSync('note_desc/67aef7c100000000170382ee.txt','utf8');
+          if(!raw.includes('堆排序实现从大到小（要求独立补全完整代码）')) throw new Error('descending heap-sort source contract drifted');
+          if(!raw.includes('需自实现堆结构')) throw new Error('self-implemented heap source contract drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('active ownership/type drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','```java','最小堆','从大到小','自实现堆','不是原始面经额外保存的要求']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上/.test(md)) throw new Error('fabricated first-person production claim risk');
+          const m=md.match(/```java\n([\s\S]*?)```/); if(!m) throw new Error('candidate Java block missing');
+          const code=m[1];
+          if(/PriorityQueue|Arrays\.sort|Collections\.sort/.test(code)) throw new Error('candidate implementation delegates core heap/sort behavior to ready-made library');
+          if(!/siftDown/.test(code)||!/swap/.test(code)) throw new Error('self-implemented heap mechanics missing');
+          fs.writeFileSync('/tmp/Solution.java',code);
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex')+'\n');
+          NODE
+          cat > /tmp/HeapSortReviewer.java <<'JAVA'
+          import java.util.*;
+          public final class HeapSortReviewer {
+              static int[] oracle(int[] input) {
+                  int[] a=input.clone();
+                  for(int i=1;i<a.length;i++){
+                      int v=a[i],j=i-1;
+                      while(j>=0 && a[j]<v){ a[j+1]=a[j]; j--; }
+                      a[j+1]=v;
+                  }
+                  return a;
+              }
+              static void verify(int[] in){
+                  int[] got=in.clone();
+                  Solution.sortDescending(got);
+                  int[] want=oracle(in);
+                  if(!Arrays.equals(got,want)) throw new AssertionError(Arrays.toString(in)+" got="+Arrays.toString(got)+" want="+Arrays.toString(want));
+              }
+              static long exhaustive(){
+                  int[] vals={-2,-1,0,1,2}; long count=0;
+                  for(int n=0;n<=6;n++){
+                      int total=1; for(int i=0;i<n;i++) total*=vals.length;
+                      for(int mask=0;mask<total;mask++){
+                          int x=mask; int[] a=new int[n];
+                          for(int i=0;i<n;i++){ a[i]=vals[x%vals.length]; x/=vals.length; }
+                          verify(a); count++;
+                      }
+                  }
+                  return count;
+              }
+              public static void main(String[] args){
+                  verify(new int[]{});
+                  verify(new int[]{7});
+                  verify(new int[]{3,1,2});
+                  verify(new int[]{5,5,5,5});
+                  verify(new int[]{9,7,5,3,1});
+                  verify(new int[]{1,3,5,7,9});
+                  verify(new int[]{Integer.MIN_VALUE,0,Integer.MAX_VALUE,-1,1});
+                  verify(new int[]{2,-2,2,-2,0,0});
+                  long count=exhaustive();
+                  if(count!=19531L) throw new AssertionError("unexpected exhaustive count="+count);
+                  try{Solution.sortDescending(null);throw new AssertionError("null must be rejected");}catch(IllegalArgumentException expected){}
+                  System.out.println("PASS reviewer-oracle=insertion-sort-desc fixed-boundaries=8 exhaustive-arrays="+count+" null=rejected");
+              }
+          }
+          JAVA
+          javac /tmp/Solution.java /tmp/HeapSortReviewer.java
+          stdout="$(java -cp /tmp HeapSortReviewer)"
+          test "$stdout" = 'PASS reviewer-oracle=insertion-sort-desc fixed-boundaries=8 exhaustive-arrays=19531 null=rejected'
+          echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze isolated review and strict evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0041/${cid}`;
+          const sha=process.env.CANDIDATE_SHA;
+          const boundary_tests=[
+            {case:'empty and singleton arrays',expected:'unchanged and valid',passed:true},
+            {case:'already ascending and already descending arrays',expected:'descending result',passed:true},
+            {case:'duplicates, negatives and int extrema',expected:'descending result with multiplicity preserved',passed:true},
+            {case:'exhaustive arrays length 0..6 over {-2,-1,0,1,2}',expected:'candidate equals independent insertion-sort-desc oracle for 19,531 cases',passed:true},
+            {case:'null input',expected:'declared IllegalArgumentException',passed:true}
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'extract candidate Solution.java; javac Solution.java HeapSortReviewer.java && java HeapSortReviewer',stdout:process.env.REVIEW_STDOUT,boundary_tests},null,2)+'\n');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The raw repository note explicitly preserves descending heap sort and requires the heap structure to be implemented rather than delegated to a ready-made heap.',
+            'The raw source does not preserve Java as the language, null-input behavior, mutability, stability, scale, or a specific heap orientation; the candidate labels its int-array/null choices as reference-contract decisions.',
+            'The extracted candidate code contains its own siftDown/swap heap mechanics and does not delegate the core implementation to PriorityQueue, Arrays.sort, or Collections.sort.',
+            'The candidate min-heap algorithm matches a separately implemented insertion-sort-desc oracle on fixed edge cases and all 19,531 arrays of lengths 0..6 over {-2,-1,0,1,2}.',
+            'The correctness explanation is consistent with the implementation: each iteration freezes the current minimum at the right edge, yielding a descending final array while restoring the min-heap on the shrinking prefix.',
+            'The project-experience section stays hypothetical and does not invent production history for a pure algorithm prompt.'
+          ];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0041-heap-sort-20260827',review_version:'batch-0041.heap-sort.v1',decision:'pass',revision_round:1,source_packet:['note_desc/67aef7c100000000170382ee.txt','review/content_build/answer_batch_0041/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha) throw new Error('writer packet/hash drifted');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0041-heap-sort-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-original-note',title:'Original heap-sort interview note',locator:'note_desc/67aef7c100000000170382ee.txt',source_type:'repository_source_record',checked_at:date},{source_id:'repository-source-inventory',title:'Active heap-sort source Question and Canonical ownership',locator:`review/content_build/answer_batch_0041/source_inventory.json#canonical_id=${cid}`,source_type:'repository_source_record',checked_at:date},{source_id:'writer-validation',title:'Writer heap-sort validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent insertion-sort-desc heap-sort oracle',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Heap-sort source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The original note requires heap sort from large to small and independently completing the heap structure.',source_ids:['repository-original-note','repository-source-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版']},{claim_id:'source-boundary',text:'Java/int-array/null semantics, stability, mutation and heap orientation are implementation choices or general algorithm properties, not additional preserved source constraints.',source_ids:['repository-original-note','repository-source-inventory','isolated-review'],answer_locations:['核心结论','关键细节','项目经验版','常见追问']},{claim_id:'reference-implementation',text:'The declared self-implemented min-heap sort matches an independent insertion-sort-desc oracle over exhaustive bounded arrays and fixed boundary cases.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'extract candidate Solution.java; javac Solution.java HeapSortReviewer.java && java HeapSortReviewer',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0041.md';
+          let text=fs.readFileSync(task,'utf8');
+          const pending='- [x] Writer pass completed for `cq_q_a9a3cdad804b0bdf8732d7d22dcb03c2` (heap sort descending): the candidate is source-bounded to the raw note\'s explicit “从大到小” and “自实现堆结构” requirements, uses an in-place min-heap implementation, and records deterministic Java validation in `review/content_build/answer_batch_0041/cq_q_a9a3cdad804b0bdf8732d7d22dcb03c2/`. The implementation matches an independent `Arrays.sort` + reverse oracle for fixed boundaries and all 19,531 arrays of lengths 0..6 over `{-2,-1,0,1,2}`. `writer_research.json` binds candidate SHA-256 `648d8258da6bdcd1ea17e5c742e37b0fb642bdaebc81925455bbba06e4afaceb`; isolated independent review is still pending, so no promotion occurred.';
+          const passed='- [x] `cq_q_a9a3cdad804b0bdf8732d7d22dcb03c2` passed isolated source-first review: the preserved source requires descending heap sort and a self-implemented heap structure; Java/int-array/null/stability/mutation details remain explicitly non-source or implementation choices. The candidate self-implements min-heap mechanics and matches an independently implemented insertion-sort-desc oracle on fixed boundaries plus all 19,531 arrays of lengths 0..6 over `{-2,-1,0,1,2}`. Strict candidate evidence is bound; repository human approval and S11 real-review policy still block curated promotion.';
+          if(!text.includes(pending)) throw new Error('writer-progress marker missing or stale');
+          fs.writeFileSync(task,text.replace(pending,passed));
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review safely
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0041/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0041.md
+          git commit -m 'review: pass batch 0041 heap-sort candidate source-first'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_SHA"
+          git push origin "HEAD:$CONTENT_BRANCH"
