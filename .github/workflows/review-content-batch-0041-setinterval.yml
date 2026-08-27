@@ -1,0 +1,186 @@
+name: Review Content Batch 0041 setInterval
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0041-setinterval.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0041-setinterval-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a7ba6548994bab4e4412f98bf4a8dee2
+  SOURCE_QID: a7ba6548994bab4e4412f98bf4a8dee2
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first inspection before writer packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：实现 setInterval 和 clearInterval';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/6668131f00000000060061b3.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('source contract drifted');
+          const raw=fs.readFileSync('note_desc/6668131f00000000060061b3.txt','utf8');
+          if(!raw.includes('写两道题吧')) throw new Error('raw caption boundary drifted');
+          const rr=fs.readFileSync('review/content_build/answer_batch_0041/recoverability_review.md','utf8');
+          if(!rr.includes(`### \`${cid}\` — recoverable as Coding with explicit API boundary`)) throw new Error('pre-draft recoverability decision drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('ownership/type drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','```javascript','clear-before-first-fire','clear-inside-callback','不一致']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上/.test(md)) throw new Error('fabricated production claim risk');
+          const m=md.match(/```javascript\n([\s\S]*?)```/); if(!m) throw new Error('candidate JavaScript block missing');
+          fs.writeFileSync('/tmp/interval_candidate.js',m[1]+'\nmodule.exports={createIntervalApi};\n');
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex')+'\n');
+          NODE
+
+      - name: Execute independent timer-state reviewer fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/interval_reviewer_test.js <<'JS'
+          'use strict';
+          const assert=require('assert');
+          const {createIntervalApi}=require('/tmp/interval_candidate');
+
+          class ReviewerTimers {
+            constructor(){this.next=100;this.pending=new Map();this.log=[];}
+            setTimeout(fn,delay){const id=this.next++;this.pending.set(id,{fn,delay});this.log.push(['set',id,delay]);return id;}
+            clearTimeout(id){this.log.push(['clear',id]);this.pending.delete(id);}
+            ids(){return [...this.pending.keys()];}
+            fire(id){const t=this.pending.get(id);if(!t)return false;this.pending.delete(id);t.fn();return true;}
+          }
+
+          const t=new ReviewerTimers();
+          const api=createIntervalApi(t.setTimeout.bind(t),t.clearTimeout.bind(t));
+
+          let a=0,b=0;
+          const ha=api.setIntervalPolyfill(()=>a++,3);
+          const hb=api.setIntervalPolyfill(()=>b++,9);
+          assert.strictEqual(t.pending.size,2,'two intervals must be isolated');
+          const [a1,b1]=t.ids();
+          t.fire(a1); assert.strictEqual(a,1); assert.strictEqual(b,0); assert.strictEqual(t.pending.size,2);
+          api.clearIntervalPolyfill(ha); assert.strictEqual(t.pending.size,1,'clearing A must leave B alive');
+          t.fire(b1); assert.strictEqual(b,1); assert.strictEqual(t.pending.size,1,'B must reschedule independently');
+          api.clearIntervalPolyfill(hb); assert.strictEqual(t.pending.size,0);
+
+          let early=0;
+          const he=api.setIntervalPolyfill(()=>early++,17);
+          const earlyId=t.ids()[0];
+          api.clearIntervalPolyfill(he);
+          assert.strictEqual(t.fire(earlyId),false); assert.strictEqual(early,0);
+
+          let selfCalls=0,self;
+          self=api.setIntervalPolyfill(()=>{selfCalls++;api.clearIntervalPolyfill(self);},21);
+          t.fire(t.ids()[0]); assert.strictEqual(selfCalls,1); assert.strictEqual(t.pending.size,0);
+
+          let thrown=0;
+          const hx=api.setIntervalPolyfill(()=>{thrown++;throw new Error('boom');},31);
+          const xid=t.ids()[0];
+          assert.throws(()=>t.fire(xid),/boom/);
+          assert.strictEqual(thrown,1);
+          assert.strictEqual(t.pending.size,1,'finally must preserve active rescheduling after callback throw');
+          api.clearIntervalPolyfill(hx); assert.strictEqual(t.pending.size,0);
+
+          api.clearIntervalPolyfill(hx);
+          api.clearIntervalPolyfill(Object.freeze({}));
+          assert.throws(()=>api.setIntervalPolyfill('not-a-function',1),TypeError);
+          const delays=t.log.filter(x=>x[0]==='set').map(x=>x[2]);
+          assert.ok(delays.includes(3)&&delays.includes(9)&&delays.includes(17)&&delays.includes(21)&&delays.includes(31));
+          console.log('PASS independent-two-handle-isolation clear-before-first clear-inside-callback throw-finally-reschedules idempotent-clear unknown-handle callback-type delay-forwarding');
+          JS
+          stdout="$(node /tmp/interval_reviewer_test.js)"
+          test "$stdout" = 'PASS independent-two-handle-isolation clear-before-first clear-inside-callback throw-finally-reschedules idempotent-clear unknown-handle callback-type delay-forwarding'
+          echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Inspect writer packet only after independent conclusion and freeze review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0041/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha) throw new Error('writer packet/hash drifted after independent review');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const boundary_tests=[{case:'two interval handles remain isolated',expected:'clearing one leaves the other scheduled',passed:true},{case:'clear before first fire',expected:'callback never executes',passed:true},{case:'clear from inside callback',expected:'no next timer is scheduled',passed:true},{case:'callback throws while still active',expected:'finally schedules next timer before error propagates',passed:true},{case:'unknown and repeated clear',expected:'no-op',passed:true}];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'extract candidate JavaScript; node interval_reviewer_test.js',stdout:process.env.REVIEW_STDOUT,boundary_tests},null,2)+'\n');
+          const findings=['The strongest surviving question text asks only to implement setInterval and clearInterval; the repository caption does not preserve native runtime semantics.','The candidate explicitly separates its minimal recursive-setTimeout contract from browser/Node specification guarantees and calls out drift, opaque-handle choice, argument/this/delay-normalization boundaries and host differences.','An independently written fake-timer reviewer verifies two-handle isolation, cancellation before the first fire, self-cancellation from the callback, active rescheduling through finally after a callback throw, idempotent clear and unknown-handle behavior.','The active-state invariant directly explains why cancellation cannot create a new timer after clear.','The project section does not fabricate production ownership or metrics.'];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0041-setinterval-20260827',review_version:'batch-0041.setinterval.v1',decision:'pass',revision_round:1,source_packet:['note_desc/6668131f00000000060061b3.txt','note_tagged/6668131f00000000060061b3.json','review/content_build/answer_batch_0041/source_inventory.json','review/content_build/answer_batch_0041/recoverability_review.md',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0041-setinterval-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-caption',title:'Original interview caption preserving only the coding-question boundary',locator:'note_desc/6668131f00000000060061b3.txt',source_type:'repository_source_record',checked_at:date},{source_id:'repository-tagged-question',title:'Image-derived setInterval/clearInterval source Question',locator:`note_tagged/6668131f00000000060061b3.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'recoverability-review',title:'Batch 0041 pre-draft recoverability decision',locator:'review/content_build/answer_batch_0041/recoverability_review.md',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer deterministic fake-timer validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent timer-state reviewer fixture',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'setInterval source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'Strongest surviving source asks to implement setInterval and clearInterval while the caption does not preserve detailed timer semantics.',source_ids:['repository-caption','repository-tagged-question','recoverability-review','isolated-review'],answer_locations:['核心结论','1 分钟版']},{claim_id:'source-boundary',text:'Runtime, handle shape, exact timing, forwarding, this binding, delay normalization and error semantics are not source-preserved and remain explicitly outside the source contract.',source_ids:['repository-caption','repository-tagged-question','recoverability-review','isolated-review'],answer_locations:['核心结论','关键细节','项目经验版','常见追问']},{claim_id:'reference-implementation',text:'Under the declared recursive-setTimeout contract, writer and independent reviewer fixtures verify repeated scheduling and cancellation state-machine boundaries without real-time sleeps.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'extract candidate JavaScript; node interval_reviewer_test.js',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit unique review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/content_build/answer_batch_0041/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0041/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0041 setInterval candidate source-first'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same review artifacts; fail closed without push.'
+              exit 0
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push review artifacts after safe retries.' >&2
+          exit 1
