@@ -428,7 +428,10 @@ function compileGo(code) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-go-'));
     try {
         const filePath = path.join(tempDir, 'answer.go');
-        fs.writeFileSync(filePath, code, 'utf8');
+        const source = /^\s*package\s+[A-Za-z_]\w*/m.test(code)
+            ? code
+            : `package main\n\n${code}\n`;
+        fs.writeFileSync(filePath, source, 'utf8');
         const result = childProcess.spawnSync('go', ['test', filePath], {
             encoding: 'utf8',
             timeout: 30000,
@@ -895,6 +898,7 @@ module.exports = {
     compileC,
     compileCpp,
     validateShell,
+    compileGo,
     parseSql,
     validateAnswerEvidence,
     validateSpecializedCandidate,

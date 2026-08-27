@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { compileJava, compileC, compileCpp, validateShell, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
+const { compileJava, compileC, compileCpp, validateShell, compileGo, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
 
 test('Java validation compiles complete classes and rejects broken implementations', () => {
     assert.equal(compileJava('public class Solution { public static int add(int a, int b) { return a + b; } }').ok, true);
@@ -38,6 +38,12 @@ test('C++ validation compiles common fence aliases and rejects broken implementa
     }
 });
 
+
+test('Go validation compiles full files and function-only answer snippets', () => {
+    assert.equal(compileGo('package main\nfunc add(a, b int) int { return a + b }').ok, true);
+    assert.equal(compileGo('func add(a, b int) int { return a + b }').ok, true);
+    assert.equal(compileGo('func add(a, b int) int { return a + }').ok, false);
+});
 
 test('shell validation accepts bash/sh fences and rejects malformed scripts', () => {
     assert.equal(validateShell("set -euo pipefail\nprintf '%s\\n' ok").ok, true);
