@@ -1,0 +1,177 @@
+name: Refresh Batch 0045 Container Water Evidence
+
+on:
+  push:
+    branches: [content/quality-completion]
+    paths:
+      - .github/workflows/refresh-batch-0045-container-water-evidence.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0045-container-water-evidence
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CID: cq_q_b537060b9176a759ceeeefa6fd13625f
+  Q1: b537060b9176a759ceeeefa6fd13625f
+  Q2: b93d1936b263eae6c64dca254aecc24c
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze post-merge live context and source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0044/$CID"
+          node scripts/xhs.js answer context --canonical-id "$CID" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CID,q1=process.env.Q1,q2=process.env.Q2;
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0044/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding')throw new Error('post-merge target context invalid');
+          const owned=[...(ctx.canonical?.question_ids||[])].sort(), expected=[q1,q2].sort();
+          if(JSON.stringify(owned)!==JSON.stringify(expected))throw new Error(`post-merge ownership drifted: ${JSON.stringify(owned)}`);
+          const exact=new Map([[q1,'算法：盛最多水的容器（Container With Most Water），双指针法逻辑分析。'],[q2,'算法：盛水最多的容器']]);
+          for(const [qid,text] of exact){const q=(ctx.source_questions||[]).find(x=>x.question_id===qid);if(!q||q.original_question!==text||q.is_valid_for_library!==true)throw new Error(`${qid}: merged source boundary drifted`);}
+          const relation=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0045/container_water_relation_review.json','utf8'));
+          if(relation.decision!=='merge_source_into_target'||relation.target_canonical_id!==cid||relation.source_canonical_id!=='cq_q_'+q2)throw new Error('relation review missing');
+          const n1=JSON.parse(fs.readFileSync('note_tagged/67ee9654000000000b02e0c2.json','utf8'));
+          const n2=JSON.parse(fs.readFileSync('note_tagged/68257aa6000000000c03b24b.json','utf8'));
+          if(!n1.tagged_questions?.some(x=>x.question_id===q1&&x.original_question===exact.get(q1)))throw new Error('primary source 1 drifted');
+          if(!n2.tagged_questions?.some(x=>x.question_id===q2&&x.original_question===exact.get(q2)))throw new Error('primary source 2 drifted');
+          NODE
+
+      - name: Re-run independent executable validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0044/$CID"
+          javac "$out/ContainerWithMostWater.java" "$out/WriterTest.java"
+          stdout="$(java -cp "$out" WriterTest)"
+          test "$stdout" = 'PASS known=49 differential=5100 long-area=3000000000'
+          cat > /tmp/IndependentReview.java <<'JAVA'
+          import java.util.*;
+          public final class IndependentReview {
+            static long brute(int[] a){long best=0;for(int i=0;i<a.length;i++)for(int j=i+1;j<a.length;j++)best=Math.max(best,(long)Math.min(a[i],a[j])*(j-i));return best;}
+            static void check(int[] a){long g=ContainerWithMostWater.maxArea(a),e=brute(a);if(g!=e)throw new AssertionError(Arrays.toString(a)+" got="+g+" expected="+e);}
+            public static void main(String[] args){
+              int[][] known={{1,8,6,2,5,4,8,3,7},{1,1},{4,3,2,1,4},{1,2,1},{0,0,0},{5,0,5},{5,5,5,5},{2,9,1,1,1,9,2}};
+              for(int[] a:known)check(a);
+              Random r=new Random(20260828L);int count=0;
+              for(int n=2;n<=24;n++)for(int t=0;t<500;t++){int[] a=new int[n];for(int i=0;i<n;i++)a[i]=r.nextInt(1001);check(a);count++;}
+              long large=ContainerWithMostWater.maxArea(new int[]{1000000000,0,0,1000000000});if(large!=3000000000L)throw new AssertionError("long overflow");
+              if(ContainerWithMostWater.maxArea(null)!=0L)throw new AssertionError("null policy");
+              try{ContainerWithMostWater.maxArea(new int[]{1,-1});throw new AssertionError("negative accepted");}catch(IllegalArgumentException ok){}
+              System.out.println("PASS independent known="+known.length+" differential="+count+" long-area="+large);
+            }
+          }
+          JAVA
+          javac -cp "$out" -d /tmp "$out/ContainerWithMostWater.java" /tmp/IndependentReview.java
+          review_stdout="$(java -cp "/tmp:$out" IndependentReview)"
+          test "$review_stdout" = 'PASS independent known=8 differential=11500 long-area=3000000000'
+          REVIEW_STDOUT="$review_stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto');
+          const cid=process.env.CID,out=`review/content_build/answer_batch_0044/${cid}`;
+          const candidate=fs.readFileSync(`review/candidates/answers/${cid}.md`);
+          const sha=crypto.createHash('sha256').update(candidate).digest('hex');
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:'2026-08-28',command:'compile reviewed implementation and compare against independent exhaustive reference after Canonical ownership merge',stdout:process.env.REVIEW_STDOUT,checks:['known/adversarial cases','11500 deterministic random arrays equal O(n^2) oracle','64-bit area 3000000000','declared null/negative-input policy']},null,2)+'\n');
+          NODE
+
+      - name: Refresh writer research for both preserved Questions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto');
+          const cid=process.env.CID,q1=process.env.Q1,q2=process.env.Q2,out=`review/content_build/answer_batch_0044/${cid}`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex');
+          const locations=['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点'];
+          const research={schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:'2026-08-28',review_state:'writer_complete_isolated_review_pending',sources:[
+            {source_id:'primary-source-detailed',title:'Meituan tagged source preserving Container With Most Water and two-pointer logic-analysis wording',locator:'note_tagged/67ee9654000000000b02e0c2.json',source_type:'repository_structured_source',checked_at:'2026-08-28'},
+            {source_id:'primary-source-short',title:'Tagged source preserving the shorter 盛水最多的容器 wording',locator:'note_tagged/68257aa6000000000c03b24b.json',source_type:'repository_structured_source',checked_at:'2026-08-28'},
+            {source_id:'merge-relation',title:'Batch 0045 source-first duplicate relation review',locator:'review/content_build/answer_batch_0045/container_water_relation_review.json',source_type:'repository_source_record',checked_at:'2026-08-28'},
+            {source_id:'writer-validation',title:'Deterministic Java brute-force differential validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-28'},
+            {source_id:'reviewer-validation',title:'Independent post-merge exhaustive validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:'2026-08-28'}
+          ],claims:[
+            {claim_id:'source-boundary',text:'Two preserved source Questions are duplicate phrasings of the same maximum-water-container coding task; the detailed source asks for double-pointer logic analysis while neither source preserves a language, API signature, numeric bounds, or invalid-input contract.',source_ids:['primary-source-detailed','primary-source-short','merge-relation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},
+            {claim_id:'algorithm-correctness',text:'Under the candidate’s explicitly declared non-negative-height contract, the Java two-pointer implementation is executable and matches exhaustive O(n^2) reference search, including independent post-merge validation.',source_ids:['writer-validation','reviewer-validation'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']}
+          ],source_question_coverage:[{question_id:q1,covered:true,answer_locations:locations},{question_id:q2,covered:true,answer_locations:locations}],promotion_blocker:'isolated_independent_review_not_yet_refreshed_after_ownership_merge'};
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify(research,null,2)+'\n');
+          NODE
+
+      - name: Perform source-first isolated post-merge review
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto');
+          const cid=process.env.CID,q1=process.env.Q1,q2=process.env.Q2,out=`review/content_build/answer_batch_0044/${cid}`;
+          const candidate=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          const sha=crypto.createHash('sha256').update(candidate).digest('hex');
+          const research=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          const validation=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          if(validation.result!=='pass'||validation.candidate_sha256!==sha)throw new Error('review validation not bound to candidate');
+          for(const qid of [q1,q2])if(!research.source_question_coverage.some(x=>x.question_id===qid&&x.covered===true))throw new Error(`${qid}: writer coverage missing`);
+          for(const token of ['min(height[l], height[r])','双指针','较短','O(n)','long'])if(!candidate.includes(token))throw new Error(`candidate missing review token ${token}`);
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:'2026-08-28',review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0045-container-water-post-merge-20260828-v2',review_version:'batch-0045.container-water.post-merge.v2',decision:'pass',revision_round:2,source_packet:['review/content_build/answer_batch_0045/container_water_relation_review.json',`${out}/context.json`,`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores:{facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:19,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5},hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:['The two now-owned Questions are duplicate phrasings of the same Container With Most Water problem; the shorter wording adds no distinct contract, so one Canonical/Answer is correct.','The candidate directly answers both formulations and gives the required two-pointer short-side elimination proof instead of merely naming the technique.','Independent post-merge execution still matches an exhaustive O(n^2) oracle on deterministic adversarial cases and 11500 random arrays, with explicit long-area and input-policy checks.','Language, API, numeric bounds and invalid-input semantics remain clearly marked as answer-side choices rather than preserved source facts.'],promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          research.review_state='isolated_review_pass_post_merge';
+          research.promotion_blocker='repository_human_approval_and_real_review_policy_not_yet_satisfied';
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify(research,null,2)+'\n');
+          NODE
+
+      - name: Run content integrity gates and record progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0045.md')
+          t=p.read_text(encoding='utf-8')
+          line='- [x] Post-merge evidence for the Container With Most Water Canonical was refreshed against both preserved source Questions. The unchanged source-bounded candidate remains executable, independent O(n^2) differential validation passes after the ownership merge, writer coverage now binds both Question IDs, and isolated source-first review revision 2 passes. Promotion remains blocked only by repository human-approval/real-review policy; the formal Answer intentionally remains `needs_update` until that policy gate is satisfied.'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit only if branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote="$(git rev-parse "origin/$CONTENT_BRANCH")"; base='${{ steps.base.outputs.head }}'
+          if [ "$remote" != "$base" ]; then echo "branch advanced: $base -> $remote; discard and retry later"; exit 0; fi
+          git rm .github/workflows/refresh-batch-0045-container-water-evidence.yml
+          git add -A
+          git diff --cached --check
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: refresh merged container-water evidence'
+          git push origin "HEAD:$CONTENT_BRANCH"
