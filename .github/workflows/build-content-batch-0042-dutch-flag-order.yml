@@ -1,0 +1,215 @@
+name: Build Content Batch 0042 Dutch Flag Order
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0042-dutch-flag-order.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-dutch-flag-order-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_af091a4667cf97a15834eaa7bada1877
+  SOURCE_QID: af091a4667cf97a15834eaa7bada1877
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：排序包含 1, 0, -1 三种元素的数组，按照 [1, -1, 0] 指定顺序排列 (荷兰国旗变形)';
+          const raw=JSON.parse(fs.readFileSync('note_structured/678fa7d6000000002901c387.json','utf8'));
+          if(raw.questions?.[12]!==exact)throw new Error('dutch-flag source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('ownership/type drifted');
+          if(!(ctx.source_questions||[]).some(x=>x.question_id===qid&&x.original_question===exact))throw new Error('exact source missing');
+          NODE
+
+      - name: Write source-bounded candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0042/$cid";candidate="review/candidates/answers/$cid.md";mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_af091a4667cf97a15834eaa7bada1877","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 按 [1, -1, 0] 顺序原地整理三值数组
+
+          ## 核心结论
+
+          来源明确给出输入只包含 `1、0、-1`，并要求最终顺序按 `[1, -1, 0]` 分组，可视为荷兰国旗问题的自定义颜色顺序。最直接的 O(n) / O(1) 做法是维护四个区间：左侧已经放好的 `1`、中间已经放好的 `-1`、尚未分类的区间、右侧已经放好的 `0`。扫描未知区间时：遇到 `1` 与左边界交换并同时推进左边界和扫描指针；遇到 `-1` 只推进扫描指针；遇到 `0` 与右边界交换并只收缩右边界，因为换回来的元素还没有分类。
+
+          来源没有保存 API、是否原地修改、非法值处理或空数组语义。下面定义一个 Java 参考契约：`reorder(int[] a)` 原地修改；空数组合法；`null` 抛 `NullPointerException`；若存在集合 `{1,-1,0}` 之外的值，先完整校验后抛 `IllegalArgumentException`，因此非法输入不会被部分改写。
+
+          ## 1 分钟版
+
+          - 目标不是自然升序，而是自定义顺序：`1` 在前、`-1` 居中、`0` 在后。
+          - 不变量：`[0, oneEnd)` 全是 `1`；`[oneEnd, scan)` 全是 `-1`；`[scan, zeroStart]` 未分类；`(zeroStart, n)` 全是 `0`。
+          - `a[scan] == 1`：与 `oneEnd` 交换，`oneEnd++`、`scan++`。
+          - `a[scan] == -1`：位置已经属于中间区，`scan++`。
+          - `a[scan] == 0`：与 `zeroStart` 交换，`zeroStart--`，**不要马上 `scan++`**，因为从右边换回来的值还没检查。
+          - 每个元素最多被常数次处理，时间 O(n)，只用几个索引，额外空间 O(1)。
+
+          ## 3 分钟版
+
+          ```java
+          public final class Solution {
+              private Solution() {}
+
+              public static void reorder(int[] a) {
+                  if (a == null) throw new NullPointerException("a");
+                  for (int value : a) {
+                      if (value != 1 && value != -1 && value != 0) {
+                          throw new IllegalArgumentException("unsupported value: " + value);
+                      }
+                  }
+
+                  int oneEnd = 0;
+                  int scan = 0;
+                  int zeroStart = a.length - 1;
+                  while (scan <= zeroStart) {
+                      if (a[scan] == 1) {
+                          swap(a, scan, oneEnd);
+                          oneEnd++;
+                          scan++;
+                      } else if (a[scan] == -1) {
+                          scan++;
+                      } else {
+                          swap(a, scan, zeroStart);
+                          zeroStart--;
+                      }
+                  }
+              }
+
+              private static void swap(int[] a, int i, int j) {
+                  int t = a[i];
+                  a[i] = a[j];
+                  a[j] = t;
+              }
+          }
+          ```
+
+          这里最容易错的是处理 `0`。当 `a[scan]` 与右端未知元素交换以后，新的 `a[scan]` 可能是 `1`、`-1` 或 `0`，所以必须留在原位置下一轮重新判断；如果此时直接 `scan++`，会跳过一个尚未分类的元素。
+
+          ## 关键细节
+
+          - **顺序定义**：题目指定的是 `[1, -1, 0]`，不能套用数值自然顺序 `[-1,0,1]`。
+          - **原地契约**：本参考实现原地修改数组；来源只保存“排序”，没有保存是否允许新数组。
+          - **非法值**：来源说数组包含三种元素，可视为前置条件。参考实现仍先做一次完整校验，使 API 在调用方违反前置条件时 fail-closed 且不产生部分写入；如果面试题明确保证输入合法，可省略这次预扫描，核心分区仍是单趟 O(n)。
+          - **空数组**：没有未知区间，循环不进入，结果仍为空。
+          - **重复值**：算法只关心三类值的分区，不要求同类元素之间稳定；所有元素本身只有三个取值，因此稳定性通常没有额外可观察信息。
+          - **复杂度**：预校验 O(n) + 分区 O(n)，总时间仍 O(n)；额外空间 O(1)。
+          - **替代方案**：也可以先计数三个值再覆盖数组，同样 O(n)/O(1)，更简单但会先统计再重写；三向分区更贴近“荷兰国旗变形”和原地交换的不变量训练。
+
+          ## 原理机制
+
+          三向分区的核心是把“已经确定的区域”从两端向中间扩张，而不是对整个数组做比较排序。`oneEnd` 是前缀 `1` 区的下一位置，`zeroStart` 是后缀 `0` 区的上一位置，`scan` 只扫描仍未知的区间。
+
+          关键不变量在每轮循环前都成立：前缀只含 `1`，随后只含 `-1`，后缀只含 `0`，所有还没决定归属的元素都集中在 `[scan, zeroStart]`。三种分支分别把一个元素并入正确的已知区间；未知区间严格缩小，所以循环最终终止。终止时 `scan > zeroStart`，未知区间为空，三个已知区间拼起来正好是目标 `[1, -1, 0]` 分组顺序。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构线上使用。工程里遇到有限状态值重排时，我会先确认是否允许原地修改、是否要求稳定、非法枚举值如何处理以及数据量；如果类别数量固定且很小，可以优先考虑计数或多路分区，而不是通用 O(n log n) 排序。
+
+          ## 常见追问
+
+          - 问：为什么处理 `0` 后不能直接 `scan++`？答：右端交换回来的元素还未分类，必须在当前索引再次判断；只有换出去的 `0` 已经确定进入后缀。
+          - 问：为什么处理 `1` 后可以同时推进 `oneEnd` 和 `scan`？答：交换前 `[oneEnd, scan)` 已经全是 `-1`。当 `scan > oneEnd` 时，换到 `scan` 的正是一个已分类的 `-1`；当两者相等时是自交换，所以当前位置处理完后可以前进。
+          - 问：能不能直接计数再覆盖？答：可以，三类值固定时计数法也是 O(n) 时间、O(1) 额外空间；这里用三向分区是为了展示单个分区循环及其不变量。
+          - 问：这是稳定排序吗？答：三向交换一般不保证稳定。当前元素只有三个数值，同类元素没有额外身份时稳定性不可观察；若元素还携带其他字段且要求保持同类相对顺序，就需要改算法和契约。
+          - 问：为什么要预校验非法值？答：这是参考 API 的 fail-closed 选择，不是来源要求。它保证发现非法值时数组保持原样；若题目明确保证输入只含三种值，可以去掉预校验。
+          - 问：复杂度为什么不是 O(n log n)？答：不需要建立全序比较，只需把每个元素归入三个固定分区，未知区间每轮至少缩小一格，因此分区本身是线性的。
+
+          ## 易错点
+
+          - 按自然数值顺序排成 `[-1,0,1]`，忘记题目指定 `[1,-1,0]`。
+          - 处理 `0` 交换后错误地同时递增 `scan`，跳过换回来的未知元素。
+          - 把 `-1` 当作应交换到左侧，破坏 `[1] + [-1] + [0]` 的区间不变量。
+          - 未定义输入前置条件，却把其它整数静默当成某一类处理。
+          - 为三种固定值使用通用比较排序，复杂度和机制都偏离题目特征。
+          EOF
+
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');const cid=process.env.CANONICAL_ID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`);fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(md).digest('hex')+'\n');const text=md.toString('utf8');const block=text.match(/```java\n([\s\S]*?)\n```/);if(!block||!block[1].includes('public static void reorder'))throw new Error('candidate code missing');fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/WriterValidation.java <<'JAVA'
+          import java.util.*;
+          public final class WriterValidation {
+              static int rank(int x){return x==1?0:x==-1?1:2;}
+              static int[] oracle(int[] a){int[] b=a.clone();Integer[] boxed=new Integer[b.length];for(int i=0;i<b.length;i++)boxed[i]=b[i];Arrays.sort(boxed,Comparator.comparingInt(WriterValidation::rank));for(int i=0;i<b.length;i++)b[i]=boxed[i];return b;}
+              static void check(int[] a){int[] input=a.clone(),want=oracle(a);Solution.reorder(a);if(!Arrays.equals(a,want))throw new AssertionError(Arrays.toString(input)+" got="+Arrays.toString(a)+" want="+Arrays.toString(want));}
+              static long exhaustive=0;static void gen(int[] a,int i,int[] vals){if(i==a.length){check(a.clone());exhaustive++;return;}for(int v:vals){a[i]=v;gen(a,i+1,vals);}}
+              public static void main(String[] args){int[] vals={1,-1,0};for(int n=0;n<=10;n++)gen(new int[n],0,vals);Random r=new Random(0x444E46574C);for(int t=0;t<20000;t++){int n=r.nextInt(300),a=new int[n];for(int i=0;i<n;i++)a[i]=vals[r.nextInt(3)];check(a);}int[] bad={1,-1,7,0};int[] snapshot=bad.clone();try{Solution.reorder(bad);throw new AssertionError("bad accepted");}catch(IllegalArgumentException expected){}if(!Arrays.equals(bad,snapshot))throw new AssertionError("invalid input partially mutated");try{Solution.reorder(null);throw new AssertionError("null accepted");}catch(NullPointerException expected){}System.out.println("PASS exhaustive="+exhaustive+" random=20000 custom-order=1,-1,0 invalid=reject-unchanged null=rejected");}
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/WriterValidation.java
+          stdout="$(java -cp /tmp WriterValidation)";echo "$stdout";grep -E '^PASS exhaustive=[0-9]+ random=20000 custom-order=1,-1,0 invalid=reject-unchanged null=rejected$' <<<"$stdout";echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0042/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const tests=[{case:'all arrays length 0..10 over {1,-1,0}',expected:'reference comparator order [1,-1,0]',passed:true},{case:'20,000 seeded random arrays',expected:'candidate equals independent comparator-order oracle',passed:true},{case:'invalid value',expected:'IllegalArgumentException before mutation',passed:true},{case:'null',expected:'NullPointerException',passed:true}];
+          fs.writeFileSync(`${out}/dutch_flag_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate; exhaustive/random comparator-order validation',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          const writer={schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'structured-note',title:'Structured interview note 678fa7d6000000002901c387',locator:'note_structured/678fa7d6000000002901c387.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_source_record',checked_at:date},{source_id:'writer-validation',title:'Dutch-flag custom-order exhaustive/random Java validation',locator:`${out}/dutch_flag_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source asks to reorder an array containing 1, 0 and -1 into the custom group order [1, -1, 0]; API shape, in-place mutation, invalid-value handling and empty-array semantics are not source-frozen.',source_ids:['structured-note','source-inventory'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'reference-behavior',text:'Under the declared Java in-place contract, three-way partitioning produces [1,-1,0] group order on exhaustive bounded and seeded random arrays, while prevalidation rejects unsupported values before mutation.',source_ids:['writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed',candidate_sha256:sha};fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify(writer,null,2)+'\n');
+          NODE
+
+      - name: Candidate pre-review gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0042/$CANONICAL_ID/writer_research.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/dutch_flag_validation.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0042 dutch-flag-order candidate'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+            sleep 5
+          done
+          exit 1
