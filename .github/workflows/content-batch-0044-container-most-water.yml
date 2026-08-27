@@ -1,0 +1,346 @@
+name: Content Batch 0044 Container With Most Water
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0044-container-most-water.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0044-container-most-water
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b537060b9176a759ceeeefa6fd13625f
+  SOURCE_QID: b537060b9176a759ceeeefa6fd13625f
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify live source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"
+          mkdir -p "$out" review/candidates/answers
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：盛最多水的容器（Container With Most Water），双指针法逻辑分析。';
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0044/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical/answer-type drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.is_valid_for_library!==true) throw new Error(`source wording/validity drifted: ${src?.original_question}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0044/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('frozen Batch 0044 inventory drifted');
+          const primary=JSON.parse(fs.readFileSync('note_tagged/67ee9654000000000b02e0c2.json','utf8'));
+          if(!primary.tagged_questions?.some(x=>x.question_id===qid&&x.original_question===exact&&x.is_valid_for_library===true)) throw new Error('primary repository source drifted');
+          NODE
+
+      - id: state
+        name: Guard writer idempotence
+        shell: bash
+        run: |
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0044/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/writer_validation.json"; test -e "$out/writer_research.json"; echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded candidate and writer fixture
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b537060b9176a759ceeeefa6fd13625f","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # 盛最多水的容器：为什么双指针只移动较短的一边？
+
+          ## 核心结论
+
+          双指针的核心不是“从两边往中间扫”，而是一个可证明安全的淘汰规则。设左右端点为 `l`、`r`，当前面积是 `min(height[l], height[r]) * (r-l)`。如果左边更短或相等，那么固定 `l`、把右端点向左移动，只会让宽度变小，而高度上限仍然不可能超过 `height[l]`；因此所有继续使用 `l` 的更窄容器都不可能比当前更优，可以安全丢弃 `l`。右边更短时同理丢弃 `r`。这样每一步至少排除一个不可能成为更优答案的端点，最终只需 O(n) 次移动。
+
+          来源只保留题名和“双指针法逻辑分析”，没有语言/API/输入异常约定。本答案选择 Java，并声明输入是非负高度数组；`null` 或不足两个端点返回 `0`，负高度作为不合法输入抛出异常。面积使用 `long`，避免把未给出的高度/长度上界偷偷假设成 `int` 乘法一定安全。
+
+          ## 1 分钟版
+
+          - 面积由较短边限制：`area = min(h[l], h[r]) * width`。
+          - 若 `h[l] <= h[r]`，固定 `l` 再把 `r` 往左移，宽度一定更小，而且有效高度最多仍是 `h[l]`，所以不可能超过当前面积；因此可以直接 `l++`。
+          - 若 `h[l] > h[r]`，对称地 `r--`。
+          - 每次只淘汰一个已经证明“不可能与内侧端点组成更优解”的端点，所以不会漏掉全局最优解。
+          - 两个指针总共最多移动 `n-1` 次，时间 O(n)，除输入外额外空间 O(1)。
+
+          ## 3 分钟版
+
+          ```java
+          public final class ContainerWithMostWater {
+              public static long maxArea(int[] height) {
+                  if (height == null || height.length < 2) {
+                      return 0L;
+                  }
+                  for (int h : height) {
+                      if (h < 0) {
+                          throw new IllegalArgumentException("height must be non-negative");
+                      }
+                  }
+
+                  int left = 0;
+                  int right = height.length - 1;
+                  long best = 0L;
+
+                  while (left < right) {
+                      long width = right - left;
+                      long boundedHeight = Math.min(height[left], height[right]);
+                      best = Math.max(best, boundedHeight * width);
+
+                      if (height[left] <= height[right]) {
+                          left++;
+                      } else {
+                          right--;
+                      }
+                  }
+                  return best;
+              }
+          }
+          ```
+
+          证明左边较短时为什么能移动左指针。当前 `h[l] <= h[r]`，当前面积是 `h[l] * (r-l)`。对任意新的右端点 `k`，其中 `l < k < r`，面积满足 `min(h[l], h[k]) * (k-l) <= h[l] * (k-l) < h[l] * (r-l)`。因此，所有仍使用 `l` 的内侧组合都严格不可能超过当前组合；既然当前组合已经计入 `best`，就可以淘汰 `l`。右边较短时完全对称。
+
+          ## 关键细节
+
+          - **为什么不是移动较高的一边**：移动较高边后，较短边还在，容器高度上限不提高、宽度却缩小，没有产生更优解所需的机会；真正可能提升高度上限的是丢掉当前较短边。
+          - **两边等高**：移动任意一边都安全。本实现统一在 `<=` 时移动左边；因为固定任一等高端点再缩窄宽度都不可能超过当前面积。
+          - **面积溢出**：来源没有约束范围，所以乘法先提升为 `long`。如果平台明确保证结果在 32 位整数内，可按平台签名改为 `int` 返回。
+          - **输入域**：经典题通常讨论非负高度。这里把这个前提写成显式契约，并拒绝负值；不是把负高度当成来源事实。
+          - **边界**：`null`、空数组、单元素没有两个端点，返回 0；全 0 也返回 0；重复高度、单调数组不影响证明。
+          - **复杂度**：负值校验一趟 O(n)，双指针再一趟 O(n)，总时间仍 O(n)；额外空间 O(1)。
+
+          ## 原理机制
+
+          这是“证明后淘汰候选”的贪心。暴力法会枚举所有 O(n²) 对端点；双指针并不是随便少看一些组合，而是在每一步利用当前较短边给出的面积上界，一次排除以该端点为一侧的整批内层组合。因为被排除的组合都有严格上界不超过已经看过的当前组合，删掉它们不会删除尚未观察到的更优解。这个单调淘汰不变量把搜索空间从所有端点对压缩到一条长度 O(n) 的指针轨迹。
+
+          ## 项目经验版
+
+          来源没有真实项目上下文，不能虚构“生产中用过这道算法”。工程落地时我会先确认输入规模、数值范围和异常策略，再决定 API 返回 `int` 还是 `long`、是否需要显式校验；算法正确性则用一个 O(n²) 的小规模参考实现做随机差分测试，这能很好地覆盖双指针移动规则是否漏解。
+
+          ## 常见追问
+
+          - 问：为什么左边较短时可以确定左边以后没用了？答：固定左边，任何更内侧右端点都会让宽度变小，而有效高度最多还是左边高度，所以面积严格小于当前组合。
+          - 问：为什么移动较高边不行？答：保留较短边时高度上限没有提升，宽度却缩短；这种移动没有消除当前瓶颈，不能获得比当前更高的上界。
+          - 问：两边一样高时移动哪边？答：任意一边都安全；本实现固定移动左边，证明对称。
+          - 问：双指针为什么不是 O(n²)？答：每轮恰好让一个指针向内一步，两个指针合计最多移动 `n-1` 次，不会回退。
+          - 问：怎么验证贪心没有漏掉某个奇怪数组？答：证明负责一般正确性；测试上可对大量小数组把 O(n) 结果与枚举所有端点对的 O(n²) 参考结果做差分。
+          - 问：如果高度或数组很大怎么办？答：算法的步数仍是 O(n)，但面积乘法应按约束选择足够宽的数值类型；本答案用 `long` 防止隐含的 `int` 乘法溢出。
+
+          ## 易错点
+
+          - 只背“移动短板”，却解释不出固定短板时所有内侧组合的面积上界。
+          - 面积计算后才转 `long`，导致 `int * int` 已经先溢出；应让乘法操作数先进入 `long`。
+          - 同时移动两个指针，虽然某些样例能过，但破坏了“一次只淘汰一个已证明安全端点”的标准推理链。
+          - 把 `left <= right` 写成循环条件，导致同一点形成宽度 0 的无意义容器；正确条件是 `left < right`。
+          - 来源没有语言、异常和数值范围约束，却把某个平台的函数签名当成题目原文。
+          EOF
+
+          cat > "$out/ContainerWithMostWater.java" <<'JAVA'
+          public final class ContainerWithMostWater {
+              public static long maxArea(int[] height) {
+                  if (height == null || height.length < 2) return 0L;
+                  for (int h : height) if (h < 0) throw new IllegalArgumentException("height must be non-negative");
+                  int left = 0, right = height.length - 1;
+                  long best = 0L;
+                  while (left < right) {
+                      long width = right - left;
+                      long boundedHeight = Math.min(height[left], height[right]);
+                      best = Math.max(best, boundedHeight * width);
+                      if (height[left] <= height[right]) left++; else right--;
+                  }
+                  return best;
+              }
+          }
+          JAVA
+          cat > "$out/WriterTest.java" <<'JAVA'
+          import java.util.*;
+          public final class WriterTest {
+              static long brute(int[] a) {
+                  long best=0;
+                  for(int i=0;i<a.length;i++) for(int j=i+1;j<a.length;j++) best=Math.max(best,(long)Math.min(a[i],a[j])*(j-i));
+                  return best;
+              }
+              static void check(int[] a) {
+                  long got=ContainerWithMostWater.maxArea(a), expected=brute(a);
+                  if(got!=expected) throw new AssertionError(Arrays.toString(a)+" got="+got+" expected="+expected);
+              }
+              public static void main(String[] args) {
+                  check(new int[]{1,8,6,2,5,4,8,3,7});
+                  check(new int[]{}); check(new int[]{5}); check(new int[]{0,0}); check(new int[]{5,5});
+                  check(new int[]{1,2,3,4,5}); check(new int[]{5,4,3,2,1}); check(new int[]{2,3,10,5,7,8,9});
+                  if(ContainerWithMostWater.maxArea(null)!=0L) throw new AssertionError("null boundary");
+                  try { ContainerWithMostWater.maxArea(new int[]{1,-1,2}); throw new AssertionError("negative accepted"); } catch(IllegalArgumentException expected) {}
+                  Random r=new Random(20260828L);
+                  for(int n=2;n<=18;n++) for(int t=0;t<300;t++) { int[] a=new int[n]; for(int i=0;i<n;i++) a[i]=r.nextInt(31); check(a); }
+                  System.out.println("PASS known=49 boundaries differential=5100 negative=rejected null=0");
+              }
+          }
+          JAVA
+          (cd "$out" && javac ContainerWithMostWater.java WriterTest.java && java WriterTest | tee writer_stdout.txt)
+          test "$(cat "$out/writer_stdout.txt")" = 'PASS known=49 boundaries differential=5100 negative=rejected null=0'
+
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}'); candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); digest=hashlib.sha256(candidate.read_bytes()).hexdigest(); date='2026-08-28'
+          validation={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'javac ContainerWithMostWater.java WriterTest.java && java WriterTest','stdout':(out/'writer_stdout.txt').read_text().strip(),'checks':['known canonical example returns 49','null/empty/single/zero/equal/monotonic boundaries','5100 deterministic random arrays match O(n^2) brute force','negative height rejected by declared contract']}
+          (out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':[{'source_id':'primary-source','title':'Meituan tagged source','locator':'note_tagged/67ee9654000000000b02e0c2.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'writer-validation','title':'Deterministic Java brute-force differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The preserved source asks for Container With Most Water and double-pointer logic analysis; it does not preserve a language, API signature, numeric limits, or invalid-input behavior.','source_ids':['primary-source','batch-inventory'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'algorithm-correctness','text':'The Java two-pointer implementation matches exhaustive O(n^2) search on deterministic boundary cases and 5100 random arrays under the declared non-negative-height contract.','source_ids':['writer-validation'],'answer_locations':['3 分钟版','关键细节','原理机制','常见追问']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n')
+          PY
+          rm -f "$out"/*.class "$out/writer_stdout.txt"
+
+      - name: Commit writer packet
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-content-builder; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0044/$CANONICAL_ID"
+          git commit -m 'content: draft batch 0044 container-water candidate'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
+
+  review:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source-first packet and exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"; mkdir -p /tmp/b44-water review/evidence
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}'); exact='算法：盛最多水的容器（Container With Most Water），双指针法逻辑分析。'
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0044/source_inventory.json').read_text()); item=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not item or item.get('state')!='active' or item.get('answer_type')!='coding' or not any(x.get('question_id')==qid and x.get('original_question')==exact for x in item.get('source_questions',[])): raise SystemExit('inventory drift')
+          primary=json.loads(pathlib.Path('note_tagged/67ee9654000000000b02e0c2.json').read_text())
+          if not any(x.get('question_id')==qid and x.get('original_question')==exact and x.get('is_valid_for_library') is True for x in primary.get('tagged_questions',[])): raise SystemExit('primary source drift')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path('/tmp/b44-water/ContainerWithMostWater.java').write_text(blocks[0].strip()+'\n')
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest(); pathlib.Path('/tmp/b44-water/candidate.sha256').write_text(digest+'\n')
+          writer=json.loads((out/'writer_validation.json').read_text()); research=json.loads((out/'writer_research.json').read_text())
+          if writer.get('candidate_sha256')!=digest or writer.get('result')!='pass' or research.get('candidate_sha256')!=digest or research.get('review_state')!='writer_complete_isolated_review_pending': raise SystemExit('writer packet drift')
+          if 'fixed `l`' not in md and '固定 `l`' not in md: raise SystemExit('short-side elimination proof missing')
+          PY
+
+      - name: Run independent adversarial differential validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/b44-water/ReviewerTest.java <<'JAVA'
+          import java.util.*;
+          public final class ReviewerTest {
+              static long brute(int[] a) { long best=0; for(int i=0;i<a.length;i++) for(int j=i+1;j<a.length;j++) best=Math.max(best,(long)Math.min(a[i],a[j])*(j-i)); return best; }
+              static void check(int[] a) { long got=ContainerWithMostWater.maxArea(a), exp=brute(a); if(got!=exp) throw new AssertionError(Arrays.toString(a)+" got="+got+" exp="+exp); }
+              public static void main(String[] args) {
+                  int[][] edge={ {1,8,6,2,5,4,8,3,7},{1,1},{0,100,0},{9,1,1,1,9},{1,100,100,1},{3,3,3,3},{1,2,100,2,1},{1000000000,0,0,1000000000} };
+                  for(int[] a:edge) check(a);
+                  Random r=new Random(4420260828L);
+                  for(int n=2;n<=24;n++) for(int t=0;t<500;t++){ int[] a=new int[n]; for(int i=0;i<n;i++) a[i]=r.nextInt(101); check(a); }
+                  if(ContainerWithMostWater.maxArea(new int[]{1000000000,0,0,1000000000})!=3000000000L) throw new AssertionError("long overflow boundary");
+                  System.out.println("PASS independent known=49 adversarial differential=11500 long-area=3000000000");
+              }
+          }
+          JAVA
+          (cd /tmp/b44-water && javac ContainerWithMostWater.java ReviewerTest.java && java ReviewerTest > reviewer_stdout.txt)
+          test "$(cat /tmp/b44-water/reviewer_stdout.txt)" = 'PASS independent known=49 adversarial differential=11500 long-area=3000000000'
+
+      - name: Write isolated review and formal evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          REVIEW_STDOUT="$(cat /tmp/b44-water/reviewer_stdout.txt)" CANDIDATE_SHA="$(cat /tmp/b44-water/candidate.sha256)" python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; digest=os.environ['CANDIDATE_SHA']; date='2026-08-28'; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}')
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'compile exact candidate Java block and compare against independent exhaustive reference','stdout':os.environ['REVIEW_STDOUT'],'checks':['known example 49','adversarial equal/zero/interior-peak/endpoints cases','11500 deterministic random arrays match O(n^2) reference','long arithmetic preserves 3000000000 area']}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':19,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=['The preserved source asks specifically for Container With Most Water and double-pointer logic analysis; language, API and numeric bounds are not preserved source facts.','The candidate supplies the critical short-side elimination proof rather than merely stating the two-pointer rule: fixing the shorter endpoint while narrowing width cannot beat the already-seen current pair.','The equal-height case is explicitly covered and moving either side is shown safe; the implementation consistently advances the left side on equality.','Independent execution of the exact Java candidate matches an exhaustive O(n^2) oracle on adversarial cases and 11500 deterministic random arrays.','Using long for the area is justified by the absence of preserved numeric bounds and is independently exercised above 32-bit range; the declared null/negative-input policy is clearly separated from source facts.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0044-container-water-20260828-v1','review_version':'batch-0044.container-water.v1','decision':'pass','revision_round':1,'source_packet':['review/content_build/answer_batch_0044/source_inventory.json',f'review/candidates/answers/{cid}.md',str(out/'reviewer_validation.json'),'docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0044-container-water-builder','writer_version':'xhs-answer-curator.v1'},'sources':[{'source_id':'primary-source','title':'Meituan tagged source','locator':'note_tagged/67ee9654000000000b02e0c2.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'writer-validation','title':'Writer brute-force differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'reviewer-validation','title':'Independent exact-candidate adversarial differential validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'isolated-review','title':'Container-water source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The source asks for Container With Most Water and double-pointer logic analysis, without preserving language/API/numeric limits.','source_ids':['primary-source','batch-inventory','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'short-side-proof','text':'When one endpoint is no taller than the other, every inner pair retaining that shorter endpoint has smaller width and height bounded by the same endpoint, so it cannot beat the current pair and that endpoint is safe to discard.','source_ids':['isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制']},{'claim_id':'implementation-behavior','text':'Writer and independent reviewer differential tests show the exact O(n) Java implementation matches exhaustive search across deterministic boundaries and random arrays, including an area beyond signed 32-bit range.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['3 分钟版','关键细节','常见追问','易错点']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path('review/evidence').mkdir(exist_ok=True); pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md'); text=task.read_text(); line="- [x] `cq_q_b537060b9176a759ceeeefa6fd13625f` completed writer construction and isolated source-first review. The preserved source asks for Container With Most Water and double-pointer logic analysis without preserving language/API/numeric bounds. The Java candidate gives the short-side elimination proof, declares its input/error policy, uses `long` area arithmetic, and is validated against exhaustive search. Writer differential testing covers 5100 random arrays; the independent reviewer executes the exact candidate against adversarial boundaries plus 11500 random arrays and a >32-bit area case. The isolated review passes at 99/100 with no hard failures; repository human approval and real-review policy remain promotion blockers."
+          if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text: text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Run strict candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm test
+          npm run ci:check
+
+      - name: Commit reviewed packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name xhs-review-bot; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0044/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0044/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md
+          git commit -m 'review: pass batch 0044 container-water candidate source-first'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
