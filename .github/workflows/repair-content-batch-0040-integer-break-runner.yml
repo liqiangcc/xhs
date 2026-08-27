@@ -1,0 +1,58 @@
+name: Repair Content Batch 0040 Integer Break Runner
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/repair-content-batch-0040-integer-break-runner.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-content-batch-0040-integer-break-runner
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - name: Add the missing Go toolchain setup to the writer workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/build-content-batch-0040-integer-break-candidate.yml')
+          s=p.read_text(encoding='utf-8')
+          if 'uses: actions/setup-go@v5' not in s:
+              needle="""      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+"""
+              replacement=needle+"""      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+"""
+              if needle not in s:
+                  raise SystemExit('setup-java anchor drifted')
+              s=s.replace(needle,replacement,1)
+              p.write_text(s,encoding='utf-8')
+          PY
+          git diff --check
+          if git diff --quiet; then
+            echo 'Writer workflow already has setup-go.'
+            exit 0
+          fi
+          git config user.name 'xhs-ci-repair'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add .github/workflows/build-content-batch-0040-integer-break-candidate.yml
+          git commit -m 'ci: setup Go for batch 0040 integer-break gates'
+          git push origin HEAD:master
