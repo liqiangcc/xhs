@@ -1,0 +1,233 @@
+name: Build Content Batch 0043 DFS SSSP
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0043-dfs-sssp.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-dfs-sssp-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b0fbb220f5a52047eb85620c3e62c501
+  SOURCE_QID: b0fbb220f5a52047eb85620c3e62c501
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：给定一个图，使用 DFS 求单源最短路径（带特殊条件处理）';
+          const note=JSON.parse(fs.readFileSync('note_tagged/672207f0000000001b013994.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact)throw new Error(`source wording drifted: ${row?.original_question}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||item.source_questions?.[0]?.original_question!==exact)throw new Error('batch0043 inventory drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid]))throw new Error('inventory ownership drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('live ownership/type drifted');
+          NODE
+
+      - name: Write source-bounded candidate and execute writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0043/$cid";candidate="review/candidates/answers/$cid.md";mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b0fbb220f5a52047eb85620c3e62c501","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # DFS 求单源最短路径：先说明适用边界，再给可验证参考实现
+
+          ## 核心结论
+
+          来源只保留“给定一个图，使用 DFS 求单源最短路径（带特殊条件处理）”，没有保留图是否有向、边权、特殊条件、输出是单目标还是全点距离，也没有给数据规模。因此不能把某一种图模型冒充成原题。下面采用一个明确的参考契约：**有向图、非负 `long` 边权、给定源点，返回源点到全部顶点的最短距离；不可达返回 `Long.MAX_VALUE`；负权边拒绝；距离加法溢出显式失败。** 实现使用 DFS 式松弛：只有当某条路径把顶点距离变短时才继续从该顶点递归扩展。
+
+          ## 1 分钟版
+
+          - `dist[source]=0`，其他点先设为无穷大。
+          - DFS 到边 `u -> v (w)` 时计算候选距离 `dist[u]+w`；只有候选值更小才更新 `dist[v]` 并继续从 `v` 深搜。
+          - 当前递归路径用 `onPath` 防止沿环立即递归回去；非负权图的最短路一定可以取简单路径，因此跳过当前路径上的重复顶点不会损失最优解。
+          - 这不是一般图最短路的首选算法：无权图优先 BFS，非负加权图通常用 Dijkstra。这里坚持 DFS 是为了忠于来源中明确保留下来的“使用 DFS”。
+          - 如果真实“特殊条件”包含负权、DAG、只能经过某类节点等，算法和证明都要按真实条件重新定义。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.*;
+
+          public final class Solution {
+              private Solution() {}
+
+              public record Edge(int to, long weight) {}
+
+              public static long[] shortestPaths(List<List<Edge>> graph, int source) {
+                  Objects.requireNonNull(graph, "graph");
+                  int n = graph.size();
+                  if (source < 0 || source >= n) throw new IllegalArgumentException("invalid source");
+                  for (int u = 0; u < n; u++) {
+                      List<Edge> edges = Objects.requireNonNull(graph.get(u), "null adjacency list");
+                      for (Edge e : edges) {
+                          Objects.requireNonNull(e, "null edge");
+                          if (e.to() < 0 || e.to() >= n) throw new IllegalArgumentException("invalid endpoint");
+                          if (e.weight() < 0) throw new IllegalArgumentException("negative weight");
+                      }
+                  }
+
+                  long[] dist = new long[n];
+                  Arrays.fill(dist, Long.MAX_VALUE);
+                  dist[source] = 0L;
+                  boolean[] onPath = new boolean[n];
+                  onPath[source] = true;
+                  relaxDfs(graph, source, dist, onPath);
+                  return dist;
+              }
+
+              private static void relaxDfs(List<List<Edge>> graph, int u, long[] dist, boolean[] onPath) {
+                  for (Edge e : graph.get(u)) {
+                      long next = Math.addExact(dist[u], e.weight());
+                      int v = e.to();
+                      if (next >= dist[v]) continue;
+                      dist[v] = next;
+                      if (onPath[v]) continue;
+                      onPath[v] = true;
+                      try {
+                          relaxDfs(graph, v, dist, onPath);
+                      } finally {
+                          onPath[v] = false;
+                      }
+                  }
+              }
+          }
+          ```
+
+          例如 `0->1(5), 0->2(1), 2->1(1)`：第一次从 `0` 到 `1` 得到 5；随后 DFS 走 `0->2->1` 把 `1` 改成 2，并再次从 `1` 扩展。关键不是“访问过就不再访问”，而是“距离真正变短才继续传播”。
+
+          ## 关键细节
+
+          - **为什么普通 visited 不行**：一个顶点第一次被 DFS 到达时不一定就是最短距离；若永久标记 visited，后续更短路径无法继续传播。
+          - **为什么 `onPath` 可以**：它只阻止当前递归链中的环，不阻止顶点以后因更短距离再次进入 DFS。非负权下，最短路可去掉环得到简单路径。
+          - **为什么要求非负权**：来源没有保留负权语义。负权会让“已有距离不会被绕环持续改善”的证明失效；有负环时最短路甚至没有有限答案。
+          - **复杂度**：这个 DFS 式松弛可能让同一顶点多次重新扩展，最坏情况明显劣于 Dijkstra，不能把它宣传成通用高效 SSSP。面试时应主动说明这是受“DFS”约束的参考实现。
+          - **溢出**：`Math.addExact` 让不可表示的路径长度直接失败，而不是 long 回绕成负数后污染最短距离。
+          - **不可达点**：保留 `Long.MAX_VALUE` 作为无穷大哨兵；如果业务要求 `-1` 或 Optional，需要在接口层转换。
+
+          ## 原理机制
+
+          这个实现维护一个单调不变量：`dist[v]` 只会变小，而且每次变小时都会尝试把改进继续传播到后继。对任意一条源点出发的简单路径，只要其前缀距离被发现，DFS 就会尝试下一条边；因此所有能产生更短值的简单路径都会触发松弛。非负权图存在不含环的最短路径，所以阻止当前递归链重复顶点不会排除最优解。算法最终稳定时，不再存在一条边能让后继距离变小。
+
+          ## 项目经验版
+
+          来源没有真实图规模、边权模型或线上约束，不能虚构项目数据。真实工程里若是无权最短路会直接选 BFS；非负权大图通常选 Dijkstra 或相应堆优化；若是 DAG 则按拓扑序做线性松弛。只有当题目明确要求 DFS 或图规模很小、特殊约束适合回溯时，才会考虑这里这种 DFS 传播方式。
+
+          ## 常见追问
+
+          - 问：DFS 为什么能做，为什么又说不推荐？答：在这里的非负权参考契约下，反复“变短才传播”的 DFS 松弛最终能覆盖所有改进；但顶点可能被重复展开很多次，复杂度没有 Dijkstra 稳定。
+          - 问：能不能用一个全局 visited？答：不能。第一次到达一个点的路径可能更长，全局 visited 会阻断后来的更短路径。
+          - 问：如果是无权图呢？答：应优先 BFS，因为按层扩展天然保证第一次到达就是最短边数。
+          - 问：如果有负权边呢？答：本候选显式拒绝。真实题目若允许负权，应重新确认是否有负环并考虑 Bellman-Ford、DAG 松弛等算法。
+          - 问：特殊条件如果是“某些点不能经过”怎么办？答：把条件放到边/节点扩展前做过滤即可，但必须先冻结真实条件；不能凭空补题。
+
+          ## 易错点
+
+          - 把 DFS 的第一次到达当成最短路径。
+          - 用永久 visited，导致更短路径无法继续向后传播。
+          - 没说明边权与负权边界，却把实现说成通用最短路。
+          - long 距离相加不检查溢出。
+          - 明知 BFS/Dijkstra 更自然，却不解释为什么题目要求 DFS 时仍这样实现。
+          EOF
+
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const p=`review/candidates/answers/${process.env.CANONICAL_ID}.md`,md=fs.readFileSync(p,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('shortestPaths'))throw new Error('exact executable Java candidate missing/ambiguous');
+          fs.writeFileSync('/tmp/Solution.java',blocks[0][1]+'\n');
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/WriterValidation.java <<'JAVA'
+          import java.util.*;
+          public final class WriterValidation {
+              static List<List<Solution.Edge>> graph(int n){List<List<Solution.Edge>> g=new ArrayList<>();for(int i=0;i<n;i++)g.add(new ArrayList<>());return g;}
+              static long[] oracle(List<List<Solution.Edge>> g,int s){int n=g.size();long[]d=new long[n];Arrays.fill(d,Long.MAX_VALUE);d[s]=0;for(int it=0;it<n-1;it++){boolean ch=false;for(int u=0;u<n;u++){if(d[u]==Long.MAX_VALUE)continue;for(Solution.Edge e:g.get(u)){long nd=Math.addExact(d[u],e.weight());if(nd<d[e.to()]){d[e.to()]=nd;ch=true;}}}if(!ch)break;}return d;}
+              static void check(List<List<Solution.Edge>> g,int s,String label){long[]got=Solution.shortestPaths(g,s),want=oracle(g,s);if(!Arrays.equals(got,want))throw new AssertionError(label+" got="+Arrays.toString(got)+" want="+Arrays.toString(want));}
+              public static void main(String[]args){
+                  List<List<Solution.Edge>> g=graph(5);g.get(0).add(new Solution.Edge(1,5));g.get(0).add(new Solution.Edge(2,1));g.get(2).add(new Solution.Edge(1,1));g.get(1).add(new Solution.Edge(3,2));g.get(3).add(new Solution.Edge(2,0));check(g,0,"fixed-cycle");
+                  List<List<Solution.Edge>> z=graph(3);z.get(0).add(new Solution.Edge(1,0));z.get(1).add(new Solution.Edge(2,0));check(z,0,"zero-weight");
+                  Random r=new Random(0x44465353535350L);for(int t=0;t<30000;t++){int n=1+r.nextInt(8);List<List<Solution.Edge>> x=graph(n);for(int u=0;u<n;u++)for(int v=0;v<n;v++)if(u!=v&&r.nextInt(100)<30)x.get(u).add(new Solution.Edge(v,r.nextInt(21)));check(x,r.nextInt(n),"random-"+t);}
+                  boolean neg=false;try{List<List<Solution.Edge>> x=graph(2);x.get(0).add(new Solution.Edge(1,-1));Solution.shortestPaths(x,0);}catch(IllegalArgumentException e){neg=true;}if(!neg)throw new AssertionError("negative edge accepted");
+                  boolean ov=false;try{List<List<Solution.Edge>> x=graph(3);x.get(0).add(new Solution.Edge(1,Long.MAX_VALUE-1));x.get(1).add(new Solution.Edge(2,2));Solution.shortestPaths(x,0);}catch(ArithmeticException e){ov=true;}if(!ov)throw new AssertionError("overflow not rejected");
+                  System.out.println("PASS fixed-cycle=covered zero-weight=covered random-vs-bellman-ford=30000 negative=rejected overflow=rejected");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/WriterValidation.java
+          stdout="$(java -cp /tmp WriterValidation)";echo "$stdout";test "$stdout" = 'PASS fixed-cycle=covered zero-weight=covered random-vs-bellman-ford=30000 negative=rejected overflow=rejected';echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const tests=[{case:'fixed graph with cycle and later shorter route',expected:'distance improvement propagates after first visit',passed:true},{case:'zero-weight edges and disconnected vertices',expected:'declared nonnegative/unreachable semantics hold',passed:true},{case:'30,000 seeded random directed graphs up to 8 vertices',expected:'DFS-relaxation candidate equals Bellman-Ford oracle',passed:true},{case:'negative edge and long overflow',expected:'reference contract rejects both',passed:true}];
+          fs.writeFileSync(`${out}/dfs_sssp_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact Java candidate and differential-test DFS relaxation against Bellman-Ford oracle',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'tagged-note',title:'Tagged interview note preserving the DFS single-source shortest-path prompt',locator:'note_tagged/672207f0000000001b013994.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'DFS-relaxation differential validation',locator:`${out}/dfs_sssp_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source preserves DFS plus a single-source shortest-path request but not graph direction, edge-weight model, exact special conditions or output shape.',source_ids:['tagged-note','source-inventory'],answer_locations:['核心结论','关键细节']},{claim_id:'reference-contract',text:'The candidate explicitly declares a directed nonnegative-long graph, source-to-all distances, unreachable sentinel, negative-edge rejection and checked overflow as one executable reference contract.',source_ids:['tagged-note','source-inventory'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'reference-behavior',text:'Under that declared contract, the exact Java DFS-relaxation implementation matches an independent Bellman-Ford oracle on fixed cases and 30,000 seeded random graphs.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Writer repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID/dfs_sssp_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft batch 0043 DFS shortest-path candidate'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+            sleep 5
+          done
+          exit 1
