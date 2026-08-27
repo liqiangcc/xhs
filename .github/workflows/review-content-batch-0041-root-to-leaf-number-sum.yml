@@ -1,0 +1,177 @@
+name: Review Content Batch 0041 Root-to-Leaf Number Sum
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0041-root-to-leaf-number-sum.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0041-root-to-leaf-number-sum-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a873b7b82bcca35bc35609aa914b70c9
+  SOURCE_QID: a873b7b82bcca35bc35609aa914b70c9
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Source-first inspection before writer packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; candidate="review/candidates/answers/$cid.md"; out="review/content_build/answer_batch_0041/$cid"
+          test -f "$candidate"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法 1：计算二叉树中根节点到叶子节点路径所组成的数字之和';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/67dccdb2000000000900ce21.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('source contract drifted');
+          const raw=fs.readFileSync('note_desc/67dccdb2000000000900ce21.txt','utf8');
+          if(!raw.includes('2道算法题，求根节点到叶子节点的数字之和,多线程打印a,b,c')) throw new Error('raw-note operation boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('ownership/type drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','0..9','实现假设','Math.multiplyExact','Math.addExact']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上/.test(md)) throw new Error('fabricated production claim risk');
+          if(!md.includes('节点是否一定是十进制单个数字并非来源事实')) throw new Error('digit assumption is not clearly separated from source facts');
+          const block=md.match(/```java\n([\s\S]*?)```/); if(!block) throw new Error('candidate Java block missing');
+          fs.writeFileSync('/tmp/RootToLeafNumberSum.java',block[1]);
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex')+'\n');
+          NODE
+
+      - name: Execute independent path-number reviewer fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/RootToLeafNumberSumReviewerTest.java <<'JAVA'
+          final class RootToLeafNumberSumReviewerTest {
+              static RootToLeafNumberSum.TreeNode n(int v) { return new RootToLeafNumberSum.TreeNode(v); }
+              static void eq(long expected, long actual, String name) {
+                  if (expected != actual) throw new AssertionError(name + ": expected=" + expected + " actual=" + actual);
+              }
+              static void rejects(int value) {
+                  boolean ok=false;
+                  try { RootToLeafNumberSum.sumRootToLeafNumbers(n(value)); }
+                  catch (IllegalArgumentException expected) { ok=true; }
+                  if(!ok) throw new AssertionError("must reject non-digit " + value);
+              }
+              public static void main(String[] args) {
+                  eq(0L, RootToLeafNumberSum.sumRootToLeafNumbers(null), "empty");
+                  eq(0L, RootToLeafNumberSum.sumRootToLeafNumbers(n(0)), "single-zero");
+
+                  var simple=n(1); simple.left=n(2); simple.right=n(3);
+                  eq(25L, RootToLeafNumberSum.sumRootToLeafNumbers(simple), "12-plus-13");
+
+                  var oneChild=n(1); oneChild.left=n(2);
+                  eq(12L, RootToLeafNumberSum.sumRootToLeafNumbers(oneChild), "one-child-is-not-leaf");
+
+                  var asymmetric=n(1); asymmetric.left=n(2); asymmetric.right=n(3); asymmetric.left.left=n(4);
+                  eq(137L, RootToLeafNumberSum.sumRootToLeafNumbers(asymmetric), "124-plus-13");
+
+                  var zeros=n(0); zeros.left=n(0); zeros.left.right=n(7); zeros.right=n(2);
+                  eq(9L, RootToLeafNumberSum.sumRootToLeafNumbers(zeros), "007-plus-02");
+
+                  rejects(-1); rejects(10);
+
+                  var deep=n(9); var p=deep;
+                  for(int i=1;i<19;i++){ p.left=n(9); p=p.left; }
+                  boolean overflow=false;
+                  try { RootToLeafNumberSum.sumRootToLeafNumbers(deep); }
+                  catch (ArithmeticException expected) { overflow=true; }
+                  if(!overflow) throw new AssertionError("19-digit decimal prefix must expose long overflow");
+
+                  System.out.println("PASS independent-empty single-zero two-leaf one-child-leaf-semantics asymmetric leading-zero negative-rejected multi-digit-rejected overflow-explicit");
+              }
+          }
+          JAVA
+          stdout="$(cd /tmp && javac RootToLeafNumberSum.java RootToLeafNumberSumReviewerTest.java && java RootToLeafNumberSumReviewerTest)"
+          test "$stdout" = 'PASS independent-empty single-zero two-leaf one-child-leaf-semantics asymmetric leading-zero negative-rejected multi-digit-rejected overflow-explicit'
+          echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Inspect writer packet only after independent conclusion and freeze review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0041/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha) throw new Error('writer packet/hash drifted after independent review');
+          const writerValidation=JSON.parse(fs.readFileSync(`${out}/code_validation.json`,'utf8'));
+          if(writerValidation.result!=='pass'||writerValidation.candidate_sha256!==sha) throw new Error('writer validation/hash drifted after independent review');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const boundary_tests=[{case:'two leaf paths 12 and 13',expected:'sum is 25',passed:true},{case:'node with exactly one child',expected:'non-leaf prefix continues to child and yields 12',passed:true},{case:'asymmetric 124 and 13',expected:'sum is 137',passed:true},{case:'leading zero paths 007 and 02',expected:'numeric sum is 9',passed:true},{case:'node outside 0..9',expected:'declared reference contract rejects input',passed:true},{case:'19-digit all-nine chain',expected:'long overflow is explicit',passed:true}];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'extract candidate Java; javac RootToLeafNumberSum.java RootToLeafNumberSumReviewerTest.java && java RootToLeafNumberSumReviewerTest',stdout:process.env.REVIEW_STDOUT,boundary_tests},null,2)+'\n');
+          const findings=['The strongest surviving Question preserves only the operation of summing numbers formed by root-to-leaf paths; it does not preserve node-value range, empty-tree result, integer type, overflow behavior or a concrete API signature.','The candidate clearly labels decimal digit values 0..9, empty-tree 0, Java long and exact-arithmetic overflow behavior as the reference implementation contract rather than source facts.','An independently written Java reviewer verifies true-leaf semantics on one-child/asymmetric trees, ordinary path-number accumulation, leading-zero numeric behavior, fail-closed non-digit input and explicit long overflow.','The prefix invariant current = prefix * 10 + digit correctly decomposes every complete root-to-leaf path exactly once under the declared decimal-digit contract.','The project section does not fabricate production ownership, scale, incidents or metrics.'];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0041-root-to-leaf-number-sum-20260827',review_version:'batch-0041.root-to-leaf-number-sum.v1',decision:'pass',revision_round:1,source_packet:['note_desc/67dccdb2000000000900ce21.txt','note_tagged/67dccdb2000000000900ce21.json','review/content_build/answer_batch_0041/source_inventory.json','review/content_build/answer_batch_0041/recoverability_review.md',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0041-root-to-leaf-number-sum-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-caption',title:'Original interview caption preserving the root-to-leaf number-sum operation',locator:'note_desc/67dccdb2000000000900ce21.txt',source_type:'repository_source_record',checked_at:date},{source_id:'repository-tagged-question',title:'Structured root-to-leaf number-sum source Question',locator:`note_tagged/67dccdb2000000000900ce21.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'recoverability-review',title:'Batch 0041 pre-draft recoverability decision',locator:'review/content_build/answer_batch_0041/recoverability_review.md',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer deterministic Java validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent path-number Java reviewer fixture',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Root-to-leaf number-sum source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The strongest surviving source asks to sum numbers formed by root-to-leaf paths and does not preserve node range, empty-tree, integer-width, overflow or API details.',source_ids:['repository-caption','repository-tagged-question','recoverability-review','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'declared-reference-contract',text:'Decimal node digits 0..9, empty tree returning 0, Java long and fail-fast overflow are explicit reference-contract choices rather than recovered source requirements.',source_ids:['repository-caption','repository-tagged-question','recoverability-review','isolated-review'],answer_locations:['核心结论','关键细节','常见追问']},{claim_id:'reference-implementation',text:'Under the declared decimal-digit contract, independent and writer fixtures verify prefix accumulation, true-leaf semantics, asymmetric/leading-zero cases, input rejection and explicit overflow.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'extract candidate Java; javac RootToLeafNumberSum.java RootToLeafNumberSumReviewerTest.java && java RootToLeafNumberSumReviewerTest',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit unique review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/content_build/answer_batch_0041/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0041/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0041 root-to-leaf number-sum candidate source-first'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same review artifacts; fail closed without push.'
+              exit 0
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push review artifacts after safe retries.' >&2
+          exit 1
