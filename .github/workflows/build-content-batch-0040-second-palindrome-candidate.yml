@@ -1,0 +1,356 @@
+name: Build Content Batch 0040 Second Palindrome Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0040-second-palindrome-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-second-palindrome-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a2b09618bc23b15a51f221be46e00bd5
+  SOURCE_QID: a2b09618bc23b15a51f221be46e00bd5
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Verify exact repository source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：找到字符串中第二长的回文子串（不能是最长回文子串的子串）？';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/68ab42b1000000001d01626e.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('second-palindrome tagged source drifted');
+          const raw=fs.readFileSync('note_desc/68ab42b1000000001d01626e.txt','utf8');
+          if(!raw.includes('手撕：leetcode005-最长回文子串的变体')||!raw.includes('找到字符串中第二长的回文子串，第二长的回文子串不能是最长回文子串的子串')) throw new Error('original note variant wording drifted');
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const q=rows.find(x=>x.question_id===qid);
+          if(!q||q.canonical_id!==cid||q.is_valid_for_library!==true) throw new Error(`Question ownership/validity drifted: ${JSON.stringify(q)}`);
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0040/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('answer context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`expected singleton ownership, got ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0040/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('Batch 0040 frozen source inventory drifted');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and Java fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a2b09618bc23b15a51f221be46e00bd5","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 第二长回文子串：候选不能位于最长回文子串内部
+
+          ## 核心结论
+
+          原始面经只保留了“LeetCode 5 最长回文子串的变体：找到第二长回文子串，而且它不能是最长回文子串的子串”，没有保留输入规模、多个最长回文并列时的处理、‘第二长’是否允许与最长同长度、返回哪个并列候选、无解时返回什么。因此面试时第一步应先把这些语义问清楚，不能把实现偏好冒充题目条件。
+
+          下面给一个**明确但只是示例的实现契约**：输入是非 `null` 字符串；先取“长度最大且最靠左”的最长回文区间 `L`；第二长定义为**长度严格小于 `L`**、且区间不完全落在 `L` 内的回文子串；同长度时取最靠左；不存在则返回空串。这个契约满足来源中已知的“不允许是最长回文子串的子串”，同时把来源没有说明的 tie/no-solution 规则显式标成实现选择。
+
+          ## 1 分钟版
+
+          - 先澄清语义：尤其是多个最长回文并列、第二名是否允许同长度、以及“不能是最长的子串”是针对一个最长区间还是所有最长区间。
+          - 在本文示例契约下，可以做两遍中心扩展：第一遍找左侧优先的最长回文 `L`；第二遍再次枚举所有回文区间，只保留 `len < len(L)` 且不被 `L` 完全包含的候选，再取最长、左侧优先。
+          - 中心扩展会覆盖奇数和偶数长度回文；每个中心最多向两侧扩到 O(n)，两遍总时间 O(n²)，额外空间 O(1)。
+          - 如果题目给出很大的 `n` 并要求线性复杂度，再考虑 Manacher 得到每个中心的最大回文半径；但仍要先确定“第二长”和 containment 的精确定义。
+          - 不要直接把普通 LeetCode 5 的最长回文答案改个变量名：这个变体新增了“排名 + 不被最长区间包含”的过滤条件。
+
+          ## 3 分钟版
+
+          ```java
+          class Solution {
+              private static final class Range {
+                  final int left, right;
+                  Range(int left, int right) { this.left = left; this.right = right; }
+                  int length() { return right - left + 1; }
+              }
+
+              public String secondLongestPalindrome(String s) {
+                  if (s == null) throw new IllegalArgumentException("s must not be null");
+                  if (s.isEmpty()) return "";
+
+                  Range longest = scan(s, null, false);
+                  Range second = scan(s, longest, true);
+                  return second == null ? "" : s.substring(second.left, second.right + 1);
+              }
+
+              private Range scan(String s, Range longest, boolean secondPass) {
+                  Range best = null;
+                  for (int c = 0; c < s.length(); c++) {
+                      best = expand(s, c, c, longest, secondPass, best);
+                      best = expand(s, c, c + 1, longest, secondPass, best);
+                  }
+                  return best;
+              }
+
+              private Range expand(String s, int l, int r, Range longest,
+                                   boolean secondPass, Range best) {
+                  while (l >= 0 && r < s.length() && s.charAt(l) == s.charAt(r)) {
+                      if (!secondPass || eligible(l, r, longest)) {
+                          if (best == null || r - l > best.right - best.left ||
+                              (r - l == best.right - best.left && l < best.left)) {
+                              best = new Range(l, r);
+                          }
+                      }
+                      l--;
+                      r++;
+                  }
+                  return best;
+              }
+
+              private boolean eligible(int l, int r, Range longest) {
+                  int len = r - l + 1;
+                  boolean insideLongest = l >= longest.left && r <= longest.right;
+                  return len < longest.length() && !insideLongest;
+              }
+          }
+          ```
+
+          这段代码故意分两遍。第一遍只决定示例契约中的最长锚点 `L`；第二遍才应用“严格更短 + 不能完全落在 `L` 内”的过滤器。这样状态含义清楚，也避免一边找最长一边维护第二名时，最长区间后来变化导致之前的 containment 判断失效。
+
+          ## 关键细节
+
+          - **来源与实现契约分开**：来源明确的是“第二长回文 + 不能是最长回文的子串”；`null`、空串、tie-break、多最长区间语义都没有保留，本文必须显式声明而不能伪装成原题要求。
+          - **‘子串’是区间关系**：对一个固定最长区间 `[L,R]`，候选 `[l,r]` 被它包含当且仅当 `l>=L && r<=R`。不能只比较字符串值，因为同样的字符序列可能出现在不同位置。
+          - **第二长按严格长度排名**：示例契约要求 `candidate.length < longest.length`。若面试官说“第二个候选”允许与最长同长度，则过滤条件必须改。
+          - **多个最长回文**：示例代码先选左侧优先的一个最长锚点。如果面试官要求“不能被任意最长回文包含”，就要先收集所有最大长度区间，再对候选检查所有最长区间；不能继续沿用单锚点语义。
+          - **中心扩展覆盖完整**：每个回文都有一个奇数中心或两个字符之间的偶数中心，因此从所有 `c,c` 和 `c,c+1` 向外扩展会枚举到全部回文区间。
+          - **复杂度**：两遍中心扩展都是 O(n²) 最坏时间、O(1) 额外空间。来源没有规模约束，所以这里只能说明复杂度，不能声称它一定满足性能要求。
+
+          ## 原理机制
+
+          普通最长回文子串只需要在所有回文区间中做一次 `arg max(length)`。这个变体是在同一个候选集合上再加两个约束：长度排名必须低于最长项，并且区间不能被选定最长区间包含。因此最直接的建模是“先确定最长锚点，再在完整回文区间集合上做受约束的第二次最优选择”。
+
+          两遍中心扩展的价值在于把两个阶段解耦：第一遍结束后最长区间已经稳定，第二遍的每个 containment 判断都基于同一个固定锚点。若用 Manacher，同样可以先得到半径数组和最长区间，再从半径信息中寻找满足过滤条件的最优候选；只是实现复杂度更高。
+
+          ## 项目经验版
+
+          来源是纯算法面试题，没有真实项目经历、线上数据或性能规模，不能虚构。可迁移的工程习惯是：面对“第二名”“不能属于第一名”这类自然语言规则，先把排序键、并列规则、范围关系和无解语义写成可测试契约，再实现；否则不同人会写出都自洽但互不兼容的程序。
+
+          ## 常见追问
+
+          - 问：为什么不能只记录最长和第二长两个字符串？答：containment 是区间关系，而且最长项在扫描过程中可能变化；先冻结最长区间，再做第二遍过滤更容易保证语义稳定。
+          - 问：如果有两个长度相同的最长回文怎么办？答：来源没有说明。本文示例选择最靠左的一个作锚点；如果要求针对所有最长回文过滤，就先收集所有最大长度区间。
+          - 问：第二长能不能和最长一样长？答：自然语言有歧义。本文把“第二长”解释为严格更短；如果面试官允许同长度的第二个 occurrence，需要去掉严格长度过滤并重新定义 tie-break。
+          - 问：为什么用区间判断而不是 `longest.contains(candidate)`？答：字符串值相同不代表是同一个 occurrence；题目说“是最长回文子串的子串”时，面试实现最好确认指的是文本包含还是位置包含。本文选择位置包含，并明确为示例契约。
+          - 问：能否做到 O(n)？答：Manacher 可以在线性时间得到每个中心的最大回文半径，但变体的候选排名和 containment 规则仍要单独处理；只有在明确 `n` 和性能目标后才值得承担这部分实现复杂度。
+
+          ## 易错点
+
+          - 把普通 LeetCode 5 的答案直接当成变体答案，没有处理第二名和 containment。
+          - 在最长区间尚未确定时就永久淘汰“位于当前最长内部”的候选，后来最长变化后判断可能失效。
+          - 用字符串值的 `contains` 替代 occurrence 区间包含，混淆“相同文本”和“同一位置关系”。
+          - 来源没有定义多个最长回文和 tie-break，却把某一种选择写成题目事实。
+          - 没有数据规模就武断要求 Manacher，或者反过来声称 O(n²) 一定足够。
+          EOF
+
+          cat > "$out/SecondPalindrome.java" <<'JAVA'
+          import java.util.*;
+
+          public final class SecondPalindrome {
+              private static final class Range {
+                  final int left, right;
+                  Range(int left, int right) { this.left = left; this.right = right; }
+                  int length() { return right - left + 1; }
+              }
+
+              public static String solve(String s) {
+                  if (s == null) throw new IllegalArgumentException("s must not be null");
+                  if (s.isEmpty()) return "";
+                  Range longest = scan(s, null, false);
+                  Range second = scan(s, longest, true);
+                  return second == null ? "" : s.substring(second.left, second.right + 1);
+              }
+
+              private static Range scan(String s, Range longest, boolean secondPass) {
+                  Range best = null;
+                  for (int c = 0; c < s.length(); c++) {
+                      best = expand(s, c, c, longest, secondPass, best);
+                      best = expand(s, c, c + 1, longest, secondPass, best);
+                  }
+                  return best;
+              }
+
+              private static Range expand(String s, int l, int r, Range longest,
+                                          boolean secondPass, Range best) {
+                  while (l >= 0 && r < s.length() && s.charAt(l) == s.charAt(r)) {
+                      if (!secondPass || eligible(l, r, longest)) best = better(best, l, r);
+                      l--;
+                      r++;
+                  }
+                  return best;
+              }
+
+              private static boolean eligible(int l, int r, Range longest) {
+                  int len = r - l + 1;
+                  boolean insideLongest = l >= longest.left && r <= longest.right;
+                  return len < longest.length() && !insideLongest;
+              }
+
+              private static Range better(Range best, int l, int r) {
+                  if (best == null || r - l > best.right - best.left ||
+                      (r - l == best.right - best.left && l < best.left)) return new Range(l, r);
+                  return best;
+              }
+
+              private static boolean palindrome(String s, int l, int r) {
+                  while (l < r) if (s.charAt(l++) != s.charAt(r--)) return false;
+                  return true;
+              }
+
+              private static String brute(String s) {
+                  if (s.isEmpty()) return "";
+                  Range longest = null;
+                  for (int l = 0; l < s.length(); l++) {
+                      for (int r = l; r < s.length(); r++) {
+                          if (palindrome(s, l, r)) longest = better(longest, l, r);
+                      }
+                  }
+                  Range second = null;
+                  for (int l = 0; l < s.length(); l++) {
+                      for (int r = l; r < s.length(); r++) {
+                          if (palindrome(s, l, r) && eligible(l, r, longest)) second = better(second, l, r);
+                      }
+                  }
+                  return second == null ? "" : s.substring(second.left, second.right + 1);
+              }
+
+              private static void enumerate(char[] a, int idx) {
+                  if (idx == a.length) {
+                      String s = new String(a);
+                      String got = solve(s), want = brute(s);
+                      if (!got.equals(want)) throw new AssertionError("mismatch s=" + s + " got=" + got + " want=" + want);
+                      return;
+                  }
+                  for (char ch : new char[]{'a','b','c'}) { a[idx] = ch; enumerate(a, idx + 1); }
+              }
+
+              public static void main(String[] args) {
+                  Map<String,String> cases = new LinkedHashMap<>();
+                  cases.put("", "");
+                  cases.put("a", "");
+                  cases.put("racecarxyzzyx", "xyzzyx");
+                  cases.put("babadxyzzyx", "bab");
+                  cases.put("aaaaabcc", "cc");
+                  cases.put("abacaba", "");
+                  for (Map.Entry<String,String> e : cases.entrySet()) {
+                      String got = solve(e.getKey());
+                      if (!got.equals(e.getValue())) throw new AssertionError("known s=" + e.getKey() + " got=" + got + " want=" + e.getValue());
+                  }
+                  for (int n = 0; n <= 8; n++) enumerate(new char[n], 0);
+                  try { solve(null); throw new AssertionError("null must reject"); } catch (IllegalArgumentException expected) {}
+                  System.out.println("PASS known-cases exhaustive-alphabet-abc-length-0..8 brute-oracle null=rejected explicit-tie-contract");
+              }
+          }
+          JAVA
+
+      - name: Execute fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          javac "$out/SecondPalindrome.java"
+          stdout="$(java -cp "$out" SecondPalindrome)"
+          test "$stdout" = 'PASS known-cases exhaustive-alphabet-abc-length-0..8 brute-oracle null=rejected explicit-tie-contract'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27';
+          const out=`review/content_build/answer_batch_0040/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'javac SecondPalindrome.java && java SecondPalindrome',stdout:process.env.STDOUT,checks:['known cases with unique longest anchor','whole-string longest produces no eligible second under declared contract','exhaustive alphabet {a,b,c} strings of length 0..8 against independent substring-enumeration oracle','leftmost tie-breaking encoded in both optimized and oracle paths','null input rejected by declared implementation contract']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[
+            {source_id:'repository-original-note',title:'Original interview note preserving the LeetCode 5 variant wording',locator:'note_desc/68ab42b1000000001d01626e.txt',source_type:'repository_source_record',checked_at:date},
+            {source_id:'repository-tagged-question',title:'Normalized exact Coding Question and Batch 0040 frozen inventory',locator:'note_tagged/68ab42b1000000001d01626e.json',source_type:'repository_source_record',checked_at:date},
+            {source_id:'fixture',title:'Second-palindrome deterministic Java validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}
+          ],claims:[
+            {claim_id:'source-contract',text:'The original note identifies this as a LeetCode 5 variant and requires a second-longest palindromic substring that is not a substring of the longest palindromic substring.',source_ids:['repository-original-note','repository-tagged-question'],answer_locations:['核心结论','1 分钟版']},
+            {claim_id:'source-ambiguity',text:'The preserved source does not define input-size, null/empty behavior, multiple-longest handling, equal-length second-place semantics, tie-breaking, or no-solution output; the answer labels these as clarification points rather than source facts.',source_ids:['repository-original-note','repository-tagged-question'],answer_locations:['核心结论','关键细节','常见追问']},
+            {claim_id:'declared-reference-contract',text:'Under the explicitly declared leftmost-longest, strictly-shorter, position-containment contract, two-pass center expansion matches an independent exhaustive substring oracle for all ternary strings through length 8.',source_ids:['fixture'],answer_locations:['核心结论','3 分钟版','原理机制']}
+          ],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Record writer-complete task progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md')
+          t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_a2b09618bc23b15a51f221be46e00bd5` second-palindrome writer slice is staged source-first: the original note preserves the LeetCode 5 variant and the non-containment rule, while missing tie/multi-longest/no-solution/size semantics remain explicitly marked as clarification points. A declared reference contract uses two-pass center expansion and matches an independent exhaustive substring oracle for every ternary string through length 8. Independent source-first review is still required.'
+          if line not in t: t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Run candidate-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during second-palindrome writer slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add review/candidates/answers/$CANONICAL_ID.md review/content_build/answer_batch_0040/$CANONICAL_ID tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0040 second-palindrome candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
