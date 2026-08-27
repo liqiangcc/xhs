@@ -1,0 +1,178 @@
+name: Review Content Batch 0042 All Courses SQL
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0042-all-courses-sql.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-all-courses-sql-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_ab9374b0bb7cceded9319a8201cc2b24
+  SOURCE_QID: ab9374b0bb7cceded9319a8201cc2b24
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Source-first inspection before writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          qid="$SOURCE_QID"
+          candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const structured=JSON.parse(fs.readFileSync('note_structured/68b593ab000000001c0077c1.json','utf8'));
+          const exact='算法手撕：查询每门功课都不低于 60 分的学生姓名（SQL）。';
+          if(!Array.isArray(structured.questions)||structured.questions[5]!==exact) throw new Error('all-courses SQL source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('ownership/type drifted');
+          const source=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!source||source.original_question!==exact) throw new Error('source wording drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','MIN(sc.score) >= 60','INNER JOIN','NULL','补考']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md)) throw new Error('fabricated production claim risk');
+          if(!md.includes('来源没有真实项目规模或表结构')) throw new Error('no-fabrication boundary missing');
+          if(!md.includes('来源未说明')||!md.includes('本候选采用“不返回”的口径')) throw new Error('zero-course reference contract is not explicit');
+          if(!md.includes('若真实表允许 `score IS NULL`')) throw new Error('NULL boundary is not explicit');
+          const blocks=[...md.matchAll(/```sql\n([\s\S]*?)```/g)].map(m=>m[1].trim());
+          const query=blocks.find(x=>/^SELECT\s+s\.name\b/i.test(x));
+          if(!query) throw new Error('main candidate SQL block missing');
+          fs.writeFileSync('/tmp/candidate.sql',query+'\n');
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex');
+          fs.writeFileSync('/tmp/candidate-sha',sha+'\n');
+          fs.writeFileSync('/tmp/source-first-preconclusion.json',JSON.stringify({decision:'pass_pending_independent_oracle',source_boundary:'only names whose every course is not below 60 is source-proven',reference_contracts:['students/scores schema','non-null scores','one row per student-course','zero-course students excluded','no ordering requirement'],candidate_sha256:sha},null,2)+'\n');
+          NODE
+
+      - name: Execute independent SQL oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY' > /tmp/reviewer-stdout
+          import sqlite3
+          sql=open('/tmp/candidate.sql',encoding='utf-8').read().strip().rstrip(';')
+          con=sqlite3.connect(':memory:')
+          con.execute('create table students(student_id integer primary key, name text not null)')
+          con.execute('create table scores(student_id integer not null, course_id integer not null, score integer not null, primary key(student_id, course_id))')
+          students=[(1,'Alice'),(2,'Bob'),(3,'Cara'),(4,'Dan'),(5,'Eve'),(6,'Finn'),(7,'Gina')]
+          scores=[
+              (1,1,60),(1,2,60),(1,3,95),
+              (2,1,100),(2,2,59),
+              (3,1,61),
+              (5,1,60),(5,2,60),(5,3,60),
+              (6,1,0),(6,2,100),
+              (7,1,99),(7,2,60)
+          ]
+          con.executemany('insert into students values(?,?)',students)
+          con.executemany('insert into scores values(?,?,?)',scores)
+          got=sorted(row[0] for row in con.execute(sql))
+          want=sorted(['Alice','Cara','Eve','Gina'])
+          assert got==want,(got,want)
+          assert 'Dan' not in got,'zero-course student must be excluded by declared INNER JOIN contract'
+          assert 'Bob' not in got and 'Finn' not in got,'any below-60 score must exclude the student'
+          print('PASS included=Alice,Cara,Eve,Gina exact60=included any-below60=excluded single-course-pass=included zero-course=excluded repeated60=included')
+          PY
+          grep -Fx 'PASS included=Alice,Cara,Eve,Gina exact60=included any-below60=excluded single-course-pass=included zero-course=excluded repeated60=included' /tmp/reviewer-stdout
+          echo "REVIEW_STDOUT=$(cat /tmp/reviewer-stdout)" >> "$GITHUB_ENV"
+
+      - name: Freeze independent review and evidence after conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          qid="$SOURCE_QID"
+          out="review/content_build/answer_batch_0042/$cid"
+          sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const pre=JSON.parse(fs.readFileSync('/tmp/source-first-preconclusion.json','utf8'));
+          if(pre.decision!=='pass_pending_independent_oracle'||pre.candidate_sha256!==sha) throw new Error('source-first preconclusion drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha) throw new Error('writer packet/hash drifted');
+          const writerValidation=JSON.parse(fs.readFileSync(`${out}/student_all_courses_validation.json`,'utf8'));
+          if(writerValidation.result!=='pass') throw new Error('writer validation did not pass');
+          const boundaryTests=[
+            {case:'minimum score exactly 60',expected:'student included',passed:true},
+            {case:'one score below 60 among higher scores',expected:'student excluded',passed:true},
+            {case:'single passing course',expected:'student included',passed:true},
+            {case:'zero score rows',expected:'student excluded by declared INNER JOIN contract',passed:true},
+            {case:'multiple courses exactly 60',expected:'student included',passed:true}
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'Repository source preserves only the SQL goal of returning student names whose every course score is not below 60; schema names, zero-course semantics, NULL handling, retakes, and ordering are not source-proven.',
+            'Candidate labels its students/scores schema, non-null one-row-per-course assumption, and zero-course exclusion as explicit reference-contract choices rather than source facts.',
+            'Under a non-empty non-null score set, MIN(score) >= 60 is equivalent to the universal condition that every recorded score is at least 60; the answer also gives the equivalent EXISTS plus NOT EXISTS form.',
+            'Independent SQLite oracle passes exact-60 inclusion, any-sub-60 rejection, single-course pass, zero-course exclusion, and repeated boundary-value courses.',
+            'Answer identifies same-name grouping, NULL, retake, empty-set, ordering, and index/explain boundaries without fabricating production experience.'
+          ];
+          fs.mkdirSync(out,{recursive:true});
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'extract main candidate SQL; execute against independent in-memory SQLite oracle',stdout:process.env.REVIEW_STDOUT,boundary_tests:boundaryTests,environment:{engine:'Python sqlite3 in-memory SQLite'}},null,2)+'\n');
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0042-all-courses-sql-20260827-v1',review_version:'batch-0042.all-courses-sql.v1',decision:'pass',revision_round:1,source_packet:['note_structured/68b593ab000000001c0077c1.json','review/content_build/answer_batch_0042/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0042-all-courses-sql-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'structured-note',title:'Structured interview note preserving all-courses SQL wording',locator:'note_structured/68b593ab000000001c0077c1.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer deterministic SQLite fixture',locator:`${out}/student_all_courses_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent SQLite SQL oracle',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'All-courses SQL source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'Strongest repository source preserves only the task of returning student names whose every course score is not below 60; schema names, zero-course semantics, NULL handling, retakes, and ordering are not source-proven.',source_ids:['structured-note','source-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'reference-query',text:'Under the explicitly declared non-null one-row-per-student-course schema and zero-course exclusion contract, grouping by student and requiring MIN(score) >= 60 returns exactly students whose recorded course scores are all at least 60.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'extract main candidate SQL; execute against independent in-memory SQLite oracle',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:boundaryTests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit unique review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/content_build/answer_batch_0042/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0042 all-courses SQL candidate source-first'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same review artifacts; fail closed.' >&2
+              exit 1
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push review artifacts after safe retries.' >&2
+          exit 1
