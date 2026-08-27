@@ -102,6 +102,26 @@ jobs:
       - name: Gate full repository validation
         run: node scripts/xhs.js validate all --noWrite
 
+      - name: Diagnose tests - answer build relation
+        continue-on-error: true
+        run: node --test test/answer*.test.js test/apply_relation_decision*.test.js test/architecture_boundaries.test.js test/build*.test.js
+
+      - name: Diagnose tests - canonical
+        continue-on-error: true
+        run: node --test test/canonical*.test.js
+
+      - name: Diagnose tests - dedup and mutation gateways
+        continue-on-error: true
+        run: node --test test/dedup*.test.js test/file_canonical_mutation_gateway*.test.js
+
+      - name: Diagnose tests - question and review
+        continue-on-error: true
+        run: node --test test/question*.test.js test/review*.test.js
+
+      - name: Diagnose tests - remaining repository tests
+        continue-on-error: true
+        run: node --test test/content_specs.test.js test/curated*.test.js test/current_dedup_operational_docs.test.js test/date.test.js test/hash.test.js test/issue.test.js test/legacy*.test.js test/long_tail_answers.test.js test/migrate_command.test.js test/no_write.test.js test/report*.test.js test/repository_role_term_audit.test.js test/taxonomy.test.js
+
       - name: Gate unit tests
         run: npm test
 
