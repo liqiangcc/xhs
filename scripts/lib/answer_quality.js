@@ -680,7 +680,7 @@ function runAnswerAudit(options = {}) {
         const title = (answer.content.match(/^#\s+(.+)$/m) || [])[1] || answer.metadata.canonical_id;
         if (types.size && !types.has(answer.metadata.answer_type || inferAnswerType([], { canonical_title: title }))) return false;
         if (setIds && !setIds.has(answer.metadata.canonical_id)) return false;
-        if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js|go|c|cpp|c\+\+|cc|cxx)(?:\s|$)/i.test(answer.content)) return false;
+        if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js|go|c|cpp|c\+\+|cc|cxx|bash|sh|shell)(?:\s|$)/i.test(answer.content)) return false;
         return true;
     });
     const rows = selectedPaths.map((filePath) => auditOneCandidate(filePath, { ...options, allowFormal: options.tier === 'curated' })).filter((row) => {
