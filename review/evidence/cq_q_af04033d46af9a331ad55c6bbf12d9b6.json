@@ -1,0 +1,150 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_af04033d46af9a331ad55c6bbf12d9b6",
+  "candidate_sha256": "37f895e060dcdfbcf6b8d332f4b4b9b6304dbcd09d1eecd0779ae1ac3b4fb2ae",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0042-inorder-traversal-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "structured-note",
+      "title": "Structured interview note preserving recursive/non-recursive inorder prompt",
+      "locator": "note_structured/67ed2207000000001c03db4e.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0042 frozen source inventory",
+      "locator": "review/content_build/answer_batch_0042/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer recursive/iterative deterministic validation",
+      "locator": "review/content_build/answer_batch_0042/cq_q_af04033d46af9a331ad55c6bbf12d9b6/inorder_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent Morris inorder oracle validation",
+      "locator": "review/content_build/answer_batch_0042/cq_q_af04033d46af9a331ad55c6bbf12d9b6/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Inorder traversal source-first isolated review",
+      "locator": "review/content_build/answer_batch_0042/cq_q_af04033d46af9a331ad55c6bbf12d9b6/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source requires both recursive and non-recursive binary-tree inorder traversal, while node API, return shape, empty-tree behavior and language are not source-frozen.",
+      "source_ids": [
+        "structured-note",
+        "source-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "Under the declared Java TreeNode/List contract, both candidate traversals match an independent Morris inorder oracle over fixed, skewed and random trees, preserve the tree, and the iterative form handles a 50,000-node skew boundary.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "af04033d46af9a331ad55c6bbf12d9b6",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "independent Morris traversal oracle and deep iterative boundary",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=5 random=30000 random-nodes=2682486 morris-oracle=match tree-restoration=verified duplicates=covered deep-iterative=50000 null=empty",
+    "boundary_tests": [
+      {
+        "case": "null, single, balanced, left-skew and right-skew trees",
+        "expected": "recursive and iterative traversals equal independent Morris inorder oracle",
+        "passed": true
+      },
+      {
+        "case": "30,000 seeded random trees with duplicate values",
+        "expected": "both candidate methods equal Morris oracle and preserve tree structure",
+        "passed": true
+      },
+      {
+        "case": "Morris oracle restoration",
+        "expected": "temporary threads are fully removed and original tree shape is restored",
+        "passed": true
+      },
+      {
+        "case": "50,000-node right-skew tree",
+        "expected": "iterative traversal completes with ordered full output without relying on JVM recursion depth",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0042-inorder-20260827-v1",
+    "review_version": "batch-0042.inorder.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The frozen source explicitly requires binary-tree inorder traversal in both recursive and non-recursive forms; node representation, return type, empty-tree result and implementation language are not preserved source constraints.",
+      "The candidate declares those missing details as a Java reference contract instead of presenting them as source facts, and it supplies both required implementations.",
+      "The recursive left-root-right implementation and the explicit left-chain stack implementation satisfy the same inorder ordering invariant.",
+      "An independent Morris-traversal oracle, structurally different from both candidate implementations and the writer fixture, matches both methods across fixed/skewed cases and 30,000 seeded random trees with duplicate values; temporary Morris threads are verified to restore the original tree.",
+      "Time O(n), auxiliary O(h) for recursion/explicit stack, deep-recursion risk, no-mutation behavior, Morris O(1) tradeoff, and the no-fabricated-project-experience boundary are explicit and consistent with the executable evidence."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
