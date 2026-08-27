@@ -1,0 +1,39 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_b0fbb220f5a52047eb85620c3e62c501",
+  "candidate_sha256": "a7db825b45e825b2da99d29f4678097f1421a0a1e76fc79fd34adf688811cd55",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "compile exact Java candidate and differential-test DFS relaxation against BFS oracle",
+  "stdout": "PASS fixed=covered cycles-parallel-selfloop-unreachable=covered blocked=covered random-vs-bfs=20000 blocked-source=rejected",
+  "boundary_tests": [
+    {
+      "case": "fixed graph where DFS order can see a longer path before a shorter one",
+      "expected": "final hop distances equal BFS oracle",
+      "passed": true
+    },
+    {
+      "case": "cycles, self-loops, parallel edges and unreachable vertices",
+      "expected": "terminates and equals BFS oracle",
+      "passed": true
+    },
+    {
+      "case": "blocked intermediate vertices under declared reference condition",
+      "expected": "blocked vertices are excluded and remaining distances equal BFS oracle",
+      "passed": true
+    },
+    {
+      "case": "20,000 seeded random directed unweighted graphs with random blocked vertices",
+      "expected": "all source distances equal independent BFS oracle",
+      "passed": true
+    },
+    {
+      "case": "blocked source",
+      "expected": "reference contract rejects invalid source condition",
+      "passed": true
+    }
+  ],
+  "environment": {
+    "java": "OpenJDK 21"
+  }
+}
