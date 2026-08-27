@@ -1,0 +1,42 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_b4d7dd86ede4f8fda6a9b027026545be",
+  "candidate_sha256": "d275d0847ae33172ef4401c40d17b8a3cd243059f7a7901bcda8ef1a5b1a7397",
+  "result": "pass",
+  "validated_at": "2026-08-28",
+  "command": "extract exact SQL candidate and execute deterministic SQLite boundary fixture",
+  "stdout": "PASS exact-sql all-valid-top2 global-violation-blocks null-blocks single-candidate empty-table",
+  "checks": [
+    "global condition is independent of b filter",
+    "ordering precedes LIMIT",
+    "NULL is explicitly treated as a counterexample",
+    "empty and fewer-than-two result sets are safe"
+  ],
+  "boundary_tests": [
+    {
+      "case": "all rows have a=1 with three b=2 rows",
+      "expected": "ascending c selects the first two rows",
+      "passed": true
+    },
+    {
+      "case": "one a=0 row has b!=2",
+      "expected": "global condition fails and returns zero rows",
+      "passed": true
+    },
+    {
+      "case": "one row has a=NULL",
+      "expected": "declared all-equal contract treats NULL as a counterexample",
+      "passed": true
+    },
+    {
+      "case": "only one b=2 row",
+      "expected": "returns that one row when global condition holds",
+      "passed": true
+    },
+    {
+      "case": "empty table",
+      "expected": "returns zero rows",
+      "passed": true
+    }
+  ]
+}
