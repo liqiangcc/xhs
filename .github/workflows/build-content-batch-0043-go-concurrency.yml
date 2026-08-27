@@ -1,0 +1,260 @@
+name: Build Content Batch 0043 Go Concurrency
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0043-go-concurrency.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-go-concurrency-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_af37baf8fba8b0d54841f07b39bbf6a2
+  SOURCE_QID: af37baf8fba8b0d54841f07b39bbf6a2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：写一个 Go 并发（如协程同步或 channel 使用）。';
+          const note=JSON.parse(fs.readFileSync('note_tagged/68c15ba3000000001d03b3ff.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact) throw new Error(`Go concurrency source boundary drifted: ${row?.original_question}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding') throw new Error('batch0043 inventory state/type drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid])) throw new Error('inventory ownership drifted');
+          if(item.source_questions?.[0]?.original_question!==exact) throw new Error('inventory source wording drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('live ownership/type drifted');
+          NODE
+
+      - name: Write source-bounded candidate and writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0043/$cid"; candidate="review/candidates/answers/$cid.md"; mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_af37baf8fba8b0d54841f07b39bbf6a2","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # Go 并发：goroutine 同步与 channel 使用
+
+          ## 核心结论
+
+          来源只保留“写一个 Go 并发（如协程同步或 channel 使用）”，没有保留具体输入输出、并发度、排序或取消语义，因此不能假装还原出唯一原题。下面明确采用一个可执行参考练习：给定 `[]int` 和正整数 worker 数，多个 goroutine 从 jobs channel 取任务并计算平方，单个 collector 从 results channel 收集结果，并按原输入下标恢复顺序。这个例子同时展示 goroutine 生命周期、channel 所有权、`WaitGroup` 同步、关闭顺序以及避免 data race 的基本做法。
+
+          ## 1 分钟版
+
+          - 主线程只负责启动 worker、投递任务和收集结果；worker 之间不共享可写结果切片。
+          - jobs 的发送方负责 `close(jobs)`，表示不会再有新任务。
+          - `WaitGroup` 只等待 worker 退出；等所有 worker 退出后，再由协调 goroutine `close(results)`。
+          - collector 用 `for range results` 读到关闭，因此不会依赖“猜测任务何时结束”。
+          - 每个结果带原始下标，collector 单线程写 `out[index]`，所以即使 worker 完成顺序随机，最终输出仍与输入顺序一致。
+
+          ## 3 分钟版
+
+          下面代码把题目未冻结的部分显式定义为参考契约；它不是声称原面试题一定要求“并发平方”：
+
+          ```go
+          import "sync"
+
+          type indexedValue struct {
+              index int
+              value int
+          }
+
+          func squareConcurrent(values []int, workers int) []int {
+              if workers <= 0 {
+                  panic("workers must be positive")
+              }
+
+              jobs := make(chan indexedValue)
+              results := make(chan indexedValue)
+
+              var wg sync.WaitGroup
+              wg.Add(workers)
+              for i := 0; i < workers; i++ {
+                  go func() {
+                      defer wg.Done()
+                      for job := range jobs {
+                          results <- indexedValue{index: job.index, value: job.value * job.value}
+                      }
+                  }()
+              }
+
+              go func() {
+                  for i, value := range values {
+                      jobs <- indexedValue{index: i, value: value}
+                  }
+                  close(jobs)
+                  wg.Wait()
+                  close(results)
+              }()
+
+              out := make([]int, len(values))
+              for result := range results {
+                  out[result.index] = result.value
+              }
+              return out
+          }
+          ```
+
+          关键关闭顺序是：生产者投递完任务后关闭 jobs；worker 因 jobs 关闭而自然退出并 `Done`；协调者 `Wait` 到所有 worker 退出后再关闭 results；collector 的 range 最终结束。若过早关闭 results，仍在发送结果的 worker 会 panic；若没人关闭 results，collector 会永久阻塞。
+
+          ## 关键细节
+
+          - **channel 关闭权属于发送方/协调方**：接收方通常不能知道是否还会有后续发送，随意关闭会造成 `send on closed channel`。
+          - **`WaitGroup.Add` 在启动 goroutine 前完成**：避免 goroutine 已经 `Done` 而计数尚未建立的竞态式用法。
+          - **结果顺序与执行顺序分离**：goroutine 完成顺序不稳定，所以结果携带 index；最终顺序由 collector 恢复，而不是依赖调度器。
+          - **避免共享写**：示例让 worker 只向 channel 发送，只有 collector 写结果切片；这样并发正确性更容易审查，也能通过 race detector 验证。
+          - **空输入也能结束**：生产者立即关闭 jobs，worker 退出，results 随后关闭，collector 返回空切片。
+          - **取消不是来源约束**：如果面试官补充“支持超时/取消”，应引入 `context.Context` 并让生产、worker、发送结果三处都能响应 `ctx.Done()`，不能只在最外层检查一次。
+
+          ## 原理机制
+
+          channel 在这里既是数据通道也是同步边界：一次无缓冲发送必须和一次接收配对，因此天然提供背压；`WaitGroup` 则只表达“所有 worker 已经结束”，并不承担数据传输。把二者分工后，关闭协议可以写成一个清晰的 happens-before 链：停止产生 jobs → worker 消耗完并退出 → results 不可能再有发送 → 关闭 results → collector 结束。这个协议比用 sleep 或共享布尔变量猜结束时机可靠。
+
+          ## 项目经验版
+
+          来源没有真实项目、吞吐、延迟或 goroutine 数量数据，不能虚构线上收益。实际工程里我会先确定任务是否 CPU/IO 密集、是否需要有界并发、取消和错误传播，再决定 worker pool、`errgroup` 或更简单的同步方式；并用 `go test -race`、基准测试和 goroutine/阻塞 profile 验证，而不是把“多开 goroutine”直接等同于更快。
+
+          ## 常见追问
+
+          - 问：为什么不是 worker 直接写 `out[index]`？答：如果严格保证每个 index 只写一次也可以无数据竞争，但把所有写集中到 collector 能让共享状态和关闭协议更直观，也更容易扩展错误处理。
+          - 问：谁应该关闭 channel？答：知道“以后绝不会再发送”的一方。这里生产者关闭 jobs，等待所有 worker 结束的协调者关闭 results。
+          - 问：为什么 `WaitGroup` 不能替代 results channel 的关闭？答：`WaitGroup` 只能告诉你 worker 结束，collector 的 `range results` 仍需要 channel close 才能终止。
+          - 问：把 channel 改成带缓冲会不会改变正确性？答：在容量足够且关闭协议不变时主要改变阻塞/背压特征，不应改变结果；容量应根据负载和内存预算设计，而不是越大越好。
+          - 问：如何支持取消并避免 goroutine 泄漏？答：给 producer 和 worker 的发送/接收都加 `select` 监听 `ctx.Done()`，并由统一协调路径关闭后续通道；否则下游停止消费时，上游 goroutine 可能永久阻塞在发送上。
+
+          ## 易错点
+
+          - 接收方或多个 worker 竞争关闭同一个 results channel。
+          - 先关闭 results，再等待 worker，导致仍在发送的 goroutine panic。
+          - 用 `time.Sleep` 等待并发任务“应该完成”，把调度时机当同步协议。
+          - 多个 goroutine 无保护写同一共享变量或 map，却没有锁、原子操作或单 owner 设计。
+          - 忽略错误传播、取消和有界并发，在生产场景里造成 goroutine 泄漏或资源失控。
+          EOF
+
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p,'utf8');
+          const block=md.match(/```go\n([\s\S]*?)\n```/);
+          if(!block||!block[1].includes('func squareConcurrent')) throw new Error('candidate Go implementation missing');
+          fs.mkdirSync('/tmp/go-concurrency',{recursive:true});
+          fs.writeFileSync('/tmp/go-concurrency/go.mod','module candidate\n\ngo 1.23\n');
+          fs.writeFileSync('/tmp/go-concurrency/solution.go','package candidate\n\n'+block[1]+'\n');
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')+'\n');
+          NODE
+          cat > /tmp/go-concurrency/solution_test.go <<'GO'
+          package candidate
+
+          import (
+              "math/rand"
+              "reflect"
+              "testing"
+          )
+
+          func want(values []int) []int {
+              out := make([]int, len(values))
+              for i, v := range values { out[i] = v * v }
+              return out
+          }
+
+          func check(t *testing.T, values []int, workers int) {
+              t.Helper()
+              got := squareConcurrent(values, workers)
+              if !reflect.DeepEqual(got, want(values)) { t.Fatalf("workers=%d values=%v got=%v want=%v", workers, values, got, want(values)) }
+          }
+
+          func TestFixed(t *testing.T) {
+              check(t, nil, 1)
+              check(t, []int{3}, 1)
+              check(t, []int{-3, 0, 4, -5}, 2)
+              check(t, []int{1,2,3}, 8)
+          }
+
+          func TestSeeded(t *testing.T) {
+              r := rand.New(rand.NewSource(0x474f434f4e435552))
+              for n := 0; n < 1000; n++ {
+                  size := r.Intn(64)
+                  values := make([]int, size)
+                  for i := range values { values[i] = r.Intn(201)-100 }
+                  check(t, values, 1+r.Intn(12))
+              }
+          }
+          GO
+          (cd /tmp/go-concurrency && go test -race ./...)
+          stdout='PASS fixed=4 seeded-cases=1000 race-detector=pass empty=covered workers>items=covered order=preserved'
+          echo "$stdout"; echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const tests=[
+            {case:'empty input and single item',expected:'returns corresponding empty/squared output without blocking',passed:true},
+            {case:'negative/zero/mixed values with multiple workers',expected:'matches sequential square oracle and preserves input order',passed:true},
+            {case:'1,000 seeded random cases including workers greater than item count',expected:'matches sequential oracle under Go race detector',passed:true}
+          ];
+          fs.writeFileSync(`${out}/go_concurrency_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'extract exact Go candidate and run go test -race',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{go:'1.23.x'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'tagged-note',title:'Tagged interview note preserving the generic Go concurrency coding prompt',locator:'note_tagged/68c15ba3000000001d03b3ff.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Go worker/channel reference implementation race-tested against sequential oracle',locator:`${out}/go_concurrency_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved source asks for a Go concurrency implementation and gives goroutine synchronization/channel use only as examples; it does not preserve a unique input/output task, worker count, ordering or cancellation contract.',source_ids:['tagged-note','source-inventory'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'reference-behavior',text:'Under the explicitly declared worker/channel reference exercise, the exact candidate matches a sequential square oracle across fixed and 1,000 seeded cases and passes the Go race detector.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Writer repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID/go_concurrency_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft batch 0043 Go concurrency candidate'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then git rebase --abort || true; exit 1; fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+          done
+          exit 1
