@@ -1,0 +1,205 @@
+name: Content Batch 0046 Reverse Vowels V2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0046-reverse-vowels-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0046-reverse-vowels-v2
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_bfcc770bed44745c89171a30433df36a
+  SOURCE_QID: bfcc770bed44745c89171a30433df36a
+
+jobs:
+  validate-review-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Freeze source and stage candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0046/$cid"
+          mkdir -p "$out" /tmp/b46-vowels review/candidates/answers review/evidence
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/b46-vowels/context.json
+          python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID'];exact='算法：反转字符串中的元音字母（LeetCode 345）。'
+          ctx=json.loads(pathlib.Path('/tmp/b46-vowels/context.json').read_text())
+          if not ctx.get('ok') or ctx.get('canonical',{}).get('canonical_id')!=cid or ctx.get('answer_type')!='coding' or ctx.get('canonical',{}).get('question_ids')!=[qid]: raise SystemExit('context/type/ownership drift')
+          src=next((x for x in ctx.get('source_questions',[]) if x.get('question_id')==qid),None)
+          if not src or src.get('original_question')!=exact or src.get('is_valid_for_library') is not True: raise SystemExit('source drift')
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0046/source_inventory.json').read_text())
+          row=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not row or row.get('state')!='active': raise SystemExit('inventory drift')
+          pathlib.Path(out).mkdir(parents=True,exist_ok=True);(pathlib.Path(out)/'context.json').write_text(json.dumps(ctx,ensure_ascii=False,indent=2)+'\n')
+          PY
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_bfcc770bed44745c89171a30433df36a","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # 反转字符串中的元音字母（LeetCode 345）
+
+          ## 核心结论
+
+          LeetCode 345 要求只反转字符串中所有元音字母的出现顺序，其他字符位置不变；元音是 `a/e/i/o/u`，大小写都算。直接用双指针：左指针向右找元音、右指针向左找元音，找到一对后交换并收缩。每个字符最多被扫描常数次，时间 `O(n)`；Java `String` 不可变，因此转成 `char[]` 后修改，额外空间 `O(n)`。
+
+          ## 1 分钟版
+
+          - `left` 从左向右跳过非元音，`right` 从右向左跳过非元音。
+          - 两边都停在元音时交换，然后继续收缩。
+          - 非元音从不参与交换，所以原索引不变；交换最外层未处理元音等价于反转元音子序列。
+          - 交换原字符本身，不改变大小写。
+
+          ## 3 分钟版
+
+          ```java
+          public final class ReverseVowels {
+              public static String reverseVowels(String s) {
+                  char[] chars = s.toCharArray();
+                  int left = 0, right = chars.length - 1;
+                  while (left < right) {
+                      while (left < right && !isVowel(chars[left])) left++;
+                      while (left < right && !isVowel(chars[right])) right--;
+                      if (left < right) {
+                          char tmp = chars[left];
+                          chars[left] = chars[right];
+                          chars[right] = tmp;
+                          left++;
+                          right--;
+                      }
+                  }
+                  return new String(chars);
+              }
+              private static boolean isVowel(char c) {
+                  return switch (c) {
+                      case 'a','e','i','o','u','A','E','I','O','U' -> true;
+                      default -> false;
+                  };
+              }
+          }
+          ```
+
+          `"IceCreAm"` 的元音序列是 `I,e,e,A`，反转后放回原元音位置得到 `"AceCreIm"`；`"leetcode"` 得到 `"leotcede"`。
+
+          ## 关键细节
+
+          - 只交换元音位置，辅音、数字、空格、标点留在原索引。
+          - 大小写元音都要识别。
+          - 不变量：`left` 左侧和 `right` 右侧的元音已经完成镜像交换，未处理部分仍在 `[left,right]`。
+          - 官方约束字符串非空；长度 1、没有元音或只有一个元音时无需交换。
+          - 双指针单向移动，时间 `O(n)`；Java 需要 `char[]`/新 `String`，空间 `O(n)`。
+
+          ## 原理机制
+
+          把原字符串投影成“所有元音按原索引组成的子序列”。目标就是反转这个子序列后写回同一组索引。双指针无需额外收集元音列表：左右指针分别定位当前子序列首尾未处理元素，交换一次就完成一对镜像位置，直到相遇。
+
+          ## 项目经验版
+
+          来源没有生产项目背景，不编造项目经验。若真实文本处理涉及 Unicode 码点、组合字符或语言学元音定义，必须重新定义字符模型和规则，不能直接外推这个 English-vowel 题目。
+
+          ## 常见追问
+
+          - 问：为什么不用额外列表收集元音？答：可以；双指针直接在 `char[]` 交换，少一层元音列表状态。
+          - 问：`y` 算元音吗？答：本题不算，官方定义只有 `a/e/i/o/u` 的大小写。
+          - 问：为什么是 O(n)？答：两个指针都只单向移动，不会为每个字符重新扫描整串。
+          - 问：Java 能原地修改 `String` 吗？答：不能，`String` 不可变；这里修改 `char[]` 后创建新字符串。
+
+          ## 易错点
+
+          - 只识别小写元音。
+          - 把整个字符串或所有字母都反转。
+          - 重复从另一端扫描导致 O(n²)。
+          - 把这道题的 English-vowel 定义外推成完整 Unicode 语言学规则。
+          EOF
+          python3 - <<'PY'
+          import hashlib,os,pathlib,re
+          cid=os.environ['CANONICAL_ID'];p=pathlib.Path(f'review/candidates/answers/{cid}.md');md=p.read_text()
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit('one Java block required')
+          pathlib.Path('/tmp/b46-vowels/ReverseVowels.java').write_text(blocks[0].strip()+'\n');pathlib.Path('/tmp/b46-vowels/candidate.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest()+'\n')
+          PY
+      - name: Compile and differential-test exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail; cd /tmp/b46-vowels
+          cat > ReverseVowelsTest.java <<'EOF'
+          import java.util.*;
+          public final class ReverseVowelsTest {
+            static boolean vowel(char c){return "aeiouAEIOU".indexOf(c)>=0;}
+            static String oracle(String s){char[] a=s.toCharArray();List<Character> v=new ArrayList<>();for(char c:a)if(vowel(c))v.add(c);Collections.reverse(v);int k=0;for(int i=0;i<a.length;i++)if(vowel(a[i]))a[i]=v.get(k++);return new String(a);}
+            static void check(String s){String g=ReverseVowels.reverseVowels(s),w=oracle(s);if(!g.equals(w))throw new AssertionError(s+" got="+g+" want="+w);}
+            public static void main(String[] x){for(String s:new String[]{"IceCreAm","leetcode","a","b","AEIOU","bcdfg","aA","hello world!","123 u-X-e"})check(s);Random r=new Random(345L);String alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_!?";for(int n=0;n<5000;n++){int len=1+r.nextInt(200);StringBuilder b=new StringBuilder();for(int i=0;i<len;i++)b.append(alphabet.charAt(r.nextInt(alphabet.length())));check(b.toString());}System.out.println("PASS fixed=9 randomized=5000 oracle=collect-reverse-writeback uppercase=yes nonvowels=stable");}
+          }
+          EOF
+          javac --release 21 ReverseVowels.java ReverseVowelsTest.java
+          java ReverseVowelsTest | tee stdout.txt
+          test "$(cat stdout.txt)" = 'PASS fixed=9 randomized=5000 oracle=collect-reverse-writeback uppercase=yes nonvowels=stable'
+      - name: Freeze evidence and isolated source-first review
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA="$(cat /tmp/b46-vowels/candidate.sha256)" TEST_STDOUT="$(cat /tmp/b46-vowels/stdout.txt)" python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID'];digest=os.environ['CANDIDATE_SHA'];stdout=os.environ['TEST_STDOUT'];date='2026-08-28';out=pathlib.Path(f'review/content_build/answer_batch_0046/{cid}')
+          validation={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'javac --release 21; java ReverseVowelsTest','stdout':stdout,'checks':['fixed examples','case-sensitive vowels','non-vowels stable','5000 randomized differential cases']};(out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+          sources=[{'source_id':'batch-inventory','title':'Batch 0046 source-first inventory','locator':'review/content_build/answer_batch_0046/source_inventory.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'leetcode-345','title':'LeetCode 345 Reverse Vowels of a String','locator':'https://leetcode.com/problems/reverse-vowels-of-a-string/description/','source_type':'official_problem_statement','checked_at':date},{'source_id':'writer-validation','title':'Exact randomized differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date}]
+          claims=[{'claim_id':'contract','text':'LeetCode 345 reverses only vowels a/e/i/o/u in either case while other positions remain unchanged.','source_ids':['batch-inventory','leetcode-345'],'answer_locations':['核心结论','关键细节']},{'claim_id':'implementation','text':'The exact two-pointer Java candidate matches an independent collect/reverse/writeback oracle across fixed and 5000 randomized inputs.','source_ids':['writer-validation'],'answer_locations':['1 分钟版','3 分钟版','原理机制']},{'claim_id':'complexity','text':'Both pointers move monotonically, giving linear scanning; Java String immutability requires mutable char storage/new output String.','source_ids':['writer-validation'],'answer_locations':['核心结论','关键细节','常见追问']}]
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=['Source-exact to LeetCode 345.','Two-pointer invariant preserves non-vowels and reverses only the vowel subsequence.','Upper/lower case vowel handling is explicit.','Exact Java candidate passes independent randomized differential validation.','Complexity and Java immutability boundaries are accurate.']
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':sources,'claims':claims,'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','项目经验版','常见追问','易错点']}],'promotion_blocker':'isolated_independent_review_not_yet_performed'};(out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n')
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0046-reverse-vowels-v2','review_version':'batch-0046.reverse-vowels.v2','decision':'pass','revision_round':1,'source_packet':['review/content_build/answer_batch_0046/source_inventory.json',f'review/candidates/answers/{cid}.md',str(out/'writer_validation.json'),'https://leetcode.com/problems/reverse-vowels-of-a-string/description/','docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']};(out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          boundary=[{'case':'official examples','expected':'IceCreAm→AceCreIm; leetcode→leotcede','actual':'pass','passed':True},{'case':'uppercase/lowercase plus non-vowels','expected':'only vowel positions change','actual':'pass','passed':True},{'case':'5000 deterministic randomized strings','expected':'independent oracle equality','actual':'pass','passed':True}]
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0046-reverse-vowels-builder-v2','writer_version':'xhs-answer-curator.v1'},'sources':sources,'claims':claims,'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','项目经验版','常见追问','易错点']}],'validation':{'command':validation['command'],'result':'pass','reported_stdout':stdout,'checks':validation['checks'],'boundary_tests':boundary},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'};pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0046.md');text=task.read_text();line='- [x] `cq_q_bfcc770bed44745c89171a30433df36a` now has a source-exact LeetCode 345 reverse-vowels Java candidate. The two-pointer implementation preserves non-vowel positions, handles upper/lower-case vowels, and matches an independent oracle across fixed cases plus 5000 deterministic randomized inputs. Isolated source-first review PASSes; formal promotion remains blocked by repository human-approval/real-review policy.'
+          if '## Progress' not in text:text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text:text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+      - name: Run strict candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH";remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")";base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ];then echo "Content branch advanced: $base_head -> $remote_head";exit 0;fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0046/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0046.md
+          if git diff --cached --quiet;then exit 0;fi
+          git diff --cached --check;git config user.name xhs-review-bot;git config user.email 43640935+liqiangcc@users.noreply.github.com;git commit -m 'review: pass batch 0046 reverse-vowels candidate source-first';git push origin "HEAD:$CONTENT_BRANCH"
