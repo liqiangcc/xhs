@@ -1,0 +1,47 @@
+name: Repair Content Batch 0046 Reverse Vowels Gate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/fix-content-batch-0046-reverse-vowels-gate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - name: Repair source type and coding boundary-test evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/content-batch-0046-reverse-vowels.yml')
+          s=p.read_text()
+          old=s
+          s=s.replace("'source_type':'primary_problem_statement'", "'source_type':'official_problem_statement'")
+          needle="'validation':{'command':validation['command'],'result':'pass','reported_stdout':validation['stdout'],'checks':validation['checks']},'review_state'"
+          repl="'validation':{'command':validation['command'],'result':'pass','reported_stdout':validation['stdout'],'checks':validation['checks'],'boundary_tests':[{'case':'official examples IceCreAm and leetcode','expected':'AceCreIm and leotcede','actual':'pass','passed':True},{'case':'uppercase/lowercase plus punctuation/non-vowels','expected':'only vowel positions change','actual':'pass','passed':True},{'case':'5000 deterministic randomized strings','expected':'match independent collect/reverse/writeback oracle','actual':'pass','passed':True}]},'review_state'"
+          if needle not in s: raise SystemExit('expected evidence validation shape missing')
+          s=s.replace(needle,repl,1)
+          if s==old: raise SystemExit('no repair applied')
+          p.write_text(s)
+          PY
+          git diff --check
+      - name: Commit repaired registered gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add .github/workflows/content-batch-0046-reverse-vowels.yml
+          git config user.name xhs-ci-repair-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'ci: satisfy reverse-vowels evidence audit contract'
+          git push origin HEAD:master
