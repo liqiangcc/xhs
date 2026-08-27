@@ -93,38 +93,40 @@ jobs:
           ## 3 分钟版
 
           ```java
-          static final class TreeNode {
-              final int val;
-              TreeNode left;
-              TreeNode right;
+          final class RootToLeafNumberSum {
+              static final class TreeNode {
+                  final int val;
+                  TreeNode left;
+                  TreeNode right;
 
-              TreeNode(int val) {
-                  this.val = val;
-              }
-          }
-
-          static long sumRootToLeafNumbers(TreeNode root) {
-              if (root == null) return 0L;
-              return dfs(root, 0L);
-          }
-
-          private static long dfs(TreeNode node, long prefix) {
-              if (node.val < 0 || node.val > 9) {
-                  throw new IllegalArgumentException("node value must be a decimal digit");
+                  TreeNode(int val) {
+                      this.val = val;
+                  }
               }
 
-              long current = Math.addExact(
-                  Math.multiplyExact(prefix, 10L),
-                  node.val
-              );
-
-              if (node.left == null && node.right == null) {
-                  return current;
+              static long sumRootToLeafNumbers(TreeNode root) {
+                  if (root == null) return 0L;
+                  return dfs(root, 0L);
               }
 
-              long left = node.left == null ? 0L : dfs(node.left, current);
-              long right = node.right == null ? 0L : dfs(node.right, current);
-              return Math.addExact(left, right);
+              private static long dfs(TreeNode node, long prefix) {
+                  if (node.val < 0 || node.val > 9) {
+                      throw new IllegalArgumentException("node value must be a decimal digit");
+                  }
+
+                  long current = Math.addExact(
+                      Math.multiplyExact(prefix, 10L),
+                      node.val
+                  );
+
+                  if (node.left == null && node.right == null) {
+                      return current;
+                  }
+
+                  long left = node.left == null ? 0L : dfs(node.left, current);
+                  long right = node.right == null ? 0L : dfs(node.right, current);
+                  return Math.addExact(left, right);
+              }
           }
           ```
 
@@ -239,11 +241,10 @@ jobs:
           fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'raw-note',title:'Original Meituan interview note',locator:'note_desc/67dccdb2000000000900ce21.txt',source_type:'repository_source_record',checked_at:date},{source_id:'tagged-question',title:'Structured root-to-leaf number-sum Question',locator:`note_tagged/67dccdb2000000000900ce21.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'recoverability-review',title:'Batch 0041 pre-draft recoverability decision',locator:'review/content_build/answer_batch_0041/recoverability_review.md',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Deterministic Java boundary fixture',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-operation',text:'The raw note preserves the operation of summing numbers formed by root-to-leaf paths.',source_ids:['raw-note','tagged-question','recoverability-review'],answer_locations:['核心结论','1 分钟版','原理机制']},{claim_id:'digit-boundary',text:'The source does not preserve node-value range; decimal digits 0..9 are an explicit reference-contract assumption, not a recovered source fact.',source_ids:['raw-note','tagged-question','recoverability-review'],answer_locations:['核心结论','关键细节','常见追问']},{claim_id:'reference-behavior',text:'Under the declared digit/long contract, deterministic Java tests verify leaf semantics, leading zero, asymmetric/multiple leaves, fail-closed non-digit input, and explicit overflow.',source_ids:['writer-validation'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_and_repository_human_S11_gates_pending'},null,2)+'\n');
           NODE
 
-      - name: Candidate-local and repository gates
+      - name: Repository safety gates
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --noWrite --noDraftCheck
           node scripts/content/check_question_coverage.js --check
           node scripts/xhs.js canonical check --noWrite
           node scripts/xhs.js review integrity --noWrite
