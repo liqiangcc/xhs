@@ -1,0 +1,30 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_b0a6332f0d7a0639860523642571848f",
+  "candidate_sha256": "4d0c5641f110778c48542176f059005a44437676095e4d9cf0f32511f1b22977",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "execute exact SQL candidate over SQLite and differential-test against independent Python relational oracle",
+  "stdout": "PASS duplicate-course-facts=oracle empty=covered randomized-fixtures=12000 aggregate-threshold=exact distinct-course-count=exact",
+  "boundary_tests": [
+    {
+      "case": "duplicate facts for the same student/course plus another course",
+      "expected": "AVG consumes every valid fact row while COUNT(DISTINCT course_id) counts course identities once",
+      "passed": true
+    },
+    {
+      "case": "empty scores table",
+      "expected": "query returns no aggregate groups",
+      "passed": true
+    },
+    {
+      "case": "12,000 seeded random valid three-table fixtures",
+      "expected": "exact rows, student averages, strict global-average threshold and distinct course count match independent Python oracle",
+      "passed": true
+    }
+  ],
+  "environment": {
+    "python": "3.12",
+    "sqlite": "stdlib sqlite3"
+  }
+}

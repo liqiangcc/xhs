@@ -1,0 +1,142 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_b0a6332f0d7a0639860523642571848f",
+  "candidate_sha256": "4d0c5641f110778c48542176f059005a44437676095e4d9cf0f32511f1b22977",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0043-three-table-sql-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "tagged-note",
+      "title": "Tagged interview note preserving three-table SQL/subquery prompt",
+      "locator": "note_tagged/67541ef40000000002014dce.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0043 frozen live source inventory",
+      "locator": "review/content_build/answer_batch_0043/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer SQLite three-table/subquery fixture",
+      "locator": "review/content_build/answer_batch_0043/cq_q_b0a6332f0d7a0639860523642571848f/sql_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent randomized SQLite differential validation",
+      "locator": "review/content_build/answer_batch_0043/cq_q_b0a6332f0d7a0639860523642571848f/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Three-table SQL source-first isolated review",
+      "locator": "review/content_build/answer_batch_0043/cq_q_b0a6332f0d7a0639860523642571848f/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source preserves a generic three-table association query with subquery implementation request, but no concrete schema, fields, business filter or target output.",
+      "source_ids": [
+        "tagged-note",
+        "source-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "Under the declared students/courses/scores reference exercise, the exact SQL matches an independent relational oracle for above-global-average student aggregates and distinct course counts across explicit and 12,000 seeded random fixtures.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "b0a6332f0d7a0639860523642571848f",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "SQLite execution of exact SQL candidate against independent Python relational oracle",
+    "result": "pass",
+    "reported_stdout": "PASS duplicate-course-facts=oracle empty=covered randomized-fixtures=12000 aggregate-threshold=exact distinct-course-count=exact",
+    "boundary_tests": [
+      {
+        "case": "duplicate facts for the same student/course plus another course",
+        "expected": "AVG consumes every valid fact row while COUNT(DISTINCT course_id) counts course identities once",
+        "passed": true
+      },
+      {
+        "case": "empty scores table",
+        "expected": "query returns no aggregate groups",
+        "passed": true
+      },
+      {
+        "case": "12,000 seeded random valid three-table fixtures",
+        "expected": "exact rows, student averages, strict global-average threshold and distinct course count match independent Python oracle",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0043-three-table-sql-20260827-v1",
+    "review_version": "batch-0043.three-table-sql.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The source preserves only a three-table association/subquery implementation prompt and does not preserve schema, fields or one business result; the candidate explicitly declares its students/courses/scores example as a reference exercise.",
+      "The reference query has a coherent result grain of one student per row, uses both three-table join relationships, computes student aggregates in the outer query and a scalar global-score aggregate in the subquery.",
+      "The answer correctly distinguishes pre-aggregation WHERE semantics from aggregate HAVING semantics and warns against using DISTINCT score to hide data-model duplication.",
+      "Independent randomized differential testing over 12,000 fixtures matches an oracle for strict above-global-average selection, aggregate values and distinct course counts, including duplicate fact rows and empty scores.",
+      "The candidate explicitly scopes INNER JOIN no-score behavior, duplicate-fact semantics, NULL/empty behavior and execution-plan/index validation as contract or operational concerns rather than preserved source facts."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
