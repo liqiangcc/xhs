@@ -1,0 +1,95 @@
+name: Remediate Content Batch 0042 Inorder Topic Boundary
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0042-inorder-topic-boundary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-inorder-topic-boundary-remediation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_af04033d46af9a331ad55c6bbf12d9b6
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Remove foreign JVM topic wording without changing code
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";candidate="review/candidates/answers/$cid.md";out="review/content_build/answer_batch_0042/$cid"
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');const cid=process.env.CANONICAL_ID,p=`review/candidates/answers/${cid}.md`;
+          let md=fs.readFileSync(p,'utf8');const block=md.match(/```java\n([\s\S]*?)\n```/);if(!block)throw new Error('candidate code block missing');const codeSha=crypto.createHash('sha256').update(block[1]).digest('hex');
+          md=md.replaceAll('JVM 调用栈','线程调用栈').replaceAll('JVM 调用帧','递归调用帧');
+          if(/\bJVM\b/.test(md))throw new Error('JVM foreign topic remains after bounded remediation');
+          const after=md.match(/```java\n([\s\S]*?)\n```/);if(!after||crypto.createHash('sha256').update(after[1]).digest('hex')!==codeSha)throw new Error('code changed during prose-only remediation');
+          fs.writeFileSync(p,md);const sha=crypto.createHash('sha256').update(Buffer.from(md)).digest('hex');
+          for(const file of [`review/content_build/answer_batch_0042/${cid}/writer_research.json`,`review/content_build/answer_batch_0042/${cid}/inorder_validation.json`]){const obj=JSON.parse(fs.readFileSync(file,'utf8'));obj.candidate_sha256=sha;fs.writeFileSync(file,JSON.stringify(obj,null,2)+'\n');}
+          fs.writeFileSync('/tmp/new-sha',sha+'\n');
+          NODE
+          grep -F '线程调用栈 O(h)' "$candidate"
+          grep -F '递归调用帧隐式保存' "$candidate"
+          ! grep -F 'JVM' "$candidate"
+
+      - name: Recompile exact unchanged candidate code
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8'),block=md.match(/```java\n([\s\S]*?)\n```/);if(!block)throw new Error('code block missing');fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+
+      - name: Repository gates after bounded remediation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit remediation with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0042/$CANONICAL_ID/writer_research.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/inorder_validation.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: remove foreign JVM topic from inorder candidate'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+            sleep 5
+          done
+          exit 1
