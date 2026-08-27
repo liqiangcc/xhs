@@ -44,15 +44,8 @@ jobs:
 
           p = Path('scripts/lib/answer_quality.js')
           s = p.read_text(encoding='utf-8')
-          old = """        const filePath = path.join(tempDir, 'answer.go');
-        fs.writeFileSync(filePath, code, 'utf8');
-        const result = childProcess.spawnSync('go', ['test', filePath], {"""
-          new = """        const filePath = path.join(tempDir, 'answer.go');
-        const source = /^\\s*package\\s+[A-Za-z_]\\w*/m.test(code)
-            ? code
-            : `package main\\n\\n${code}\\n`;
-        fs.writeFileSync(filePath, source, 'utf8');
-        const result = childProcess.spawnSync('go', ['test', filePath], {"""
+          old = "        const filePath = path.join(tempDir, 'answer.go');\n        fs.writeFileSync(filePath, code, 'utf8');\n        const result = childProcess.spawnSync('go', ['test', filePath], {"
+          new = "        const filePath = path.join(tempDir, 'answer.go');\n        const source = /^\\s*package\\s+[A-Za-z_]\\w*/m.test(code)\n            ? code\n            : `package main\\n\\n${code}\\n`;\n        fs.writeFileSync(filePath, source, 'utf8');\n        const result = childProcess.spawnSync('go', ['test', filePath], {"
           if old not in s:
               raise SystemExit('compileGo write block drifted')
           s = s.replace(old, new, 1)
