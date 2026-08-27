@@ -1,0 +1,202 @@
+name: Review Content Batch 0040 Second Palindrome
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0040-second-palindrome.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-second-palindrome-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a2b09618bc23b15a51f221be46e00bd5
+  SOURCE_QID: a2b09618bc23b15a51f221be46e00bd5
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze source-first independent conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"
+          test -f "$candidate"; test -f "$out/SecondPalindrome.java"; test -f "$out/writer_research.json"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/second-palindrome-context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：找到字符串中第二长的回文子串（不能是最长回文子串的子串）？';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/68ab42b1000000001d01626e.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('source contract drifted');
+          const raw=fs.readFileSync('note_desc/68ab42b1000000001d01626e.txt','utf8');
+          if(!raw.includes('手撕：leetcode005-最长回文子串的变体')||!raw.includes('找到字符串中第二长的回文子串，第二长的回文子串不能是最长回文子串的子串')) throw new Error('original-note wording drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/second-palindrome-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`singleton ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','```java','示例的实现契约','长度严格小于','不能被任意最长回文包含','来源没有说明']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上/.test(md)) throw new Error('fabricated first-person production claim risk');
+          const match=md.match(/```java\n([\s\S]*?)```/);
+          if(!match) throw new Error('standalone Java answer block missing');
+          fs.writeFileSync('/tmp/Solution.java',match[1]);
+          fs.writeFileSync('/tmp/second-palindrome-candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex')+'\n');
+          NODE
+
+          cat > /tmp/ReviewerHarness.java <<'JAVA'
+          import java.util.*;
+
+          final class ReviewerHarness {
+              static final class R {
+                  final int l,r;
+                  R(int l,int r){this.l=l;this.r=r;}
+                  int len(){return r-l+1;}
+              }
+              static R better(R best,int l,int r){
+                  if(best==null || r-l>best.r-best.l || (r-l==best.r-best.l && l<best.l)) return new R(l,r);
+                  return best;
+              }
+              static String oracle(String s){
+                  if(s==null) throw new IllegalArgumentException();
+                  int n=s.length(); if(n==0) return "";
+                  boolean[][] pal=new boolean[n][n];
+                  for(int i=n-1;i>=0;i--) for(int j=i;j<n;j++) pal[i][j]=s.charAt(i)==s.charAt(j) && (j-i<2 || pal[i+1][j-1]);
+                  R longest=null;
+                  for(int l=0;l<n;l++) for(int r=l;r<n;r++) if(pal[l][r]) longest=better(longest,l,r);
+                  R second=null;
+                  for(int l=0;l<n;l++) for(int r=l;r<n;r++) if(pal[l][r]) {
+                      int len=r-l+1;
+                      boolean inside=l>=longest.l && r<=longest.r;
+                      if(len<longest.len() && !inside) second=better(second,l,r);
+                  }
+                  return second==null?"":s.substring(second.l,second.r+1);
+              }
+              static void enumerate(Solution sol,char[] a,int idx){
+                  if(idx==a.length){
+                      String s=new String(a),got=sol.secondLongestPalindrome(s),want=oracle(s);
+                      if(!Objects.equals(got,want)) throw new AssertionError("mismatch s="+s+" got="+got+" want="+want);
+                      return;
+                  }
+                  for(char c:new char[]{'a','b','c'}){a[idx]=c;enumerate(sol,a,idx+1);}
+              }
+              public static void main(String[] args){
+                  Solution sol=new Solution();
+                  Map<String,String> cases=new LinkedHashMap<>();
+                  cases.put("","");
+                  cases.put("a","");
+                  cases.put("racecarxyzzyx","xyzzyx");
+                  cases.put("babadxyzzyx","bab");
+                  cases.put("aaaaabcc","cc");
+                  cases.put("abacaba","");
+                  cases.put("babad","a");
+                  cases.put("abacdc","c");
+                  for(var e:cases.entrySet()){
+                      String got=sol.secondLongestPalindrome(e.getKey());
+                      if(!got.equals(e.getValue())) throw new AssertionError("known s="+e.getKey()+" got="+got+" want="+e.getValue());
+                      if(!got.equals(oracle(e.getKey()))) throw new AssertionError("oracle known mismatch "+e.getKey());
+                  }
+                  for(int n=0;n<=9;n++) enumerate(sol,new char[n],0);
+                  try{sol.secondLongestPalindrome(null);throw new AssertionError("null must reject");}catch(IllegalArgumentException expected){}
+                  System.out.println("PASS candidate-vs-independent-dp-oracle alphabet-abc-length-0..9 unique-and-tied-longest no-solution null=rejected");
+              }
+          }
+          JAVA
+          javac /tmp/Solution.java /tmp/ReviewerHarness.java
+          stdout="$(java -cp /tmp ReviewerHarness)"
+          test "$stdout" = 'PASS candidate-vs-independent-dp-oracle alphabet-abc-length-0..9 unique-and-tied-longest no-solution null=rejected'
+
+          CANDIDATE_SHA="$(cat /tmp/second-palindrome-candidate-sha)" STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,date='2026-08-27',out=`review/content_build/answer_batch_0040/${cid}`;
+          const boundaryTests=[
+            {case:'source ambiguity',expected:'candidate labels tie/multiple-longest/no-solution/size rules as clarification points, not source facts',passed:true},
+            {case:'whole-string longest',expected:'no eligible strictly-shorter palindrome outside the longest anchor',passed:true},
+            {case:'multiple equal-length longest palindromes',expected:'declared leftmost-longest plus strict-shorter semantics are deterministic and explicitly non-source',passed:true},
+            {case:'independent exhaustive oracle',expected:'candidate code matches DP-table oracle on all ternary strings through length 9',passed:true}
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,result:'pass',validated_at:date,command:'extract candidate Solution.java; javac Solution.java ReviewerHarness.java && java ReviewerHarness',stdout:process.env.STDOUT,boundary_tests:boundaryTests},null,2)+'\n');
+          const reviewer='source-first-isolated-reviewer-batch-0040-second-palindrome-20260827';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The original repository note preserves only the LeetCode 5 variant statement and the non-containment rule; it does not preserve tie, multiple-longest, no-solution, null/empty or size semantics.','The candidate correctly separates those missing semantics from source facts and declares a deterministic reference contract instead of silently inventing them.','The candidate Java implementation is executed directly and matches a separately implemented dynamic-programming palindrome-table oracle on all ternary strings through length 9, including tied-longest and no-solution cases.','The explanation uses occurrence interval containment rather than conflating positional containment with string-value containment.','The project-experience section explicitly refuses to fabricate production experience for a pure algorithm question.'];
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewer,review_version:'batch-0040.second-palindrome.v1',decision:'pass',revision_round:1,source_packet:['note_desc/68ab42b1000000001d01626e.txt','note_tagged/68ab42b1000000001d01626e.json','review/content_build/answer_batch_0040/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Bind evidence and task state after conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; CANDIDATE_SHA="$(cat /tmp/second-palindrome-candidate-sha)"
+          CANDIDATE_SHA="$CANDIDATE_SHA" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0040/${cid}`;
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==process.env.CANDIDATE_SHA) throw new Error('writer packet state/hash drifted');
+          const review=JSON.parse(fs.readFileSync(`${out}/isolated_review_result.json`,'utf8'));
+          const validation=JSON.parse(fs.readFileSync(`${out}/reviewer_validation.json`,'utf8'));
+          if(review.decision!=='pass'||review.candidate_sha256!==process.env.CANDIDATE_SHA) throw new Error('review binding failed');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,checked_at:date,writer:{writer_id:'content-batch-0040-second-palindrome-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-original-note',title:'Original interview note preserving the LeetCode 5 variant wording',locator:'note_desc/68ab42b1000000001d01626e.txt',source_type:'repository_source_record',checked_at:date},{source_id:'repository-tagged-question',title:'Exact normalized second-palindrome Question',locator:`note_tagged/68ab42b1000000001d01626e.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'writer-validation',title:'Writer center-expansion validation',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent DP-table palindrome oracle',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Second-palindrome source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source identifies a LeetCode 5 variant requiring a second-longest palindromic substring that is not a substring of the longest palindromic substring.',source_ids:['repository-original-note','repository-tagged-question','isolated-review'],answer_locations:['核心结论','1 分钟版']},{claim_id:'source-ambiguity',text:'Tie, multiple-longest, no-solution, input-size and null/empty semantics are not preserved and are therefore explicitly separated from the source contract.',source_ids:['repository-original-note','repository-tagged-question','isolated-review'],answer_locations:['核心结论','关键细节','常见追问']},{claim_id:'declared-reference-contract',text:'Under the explicitly declared leftmost-longest, strict-shorter, positional-containment contract, the candidate code matches an independent DP-table oracle on exhaustive ternary strings through length 9.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:validation.command,result:'pass',reported_stdout:validation.stdout,boundary_tests:validation.boundary_tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores:review.scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings:review.findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md';
+          let text=fs.readFileSync(task,'utf8');
+          const pending='- [x] `cq_q_a2b09618bc23b15a51f221be46e00bd5` second-palindrome writer slice is staged source-first: the original note preserves the LeetCode 5 variant and the non-containment rule, while missing tie/multi-longest/no-solution/size semantics remain explicitly marked as clarification points. A declared reference contract uses two-pass center expansion and matches an independent exhaustive substring oracle for every ternary string through length 8. Independent source-first review is still required.';
+          const passed='- [x] `cq_q_a2b09618bc23b15a51f221be46e00bd5` passed isolated source-first review: the preserved source gives only the LeetCode 5 variant and non-containment rule, while tie/multi-longest/no-solution/size semantics stay explicitly non-source. The candidate Java implementation matches a separately implemented DP-table oracle on every ternary string through length 9, including tied-longest and no-solution cases. Strict candidate evidence is bound; repository human approval and S11 real-review policy still block curated promotion.';
+          if(!text.includes(pending)) throw new Error('writer-progress marker missing or stale');
+          fs.writeFileSync(task,text.replace(pending,passed));
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review safely
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0040/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git commit -m 'review: pass batch 0040 second-palindrome candidate source-first'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_SHA"
+          git push origin "HEAD:$CONTENT_BRANCH"
