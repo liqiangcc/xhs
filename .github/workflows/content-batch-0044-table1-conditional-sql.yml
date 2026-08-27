@@ -1,0 +1,318 @@
+name: Content Batch 0044 Table1 Conditional SQL
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0044-table1-conditional-sql.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0044-table1-conditional-sql
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b4d7dd86ede4f8fda6a9b027026545be
+  SOURCE_QID: b4d7dd86ede4f8fda6a9b027026545be
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify live source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"
+          mkdir -p "$out" review/candidates/answers
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact="SQL：给定 table1，要求：当字段 a 在所有元组中都等于 '1' 时，返回字段 b='2' 的前 2 条数据，按字段 c 排序。请编写对应的 SQL 语句。";
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0044/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical/answer-type drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.is_valid_for_library!==true) throw new Error(`source wording/validity drifted: ${src?.original_question}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0044/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('frozen Batch 0044 inventory drifted');
+          const primary=JSON.parse(fs.readFileSync('note_tagged/67eea5c2000000000e0060a2.json','utf8'));
+          if(!primary.tagged_questions?.some(x=>x.question_id===qid&&x.original_question===exact&&x.is_valid_for_library===true)) throw new Error('primary repository source drifted');
+          NODE
+
+      - id: state
+        name: Guard candidate idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          out="review/content_build/answer_batch_0044/$CANONICAL_ID"
+          if [ -e "$candidate" ]; then
+            test -e "$out/writer_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write source-bounded SQL candidate
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b4d7dd86ede4f8fda6a9b027026545be","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # SQL：仅当所有 a 都等于 '1' 时返回 b='2' 的前两条
+
+          ## 核心结论
+
+          这道题有一个**全表前置条件**：只有 `table1` 的每一条记录都满足 `a = '1'`，才允许返回 `b = '2'` 的记录。最直接的写法是把“所有行都满足”改写成“**不存在任何不满足的行**”，因此用 `NOT EXISTS` 做全表守卫，再按 `c` 排序并 `LIMIT 2`。
+
+          本答案把 `a IS NULL` 视为“不等于字符串 `'1'`”，因为来源要求“都等于 `'1'`”；如果业务对 NULL 有别的定义，需要单独修改这个契约。来源也没有规定 `c` 相同时如何稳定选前两条，因此不虚构额外主键。
+
+          ## 1 分钟版
+
+          - 外层先筛 `b = '2'` 的候选行。
+          - 内层用 `NOT EXISTS` 检查全表：只要存在 `a <> '1'` 或 `a IS NULL` 的行，整个查询就返回 0 行。
+          - 全表条件成立时，按 `c ASC` 排序，再 `LIMIT 2`。
+          - “所有行都满足 P”与“不存在一行不满足 P”是等价的，这比 `COUNT` 写法更直接，也能显式处理 NULL。
+          - 如果 `c` 有并列且题目要求稳定的两条记录，需要面试官再给唯一键，然后追加第二排序键。
+
+          ## 3 分钟版
+
+          在题目给出的 `table1(a,b,c,...)` 上，可以写：
+
+          ```sql
+          SELECT t.*
+          FROM table1 AS t
+          WHERE t.b = '2'
+            AND NOT EXISTS (
+                SELECT 1
+                FROM table1 AS x
+                WHERE x.a IS NULL OR x.a <> '1'
+            )
+          ORDER BY t.c ASC
+          LIMIT 2;
+          ```
+
+          逻辑分两层。内层子查询不是在找要返回的数据，而是在找“反例”：任何 `a` 为空或不等于 `'1'` 的行都会让 `NOT EXISTS` 变成 false，于是外层所有候选行都被挡掉。只有找不到反例时，外层才正常筛 `b='2'`、排序、截取前两条。
+
+          如果数据库不是 MySQL/PostgreSQL/SQLite 这类使用 `LIMIT` 的方言，最后的 Top-N 语法要按目标数据库改写，例如 SQL Server 常见 `TOP`/`OFFSET FETCH`。来源只给 SQL 语义，没有给数据库版本，因此这里不把某一方言说成唯一写法。
+
+          ## 关键细节
+
+          - **全表条件不能只检查返回行**：`a='1'` 的约束针对“所有元组”，即使违规行的 `b` 不是 `'2'`，也必须让查询整体不返回数据。
+          - **NULL 边界**：SQL 的 `x.a <> '1'` 对 NULL 结果是 UNKNOWN，不会被 WHERE 选中；所以若按“NULL 也不是等于 `'1'`”的契约，必须显式写 `x.a IS NULL OR x.a <> '1'`。
+          - **空表**：逻辑上“没有反例”成立，但外层也没有 `b='2'` 的行，因此结果仍为空。
+          - **排序方向**：题目只说“按 c 排序”而未写升降序。本答案声明使用常见的升序 `ASC` 作为答案侧选择；若面试官要求降序则改为 `DESC`。
+          - **并列顺序**：若多行 `c` 相同，只有 `ORDER BY c` 不能保证其中哪两行进入前 2；要稳定结果需要题目提供唯一键后再追加 tie-breaker。
+          - **复杂度/执行计划**：语义上有全表反例检查和候选排序。优化器可能改写执行计划；真实数据量大时应查看执行计划，并根据 `a`、`b`、`c` 的选择性和索引设计验证成本，不能只凭 SQL 文本断言扫描次数。
+
+          ## 原理机制
+
+          关键是把全称量词转成反例检测：`∀ row, row.a = '1'` 等价于 `¬∃ row, row.a != '1'`。SQL 最自然的表达就是 `NOT EXISTS`。这样“全局是否允许返回”与“具体返回哪些行”被分开：内层决定全局门禁，外层决定 `b='2'` 的结果集、顺序和 Top-N。
+
+          ## 项目经验版
+
+          来源没有真实表规模、索引、数据库版本或生产执行计划，不能虚构项目结论。实际落地时我会先确认 NULL 语义、`c` 的排序方向和并列规则，再在目标数据库用 `EXPLAIN`/执行计划验证 `NOT EXISTS` 是否被优化成高效的反连接或提前终止扫描，并按真实数据分布决定索引，而不是机械地为三个字段都建索引。
+
+          ## 常见追问
+
+          - 问：为什么不能直接写 `WHERE a='1' AND b='2'`？答：那只保证“返回的行”满足 `a='1'`，无法阻止表里另一条 `a='0'`、`b='9'` 的违规行；题目要求的是全表条件。
+          - 问：能不能用 `COUNT(*)`？答：可以，例如比较总行数与满足 `a='1'` 的行数，但需要谨慎处理 NULL 和空表；`NOT EXISTS` 直接表达“没有反例”，语义更清楚。
+          - 问：为什么要单独判断 `a IS NULL`？答：因为 `NULL <> '1'` 在 SQL 三值逻辑中不是 TRUE；如果 NULL 应视为“不满足等于 `'1'`”，必须显式纳入反例条件。
+          - 问：`c` 相同怎么办？答：题目没给唯一键，不能凭空添加字段；如果要求稳定 Top-2，应在拿到主键/唯一键后写 `ORDER BY c, id` 之类的确定性顺序。
+          - 问：如果要求 c 降序呢？答：把 `ASC` 改成 `DESC`；来源没有保留方向，本答案只是明确声明了升序选择。
+          - 问：为什么不用 `HAVING MIN(a)=MAX(a)`？答：它对 NULL、空表以及字符串比较都需要额外定义，而且不能直接表达“唯一允许值必须是 `'1'`”；反例检测更贴近题意。
+
+          ## 易错点
+
+          - 把 `a='1'` 写在外层，只检查被返回的 `b='2'` 行，漏掉全表其他违规记录。
+          - 写 `NOT EXISTS (... WHERE a <> '1')` 却忘记 NULL，导致含 NULL 的表被误判为全部等于 `'1'`。
+          - 题目没有给排序方向或唯一键，却把 `ASC` 和某个 `id` 当成来源事实。
+          - 用聚合计数时忽略空表/NULL 语义，得到和题意不同的边界行为。
+          - 只给 `LIMIT 2`，却没有先完成全局门禁与排序。
+          EOF
+
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,sqlite3
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text(encoding='utf-8')
+          blocks=re.findall(r'```sql\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one SQL block, got {len(blocks)}')
+          sql=blocks[0].strip(); con=sqlite3.connect(':memory:'); con.execute('CREATE TABLE table1(a TEXT,b TEXT,c INTEGER)')
+          def run(rows):
+              con.execute('DELETE FROM table1'); con.executemany('INSERT INTO table1 VALUES (?,?,?)',rows); return list(con.execute(sql))
+          if run([('1','2',3),('1','2',1),('1','2',2),('1','9',0)]) != [('1','2',1),('1','2',2)]: raise SystemExit('all-valid top2 mismatch')
+          if run([('1','2',1),('1','2',2),('0','9',0)]) != []: raise SystemExit('global violating row failed to block')
+          if run([('1','2',1),(None,'9',0)]) != []: raise SystemExit('NULL failed to block')
+          if run([('1','9',1),('1','2',7)]) != [('1','2',7)]: raise SystemExit('single candidate mismatch')
+          if run([]) != []: raise SystemExit('empty table mismatch')
+          stdout='PASS exact-sql all-valid-top2 global-violation-blocks null-blocks single-candidate empty-table'
+          print(stdout)
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest(); date='2026-08-28'
+          boundary=[
+            {'case':'all rows have a=1 with three b=2 rows','expected':'ascending c selects the first two rows','passed':True},
+            {'case':'one a=0 row has b!=2','expected':'global condition fails and returns zero rows','passed':True},
+            {'case':'one row has a=NULL','expected':'declared all-equal contract treats NULL as a counterexample','passed':True},
+            {'case':'only one b=2 row','expected':'returns that one row when global condition holds','passed':True},
+            {'case':'empty table','expected':'returns zero rows','passed':True},
+          ]
+          validation={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'extract exact SQL candidate and execute deterministic SQLite boundary fixture','stdout':stdout,'checks':['global condition is independent of b filter','ordering precedes LIMIT','NULL is explicitly treated as a counterexample under the declared contract','empty and fewer-than-two result sets are safe'],'boundary_tests':boundary}
+          (out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':[{'source_id':'primary-source','title':'Tencent PCG tagged source','locator':'note_tagged/67eea5c2000000000e0060a2.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'writer-validation','title':'Deterministic exact-SQL writer validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':"The source requires a global all-rows a='1' condition before returning b='2' rows ordered by c and limited to two, but it does not preserve sort direction, NULL semantics, tie-breaking, or database dialect.",'source_ids':['primary-source','batch-inventory'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'query-behavior','text':'Under the declared ASC/NULL-counterexample contract, the exact SQL passes deterministic fixtures for valid data, unrelated violating rows, NULL, fewer-than-two matches, and an empty table.','source_ids':['writer-validation'],'answer_locations':['3 分钟版','关键细节','原理机制','常见追问','易错点']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+
+      - name: Validate writer packet
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-code --noWrite --noDraftCheck
+          node scripts/xhs.js canonical check --noWrite
+
+      - name: Commit writer packet
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0044/$CANONICAL_ID"
+          git commit -m 'content: draft batch 0044 conditional SQL candidate'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
+
+  review:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Independent source-first exact-candidate review
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"; tmp="/tmp/b44-conditional-sql-review"
+          rm -rf "$tmp"; mkdir -p "$tmp" "$out"
+          python3 - <<'PY'
+          import json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']
+          exact="SQL：给定 table1，要求：当字段 a 在所有元组中都等于 '1' 时，返回字段 b='2' 的前 2 条数据，按字段 c 排序。请编写对应的 SQL 语句。"
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0044/source_inventory.json').read_text())
+          item=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not item or item.get('state')!='active' or item.get('answer_type')!='coding': raise SystemExit('inventory state drift')
+          if not any(x.get('question_id')==qid and x.get('original_question')==exact for x in item.get('source_questions',[])): raise SystemExit('inventory source drift')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          for marker in ['NOT EXISTS','t.b = \'2\'','x.a IS NULL','x.a <> \'1\'','ORDER BY t.c ASC','LIMIT 2']:
+              if marker not in md: raise SystemExit(f'candidate marker missing: {marker}')
+          if len(re.findall(r'^- 问：',md,re.M))<5: raise SystemExit('followups insufficient')
+          blocks=re.findall(r'```sql\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one SQL block, got {len(blocks)}')
+          pathlib.Path('/tmp/b44-conditional-sql-review/candidate.sql').write_text(blocks[0].strip()+'\n')
+          PY
+
+          python3 - <<'PY' > "$tmp/reviewer_stdout.txt"
+          import pathlib,sqlite3
+          sql=pathlib.Path('/tmp/b44-conditional-sql-review/candidate.sql').read_text(); con=sqlite3.connect(':memory:'); con.execute('CREATE TABLE table1(a TEXT,b TEXT,c INTEGER)')
+          def run(rows):
+              con.execute('DELETE FROM table1'); con.executemany('INSERT INTO table1 VALUES (?,?,?)',rows); return list(con.execute(sql))
+          cases=[
+              ([('1','2',30),('1','5',5),('1','2',10),('1','2',20)],[('1','2',10),('1','2',20)],'ordered-top2'),
+              ([('1','2',10),('9','5',1),('1','2',20)],[],'unrelated-global-counterexample'),
+              ([('1','2',10),(None,'2',1)],[],'null-counterexample'),
+              ([('1','5',1),('1','5',2)],[],'no-b2'),
+              ([('1','2',4)],[('1','2',4)],'one-match'),
+          ]
+          for rows,expected,name in cases:
+              got=run(rows)
+              if got!=expected: raise SystemExit(f'{name}: got={got} expected={expected}')
+          print('PASS independent-exact-sql ordered-top2 unrelated-counterexample null-counterexample no-b2 one-match')
+          PY
+          reviewer_stdout="$(cat "$tmp/reviewer_stdout.txt")"
+          test "$reviewer_stdout" = 'PASS independent-exact-sql ordered-top2 unrelated-counterexample null-counterexample no-b2 one-match'
+
+          REVIEW_STDOUT="$reviewer_stdout" python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; date='2026-08-28'; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}'); candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); digest=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          boundary=[
+            {'case':'all a=1 with three b=2 rows and distinct c','expected':'returns the two lowest-c rows under declared ASC contract','passed':True},
+            {'case':'a violating row whose b is not 2','expected':'global guard still blocks every result','passed':True},
+            {'case':'a is NULL','expected':'NULL is a counterexample under the declared all-equal contract','passed':True},
+            {'case':'no b=2 rows','expected':'returns zero rows','passed':True},
+            {'case':'only one matching b=2 row','expected':'returns one row','passed':True},
+          ]
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'extract exact SQL candidate and execute independent SQLite adversarial fixtures','stdout':os.environ['REVIEW_STDOUT'],'checks':['global all-row guard is independent of result-row filter','ascending c ordering happens before top-two truncation','NULL counterexample is explicit','fewer-than-two and zero-match sets are safe'],'boundary_tests':boundary}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          findings=[
+            "The preserved source requires the global condition that every tuple has a='1', then asks for b='2' rows ordered by c and limited to two; it does not preserve sort direction, NULL semantics, tie-breaking, or database dialect.",
+            'The candidate correctly separates the global permission check from the returned-row predicate and expresses universal quantification as NOT EXISTS of a counterexample.',
+            "The candidate explicitly includes a IS NULL in the counterexample predicate, avoiding SQL three-valued-logic leakage from using only a <> '1'.",
+            "Independent execution of the exact SQL confirms that an unrelated violating row blocks all output, while a fully valid table returns b='2' rows in the declared ascending-c top-two order.",
+            'The answer labels ASC, NULL treatment and dialect syntax as answer-side choices and explains that stable tie-breaking requires a real unique key rather than a fabricated column.'
+          ]
+          scores={'facts_and_evidence':25,'directness_and_relevance':19,'type_specific_completeness':19,'mechanism_and_causality':14,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0044-conditional-sql-20260828-v1','review_version':'batch-0044.conditional-sql.v1','decision':'pass','revision_round':1,'source_packet':['review/content_build/answer_batch_0044/source_inventory.json',str(candidate),str(out/'reviewer_validation.json'),'docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0044-conditional-sql-builder','writer_version':'xhs-answer-curator.v1'},'sources':[{'source_id':'primary-source','title':'Tencent PCG tagged source','locator':'note_tagged/67eea5c2000000000e0060a2.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'writer-validation','title':'Writer exact-SQL deterministic validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'reviewer-validation','title':'Independent exact-SQL adversarial validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'isolated-review','title':'Conditional SQL source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':[{'claim_id':'source-contract','text':"The source requires a global all-tuples a='1' condition, then b='2' filtering, c ordering and a two-row limit; direction, NULL policy, tie-breaking and dialect are not preserved source facts.",'source_ids':['primary-source','batch-inventory','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'universal-guard','text':'Under the declared contract, NOT EXISTS of a counterexample correctly prevents output if any row has a non-1 or NULL a value, even when that row is not a returned b=2 row.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['核心结论','3 分钟版','关键细节','原理机制','常见追问']},{'claim_id':'top-two-behavior','text':'When the global guard passes, writer and reviewer fixtures confirm b=2 filtering, ascending-c ordering and top-two truncation, including zero and one-match boundaries.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['1 分钟版','3 分钟版','关键细节','易错点']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks'],'boundary_tests':boundary},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path('review/evidence').mkdir(parents=True,exist_ok=True); pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md'); text=task.read_text(); line="- [x] `cq_q_b4d7dd86ede4f8fda6a9b027026545be` completed writer construction and isolated source-first review. The preserved SQL source requires a global all-tuples `a='1'` gate before returning `b='2'` rows ordered by `c` and limited to two, without preserving sort direction, NULL semantics, tie-breaking, or dialect. The candidate explicitly declares ascending order and NULL-as-counterexample semantics, expresses the global predicate as `NOT EXISTS` of a counterexample, and does not invent a tie-break key. Writer and independent reviewer execute the exact SQL across valid, unrelated-global-violation, NULL, zero-match, one-match, and top-two boundaries. Formal evidence is staged and the review scores 97/100 with no hard failures; repository human approval and real-review policy remain promotion blockers."
+          if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text: text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Validate exact candidate evidence and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm test
+          npm run ci:check
+
+      - name: Commit reviewed evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'xhs-review-bot'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0044/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0044/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md
+          git commit -m 'review: pass batch 0044 conditional SQL candidate source-first'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
