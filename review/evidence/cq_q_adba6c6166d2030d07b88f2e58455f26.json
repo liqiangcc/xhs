@@ -1,0 +1,154 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_adba6c6166d2030d07b88f2e58455f26",
+  "candidate_sha256": "c263d93cf739cf4862a9f851f9c46556bef32ef1e4e1be40eb7a08a6268f86de",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0042-thousands-separator-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "structured-note",
+      "title": "Structured interview note preserving integer grouping prompt",
+      "locator": "note_structured/6678d3f7000000001e013539.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0042 frozen source inventory",
+      "locator": "review/content_build/answer_batch_0042/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic thousands-separator fixture",
+      "locator": "review/content_build/answer_batch_0042/cq_q_adba6c6166d2030d07b88f2e58455f26/thousands_separator_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent BigInteger arithmetic grouping oracle",
+      "locator": "review/content_build/answer_batch_0042/cq_q_adba6c6166d2030d07b88f2e58455f26/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Thousands-separator source-first isolated review",
+      "locator": "review/content_build/answer_batch_0042/cq_q_adba6c6166d2030d07b88f2e58455f26/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source requires an integer to be grouped in threes with commas; language, width, negative handling, leading zeros, fractions and locale are not source-frozen.",
+      "source_ids": [
+        "structured-note",
+        "source-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "Under the declared Java long contract, the implementation right-aligns three-digit groups, preserves a leading minus sign and matches an independent BigInteger arithmetic oracle across exhaustive small values, long extremes and 50,000 seeded random longs.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "adba6c6166d2030d07b88f2e58455f26",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "compile exact candidate Solution.java; compile/run independent BigInteger arithmetic Reviewer.java",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=17 exhaustive-small=20001 random=50000 biginteger-oracle=match zero+sign+group-boundaries+long-extremes=covered",
+    "boundary_tests": [
+      {
+        "case": "0 and exact 3/4/6/7-digit boundaries",
+        "expected": "commas only between right-aligned three-digit groups",
+        "passed": true
+      },
+      {
+        "case": "negative values",
+        "expected": "minus sign preserved and excluded from digit grouping",
+        "passed": true
+      },
+      {
+        "case": "Long.MIN_VALUE / Long.MAX_VALUE",
+        "expected": "correct output without abs overflow in candidate",
+        "passed": true
+      },
+      {
+        "case": "all integers -10000..10000",
+        "expected": "candidate matches independent BigInteger arithmetic grouping oracle",
+        "passed": true
+      },
+      {
+        "case": "50,000 seeded random long values",
+        "expected": "candidate matches independent BigInteger arithmetic grouping oracle",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0042-thousands-separator-20260827-v1",
+    "review_version": "batch-0042.thousands-separator.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "Repository source only freezes the three-digit grouping plus comma requirement; language, integer width, negative handling, leading-zero semantics, fractions and locale are not source-proven.",
+      "Candidate explicitly labels Java long, preserved minus sign and plain-decimal formatting as reference choices rather than original-question facts.",
+      "The implementation aligns grouping to the right edge of the decimal digit sequence, excludes the sign from grouping, and avoids the Long.MIN_VALUE absolute-value overflow trap by never applying Math.abs.",
+      "Independent BigInteger arithmetic oracle validates all values from -10000 through 10000, fixed group boundaries and long extremes, plus 50,000 seeded random long values with no mismatch.",
+      "O(d) time and O(d) output-space claims match the single-pass implementation and unavoidable result size; the answer avoids fabricated project experience and does not smuggle locale/currency semantics into the prompt."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
