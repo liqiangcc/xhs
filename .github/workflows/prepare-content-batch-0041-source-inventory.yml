@@ -73,12 +73,13 @@ jobs:
             'cq_q_a9a3cdad804b0bdf8732d7d22dcb03c2',
             'cq_q_aa5412e581a46db5a2dbf3f5bc6262eb',
           ];
+          const allowedTypes=new Set(['coding','conceptual','scenario','project']);
           const items=[];
           for(const cid of ids){
             const ctx=JSON.parse(fs.readFileSync(`/tmp/batch0041-context/${cid}.json`,'utf8'));
             if(!ctx.ok) throw new Error(`${cid}: answer context failed`);
             if(ctx.canonical?.canonical_id!==cid) throw new Error(`${cid}: canonical id drifted`);
-            if(ctx.answer_type!=='coding') throw new Error(`${cid}: expected coding, got ${ctx.answer_type}`);
+            if(!allowedTypes.has(ctx.answer_type)) throw new Error(`${cid}: unsupported answer type ${ctx.answer_type}`);
             const sourceQuestions=Array.isArray(ctx.source_questions)?ctx.source_questions:[];
             if(sourceQuestions.length===0) throw new Error(`${cid}: no source questions in context`);
             const owned=Array.isArray(ctx.canonical?.question_ids)?ctx.canonical.question_ids:[];
@@ -86,9 +87,9 @@ jobs:
             if(JSON.stringify([...owned].sort())!==JSON.stringify([...sourceIds].sort())) throw new Error(`${cid}: canonical ownership/source context mismatch owned=${JSON.stringify(owned)} source=${JSON.stringify(sourceIds)}`);
             items.push({canonical_id:cid,answer_type:ctx.answer_type,canonical_question:ctx.canonical?.canonical_question ?? ctx.canonical?.question ?? null,question_ids:owned,source_questions:sourceQuestions,active_answer_metadata:ctx.answer?.metadata ?? ctx.answer_metadata ?? null});
           }
-          const out={schema_version:'answer_batch_source_inventory.v1',batch:'0041',frozen_at:'2026-08-27',canonical_count:items.length,source_first:true,note:'Repository-local inventory only. It preserves current Canonical ownership and exact source-question objects before any candidate drafting. Missing source contract details must not be invented.',items};
+          const out={schema_version:'answer_batch_source_inventory.v1',batch:'0041',frozen_at:'2026-08-27',canonical_count:items.length,source_first:true,note:'Repository-local inventory only. It preserves current Canonical ownership, resolved answer type, and exact source-question objects before any candidate drafting. Missing source contract details must not be invented.',items};
           fs.writeFileSync('review/content_build/answer_batch_0041/source_inventory.json',JSON.stringify(out,null,2)+'\n');
-          console.log(`PASS frozen ${items.length} batch0041 source contexts`);
+          console.log(`PASS frozen ${items.length} batch0041 source contexts types=${[...new Set(items.map(x=>x.answer_type))].sort().join(',')}`);
           NODE
 
       - name: Validate inventory against live repository projections
@@ -127,7 +128,7 @@ jobs:
           p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0041.md')
           t=p.read_text(encoding='utf-8')
           t=t.replace('- Status: `pending`','- Status: `in_progress`',1)
-          line='- [x] Source-first inventory frozen before candidate drafting: all 10 active Coding Canonicals have live ownership and exact repository source-question objects captured in `review/content_build/answer_batch_0041/source_inventory.json`; missing contract details remain fail-closed for the next recoverability review.'
+          line='- [x] Source-first inventory frozen before candidate drafting: all 10 active Canonicals have live ownership, resolved answer type, and exact repository source-question objects captured in `review/content_build/answer_batch_0041/source_inventory.json`; stale task-level type hints do not override the current answer-type SSOT, and missing contract details remain fail-closed for the next recoverability review.'
           if '## Progress' not in t: t=t.rstrip()+'\n\n## Progress\n\n'
           if line not in t: t=t.rstrip()+'\n'+line+'\n'
           p.write_text(t,encoding='utf-8')
