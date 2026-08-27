@@ -1,0 +1,150 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_ae26e919521a374b27e6632b2969aa13",
+  "candidate_sha256": "53b144cdfe35b30681538992101d431944394d87795cac2a6d58b893ab0a9e30",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0042-min-swaps-builder-v2",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "structured-note",
+      "title": "Structured interview note preserving min-swaps prompt",
+      "locator": "note_structured/67de17c2000000001a005fa3.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0042 frozen source inventory",
+      "locator": "review/content_build/answer_batch_0042/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Corrected writer constructive min-swaps validation",
+      "locator": "review/content_build/answer_batch_0042/cq_q_ae26e919521a374b27e6632b2969aa13/min_swaps_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exhaustive BFS transposition oracle",
+      "locator": "review/content_build/answer_batch_0042/cq_q_ae26e919521a374b27e6632b2969aa13/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Min-swaps source-first isolated review",
+      "locator": "review/content_build/answer_batch_0042/cq_q_ae26e919521a374b27e6632b2969aa13/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source asks for minimum arbitrary character swaps needed to order the string without preserving comparator, duplicate, Unicode-unit or language constraints.",
+      "source_ids": [
+        "structured-note",
+        "source-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "For the explicit distinct-Java-char ascending contract, cycle decomposition returns the exact minimum; exhaustive independent BFS validates every distinct permutation of sizes 0 through 7 and confirms dcab requires 3 swaps.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "ae26e919521a374b27e6632b2969aa13",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "exhaustive BFS arbitrary-transposition oracle n=0..7",
+    "result": "pass",
+    "reported_stdout": "PASS bfs-state-space=5914 n=0..7 arbitrary-transpositions=exact corrected-dcab=3 duplicates=rejected null=rejected",
+    "boundary_tests": [
+      {
+        "case": "all distinct permutations n=0..7",
+        "expected": "candidate equals exact BFS distance under arbitrary transpositions",
+        "passed": true
+      },
+      {
+        "case": "dcab",
+        "expected": "four-cycle requires exactly 3 swaps",
+        "passed": true
+      },
+      {
+        "case": "duplicate chars",
+        "expected": "explicitly rejected under stated reference contract",
+        "passed": true
+      },
+      {
+        "case": "null",
+        "expected": "explicit NullPointerException reference contract",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0042-min-swaps-20260827-v2",
+    "review_version": "batch-0042.min-swaps.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "Source freezes only arbitrary character swaps plus ordered target and minimum operation count; comparator, duplicate semantics, character unit, and implementation language are not preserved.",
+      "Candidate makes a narrow explicit distinct-Java-char ascending reference contract and does not present it as source fact.",
+      "The corrected dcab example is a single four-cycle [3,2,0,1] and requires 3 swaps; the earlier pre-staging 2-swap assertion was caught by writer validation and never committed as candidate content.",
+      "Independent BFS over the full arbitrary-transposition state graph for every distinct permutation of lengths 0 through 7 exactly matches the candidate result.",
+      "Duplicate-character ambiguity, adjacent-swap distinction, UTF-16 char boundary, complexity, and no-fabrication project boundary are explicit."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
