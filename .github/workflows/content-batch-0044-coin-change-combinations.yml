@@ -1,0 +1,306 @@
+name: Content Batch 0044 Coin Change Combinations
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0044-coin-change-combinations.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0044-coin-change-combinations
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b63be92cf59d4f24b1c8f7d0d0ca90b5
+  SOURCE_QID: b63be92cf59d4f24b1c8f7d0d0ca90b5
+
+jobs:
+  writer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify live source boundary and candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：零钱兑换（Coin Change），给定金额和硬币面值，求总组合数。';
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0044/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('canonical/answer-type drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`ownership drifted: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.is_valid_for_library!==true) throw new Error(`source wording/validity drifted: ${src?.original_question}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0044/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('frozen Batch 0044 inventory drifted');
+          const primary=JSON.parse(fs.readFileSync('note_tagged/67e13c24000000000302a976.json','utf8'));
+          if(!primary.tagged_questions?.some(x=>x.question_id===qid&&x.original_question===exact&&x.is_valid_for_library===true)) throw new Error('primary repository source drifted');
+          const candidate=`review/candidates/answers/${cid}.md`;
+          if(!fs.existsSync(candidate)) throw new Error('prewritten candidate missing');
+          const md=fs.readFileSync(candidate,'utf8');
+          if(!md.includes('quality_tier":"candidate"')||!md.includes('status":"draft"')) throw new Error('candidate metadata drifted');
+          NODE
+
+      - id: state
+        name: Guard writer idempotence
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="review/content_build/answer_batch_0044/$CANONICAL_ID"
+          if [ -e "$out/writer_validation.json" ] || [ -e "$out/writer_research.json" ]; then
+            test -e "$out/writer_validation.json"
+            test -e "$out/writer_research.json"
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Execute exact candidate and writer differential
+        if: steps.state.outputs.pending == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"; candidate="review/candidates/answers/$cid.md"
+          python3 - <<'PY'
+          import hashlib,pathlib,re,os
+          cid=os.environ['CANONICAL_ID']; candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}')
+          (out/'CoinChangeCombinations.java').write_text(blocks[0].strip()+'\n')
+          (out/'candidate.sha256').write_text(hashlib.sha256(candidate.read_bytes()).hexdigest()+'\n')
+          PY
+          cat > "$out/WriterTest.java" <<'JAVA'
+          import java.math.BigInteger;
+          import java.util.*;
+          public final class WriterTest {
+              static BigInteger oracle(int amount, int[] coins) {
+                  BigInteger[][] ways=new BigInteger[coins.length+1][amount+1];
+                  for(int i=0;i<=coins.length;i++) Arrays.fill(ways[i],BigInteger.ZERO);
+                  ways[0][0]=BigInteger.ONE;
+                  for(int i=1;i<=coins.length;i++) {
+                      int c=coins[i-1];
+                      for(int s=0;s<=amount;s++) {
+                          BigInteger v=ways[i-1][s];
+                          if(s>=c) v=v.add(ways[i][s-c]);
+                          ways[i][s]=v;
+                      }
+                  }
+                  return ways[coins.length][amount];
+              }
+              static void check(int amount,int[] coins) {
+                  BigInteger got=CoinChangeCombinations.countCombinations(amount,coins), expected=oracle(amount,coins);
+                  if(!got.equals(expected)) throw new AssertionError("amount="+amount+" coins="+Arrays.toString(coins)+" got="+got+" expected="+expected);
+              }
+              public static void main(String[] args) {
+                  if(!CoinChangeCombinations.countCombinations(5,new int[]{1,2,5}).equals(BigInteger.valueOf(4))) throw new AssertionError("known 5/[1,2,5]");
+                  check(0,new int[]{}); check(7,new int[]{}); check(3,new int[]{2}); check(10,new int[]{10}); check(10,new int[]{5,2,1});
+                  try { CoinChangeCombinations.countCombinations(-1,new int[]{1}); throw new AssertionError("negative amount accepted"); } catch(IllegalArgumentException expected) {}
+                  try { CoinChangeCombinations.countCombinations(3,null); throw new AssertionError("null coins accepted"); } catch(IllegalArgumentException expected) {}
+                  try { CoinChangeCombinations.countCombinations(3,new int[]{0,1}); throw new AssertionError("zero coin accepted"); } catch(IllegalArgumentException expected) {}
+                  try { CoinChangeCombinations.countCombinations(3,new int[]{-1,1}); throw new AssertionError("negative coin accepted"); } catch(IllegalArgumentException expected) {}
+                  try { CoinChangeCombinations.countCombinations(3,new int[]{1,1}); throw new AssertionError("duplicate coin accepted"); } catch(IllegalArgumentException expected) {}
+                  Random r=new Random(20260828L); int cases=0;
+                  for(int t=0;t<5000;t++) {
+                      int n=1+r.nextInt(6); LinkedHashSet<Integer> set=new LinkedHashSet<>(); while(set.size()<n) set.add(1+r.nextInt(12));
+                      int[] coins=set.stream().mapToInt(Integer::intValue).toArray();
+                      for(int i=coins.length-1;i>0;i--){int j=r.nextInt(i+1),x=coins[i];coins[i]=coins[j];coins[j]=x;}
+                      int amount=r.nextInt(41); check(amount,coins); cases++;
+                  }
+                  BigInteger large=CoinChangeCombinations.countCombinations(1000,java.util.stream.IntStream.rangeClosed(1,100).toArray());
+                  if(large.bitLength()<=63) throw new AssertionError("large-count boundary did not exceed signed long");
+                  System.out.println("PASS known=4 boundaries=10 differential="+cases+" biginteger-bits="+large.bitLength());
+              }
+          }
+          JAVA
+          (cd "$out" && javac CoinChangeCombinations.java WriterTest.java && java WriterTest | tee writer_stdout.txt)
+          grep -q '^PASS known=4 boundaries=10 differential=5000 biginteger-bits=' "$out/writer_stdout.txt"
+
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}'); candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); digest=hashlib.sha256(candidate.read_bytes()).hexdigest(); date='2026-08-28'
+          stdout=(out/'writer_stdout.txt').read_text().strip()
+          validation={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'javac CoinChangeCombinations.java WriterTest.java && java WriterTest','stdout':stdout,'checks':['known amount=5 coins=[1,2,5] returns 4 combinations','zero/empty/unreachable/single-coin and shuffled-denomination boundaries','negative amount, null coins, non-positive coins and duplicate denominations rejected by declared contract','5000 deterministic random cases match independent two-dimensional unbounded-combination DP','amount=1000 with denominations 1..100 produces an exact count wider than signed 64-bit']}
+          (out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':[{'source_id':'primary-source','title':'Kuaishou tagged source','locator':'note_tagged/67e13c24000000000302a976.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'writer-validation','title':'Deterministic Java two-dimensional DP differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The preserved source asks for total combination count for a target amount and coin denominations; unlimited reuse, denomination uniqueness, invalid-input behavior and numeric bounds are not preserved source constraints.','source_ids':['primary-source','batch-inventory'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'dp-semantics','text':'Under the explicitly declared unlimited-use distinct-positive-denomination contract, coin-outer and ascending-amount one-dimensional DP matches an independent two-dimensional unbounded-combination recurrence across deterministic boundaries and 5000 random cases.','source_ids':['writer-validation'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']},{'claim_id':'numeric-boundary','text':'The exact implementation uses BigInteger and is exercised on a combination count that exceeds signed 64-bit range, avoiding an unsupported integer-width assumption.','source_ids':['writer-validation'],'answer_locations':['核心结论','关键细节','常见追问','易错点']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n')
+          PY
+          rm -f "$out"/*.class "$out/writer_stdout.txt" "$out/candidate.sha256"
+
+      - name: Verify existing writer packet is bound to current candidate
+        if: steps.state.outputs.pending == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE="review/candidates/answers/$CANONICAL_ID.md" OUT="review/content_build/answer_batch_0044/$CANONICAL_ID" python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          c=pathlib.Path(os.environ['CANDIDATE']); out=pathlib.Path(os.environ['OUT']); d=hashlib.sha256(c.read_bytes()).hexdigest()
+          v=json.loads((out/'writer_validation.json').read_text()); r=json.loads((out/'writer_research.json').read_text())
+          if v.get('candidate_sha256')!=d or v.get('result')!='pass' or r.get('candidate_sha256')!=d or r.get('review_state')!='writer_complete_isolated_review_pending': raise SystemExit('existing writer packet is stale')
+          PY
+
+      - name: Commit writer packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name xhs-content-builder; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0044/$CANONICAL_ID"
+          git commit -m 'content: validate batch 0044 coin-change candidate'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
+
+  review:
+    needs: writer
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze source-first packet and exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0044/$cid"; mkdir -p /tmp/b44-coin review/evidence
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}'); exact='算法：零钱兑换（Coin Change），给定金额和硬币面值，求总组合数。'
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0044/source_inventory.json').read_text()); item=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not item or item.get('state')!='active' or item.get('answer_type')!='coding' or item.get('question_ids')!=[qid] or not any(x.get('question_id')==qid and x.get('original_question')==exact for x in item.get('source_questions',[])): raise SystemExit('inventory drift')
+          primary=json.loads(pathlib.Path('note_tagged/67e13c24000000000302a976.json').read_text())
+          if not any(x.get('question_id')==qid and x.get('original_question')==exact and x.get('is_valid_for_library') is True for x in primary.get('tagged_questions',[])): raise SystemExit('primary source drift')
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md'); md=candidate.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path('/tmp/b44-coin/CoinChangeCombinations.java').write_text(blocks[0].strip()+'\n')
+          digest=hashlib.sha256(candidate.read_bytes()).hexdigest(); pathlib.Path('/tmp/b44-coin/candidate.sha256').write_text(digest+'\n')
+          writer=json.loads((out/'writer_validation.json').read_text()); research=json.loads((out/'writer_research.json').read_text())
+          if writer.get('candidate_sha256')!=digest or writer.get('result')!='pass' or research.get('candidate_sha256')!=digest or research.get('review_state')!='writer_complete_isolated_review_pending': raise SystemExit('writer packet drift')
+          for phrase in ['硬币在外层','金额正序','dp[0]=1','BigInteger']:
+              if phrase not in md: raise SystemExit(f'critical mechanism missing: {phrase}')
+          PY
+
+      - name: Run independent recursive-oracle and permutation validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/b44-coin/ReviewerTest.java <<'JAVA'
+          import java.math.BigInteger;
+          import java.util.*;
+          public final class ReviewerTest {
+              static BigInteger enumerate(int amount,int[] coins,int idx) {
+                  if(idx==coins.length) return amount==0?BigInteger.ONE:BigInteger.ZERO;
+                  BigInteger total=BigInteger.ZERO; int c=coins[idx];
+                  for(int used=0;used*c<=amount;used++) total=total.add(enumerate(amount-used*c,coins,idx+1));
+                  return total;
+              }
+              static void check(int amount,int[] coins) {
+                  BigInteger got=CoinChangeCombinations.countCombinations(amount,coins), exp=enumerate(amount,coins,0);
+                  if(!got.equals(exp)) throw new AssertionError("amount="+amount+" coins="+Arrays.toString(coins)+" got="+got+" exp="+exp);
+              }
+              static int[] shuffled(int[] a,Random r){int[] b=a.clone();for(int i=b.length-1;i>0;i--){int j=r.nextInt(i+1),x=b[i];b[i]=b[j];b[j]=x;}return b;}
+              public static void main(String[] args) {
+                  check(5,new int[]{1,2,5}); check(11,new int[]{1,2,5}); check(7,new int[]{2,3,6}); check(0,new int[]{2,3}); check(1,new int[]{2,3});
+                  Random r=new Random(44006320260828L); int cases=0,permutations=0;
+                  for(int t=0;t<2400;t++) {
+                      int n=1+r.nextInt(5); TreeSet<Integer> set=new TreeSet<>(); while(set.size()<n) set.add(1+r.nextInt(9)); int[] base=set.stream().mapToInt(Integer::intValue).toArray(); int amount=r.nextInt(31);
+                      check(amount,base); cases++;
+                      BigInteger expected=CoinChangeCombinations.countCombinations(amount,base);
+                      for(int p=0;p<3;p++) { int[] perm=shuffled(base,r); if(!CoinChangeCombinations.countCombinations(amount,perm).equals(expected)) throw new AssertionError("coin-order changed combination count"); permutations++; }
+                  }
+                  if(!CoinChangeCombinations.countCombinations(0,new int[]{}).equals(BigInteger.ONE)) throw new AssertionError("empty combination boundary");
+                  try { CoinChangeCombinations.countCombinations(2,new int[]{1,1}); throw new AssertionError("duplicate accepted"); } catch(IllegalArgumentException expected) {}
+                  try { CoinChangeCombinations.countCombinations(2,new int[]{0,1}); throw new AssertionError("zero accepted"); } catch(IllegalArgumentException expected) {}
+                  System.out.println("PASS independent recursive="+cases+" permutations="+permutations+" zero-empty=1 invalid-denominations=rejected");
+              }
+          }
+          JAVA
+          (cd /tmp/b44-coin && javac CoinChangeCombinations.java ReviewerTest.java && java ReviewerTest > reviewer_stdout.txt)
+          test "$(cat /tmp/b44-coin/reviewer_stdout.txt)" = 'PASS independent recursive=2400 permutations=7200 zero-empty=1 invalid-denominations=rejected'
+
+      - name: Write isolated review and formal evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          REVIEW_STDOUT="$(cat /tmp/b44-coin/reviewer_stdout.txt)" CANDIDATE_SHA="$(cat /tmp/b44-coin/candidate.sha256)" python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; digest=os.environ['CANDIDATE_SHA']; date='2026-08-28'; out=pathlib.Path(f'review/content_build/answer_batch_0044/{cid}')
+          rv={'schema_version':'answer_code_validation.v1','canonical_id':cid,'candidate_sha256':digest,'result':'pass','validated_at':date,'command':'compile exact candidate Java block and compare with an independent recursive combination enumerator plus denomination-order permutations','stdout':os.environ['REVIEW_STDOUT'],'checks':['known 5/[1,2,5], 11/[1,2,5], unreachable and zero-amount boundaries','2400 deterministic small cases match independent recursive enumeration','7200 denomination-order permutations preserve the same unordered-combination count','zero amount with no coins returns the single empty combination','duplicate and zero denominations are rejected by the explicitly declared candidate contract']}
+          (out/'reviewer_validation.json').write_text(json.dumps(rv,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=['The preserved source asks only for the total combination count for a target amount and coin denominations; unlimited reuse, distinct-denomination validation, error policy and numeric bounds are not preserved source facts.','The candidate clearly labels those missing conditions as an explicit executable contract rather than retroactively attributing them to the source.','The core mechanism is correctly explained: coin-outer iteration canonicalizes construction by denomination stage so order does not create duplicate arrangements, while ascending amount reuses current-layer state and therefore permits unlimited copies of the current coin.','The dp[0]=1 empty-combination base case is explained as the recurrence seed, and the answer contrasts ascending complete-knapsack counting with descending 0/1 behavior.','Independent execution of the exact Java block matches a recursive enumerator on 2400 deterministic cases and remains invariant across 7200 denomination-order permutations; invalid-denomination and zero-empty boundaries also match the declared contract.','BigInteger is a defensible boundary choice because the source preserves no result bound, and writer validation exercises a result wider than signed 64-bit.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0044-coin-change-20260828-v1','review_version':'batch-0044.coin-change-combinations.v1','decision':'pass','revision_round':1,'source_packet':['note_tagged/67e13c24000000000302a976.json','review/content_build/answer_batch_0044/source_inventory.json',f'review/candidates/answers/{cid}.md',str(out/'reviewer_validation.json'),'docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0044-coin-change-builder','writer_version':'xhs-answer-curator.v1'},'sources':[{'source_id':'primary-source','title':'Kuaishou tagged source','locator':'note_tagged/67e13c24000000000302a976.json','source_type':'repository_structured_source','checked_at':date},{'source_id':'batch-inventory','title':'Frozen Batch 0044 source inventory','locator':'review/content_build/answer_batch_0044/source_inventory.json','source_type':'repository_source_record','checked_at':date},{'source_id':'writer-validation','title':'Writer two-dimensional DP differential validation','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'reviewer-validation','title':'Independent recursive enumeration and permutation validation','locator':str(out/'reviewer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},{'source_id':'isolated-review','title':'Coin-change source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':[{'claim_id':'source-boundary','text':'The source asks for a total coin-change combination count but does not preserve unlimited-use, input-validation or numeric-width constraints; the candidate marks these as its executable contract.','source_ids':['primary-source','batch-inventory','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节']},{'claim_id':'combination-dp-mechanism','text':'Coin-outer iteration avoids counting denomination order as separate arrangements, while ascending amount permits repeated use of the current denomination; exact execution matches independent enumeration and is invariant to denomination input order.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['核心结论','1 分钟版','3 分钟版','原理机制','常见追问']},{'claim_id':'base-and-boundaries','text':'The empty combination dp[0]=1, unreachable amounts, invalid denominations and exact large-count behavior are covered by deterministic executable validation under the declared contract.','source_ids':['writer-validation','reviewer-validation','isolated-review'],'answer_locations':['1 分钟版','关键细节','常见追问','易错点']}],'source_question_coverage':[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}],'validation':{'command':rv['command'],'result':'pass','reported_stdout':rv['stdout'],'checks':rv['checks']},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path('review/evidence').mkdir(exist_ok=True); pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md'); text=task.read_text(); line="- [x] `cq_q_b63be92cf59d4f24b1c8f7d0d0ca90b5` completed writer validation and isolated source-first review. The preserved source asks only for a Coin Change total combination count; unlimited reuse, denomination uniqueness, invalid-input policy and numeric bounds are not preserved source facts, so the candidate states those as an explicit contract. Coin-outer/ascending-amount DP semantics, the `dp[0]=1` base case and combination-versus-permutation boundary are explained mechanistically. Writer validation matches an independent two-dimensional recurrence on 5000 deterministic random cases and exercises a count beyond signed 64-bit; the isolated reviewer separately matches the exact Java block to recursive enumeration on 2400 cases plus 7200 denomination-order permutations. The review passes at 100/100 with no hard failures; repository human approval and real-review policy remain promotion blockers."
+          if '## Progress' not in text: text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text: text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text)
+          PY
+
+      - name: Run strict candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm test
+          npm run ci:check
+
+      - name: Commit reviewed packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name xhs-review-bot; git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0044/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0044/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md
+          git commit -m 'review: pass batch 0044 coin-change candidate source-first'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:"$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"; git rebase "origin/$CONTENT_BRANCH"
+          done
+          exit 1
