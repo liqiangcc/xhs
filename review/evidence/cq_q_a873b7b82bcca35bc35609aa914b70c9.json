@@ -1,0 +1,178 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_a873b7b82bcca35bc35609aa914b70c9",
+  "candidate_sha256": "0af14780dc5cde31cf31afc505e609481347a86bb1fc11a5dad0e2435a2bbd41",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0041-root-to-leaf-number-sum-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-caption",
+      "title": "Original interview caption preserving the root-to-leaf number-sum operation",
+      "locator": "note_desc/67dccdb2000000000900ce21.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "repository-tagged-question",
+      "title": "Structured root-to-leaf number-sum source Question",
+      "locator": "note_tagged/67dccdb2000000000900ce21.json#question_id=a873b7b82bcca35bc35609aa914b70c9",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "recoverability-review",
+      "title": "Batch 0041 pre-draft recoverability decision",
+      "locator": "review/content_build/answer_batch_0041/recoverability_review.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer deterministic Java validation",
+      "locator": "review/content_build/answer_batch_0041/cq_q_a873b7b82bcca35bc35609aa914b70c9/code_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent path-number Java reviewer fixture",
+      "locator": "review/content_build/answer_batch_0041/cq_q_a873b7b82bcca35bc35609aa914b70c9/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Root-to-leaf number-sum source-first isolated review",
+      "locator": "review/content_build/answer_batch_0041/cq_q_a873b7b82bcca35bc35609aa914b70c9/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The strongest surviving source asks to sum numbers formed by root-to-leaf paths and does not preserve node range, empty-tree, integer-width, overflow or API details.",
+      "source_ids": [
+        "repository-caption",
+        "repository-tagged-question",
+        "recoverability-review",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "declared-reference-contract",
+      "text": "Decimal node digits 0..9, empty tree returning 0, Java long and fail-fast overflow are explicit reference-contract choices rather than recovered source requirements.",
+      "source_ids": [
+        "repository-caption",
+        "repository-tagged-question",
+        "recoverability-review",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "reference-implementation",
+      "text": "Under the declared decimal-digit contract, independent and writer fixtures verify prefix accumulation, true-leaf semantics, asymmetric/leading-zero cases, input rejection and explicit overflow.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "a873b7b82bcca35bc35609aa914b70c9",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract candidate Java; javac RootToLeafNumberSum.java RootToLeafNumberSumReviewerTest.java && java RootToLeafNumberSumReviewerTest",
+    "result": "pass",
+    "reported_stdout": "PASS independent-empty single-zero two-leaf one-child-leaf-semantics asymmetric leading-zero negative-rejected multi-digit-rejected overflow-explicit",
+    "boundary_tests": [
+      {
+        "case": "two leaf paths 12 and 13",
+        "expected": "sum is 25",
+        "passed": true
+      },
+      {
+        "case": "node with exactly one child",
+        "expected": "non-leaf prefix continues to child and yields 12",
+        "passed": true
+      },
+      {
+        "case": "asymmetric 124 and 13",
+        "expected": "sum is 137",
+        "passed": true
+      },
+      {
+        "case": "leading zero paths 007 and 02",
+        "expected": "numeric sum is 9",
+        "passed": true
+      },
+      {
+        "case": "node outside 0..9",
+        "expected": "declared reference contract rejects input",
+        "passed": true
+      },
+      {
+        "case": "19-digit all-nine chain",
+        "expected": "long overflow is explicit",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0041-root-to-leaf-number-sum-20260827",
+    "review_version": "batch-0041.root-to-leaf-number-sum.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The strongest surviving Question preserves only the operation of summing numbers formed by root-to-leaf paths; it does not preserve node-value range, empty-tree result, integer type, overflow behavior or a concrete API signature.",
+      "The candidate clearly labels decimal digit values 0..9, empty-tree 0, Java long and exact-arithmetic overflow behavior as the reference implementation contract rather than source facts.",
+      "An independently written Java reviewer verifies true-leaf semantics on one-child/asymmetric trees, ordinary path-number accumulation, leading-zero numeric behavior, fail-closed non-digit input and explicit long overflow.",
+      "The prefix invariant current = prefix * 10 + digit correctly decomposes every complete root-to-leaf path exactly once under the declared decimal-digit contract.",
+      "The project section does not fabricate production ownership, scale, incidents or metrics."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
