@@ -453,7 +453,7 @@ function compileGo(code) {
 
 function parseSql(code) {
     const stripped = code.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
-    if (!/^(?:WITH\b[\s\S]+?\b(?:SELECT|INSERT|UPDATE|DELETE)\b|SELECT\b|INSERT\b|UPDATE\b|DELETE\b)/i.test(stripped)) {
+    if (!/^(?:WITH\b[\s\S]+?\b(?:SELECT|INSERT|UPDATE|DELETE)\b|SELECT\b|INSERT\b|UPDATE\b|DELETE\b|CREATE\s+TABLE\b)/i.test(stripped)) {
         return { ok: false, error: 'sql_statement_required' };
     }
     let depth = 0;

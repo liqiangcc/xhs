@@ -69,6 +69,7 @@ test('shell validation accepts bash/sh fences and rejects malformed scripts', ()
 
 test('SQL validation checks statement structure balance and placeholders', () => {
     assert.equal(parseSql('SELECT department_id, COUNT(*) FROM employee GROUP BY department_id').ok, true);
+    assert.equal(parseSql('CREATE TABLE students (student_id INTEGER PRIMARY KEY, name TEXT NOT NULL)').ok, true);
     assert.equal(parseSql('SELECT * FROM source_table WHERE id = <id>').error, 'sql_placeholder');
     assert.equal(parseSql('SELECT * FROM employee WHERE (id = 1').error, 'sql_unbalanced_parentheses');
 });
