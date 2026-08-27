@@ -1,0 +1,50 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_ac84e5db17665ebccb2f19fb39727e90",
+  "candidate_sha256": "36728bba7d5049da3752d8b71ab820338cf49557555c469d4e4866b21d9fb881",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "compile exact candidate Solution.java; compile/run independent Reviewer.java against O(n^2) code-point oracle",
+  "stdout": "PASS fixed=13 exhaustive=87381 random=10000 unicode-code-point=covered stale-last-seen=covered leftmost-tie=covered null=rejected",
+  "boundary_tests": [
+    {
+      "case": "empty, single-code-point, and all-duplicate inputs",
+      "expected": "return the leftmost longest valid substring, including empty string",
+      "passed": true
+    },
+    {
+      "case": "stale last-seen positions (abba, dvdf, tmmzuxt)",
+      "expected": "left boundary never moves backward and result matches oracle",
+      "passed": true
+    },
+    {
+      "case": "equal-length ties (abcba)",
+      "expected": "leftmost longest substring abc is preserved",
+      "passed": true
+    },
+    {
+      "case": "supplementary Unicode code points",
+      "expected": "supplementary characters are treated as one code point and results match oracle",
+      "passed": true
+    },
+    {
+      "case": "all strings of length 0..8 over a,b,c,U+1F600",
+      "expected": "87,381/87,381 outputs equal independent O(n^2) oracle",
+      "passed": true
+    },
+    {
+      "case": "10,000 seeded random strings over ASCII, CJK, Euro, and supplementary code points",
+      "expected": "all outputs equal independent O(n^2) oracle",
+      "passed": true
+    },
+    {
+      "case": "null input",
+      "expected": "explicit IllegalArgumentException under declared reference contract",
+      "passed": true
+    }
+  ],
+  "environment": {
+    "java": "OpenJDK 21.0.11",
+    "javac": "21.0.11"
+  }
+}
