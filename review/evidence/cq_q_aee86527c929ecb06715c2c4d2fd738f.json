@@ -1,0 +1,155 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_aee86527c929ecb06715c2c4d2fd738f",
+  "candidate_sha256": "c7f127269a5ceb5f5d52215078c7a8aebf86c3cb0a14083a64b5f8f216a4ea24",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0042-max-subarray-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "structured-note",
+      "title": "Structured interview note preserving max-subarray prompt",
+      "locator": "note_structured/659a2c620000000011033b5e.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0042 frozen source inventory",
+      "locator": "review/content_build/answer_batch_0042/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer brute-force max-subarray validation",
+      "locator": "review/content_build/answer_batch_0042/cq_q_aee86527c929ecb06715c2c4d2fd738f/max_subarray_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent prefix-sum interval oracle",
+      "locator": "review/content_build/answer_batch_0042/cq_q_aee86527c929ecb06715c2c4d2fd738f/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Max-subarray source-first isolated review",
+      "locator": "review/content_build/answer_batch_0042/cq_q_aee86527c929ecb06715c2c4d2fd738f/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source asks for the maximum sum of a contiguous subarray without freezing empty semantics, numeric width, returned interval, or language.",
+      "source_ids": [
+        "structured-note",
+        "source-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "For the declared non-empty int[] to long contract, Kadane matches independent prefix-sum interval enumeration across exhaustive bounded arrays, random arrays, all-negative cases and integer extremes.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "aee86527c929ecb06715c2c4d2fd738f",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "exhaustive/random prefix-sum interval oracle",
+    "result": "pass",
+    "reported_stdout": "PASS exhaustive=87380 random=30000 prefix-interval-oracle=match all-negative+int-extremes=covered empty+null=rejected",
+    "boundary_tests": [
+      {
+        "case": "all arrays length 1..8 over {-4,-1,2,5}",
+        "expected": "Kadane equals independently computed prefix-sum interval maximum",
+        "passed": true
+      },
+      {
+        "case": "30,000 seeded random arrays",
+        "expected": "candidate equals prefix interval oracle",
+        "passed": true
+      },
+      {
+        "case": "all-negative",
+        "expected": "largest negative element",
+        "passed": true
+      },
+      {
+        "case": "int extremes",
+        "expected": "long result avoids int addition overflow",
+        "passed": true
+      },
+      {
+        "case": "empty/null",
+        "expected": "explicit rejection",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0042-max-subarray-20260827-v1",
+    "review_version": "batch-0042.max-subarray.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "Source freezes only the maximum sum of a contiguous subarray; empty-input behavior, numeric width, returned indices and implementation language are not preserved.",
+      "Candidate clearly declares a non-empty Java int[] to long reference contract and does not present it as source fact.",
+      "The ending-at-i DP invariant and best-so-far aggregation correctly preserve non-empty semantics, including all-negative arrays where zero is not a valid answer.",
+      "Independent prefix-sum interval enumeration, structurally different from Kadane and the writer nested-sum oracle, matches the candidate on exhaustive bounded arrays and 30,000 seeded random arrays.",
+      "Time O(n), auxiliary space O(1), no-input-mutation, interval-output extension, and no-fabrication boundaries are explicit."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
