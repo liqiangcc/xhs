@@ -1,0 +1,199 @@
+name: Build Content Batch 0042 Max Subarray
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0042-max-subarray.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-max-subarray-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_aee86527c929ecb06715c2c4d2fd738f
+  SOURCE_QID: aee86527c929ecb06715c2c4d2fd738f
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'); const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='算法：找到最大连续子数组的和';
+          const raw=JSON.parse(fs.readFileSync('note_structured/659a2c620000000011033b5e.json','utf8'));
+          if(raw.questions?.[20]!==exact) throw new Error('max-subarray source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('ownership/type drifted');
+          if(!(ctx.source_questions||[]).some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('exact source question missing');
+          NODE
+
+      - name: Write source-bounded candidate and brute-force fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0042/$cid"; candidate="review/candidates/answers/$cid.md"; mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_aee86527c929ecb06715c2c4d2fd738f","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 找到最大连续子数组的和
+
+          ## 核心结论
+
+          这是经典的最大连续子数组问题。来源只保存“找到最大连续子数组的和”，没有规定空数组语义、整数位宽、是否返回区间或具体语言。下面采用一个可执行参考契约：输入是**非空** Java `int[]`，返回至少包含一个元素的连续子数组最大和，返回类型用 `long`。核心状态 `ending` 表示“必须以当前位置结尾的最大连续子数组和”，每到一个元素 `x`，只有两种选择：从 `x` 重新开始，或把 `x` 接到前一个最优结尾后面，因此 `ending = max(x, ending + x)`；全局答案 `best` 取遍历过程中最大的 `ending`。这就是 Kadane 算法，时间 O(n)，额外空间 O(1)。
+
+          ## 1 分钟版
+
+          - 状态不是“前 i 个数的最大和”，而是“**必须以 i 结尾**的最大和”；这样下一步只依赖一个值。
+          - 对当前 `x`：如果前面的 `ending` 是负贡献，就从 `x` 重启；否则继续接上，所以 `ending = max(x, ending + x)`。
+          - `best = max(best, ending)` 保存所有结尾位置里见过的最好答案。
+          - 必须用第一个元素初始化 `ending` 和 `best`，不能初始化为 0，否则全负数组会错误返回 0。
+          - 本参考 API 用 `int[]` 输入、`long` 累加；空数组在来源中没有定义，这里显式拒绝。
+
+          ## 3 分钟版
+
+          例如 `[-2,1,-3,4,-1,2,1,-5,4]`。扫描到 `4` 时，之前以 `-3` 结尾的最优和是负数，所以重新从 `4` 开始；随后接上 `-1,2,1` 得到 6。再接 `-5` 只剩 1，因此全局最佳仍是 6，对应连续子数组 `[4,-1,2,1]`。
+
+          ```java
+          public final class Solution {
+              private Solution() {}
+
+              public static long maxSubarraySum(int[] nums) {
+                  if (nums == null) {
+                      throw new NullPointerException("nums");
+                  }
+                  if (nums.length == 0) {
+                      throw new IllegalArgumentException("reference contract requires a non-empty array");
+                  }
+
+                  long ending = nums[0];
+                  long best = nums[0];
+                  for (int i = 1; i < nums.length; i++) {
+                      long x = nums[i];
+                      ending = Math.max(x, ending + x);
+                      best = Math.max(best, ending);
+                  }
+                  return best;
+              }
+          }
+          ```
+
+          为什么这个局部状态足够？任何以位置 `i` 结尾的连续子数组，要么只包含 `nums[i]`，要么等于“某个以 `i-1` 结尾的连续子数组 + nums[i]”。若选择后者，显然应该接在以 `i-1` 结尾的最大和后面，因此不需要保存更早的完整区间集合。
+
+          ## 关键细节
+
+          - **连续**：不能跳元素。若题目问的是“子序列最大和”，模型不同。
+          - **全负数组**：例如 `[-5,-2,-7]` 的答案是 `-2`，不是 0；所以必须以首元素初始化。
+          - **空数组**：来源没有定义。参考实现选择抛 `IllegalArgumentException`，不把 0、负无穷或 Optional 等某一种语义冒充原题要求。
+          - **返回类型**：来源没给数据范围。参考实现输入 `int[]`、返回 `long`；Java 数组长度受 `int` 下标约束，因此即使所有元素都是 `Integer.MAX_VALUE`，任一可实际表示数组的数学总和仍可放进 `long`。
+          - **不修改输入**：算法只读数组。
+          - **复杂度**：每个元素访问一次，时间 O(n)；只维护 `ending/best` 两个状态，额外空间 O(1)。
+          - **如果还要返回区间**：再维护当前候选起点、最佳左右端点即可，状态转移不变；但来源只要求“和”，本答案不擅自扩大输出。
+
+          ## 原理机制
+
+          Kadane 算法是一个被压缩到常数空间的动态规划。定义 `dp[i]` 为“必须以 i 结尾的最大连续子数组和”，转移是 `dp[i] = max(nums[i], dp[i-1] + nums[i])`。最终答案是 `max(dp[i])`，因为全局最优连续子数组一定有一个右端点。
+
+          `dp[i]` 只依赖 `dp[i-1]`，所以数组可以压成变量 `ending`。这个状态同时解释了“为什么负前缀要丢掉”：若 `ending < 0`，对任何当前值 `x`，`ending + x < x`，保留这个前缀只会让以当前位置结尾的候选更差。
+
+          ## 项目经验版
+
+          来源没有提供用户在真实项目中使用 Kadane 或连续区间优化的经历，不能虚构。工程里如果是时间序列/收益区间等类似问题，我会先确认是否真的要求连续、空区间是否允许、数值是否可能溢出以及是否要返回边界；这些契约确定后再选择 Kadane、前缀和或其他模型，并用全负、单元素和极值样本做回归。
+
+          ## 常见追问
+
+          - 问：为什么不能把 `best` 初始化成 0？答：因为参考契约要求子数组非空；全负数组的最大和仍是某个负元素，初始化 0 会凭空允许空子数组。
+          - 问：为什么负的 `ending` 可以直接丢掉？答：它加到任何后继元素都会让和更小，不可能帮助构成更优的“以当前结尾”候选。
+          - 问：时间复杂度为什么是 O(n)？答：每个元素只参与一次常数时间状态更新，没有嵌套枚举区间。
+          - 问：如果要返回最大区间本身呢？答：在选择“从当前元素重启”时记录新起点，在 `best` 更新时冻结左右端点即可。
+          - 问：如果允许空子数组呢？答：契约会改变；通常可以把 0 纳入候选，使全负输入返回 0，但这不是当前来源已经说明的语义。
+          - 问：为什么用 `long` 返回？答：这是参考实现为 Java `int[]` 做的防溢出选择；来源没有给数值范围，所以必须把它标成实现契约而不是题目事实。
+
+          ## 易错点
+
+          - 把“连续子数组”写成可以跳元素的子序列。
+          - `best=0` 导致全负数组错误。
+          - 只更新 `ending`，最后直接返回它，漏掉更早出现的全局最优。
+          - 题目只要和，却未经说明改变为空数组返回 0 或额外输出区间。
+          - 用 `int` 累加而没有数据范围，可能发生溢出。
+          EOF
+
+          cat > "$out/MaxSubarrayWriterValidation.java" <<'JAVA'
+          import java.util.*;
+          public final class MaxSubarrayWriterValidation {
+              static long brute(int[] a){long best=Long.MIN_VALUE;for(int i=0;i<a.length;i++){long s=0;for(int j=i;j<a.length;j++){s+=a[j];best=Math.max(best,s);}}return best;}
+              static void check(int[] a){long got=Solution.maxSubarraySum(a),want=brute(a);if(got!=want)throw new AssertionError(Arrays.toString(a)+" got="+got+" want="+want);}
+              static long exhaustive=0;
+              static void gen(int[] a,int i,int[] vals){if(i==a.length){check(a);exhaustive++;return;}for(int v:vals){a[i]=v;gen(a,i+1,vals);}}
+              public static void main(String[] args){
+                  check(new int[]{-2,1,-3,4,-1,2,1,-5,4}); check(new int[]{-5,-2,-7}); check(new int[]{0}); check(new int[]{Integer.MAX_VALUE,Integer.MAX_VALUE}); check(new int[]{Integer.MIN_VALUE});
+                  int[] vals={-3,-1,0,2,4};for(int n=1;n<=7;n++)gen(new int[n],0,vals);
+                  Random r=new Random(0x4B4144414EL);for(int t=0;t<20000;t++){int n=1+r.nextInt(80),a[]=new int[n];for(int i=0;i<n;i++)a[i]=r.nextInt(2001)-1000;check(a);}
+                  try{Solution.maxSubarraySum(new int[0]);throw new AssertionError("empty accepted");}catch(IllegalArgumentException expected){}
+                  try{Solution.maxSubarraySum(null);throw new AssertionError("null accepted");}catch(NullPointerException expected){}
+                  System.out.println("PASS fixed=5 exhaustive="+exhaustive+" random=20000 all-negative+zero+int-extremes=covered empty+null=rejected brute-oracle=match");
+              }
+          }
+          JAVA
+          node <<'NODE'
+          const fs=require('fs');const md=fs.readFileSync(`review/candidates/answers/${process.env.CANONICAL_ID}.md`,'utf8');const block=md.match(/```java\n([\s\S]*?)\n```/);if(!block||!block[1].includes('maxSubarraySum'))throw new Error('candidate code missing');fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java "$out/MaxSubarrayWriterValidation.java"
+          stdout="$(java -cp /tmp MaxSubarrayWriterValidation)"; echo "$stdout"; grep -E '^PASS fixed=5 exhaustive=[0-9]+ random=20000 all-negative\+zero\+int-extremes=covered empty\+null=rejected brute-oracle=match$' <<<"$stdout"; echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0042/$cid"
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`,candidate=`review/candidates/answers/${cid}.md`;const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          const tests=[{case:'canonical sample',expected:'6',passed:true},{case:'all-negative',expected:'largest negative element, not zero',passed:true},{case:'all arrays length 1..7 over {-3,-1,0,2,4}',expected:'Kadane equals O(n^2) brute force',passed:true},{case:'20,000 seeded random arrays',expected:'Kadane equals brute force',passed:true},{case:'integer extremes',expected:'long accumulation preserves int-pair sums',passed:true},{case:'empty/null',expected:'explicit rejection',passed:true}];
+          fs.writeFileSync(`${out}/max_subarray_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate; exhaustive/random brute-force oracle',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'structured-note',title:'Structured interview note 659a2c620000000011033b5e',locator:'note_structured/659a2c620000000011033b5e.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_source_record',checked_at:date},{source_id:'writer-validation',title:'Max-subarray brute-force Java fixture',locator:`${out}/max_subarray_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source only asks for the maximum sum of a contiguous subarray; empty-input semantics, numeric width, returned indices, and language are not source-frozen.',source_ids:['structured-note','source-inventory'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'kadane',text:'Under the explicit non-empty int[] to long contract, ending=max(x,ending+x) and best=max(best,ending) matches O(n^2) brute force over exhaustive bounded arrays and seeded random arrays, including all-negative and integer-extreme boundaries.',source_ids:['writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed',candidate_sha256:sha},null,2)+'\n');
+          NODE
+
+      - name: Writer-side repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate and writer packet with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0042/$CANONICAL_ID/MaxSubarrayWriterValidation.java" "review/content_build/answer_batch_0042/$CANONICAL_ID/max_subarray_validation.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name xhs-content-builder;git config user.email '43640935+liqiangcc@users.noreply.github.com';git commit -m 'content: stage batch 0042 max-subarray candidate'
+          for attempt in 1 2 3;do git fetch origin "$CONTENT_BRANCH";if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi;if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi;sleep 5;done;exit 1
