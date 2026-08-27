@@ -1,0 +1,185 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_bd698ddf9e43e3ba654176921e45bb21",
+  "candidate_sha256": "996f784011d6cfd673d3006bdc9f4ab0b07171495ff311a9d9f4f17ec535ab6a",
+  "checked_at": "2026-08-28",
+  "writer": {
+    "writer_id": "content-batch-0046-fibonacci-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "batch-inventory",
+      "title": "Batch 0046 source-first inventory",
+      "locator": "review/content_build/answer_batch_0046/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "raw-interview",
+      "title": "Didi Java backend interview raw Question list",
+      "locator": "question/677632b5000000000b016b05_desc_questions.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "jdk-concurrent",
+      "title": "Java SE 21 java.util.concurrent package specification",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/package-summary.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "jdk-biginteger",
+      "title": "Java SE 21 BigInteger API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/BigInteger.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Exact three-thread Fibonacci compile/stress validation",
+      "locator": "review/content_build/answer_batch_0046/cq_q_bd698ddf9e43e3ba654176921e45bb21/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Three-thread Fibonacci source-first isolated review",
+      "locator": "review/content_build/answer_batch_0046/cq_q_bd698ddf9e43e3ba654176921e45bb21/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved interview task asks only for three threads alternating Fibonacci output; its source context is Java backend and it does not preserve term count, start convention, method signature, cancellation contract, or performance target.",
+      "source_ids": [
+        "batch-inventory",
+        "raw-interview"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "synchronization",
+      "text": "The candidate uses three Java Semaphore instances as an explicit baton ring so only the current slot advances shared Fibonacci/output state; the Java concurrency specification provides the synchronization/memory-consistency boundary used by the design.",
+      "source_ids": [
+        "jdk-concurrent",
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "numeric-domain",
+      "text": "BigInteger supplies arbitrary-precision integer addition so long Fibonacci examples are not constrained by int/long overflow in this candidate.",
+      "source_ids": [
+        "jdk-biginteger",
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "behavior",
+      "text": "The exact candidate compiles on Java 21 and repeatedly emits exact Fibonacci values with thread slot index mod 3, completes boundary cases including 200 terms, and terminates all workers.",
+      "source_ids": [
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "bd698ddf9e43e3ba654176921e45bb21",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact Java candidate; javac --release 21; timeout 45s java ThreeThreadFibonacciTest",
+    "result": "pass",
+    "reported_stdout": "PASS repeats=300 terms=100 round-robin=T0,T1,T2 fibonacci=exact BigInteger long-case=200 zero-case=empty negative=rejected",
+    "checks": [
+      "300 repeated 100-term runs complete without deadlock",
+      "thread slot is exactly index mod 3",
+      "Fibonacci values match independent BigInteger oracle",
+      "0/1/2/3/4/200 term boundaries pass",
+      "negative term count rejected"
+    ],
+    "boundary_tests": [
+      {
+        "case": "300 x 100-term repeated runs",
+        "expected": "exact values and T0/T1/T2 ownership without hang",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "0,1,2,3,4,200 terms",
+        "expected": "complete exact prefix",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "negative terms",
+        "expected": "reject invalid candidate API input",
+        "actual": "IllegalArgumentException",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0046-fibonacci-20260828-v1",
+    "review_version": "batch-0046.three-thread-fibonacci.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer keeps the exact source requirement—three threads alternating Fibonacci output—separate from adopted API details such as term count and F(0)=0/F(1)=1.",
+      "Java is grounded in the source interview position rather than invented from the short Question wording.",
+      "The semaphore baton establishes deterministic T0/T1/T2 ownership without sleep, busy waiting, or scheduler assumptions.",
+      "Termination is explicit: after completion the baton is propagated so every blocked worker can observe the stop condition and exit.",
+      "The exact Java 21 candidate passes repeated compile/stress validation, round-robin ownership checks, an independent Fibonacci oracle, and boundary cases.",
+      "The answer does not fabricate production use or claim that three threads improve this inherently sequential recurrence."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
