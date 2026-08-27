@@ -1,0 +1,47 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_b4d7dd86ede4f8fda6a9b027026545be",
+  "candidate_sha256": "d275d0847ae33172ef4401c40d17b8a3cd243059f7a7901bcda8ef1a5b1a7397",
+  "result": "pass",
+  "validated_at": "2026-08-28",
+  "command": "extract exact SQL candidate and execute independent SQLite adversarial fixtures",
+  "stdout": "PASS independent-exact-sql ordered-top2 unrelated-counterexample null-counterexample no-b2 one-match empty-table",
+  "checks": [
+    "global all-row guard is independent of result-row filter",
+    "ascending c ordering happens before top-two truncation",
+    "NULL counterexample is explicit",
+    "zero, one-match and empty-table sets are safe"
+  ],
+  "boundary_tests": [
+    {
+      "case": "all a=1 with three b=2 rows and distinct c",
+      "expected": "returns the two lowest-c rows under declared ASC contract",
+      "passed": true
+    },
+    {
+      "case": "a violating row whose b is not 2",
+      "expected": "global guard blocks every result",
+      "passed": true
+    },
+    {
+      "case": "a is NULL",
+      "expected": "NULL is a counterexample under declared all-equal contract",
+      "passed": true
+    },
+    {
+      "case": "no b=2 rows",
+      "expected": "returns zero rows",
+      "passed": true
+    },
+    {
+      "case": "only one matching b=2 row",
+      "expected": "returns one row",
+      "passed": true
+    },
+    {
+      "case": "empty table",
+      "expected": "returns zero rows",
+      "passed": true
+    }
+  ]
+}

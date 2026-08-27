@@ -1,0 +1,181 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_b4d7dd86ede4f8fda6a9b027026545be",
+  "candidate_sha256": "d275d0847ae33172ef4401c40d17b8a3cd243059f7a7901bcda8ef1a5b1a7397",
+  "checked_at": "2026-08-28",
+  "writer": {
+    "writer_id": "content-batch-0044-conditional-sql-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "primary-source",
+      "title": "Tencent PCG tagged source",
+      "locator": "note_tagged/67eea5c2000000000e0060a2.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "batch-inventory",
+      "title": "Frozen Batch 0044 source inventory",
+      "locator": "review/content_build/answer_batch_0044/source_inventory.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer exact-SQL deterministic validation",
+      "locator": "review/content_build/answer_batch_0044/cq_q_b4d7dd86ede4f8fda6a9b027026545be/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent exact-SQL adversarial validation",
+      "locator": "review/content_build/answer_batch_0044/cq_q_b4d7dd86ede4f8fda6a9b027026545be/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Conditional SQL source-first isolated review",
+      "locator": "review/content_build/answer_batch_0044/cq_q_b4d7dd86ede4f8fda6a9b027026545be/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source requires a global all-tuples a='1' condition, then b='2' filtering, c ordering and a two-row limit; direction, NULL policy, tie-breaking and dialect are not preserved source facts.",
+      "source_ids": [
+        "primary-source",
+        "batch-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "universal-guard",
+      "text": "NOT EXISTS of a counterexample prevents output if any row has a non-1 or NULL a value, even when that row is not a returned b=2 row.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "top-two-behavior",
+      "text": "When the global guard passes, exact-candidate fixtures confirm b=2 filtering, ascending-c ordering and top-two truncation, including zero, one-match and empty-table boundaries.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "b4d7dd86ede4f8fda6a9b027026545be",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "extract exact SQL candidate and execute independent SQLite adversarial fixtures",
+    "result": "pass",
+    "reported_stdout": "PASS independent-exact-sql ordered-top2 unrelated-counterexample null-counterexample no-b2 one-match empty-table",
+    "checks": [
+      "global all-row guard is independent of result-row filter",
+      "ascending c ordering happens before top-two truncation",
+      "NULL counterexample is explicit",
+      "zero, one-match and empty-table sets are safe"
+    ],
+    "boundary_tests": [
+      {
+        "case": "all a=1 with three b=2 rows and distinct c",
+        "expected": "returns the two lowest-c rows under declared ASC contract",
+        "passed": true
+      },
+      {
+        "case": "a violating row whose b is not 2",
+        "expected": "global guard blocks every result",
+        "passed": true
+      },
+      {
+        "case": "a is NULL",
+        "expected": "NULL is a counterexample under declared all-equal contract",
+        "passed": true
+      },
+      {
+        "case": "no b=2 rows",
+        "expected": "returns zero rows",
+        "passed": true
+      },
+      {
+        "case": "only one matching b=2 row",
+        "expected": "returns one row",
+        "passed": true
+      },
+      {
+        "case": "empty table",
+        "expected": "returns zero rows",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0044-conditional-sql-20260828-v2",
+    "review_version": "batch-0044.conditional-sql.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The preserved source requires a global all-tuples a='1' gate before b='2' filtering, c ordering and a two-row limit, but does not preserve direction, NULL semantics, tie-breaking or SQL dialect.",
+      "The candidate correctly expresses the universal condition as NOT EXISTS of a counterexample and keeps the global gate independent from the returned-row predicate.",
+      "The explicit a IS NULL disjunct prevents three-valued-logic leakage from using only a <> '1'.",
+      "Independent execution of the exact candidate covers top-two ordering, an unrelated violating row, NULL, zero matches, one match and the empty table.",
+      "ASC, NULL treatment and dialect are labeled answer-side choices; no nonexistent tie-break key is fabricated."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
