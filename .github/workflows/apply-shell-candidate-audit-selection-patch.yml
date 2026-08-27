@@ -1,0 +1,66 @@
+name: Apply Shell Candidate Audit Selection Patch
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - scripts/content/patch_shell_candidate_audit_selection_20260827.py
+      - .github/workflows/apply-shell-candidate-audit-selection-patch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-shell-candidate-audit-selection-patch
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Load and apply patch helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master --depth=1
+          git show origin/master:scripts/content/patch_shell_candidate_audit_selection_20260827.py > /tmp/patch.py
+          python3 /tmp/patch.py
+      - name: Run regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test test/answer_code_validation.test.js test/answer_candidate.test.js
+          npm test
+          npm run ci:check
+      - name: Commit safely
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name xhs-maintenance-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add scripts/lib/answer_quality.js test/answer_candidate.test.js
+          git commit -m 'fix: select shell coding candidates for strict audit'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_SHA"
+          git push origin "HEAD:$CONTENT_BRANCH"
