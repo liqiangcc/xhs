@@ -42,12 +42,12 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          p=Path('scripts/lib/answer_quality.js')
-          s=p.read_text(encoding='utf-8')
-          old="""        const filePath = path.join(tempDir, 'answer.go');
+          p = Path('scripts/lib/answer_quality.js')
+          s = p.read_text(encoding='utf-8')
+          old = """        const filePath = path.join(tempDir, 'answer.go');
         fs.writeFileSync(filePath, code, 'utf8');
         const result = childProcess.spawnSync('go', ['test', filePath], {"""
-          new="""        const filePath = path.join(tempDir, 'answer.go');
+          new = """        const filePath = path.join(tempDir, 'answer.go');
         const source = /^\\s*package\\s+[A-Za-z_]\\w*/m.test(code)
             ? code
             : `package main\\n\\n${code}\\n`;
@@ -55,36 +55,38 @@ jobs:
         const result = childProcess.spawnSync('go', ['test', filePath], {"""
           if old not in s:
               raise SystemExit('compileGo write block drifted')
-          s=s.replace(old,new,1)
+          s = s.replace(old, new, 1)
 
-          old_export='    validateShell,\n    parseSql,'
-          new_export='    validateShell,\n    compileGo,\n    parseSql,'
+          old_export = '    validateShell,\n    parseSql,'
+          new_export = '    validateShell,\n    compileGo,\n    parseSql,'
           if old_export not in s:
               raise SystemExit('module export anchor drifted')
-          s=s.replace(old_export,new_export,1)
-          p.write_text(s,encoding='utf-8')
+          s = s.replace(old_export, new_export, 1)
+          p.write_text(s, encoding='utf-8')
 
-          t=Path('test/answer_code_validation.test.js')
-          x=t.read_text(encoding='utf-8')
-          old_import="const { compileJava, compileC, compileCpp, validateShell, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
-          new_import="const { compileJava, compileC, compileCpp, validateShell, compileGo, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
+          t = Path('test/answer_code_validation.test.js')
+          x = t.read_text(encoding='utf-8')
+          old_import = "const { compileJava, compileC, compileCpp, validateShell, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
+          new_import = "const { compileJava, compileC, compileCpp, validateShell, compileGo, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
           if old_import not in x:
               raise SystemExit('answer code validation import drifted')
-          x=x.replace(old_import,new_import,1)
+          x = x.replace(old_import, new_import, 1)
 
-          marker="\ntest('shell validation accepts bash/sh fences and rejects malformed scripts', () => {"
-          test_block="""
-
-test('Go validation compiles full files and function-only answer snippets', () => {
-    assert.equal(compileGo('package main\\nfunc add(a, b int) int { return a + b }').ok, true);
-    assert.equal(compileGo('func add(a, b int) int { return a + b }').ok, true);
-    assert.equal(compileGo('func add(a, b int) int { return a + }').ok, false);
-});
-"""
+          marker = "\ntest('shell validation accepts bash/sh fences and rejects malformed scripts', () => {"
+          lines = [
+              '',
+              "test('Go validation compiles full files and function-only answer snippets', () => {",
+              "    assert.equal(compileGo('package main\\nfunc add(a, b int) int { return a + b }').ok, true);",
+              "    assert.equal(compileGo('func add(a, b int) int { return a + b }').ok, true);",
+              "    assert.equal(compileGo('func add(a, b int) int { return a + }').ok, false);",
+              '});',
+              '',
+          ]
+          test_block = '\n'.join(lines)
           if marker not in x:
               raise SystemExit('Go regression insertion marker drifted')
-          x=x.replace(marker,test_block+marker,1)
-          t.write_text(x,encoding='utf-8')
+          x = x.replace(marker, test_block + marker, 1)
+          t.write_text(x, encoding='utf-8')
           PY
 
       - name: Run focused and repository regressions
