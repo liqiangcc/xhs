@@ -1,0 +1,39 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_b4585610b9994d240a2ec669176946c4",
+  "candidate_sha256": "fff623aaa8338a354999131939fb0cd90d60c5891747b586f38c4242b69124ab",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "compile exact Java candidate and differential-test against independent BigInteger Bellman-Ford oracle",
+  "stdout": "PASS fixed=covered zero-parallel-selfloop-unreachable=covered sentinel-boundary=covered random-small=20000 random-near-max=5000 negative-edge=rejected oracle=bellman-ford-bigint",
+  "boundary_tests": [
+    {
+      "case": "fixed weighted graph plus zero-weight/self-loop/parallel/unreachable boundaries",
+      "expected": "exact distances match independent Bellman-Ford oracle",
+      "passed": true
+    },
+    {
+      "case": "Long.MAX_VALUE sentinel, Long.MAX_VALUE-1 finite value and overflow-path competition",
+      "expected": "reserved sentinel is never emitted as a representable finite path while Long.MAX_VALUE-1 remains representable",
+      "passed": true
+    },
+    {
+      "case": "20,000 seeded small nonnegative directed graphs",
+      "expected": "all distances equal independent Bellman-Ford oracle",
+      "passed": true
+    },
+    {
+      "case": "5,000 seeded near-long-maximum graphs",
+      "expected": "all representable/sentinel results equal BigInteger Bellman-Ford oracle",
+      "passed": true
+    },
+    {
+      "case": "negative edge",
+      "expected": "declared Dijkstra reference contract rejects unsupported input",
+      "passed": true
+    }
+  ],
+  "environment": {
+    "java": "OpenJDK 21"
+  }
+}
