@@ -36,13 +36,28 @@ function sha256(value) {
 }
 
 function inferAnswerType(questions = [], canonical = {}) {
-    const joined = questions.map((item) => item.question_type || '').join(' ').toLowerCase();
+    const sourceTypes = questions.map((item) => item.question_type || '').join(' ').toLowerCase();
     const title = String(canonical.canonical_title || '').toLowerCase();
-    if (/coding|算法手撕|sql/.test(joined)) return 'coding';
-    if (/项目|project|故障|线上排障/.test(joined + title)) return 'project';
-    if (/行为|behavior|自我介绍|职业|冲突|沟通/.test(joined + title)) return 'behavior';
-    if (/场景|system|设计|架构|方案/.test(joined + title)) return 'scenario';
-    if (/原理|mechanism|流程|过程|底层/.test(joined + title)) return 'mechanism';
+
+    // Source taxonomy is stronger evidence than title keywords. In
+    // particular, technical wording such as "无冲突" must not be
+    // mistaken for a behavioral-interview question merely because it
+    // contains the substring "冲突".
+    if (/coding|算法手撕|sql/.test(sourceTypes)) return 'coding';
+    if (/场景|scenario|system|设计|架构|方案/.test(sourceTypes)) return 'scenario';
+    if (/行为|behavior/.test(sourceTypes)) return 'behavior';
+    if (/项目|project/.test(sourceTypes)) return 'project';
+    if (/原理|mechanism|under.?the.?hood|流程|过程|底层/.test(sourceTypes)) return 'mechanism';
+    if (/concept|八股文/.test(sourceTypes)) return 'concept';
+
+    // Fall back to title semantics only when source taxonomy is absent
+    // or unrecognized. Keep behavioral phrases narrow enough that
+    // ordinary technical "conflict" terminology is not captured.
+    if (/算法|sql|手撕/.test(title)) return 'coding';
+    if (/自我介绍|职业规划|离职|行为面|团队冲突|同事冲突|上下级冲突|沟通经历/.test(title)) return 'behavior';
+    if (/项目|线上故障|事故复盘/.test(title)) return 'project';
+    if (/场景|系统设计|架构|方案|如何设计|迁移|扩容|高并发/.test(title)) return 'scenario';
+    if (/原理|流程|过程|底层|源码/.test(title)) return 'mechanism';
     return 'concept';
 }
 
@@ -299,41 +314,138 @@ function validateAnswerEvidence(evidence, candidate, context, config) {
 
 function extractCodeBlocks(content) {
     const blocks = [];
-    const regex = /(?:```|~~~)(java|sql|javascript|js)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
+    const regex = /(?:```|~~~)(java|sql|javascript|js|go|c|cpp|c\+\+|cc|cxx|bash|sh|shell)\s*\n([\s\S]*?)\n(?:```|~~~)/gi;
     let match;
-    while ((match = regex.exec(String(content)))) {
-        blocks.push({ language: match[1].toLowerCase(), code: match[2] });
-    }
+    while ((match = regex.exec(content))) blocks.push({ language: match[1].toLowerCase(), code: match[2].trim() });
     return blocks;
 }
 
 function compileJava(code) {
-    const hasCompleteClass = /\b(?:public\s+)?(?:final\s+|abstract\s+)?class\s+[A-Za-z_$][\w$]*/.test(code)
-        || /\b(?:public\s+)?(?:sealed\s+)?(?:interface|record|enum)\s+[A-Za-z_$][\w$]*/.test(code);
-    if (!hasCompleteClass) {
-        return { ok: false, error: 'java_class_required' };
-    }
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-javac-'));
     try {
-        const publicMatch = code.match(/\bpublic\s+(?:final\s+|abstract\s+)?(?:class|interface|record|enum)\s+([A-Za-z_$][\w$]*)/);
-        const fallbackMatch = code.match(/\b(?:class|interface|record|enum)\s+([A-Za-z_$][\w$]*)/);
-        const className = (publicMatch || fallbackMatch || [])[1] || 'Solution';
+        const className = (code.match(/public\s+(?:final\s+)?class\s+([A-Za-z_$][\w$]*)/) || code.match(/class\s+([A-Za-z_$][\w$]*)/) || [])[1];
+        if (!className) return { ok: false, error: 'java_class_required' };
         const filePath = path.join(tempDir, `${className}.java`);
         fs.writeFileSync(filePath, code, 'utf8');
-        const result = childProcess.spawnSync('javac', [filePath], { encoding: 'utf8', timeout: 20000 });
-        return { ok: result.status === 0, error: result.status === 0 ? null : (result.stderr || result.stdout || 'javac_failed').slice(0, 4000) };
+        const result = childProcess.spawnSync('javac', ['-encoding', 'UTF-8', '-d', tempDir, filePath], { encoding: 'utf8', timeout: 15000 });
+        return { ok: result.status === 0, error: result.status === 0 ? null : (result.stderr || result.stdout || 'javac_failed').slice(0, 2000) };
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
 }
 
-function checkJavaScript(code) {
+function compileC(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-gcc-'));
+    try {
+        const filePath = path.join(tempDir, 'candidate.c');
+        const objectPath = path.join(tempDir, 'candidate.o');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('gcc', ['-std=c17', '-Wall', '-Wextra', '-Werror', '-pedantic', '-c', filePath, '-o', objectPath], {
+            encoding: 'utf8',
+            timeout: 15000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'gcc_not_available' };
+        if (result.error) return { ok: false, error: 'c_compile_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'c_compile_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 2000),
+            };
+        }
+        return { ok: true };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+function compileCpp(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-gpp-'));
+    try {
+        const filePath = path.join(tempDir, 'candidate.cpp');
+        const objectPath = path.join(tempDir, 'candidate.o');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('g++', ['-std=c++17', '-Wall', '-Wextra', '-Werror', '-pedantic', '-c', filePath, '-o', objectPath], {
+            encoding: 'utf8',
+            timeout: 15000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'g++_not_available' };
+        if (result.error) return { ok: false, error: 'cpp_compile_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'cpp_compile_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 2000),
+            };
+        }
+        return { ok: true };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+function parseJavaScript(code) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-node-check-'));
     try {
         const filePath = path.join(tempDir, 'candidate.mjs');
         fs.writeFileSync(filePath, code, 'utf8');
-        const result = childProcess.spawnSync(process.execPath, ['--check', filePath], { encoding: 'utf8', timeout: 15000 });
-        return { ok: result.status === 0, error: result.status === 0 ? null : (result.stderr || result.stdout || 'node_check_failed').slice(0, 2000) };
+        childProcess.execFileSync(process.execPath, ['--check', filePath], { stdio: 'pipe' });
+        return { ok: true };
+    } catch (error) {
+        return { ok: false, error: String(error.stderr || error.message || 'javascript_syntax_error').trim() };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+
+
+function validateShell(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-shell-'));
+    try {
+        const filePath = path.join(tempDir, 'candidate.sh');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('bash', ['-n', filePath], {
+            encoding: 'utf8',
+            timeout: 10000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'bash_not_available' };
+        if (result.error) return { ok: false, error: 'shell_parse_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'shell_parse_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 1200),
+            };
+        }
+        return { ok: true };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+
+function compileGo(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-go-'));
+    try {
+        const filePath = path.join(tempDir, 'answer.go');
+        const source = /^\s*package\s+[A-Za-z_]\w*/m.test(code)
+            ? code
+            : `package main\n\n${code}\n`;
+        fs.writeFileSync(filePath, source, 'utf8');
+        const result = childProcess.spawnSync('go', ['test', filePath], {
+            encoding: 'utf8',
+            timeout: 30000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'go_not_available' };
+        if (result.error) return { ok: false, error: 'go_compile_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'go_compile_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 1200),
+            };
+        }
+        return { ok: true };
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -341,7 +453,7 @@ function checkJavaScript(code) {
 
 function parseSql(code) {
     const stripped = code.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
-    if (!/^(?:WITH\b[\s\S]+?\b(?:SELECT|INSERT|UPDATE|DELETE)\b|SELECT\b|INSERT\b|UPDATE\b|DELETE\b)/i.test(stripped)) {
+    if (!/^(?:WITH\b[\s\S]+?\b(?:SELECT|INSERT|UPDATE|DELETE)\b|SELECT\b|INSERT\b|UPDATE\b|DELETE\b|CREATE\s+TABLE\b)/i.test(stripped)) {
         return { ok: false, error: 'sql_statement_required' };
     }
     let depth = 0;
@@ -397,7 +509,19 @@ function validateSpecializedCandidate(candidate, evidence, context) {
             errors.push({ error: 'coding_block_required' });
         }
         for (const block of blocks) {
-            const validation = block.language === 'java' ? compileJava(block.code) : block.language === 'sql' ? parseSql(block.code) : checkJavaScript(block.code);
+            const validation = block.language === 'java'
+                ? compileJava(block.code)
+                : block.language === 'sql'
+                    ? parseSql(block.code)
+                    : block.language === 'go'
+                        ? compileGo(block.code)
+                        : block.language === 'c'
+                            ? compileC(block.code)
+                            : ['cpp', 'c++', 'cc', 'cxx'].includes(block.language)
+                                ? compileCpp(block.code)
+                                : ['bash', 'sh', 'shell'].includes(block.language)
+                                    ? validateShell(block.code)
+                                    : parseJavaScript(block.code);
             if (!validation.ok) {
                 addHardFailure(hardFailures, /placeholder|required/.test(validation.error || '') ? 'placeholder_implementation' : 'unrunnable_implementation');
                 errors.push({ error: `${block.language}_validation_failed`, detail: validation.error });
@@ -526,199 +650,264 @@ function auditOneCandidate(filePath, options = {}) {
 }
 
 function readSetIds(setPath) {
-    const payload = readJson(setPath);
-    return Array.isArray(payload) ? payload : payload.canonical_ids || payload.items || [];
+    if (!setPath) return null;
+    const resolved = path.resolve(setPath);
+    const value = resolved.endsWith('.jsonl') ? readJsonl(resolved) : readJson(resolved);
+    const rows = Array.isArray(value) ? value : value.canonical_ids || value.rows || value.answers || [];
+    return new Set(rows.map((item) => typeof item === 'string' ? item : item.canonical_id).filter(Boolean));
 }
 
-function selectAuditCandidates(options = {}) {
+function runAnswerAudit(options = {}) {
+    if (options.fixtures) {
+        return require('../content/check_answer_evidence').runEvidenceFixtures(options);
+    }
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const paths = pathsFor(root);
-    let files = [];
-    if (options.candidate) files = [assertPathWithin(path.resolve(options.candidate), paths.candidateAnswersDir, 'candidate')];
-    else if (options.set) files = readSetIds(path.resolve(options.set)).map((id) => path.join(paths.candidateAnswersDir, `${id}.md`));
-    else if (options.all) files = fs.existsSync(paths.candidateAnswersDir)
-        ? fs.readdirSync(paths.candidateAnswersDir).filter((name) => name.endsWith('.md')).map((name) => path.join(paths.candidateAnswersDir, name))
-        : [];
-    else {
-        const canonicalId = options['canonical-id'] || options.canonicalId;
-        if (!canonicalId) throw new Error('Usage: answer audit --candidate <path> | --canonical-id <id> | --set <json> | --all');
-        files = [path.join(paths.candidateAnswersDir, `${canonicalId}.md`)];
+    let candidatePaths;
+    if (options.candidate) {
+        candidatePaths = [assertPathWithin(path.resolve(options.candidate), paths.candidateAnswersDir, 'candidate')];
+    } else if (options.tier === 'curated') {
+        candidatePaths = fs.existsSync(paths.answersDir)
+            ? fs.readdirSync(paths.answersDir).filter((name) => name.endsWith('.md')).sort().map((name) => path.join(paths.answersDir, name))
+            : [];
+    } else {
+        candidatePaths = fs.existsSync(paths.candidateAnswersDir)
+            ? fs.readdirSync(paths.candidateAnswersDir).filter((name) => name.endsWith('.md')).sort().map((name) => path.join(paths.candidateAnswersDir, name))
+            : [];
     }
-    return [...new Set(files)];
-}
-
-function auditAnswerCandidate(options = {}) {
-    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
-    const paths = pathsFor(root);
-    const files = selectAuditCandidates({ ...options, root });
-    const rows = [];
-    for (const filePath of files) {
-        if (!fs.existsSync(filePath)) {
-            rows.push({ schema_version: 'answer_audit.v1', ok: false, candidate_path: path.relative(root, filePath), error: 'candidate_missing' });
-            continue;
-        }
-        rows.push(auditOneCandidate(filePath, { ...options, root }));
-    }
-    const failed = rows.filter((row) => !row.ok);
-    const report = {
-        schema_version: 'answer_audit_report.v1',
-        ok: failed.length === 0,
-        dry_run: Boolean(options.noWrite),
-        candidate_count: rows.length,
-        passed_count: rows.length - failed.length,
-        failed_count: failed.length,
-        rows,
-    };
+    const types = new Set([].concat(options.type || []).filter(Boolean));
+    const setIds = readSetIds(options.set);
+    const selectedPaths = candidatePaths.filter((filePath) => {
+        const answer = readAnswerFile(filePath);
+        if (options.tier && answer.metadata.quality_tier !== options.tier) return false;
+        const title = (answer.content.match(/^#\s+(.+)$/m) || [])[1] || answer.metadata.canonical_id;
+        if (types.size && !types.has(answer.metadata.answer_type || inferAnswerType([], { canonical_title: title }))) return false;
+        if (setIds && !setIds.has(answer.metadata.canonical_id)) return false;
+        if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js|go|c|cpp|c\+\+|cc|cxx|bash|sh|shell)(?:\s|$)/i.test(answer.content)) return false;
+        return true;
+    });
+    const rows = selectedPaths.map((filePath) => auditOneCandidate(filePath, { ...options, allowFormal: options.tier === 'curated' })).filter((row) => {
+        if (options['require-evidence'] && !row.evidence_path) return false;
+        return true;
+    });
     if (!options.noWrite) {
         ensureDir(paths.candidateAuditsDir);
-        const reportPath = options.report || path.join(paths.candidateAuditsDir, `audit-${Date.now()}.json`);
-        writeJson(path.resolve(reportPath), report);
+        for (const row of rows) fs.writeFileSync(path.join(paths.candidateAuditsDir, `${row.canonical_id}.json`), stablePrettyStringify(row), 'utf8');
     }
-    return report;
-}
-
-function updateCanonicalAnswerStatus(filePath, canonicalId, status) {
-    const rows = readJsonl(filePath, []);
-    let found = false;
-    const next = rows.map((item) => {
-        if (item.canonical_id !== canonicalId) return item;
-        found = true;
-        return { ...item, answer_status: status };
-    });
-    if (!found) throw new Error(`Canonical not found while updating answer status: ${canonicalId}`);
-    const content = next.map((item) => stableStringify(item)).join('\n') + (next.length ? '\n' : '');
-    fs.writeFileSync(filePath, content, 'utf8');
-}
-
-function createBatchSnapshot(root, canonicalId) {
-    const paths = pathsFor(root);
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-promote-'));
-    for (const relativePath of [
-        'data/questions/canonical_questions.jsonl',
-        'data/review/progress.jsonl',
-        `review/answers/${canonicalId}.md`,
-    ]) {
-        const source = path.join(root, relativePath);
-        const target = path.join(tempDir, relativePath);
-        ensureDir(path.dirname(target));
-        if (fs.existsSync(source)) fs.copyFileSync(source, target);
-    }
-    return tempDir;
-}
-
-function restoreBatchSnapshot(root, tempDir, canonicalId) {
-    for (const relativePath of [
-        'data/questions/canonical_questions.jsonl',
-        'data/review/progress.jsonl',
-        `review/answers/${canonicalId}.md`,
-    ]) {
-        const source = path.join(tempDir, relativePath);
-        const target = path.join(root, relativePath);
-        if (fs.existsSync(source)) fs.copyFileSync(source, target);
-        else fs.rmSync(target, { force: true });
-    }
-}
-
-function verifyPromotionGates(root, canonicalId, candidatePath, options = {}) {
-    const checks = [];
-    const runCheck = (name, fn) => {
-        try {
-            const output = fn();
-            checks.push({ name, ok: output?.ok !== false, output });
-            if (output?.ok === false) throw new Error(`${name} failed`);
-        } catch (error) {
-            checks.push({ name, ok: false, error: error.message });
-            throw error;
-        }
+    return {
+        schema_version: 'answer_audit_report.v1',
+        ok: rows.length > 0 && rows.every((row) => row.ok),
+        dry_run: Boolean(options.noWrite),
+        candidate_count: rows.length,
+        passed_count: rows.filter((row) => row.ok).length,
+        failed_count: rows.filter((row) => !row.ok).length,
+        rows,
     };
-    runCheck('candidate_audit', () => auditOneCandidate(candidatePath, { root }));
-    runCheck('review_integrity', () => require('./review_integrity').checkReviewIntegrity({ root, noWrite: true }));
-    runCheck('answer_validate_strict', () => require('./answer_store').validateAnswers({ root, strict: true, noWrite: true }));
-    runCheck('canonical_check', () => require('./canonical_store').checkCanonicalQuestions({ root, noWrite: true }));
-    runCheck('repository_validate_all', () => require('./validate_all').validateAll({ root, noWrite: true }));
-    if (options.command) {
-        const result = childProcess.spawnSync(options.command, { cwd: root, shell: true, encoding: 'utf8', timeout: Number(options.timeout || 120000) });
-        checks.push({ name: 'type_specific_command', ok: result.status === 0, command: options.command, stdout: result.stdout?.slice(-4000), stderr: result.stderr?.slice(-4000) });
-        if (result.status !== 0) throw new Error('type_specific_command failed');
-    }
-    return checks;
 }
 
-function promoteAnswerCandidate(options = {}) {
+function atomicPromote(options = {}) {
     const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
     const paths = pathsFor(root);
     const canonicalId = options['canonical-id'] || options.canonicalId;
-    if (!canonicalId) throw new Error('Usage: answer promote --canonical-id <id> --batch-id <id>');
-    const candidatePath = path.join(paths.candidateAnswersDir, `${canonicalId}.md`);
-    if (!fs.existsSync(candidatePath)) throw new Error(`Candidate missing: ${candidatePath}`);
+    if (!canonicalId || !options.candidate || !options.evidence) {
+        throw new Error('Usage: answer promote --canonical-id <id> --candidate <path> --evidence <path>');
+    }
+    const candidatePath = assertPathWithin(path.resolve(options.candidate), paths.candidateAnswersDir, 'candidate');
+    const evidencePath = assertPathWithin(path.resolve(options.evidence), paths.evidenceDir, 'evidence');
     const candidate = readAnswerFile(candidatePath);
-    const evidencePath = evidencePathFor(candidate, paths, options.evidence);
-    const evidence = fs.existsSync(evidencePath) ? readJson(evidencePath) : null;
-    const config = readJson(paths.qualityConfig);
-    const humanGateEnabled = options.requireHuman === true || (config.promotion.require_human_review_for_pilot && countHumanReviewApprovals(paths) < config.promotion.pilot_human_review_count);
-    if (humanGateEnabled) {
-        const error = humanReviewError(evidence);
-        if (error) throw new Error(error);
-    }
-    verifyPromotionGates(root, canonicalId, candidatePath, { command: options.command, timeout: options.timeout });
-    if (options.noWrite) return { schema_version: 'answer_promotion.v1', ok: true, dry_run: true, canonical_id: canonicalId };
-    const snapshot = createBatchSnapshot(root, canonicalId);
-    try {
-        const formalPath = path.join(paths.answersDir, `${canonicalId}.md`);
-        const existingVersion = fs.existsSync(formalPath) ? Number(readAnswerFile(formalPath).metadata.version || 0) : 0;
-        const promoted = replaceAnswerMetadata(candidate.content, {
-            ...candidate.metadata,
-            schema_version: 'answer.v1',
-            canonical_id: canonicalId,
-            version: Math.max(existingVersion + 1, Number(candidate.metadata.version || 1)),
-            status: 'ready',
-            updated_at: options.date || defaultDate(options),
-            answer_type: candidate.metadata.answer_type,
-            quality_tier: 'curated',
-            candidate_sha256: evidence.candidate_sha256,
-            writer_id: evidence.writer.writer_id,
-            writer_version: evidence.writer.writer_version,
-            reviewer_id: evidence.review.reviewer_id,
-            reviewer_version: evidence.review.reviewer_version,
-            promoted_at: options.date || defaultDate(options),
-            promotion_batch_id: options['batch-id'] || options.batchId || null,
-        });
-        ensureDir(paths.answersDir);
-        fs.writeFileSync(formalPath, promoted, 'utf8');
-        updateCanonicalAnswerStatus(paths.canonicalQuestions, canonicalId, 'ready');
-        require('./review_progress').ensureProgress({ root, canonicalId, noWrite: false });
-        require('./review_integrity').checkReviewIntegrity({ root, noWrite: true });
-        require('./answer_store').validateAnswers({ root, strict: true, noWrite: true });
-        require('./canonical_store').checkCanonicalQuestions({ root, noWrite: true });
-        require('./validate_all').validateAll({ root, noWrite: true });
+    if (candidate.metadata.canonical_id !== canonicalId) throw new Error('candidate canonical_id does not match requested canonical_id');
+    const audit = auditOneCandidate(candidatePath, { ...options, root, evidence: evidencePath });
+    if (!audit.ok) return { schema_version: 'answer_promote.v1', ok: false, promoted: false, canonical_id: canonicalId, audit };
+    const canonicals = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
+    const index = canonicals.findIndex((item) => item.canonical_id === canonicalId);
+    if (index < 0) throw new Error(`Canonical not found: ${canonicalId}`);
+    const formalPath = answerPath(canonicalId, { answersDir: paths.answersDir });
+    const oldFormal = fs.existsSync(formalPath) ? fs.readFileSync(formalPath, 'utf8') : null;
+    const oldMetadata = oldFormal ? parseAnswerMetadata(oldFormal, formalPath) : {};
+    const evidence = readJson(evidencePath);
+    const qualityConfig = readJson(paths.qualityConfig);
+    const humanReviewNeeded = qualityConfig.promotion.require_human_review_for_pilot
+        && countHumanReviewApprovals(paths) < Number(qualityConfig.promotion.pilot_human_review_count || 0);
+    const humanError = humanReviewNeeded ? humanReviewError(evidence) : null;
+    if (humanError) {
         return {
-            schema_version: 'answer_promotion.v1',
-            ok: true,
-            dry_run: false,
-            canonical_id: canonicalId,
-            answer_path: path.relative(root, formalPath),
-            canonical_questions_path: path.relative(root, paths.canonicalQuestions),
-            review_progress_path: path.relative(root, path.join(root, 'data', 'review', 'progress.jsonl')),
+            schema_version: 'answer_promote.v1', ok: false, promoted: false, canonical_id: canonicalId,
+            audit: { ...audit, ok: false, hard_failures: [...new Set([...audit.hard_failures, 'missing_human_review'])], errors: [...audit.errors, { error: humanError }] },
         };
-    } catch (error) {
-        restoreBatchSnapshot(root, snapshot, canonicalId);
-        throw error;
-    } finally {
-        fs.rmSync(snapshot, { recursive: true, force: true });
     }
+    const nextMetadata = {
+        ...candidate.metadata,
+        version: Number(oldMetadata.version || 0) + 1,
+        status: 'ready',
+        quality_tier: 'curated',
+        updated_at: options.date || defaultDate(options),
+        candidate_sha256: audit.candidate_sha256,
+        evidence_version: evidence.review?.review_version || evidence.schema_version,
+    };
+    delete nextMetadata.generator_version;
+    const nextFormal = replaceAnswerMetadata(candidate.content, nextMetadata);
+    const nextCanonicals = canonicals.map((item, itemIndex) => itemIndex === index ? { ...item, answer_status: 'ready' } : item);
+    const nextCanonicalText = `${nextCanonicals.sort((a, b) => a.canonical_id.localeCompare(b.canonical_id)).map(stableStringify).join('\n')}\n`;
+    if (options.noWrite) {
+        return { schema_version: 'answer_promote.v1', ok: true, promoted: false, dry_run: true, canonical_id: canonicalId, audit };
+    }
+    ensureDir(path.dirname(formalPath));
+    const canonicalPath = paths.canonicalQuestions;
+    const oldCanonicalText = fs.readFileSync(canonicalPath, 'utf8');
+    const formalTemp = `${formalPath}.promote-${process.pid}.tmp`;
+    const canonicalTemp = `${canonicalPath}.promote-${process.pid}.tmp`;
+    fs.writeFileSync(formalTemp, nextFormal, 'utf8');
+    fs.writeFileSync(canonicalTemp, nextCanonicalText, 'utf8');
+    try {
+        fs.renameSync(formalTemp, formalPath);
+        fs.renameSync(canonicalTemp, canonicalPath);
+    } catch (error) {
+        if (oldFormal === null) fs.rmSync(formalPath, { force: true });
+        else fs.writeFileSync(formalPath, oldFormal, 'utf8');
+        fs.writeFileSync(canonicalPath, oldCanonicalText, 'utf8');
+        fs.rmSync(formalTemp, { force: true });
+        fs.rmSync(canonicalTemp, { force: true });
+        throw error;
+    }
+    return {
+        schema_version: 'answer_promote.v1',
+        ok: true,
+        promoted: true,
+        dry_run: false,
+        canonical_id: canonicalId,
+        answer_path: path.relative(root, formalPath),
+        version: nextMetadata.version,
+        audit,
+    };
+}
+
+function atomicDemote(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = pathsFor(root);
+    const canonicalId = options['canonical-id'] || options.canonicalId;
+    if (!canonicalId || !options.evidence) throw new Error('Usage: answer demote --canonical-id <id> --evidence <path>');
+    const evidencePath = assertPathWithin(path.resolve(options.evidence), paths.evidenceDir, 'evidence');
+    const formalPath = answerPath(canonicalId, { answersDir: paths.answersDir });
+    if (!fs.existsSync(formalPath)) throw new Error(`Formal answer not found: ${canonicalId}`);
+    const formal = readAnswerFile(formalPath);
+    const evidence = readJson(evidencePath);
+    if (formal.metadata.canonical_id !== canonicalId || evidence.canonical_id !== canonicalId) {
+        throw new Error('canonical_id must match the formal answer and evidence');
+    }
+    const expectedCandidateHash = formal.metadata.quality_tier === 'curated'
+        ? formal.metadata.candidate_sha256
+        : sha256(formal.content);
+    if (!expectedCandidateHash || evidence.candidate_sha256 !== expectedCandidateHash) {
+        throw new Error('evidence does not match formal answer candidate hash');
+    }
+    if (!evidence.review?.independent || !evidence.review?.reviewer_id || evidence.review.reviewer_id === evidence.writer?.writer_id) {
+        throw new Error('demotion requires an independent reviewer record');
+    }
+    if (evidence.review.decision === 'pass' && !(evidence.review.hard_failures || []).length) {
+        throw new Error('demotion requires a revise/reject decision or a hard failure');
+    }
+    const canonicals = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
+    const index = canonicals.findIndex((item) => item.canonical_id === canonicalId);
+    if (index < 0) throw new Error(`Canonical not found: ${canonicalId}`);
+    const nextMetadata = {
+        ...formal.metadata,
+        version: Number(formal.metadata.version || 0) + 1,
+        status: 'needs_update',
+        quality_tier: 'curated_audit_failed',
+        updated_at: options.date || defaultDate(options),
+        audit_evidence_version: evidence.review.review_version || evidence.schema_version,
+    };
+    const nextFormal = replaceAnswerMetadata(formal.content, nextMetadata);
+    const nextCanonicals = canonicals.map((item, itemIndex) => itemIndex === index ? { ...item, answer_status: 'needs_update' } : item);
+    const nextCanonicalText = `${nextCanonicals.sort((a, b) => a.canonical_id.localeCompare(b.canonical_id)).map(stableStringify).join('\n')}\n`;
+    if (options.noWrite) return { schema_version: 'answer_demote.v1', ok: true, demoted: false, dry_run: true, canonical_id: canonicalId };
+    const oldFormal = fs.readFileSync(formalPath, 'utf8');
+    const oldCanonicals = fs.readFileSync(paths.canonicalQuestions, 'utf8');
+    const formalTemp = `${formalPath}.demote-${process.pid}.tmp`;
+    const canonicalTemp = `${paths.canonicalQuestions}.demote-${process.pid}.tmp`;
+    fs.writeFileSync(formalTemp, nextFormal, 'utf8');
+    fs.writeFileSync(canonicalTemp, nextCanonicalText, 'utf8');
+    try {
+        fs.renameSync(formalTemp, formalPath);
+        fs.renameSync(canonicalTemp, paths.canonicalQuestions);
+    } catch (error) {
+        fs.writeFileSync(formalPath, oldFormal, 'utf8');
+        fs.writeFileSync(paths.canonicalQuestions, oldCanonicals, 'utf8');
+        fs.rmSync(formalTemp, { force: true });
+        fs.rmSync(canonicalTemp, { force: true });
+        throw error;
+    }
+    return { schema_version: 'answer_demote.v1', ok: true, demoted: true, canonical_id: canonicalId, answer_path: path.relative(root, formalPath), version: nextMetadata.version };
+}
+
+function atomicDemoteMissingEvidence(options = {}) {
+    const root = options.root ? path.resolve(options.root) : DEFAULT_ROOT;
+    const paths = pathsFor(root);
+    const canonicalId = options['canonical-id'] || options.canonicalId;
+    if (!canonicalId) throw new Error('canonical_id is required');
+    const formalPath = answerPath(canonicalId, { answersDir: paths.answersDir });
+    if (!fs.existsSync(formalPath)) throw new Error(`Formal answer not found: ${canonicalId}`);
+    const formal = readAnswerFile(formalPath);
+    if (formal.metadata.quality_tier !== 'curated' || formal.metadata.status !== 'ready') {
+        throw new Error('only ready curated answers may be demoted for missing evidence');
+    }
+    const evidencePath = path.join(paths.evidenceDir, `${canonicalId}.json`);
+    if (fs.existsSync(evidencePath)) throw new Error('evidence exists; use audited answer demote instead');
+    const canonicals = loadCanonicalQuestions({ filePath: paths.canonicalQuestions });
+    const index = canonicals.findIndex((item) => item.canonical_id === canonicalId);
+    if (index < 0) throw new Error(`Canonical not found: ${canonicalId}`);
+    const nextMetadata = {
+        ...formal.metadata,
+        version: Number(formal.metadata.version || 0) + 1,
+        status: 'needs_update',
+        quality_tier: 'curated_audit_failed',
+        updated_at: options.date || defaultDate(options),
+        audit_failure: 'missing_evidence',
+    };
+    const nextFormal = replaceAnswerMetadata(formal.content, nextMetadata);
+    const nextCanonicals = canonicals.map((item, itemIndex) => itemIndex === index ? { ...item, answer_status: 'needs_update' } : item);
+    const nextCanonicalText = `${nextCanonicals.sort((a, b) => a.canonical_id.localeCompare(b.canonical_id)).map(stableStringify).join('\n')}\n`;
+    if (options.noWrite) return { schema_version: 'answer_demote_missing_evidence.v1', ok: true, demoted: false, dry_run: true, canonical_id: canonicalId };
+    const oldFormal = fs.readFileSync(formalPath, 'utf8');
+    const oldCanonicals = fs.readFileSync(paths.canonicalQuestions, 'utf8');
+    const formalTemp = `${formalPath}.missing-evidence-${process.pid}.tmp`;
+    const canonicalTemp = `${paths.canonicalQuestions}.missing-evidence-${process.pid}.tmp`;
+    fs.writeFileSync(formalTemp, nextFormal, 'utf8');
+    fs.writeFileSync(canonicalTemp, nextCanonicalText, 'utf8');
+    try {
+        fs.renameSync(formalTemp, formalPath);
+        fs.renameSync(canonicalTemp, paths.canonicalQuestions);
+    } catch (error) {
+        fs.writeFileSync(formalPath, oldFormal, 'utf8');
+        fs.writeFileSync(paths.canonicalQuestions, oldCanonicals, 'utf8');
+        fs.rmSync(formalTemp, { force: true });
+        fs.rmSync(canonicalTemp, { force: true });
+        throw error;
+    }
+    return { schema_version: 'answer_demote_missing_evidence.v1', ok: true, demoted: true, canonical_id: canonicalId, answer_path: path.relative(root, formalPath), version: nextMetadata.version };
 }
 
 module.exports = {
     pathsFor,
+    sha256,
     inferAnswerType,
     buildAnswerContext,
     renderCandidate,
+    extractCodeBlocks,
     compileJava,
-    checkJavaScript,
+    compileC,
+    compileCpp,
+    validateShell,
+    compileGo,
     parseSql,
+    validateAnswerEvidence,
     validateSpecializedCandidate,
     auditOneCandidate,
-    auditAnswerCandidate,
+    runAnswerAudit,
+    atomicPromote,
+    atomicDemote,
+    atomicDemoteMissingEvidence,
     recordHumanReview,
-    promoteAnswerCandidate,
+    humanReviewError,
+    countHumanReviewApprovals,
 };
