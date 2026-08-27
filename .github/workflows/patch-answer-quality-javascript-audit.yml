@@ -32,20 +32,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 <<'PY'
-          from pathlib import Path
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'scripts/lib/answer_quality.js';
+          let text = fs.readFileSync(path, 'utf8');
 
-          path = Path('scripts/lib/answer_quality.js')
-          text = path.read_text(encoding='utf-8')
+          function replaceOne(oldText, newText, label) {
+            if (!text.includes(oldText)) throw new Error(`${label} drifted`);
+            text = text.replace(oldText, newText);
+          }
 
-          old = "const regex = /(?:```|~~~)(java|sql)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
-          new = "const regex = /(?:```|~~~)(java|sql|javascript|js)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
-          if old not in text:
-              raise SystemExit('extractCodeBlocks language regex drifted')
-          text = text.replace(old, new, 1)
+          replaceOne(
+            'const regex = /(?:```|~~~)(java|sql)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;',
+            'const regex = /(?:```|~~~)(java|sql|javascript|js)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;',
+            'extractCodeBlocks language regex'
+          );
 
-          anchor = "function parseSql(code) {"
-          helper = r'''function checkJavaScript(code) {
+          const parseAnchor = 'function parseSql(code) {';
+          if (!text.includes(parseAnchor)) throw new Error('parseSql anchor drifted');
+          if (!text.includes('function checkJavaScript(code)')) {
+            const helper = `function checkJavaScript(code) {
               const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-node-check-'));
               try {
                   const filePath = path.join(tempDir, 'candidate.mjs');
@@ -57,33 +63,30 @@ jobs:
               }
           }
 
-          '''
-          if anchor not in text:
-              raise SystemExit('parseSql anchor drifted')
-          if 'function checkJavaScript(code)' not in text:
-              text = text.replace(anchor, helper + anchor, 1)
+          `;
+            text = text.replace(parseAnchor, helper + parseAnchor);
+          }
 
-          old_validation = "const validation = block.language === 'java' ? compileJava(block.code) : parseSql(block.code);"
-          new_validation = "const validation = block.language === 'java' ? compileJava(block.code) : block.language === 'sql' ? parseSql(block.code) : checkJavaScript(block.code);"
-          if old_validation not in text:
-              raise SystemExit('specialized coding validation dispatch drifted')
-          text = text.replace(old_validation, new_validation, 1)
+          replaceOne(
+            "const validation = block.language === 'java' ? compileJava(block.code) : parseSql(block.code);",
+            "const validation = block.language === 'java' ? compileJava(block.code) : block.language === 'sql' ? parseSql(block.code) : checkJavaScript(block.code);",
+            'specialized coding validation dispatch'
+          );
+          replaceOne(
+            "if (options['require-code'] && !/(?:```|~~~)(?:java|sql)\\b/i.test(answer.content)) return false;",
+            "if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js)\\b/i.test(answer.content)) return false;",
+            'require-code filter'
+          );
+          replaceOne(
+            '    compileJava,\n    parseSql,',
+            '    compileJava,\n    checkJavaScript,\n    parseSql,',
+            'answer quality export'
+          );
+          fs.writeFileSync(path, text, 'utf8');
+          NODE
 
-          old_filter = "if (options['require-code'] && !/(?:```|~~~)(?:java|sql)\\b/i.test(answer.content)) return false;"
-          new_filter = "if (options['require-code'] && !/(?:```|~~~)(?:java|sql|javascript|js)\\b/i.test(answer.content)) return false;"
-          if old_filter not in text:
-              raise SystemExit('require-code filter drifted')
-          text = text.replace(old_filter, new_filter, 1)
-
-          export_anchor = "    compileJava,\n    parseSql,"
-          if export_anchor not in text:
-              raise SystemExit('answer quality export anchor drifted')
-          text = text.replace(export_anchor, "    compileJava,\n    checkJavaScript,\n    parseSql,", 1)
-
-          path.write_text(text, encoding='utf-8')
-
-          test_path = Path('test/answer_javascript_candidate.test.js')
-          test_path.write_text(r'''\'use strict\';
+          cat > test/answer_javascript_candidate.test.js <<'TEST'
+          'use strict';
 
           const fs = require('fs');
           const os = require('os');
@@ -124,7 +127,7 @@ jobs:
                   '- 问：复杂度是多少？答：时间 O(n)，空间 O(1)。',
                   '- 问：遇到非数字怎么办？答：当前契约不接受非数字，需要业务另行定义。', '',
                   '## 易错点', '', '不要在题目未定义时擅自做字符串到数字的隐式转换。', '',
-              ].join('\\n');
+              ].join('\n');
           }
 
           test('JavaScript coding candidates are discovered by require-code and syntax checked', () => {
@@ -132,7 +135,7 @@ jobs:
               const dir = path.join(root, 'review', 'candidates', 'answers');
               ensureDir(dir);
               const file = path.join(dir, 'cq_js.md');
-              const validCode = 'export function sum(values) {\\n  let total = 0;\\n  for (const value of values) total += value;\\n  return total;\\n}';
+              const validCode = 'export function sum(values) {\n  let total = 0;\n  for (const value of values) total += value;\n  return total;\n}';
               fs.writeFileSync(file, candidate(validCode), 'utf8');
               assert.deepEqual(extractCodeBlocks(fs.readFileSync(file, 'utf8')).map((block) => block.language), ['javascript']);
               const valid = runAnswerAudit({ root, candidate: file, noWrite: true, 'require-code': true });
@@ -146,8 +149,7 @@ jobs:
               assert.equal(invalid.rows[0].errors.some((row) => row.error === 'javascript_validation_failed'), true);
               fs.rmSync(root, { recursive: true, force: true });
           });
-          '''.replace("\\'use strict\\';", "'use strict';").replace(/^          /gm, ''), encoding='utf-8')
-          PY
+          TEST
 
       - name: Run focused regression tests
         shell: bash
@@ -155,13 +157,12 @@ jobs:
           set -euo pipefail
           node --test test/answer_candidate.test.js test/answer_javascript_candidate.test.js
 
-      - name: Commit bounded repair and remove one-shot workflow
+      - name: Commit bounded repair
         shell: bash
         run: |
           set -euo pipefail
-          rm .github/workflows/patch-answer-quality-javascript-audit.yml
           git diff --check
-          git add scripts/lib/answer_quality.js test/answer_javascript_candidate.test.js .github/workflows/patch-answer-quality-javascript-audit.yml
+          git add scripts/lib/answer_quality.js test/answer_javascript_candidate.test.js
           git config user.name 'xhs-ci-repair-bot'
           git config user.email '43640935+liqiangcc@users.noreply.github.com'
           git commit -m 'fix: audit JavaScript coding candidates'
