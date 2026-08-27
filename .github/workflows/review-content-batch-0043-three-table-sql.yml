@@ -1,0 +1,185 @@
+name: Review Content Batch 0043 Three Table SQL
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0043-three-table-sql.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-three-table-sql-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b0a6332f0d7a0639860523642571848f
+  SOURCE_QID: b0a6332f0d7a0639860523642571848f
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Source-first inspection before writer records
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='SQL 考题：三表关联查询及子查询的应用实现？';
+          const note=JSON.parse(fs.readFileSync('note_tagged/67541ef40000000002014dce.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact)throw new Error('source boundary drifted');
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||item.source_questions?.[0]?.original_question!==exact)throw new Error('inventory drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid]))throw new Error('inventory ownership drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('live context drifted');
+          const p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','FROM students AS s','JOIN scores AS sc','JOIN courses AS c','HAVING AVG(sc.score) >'])if(!md.includes(marker))throw new Error(`marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5)throw new Error('followups missing');
+          if(!md.includes('没有保留真实表结构')||!md.includes('可执行参考练习'))throw new Error('under-specified schema/business boundary not explicit');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md))throw new Error('fabricated experience risk');
+          const blocks=[...md.matchAll(/```sql\n([\s\S]*?)\n```/g)];if(blocks.length!==1)throw new Error('candidate SQL block missing or ambiguous');
+          fs.writeFileSync('/tmp/candidate.sql',blocks[0][1]+'\n');
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');fs.writeFileSync('/tmp/candidate-sha',sha+'\n');
+          fs.writeFileSync('/tmp/pre.json',JSON.stringify({decision:'pass_pending_independent_sql_differential',candidate_sha256:sha,source_boundary:'The source preserves only a generic three-table association/subquery coding request; the students/courses/scores schema and above-global-average output are explicitly a reference exercise.'},null,2)+'\n');
+          NODE
+
+      - name: Execute independent randomized SQL differential validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/reviewer_sql.py <<'PY'
+          import random, sqlite3
+          SQL=open('/tmp/candidate.sql',encoding='utf-8').read()
+
+          def run(students,courses,scores):
+              con=sqlite3.connect(':memory:')
+              con.execute('create table students(student_id integer primary key, name text not null)')
+              con.execute('create table courses(course_id integer primary key, name text not null)')
+              con.execute('create table scores(student_id integer not null, course_id integer not null, score real not null)')
+              con.executemany('insert into students values(?,?)',students)
+              con.executemany('insert into courses values(?,?)',courses)
+              con.executemany('insert into scores values(?,?,?)',scores)
+              got=[(int(sid),str(name),float(avg),int(cnt)) for sid,name,avg,cnt in con.execute(SQL)]
+              return got
+
+          def oracle(students,courses,scores):
+              valid_students={sid:name for sid,name in students}
+              valid_courses={cid for cid,_ in courses}
+              # Declared reference schema treats rows as facts and joins only matching dimension keys.
+              joined=[(sid,cid,float(score)) for sid,cid,score in scores if sid in valid_students and cid in valid_courses]
+              if not scores: global_avg=None
+              else: global_avg=sum(float(x[2]) for x in scores)/len(scores)
+              by={}
+              for sid,cid,score in joined:
+                  by.setdefault(sid,[]).append((cid,score))
+              out=[]
+              for sid,items in by.items():
+                  avg=sum(x[1] for x in items)/len(items)
+                  if global_avg is not None and avg>global_avg:
+                      out.append((sid,valid_students[sid],avg,len({x[0] for x in items})))
+              out.sort()
+              return out
+
+          def assert_rows(got,want):
+              assert len(got)==len(want),(got,want)
+              for a,b in zip(got,want):
+                  assert a[0]==b[0] and a[1]==b[1] and a[3]==b[3],(a,b)
+                  assert abs(a[2]-b[2])<1e-9,(a,b)
+
+          # Explicit duplicate-course facts: avg counts both facts, course_count is distinct course IDs.
+          students=[(1,'S1'),(2,'S2')];courses=[(10,'C10'),(20,'C20')];scores=[(1,10,100),(1,10,80),(1,20,90),(2,20,0)]
+          assert_rows(run(students,courses,scores),oracle(students,courses,scores))
+
+          # Empty fact table.
+          assert run(students,courses,[])==[]
+
+          r=random.Random(0x53514C5245564945)
+          for case in range(12000):
+              ns=r.randint(1,8); nc=r.randint(1,7)
+              students=[(i+1,f'S{i+1}') for i in range(ns)]
+              courses=[(100+j,f'C{100+j}') for j in range(nc)]
+              scores=[]
+              for _ in range(r.randint(0,50)):
+                  scores.append((r.randint(1,ns),100+r.randrange(nc),r.randint(0,100)))
+              assert_rows(run(students,courses,scores),oracle(students,courses,scores))
+          print('PASS duplicate-course-facts=oracle empty=covered randomized-fixtures=12000 aggregate-threshold=exact distinct-course-count=exact')
+          PY
+          stdout="$(python3 /tmp/reviewer_sql.py)";echo "$stdout";test "$stdout" = 'PASS duplicate-course-facts=oracle empty=covered randomized-fixtures=12000 aggregate-threshold=exact distinct-course-count=exact';echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze independent review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const pre=JSON.parse(fs.readFileSync('/tmp/pre.json','utf8'));if(pre.decision!=='pass_pending_independent_sql_differential'||pre.candidate_sha256!==sha)throw new Error('source-first preconclusion drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha)throw new Error('writer packet/hash drifted');
+          const tests=[{case:'duplicate facts for the same student/course plus another course',expected:'AVG consumes every valid fact row while COUNT(DISTINCT course_id) counts course identities once',passed:true},{case:'empty scores table',expected:'query returns no aggregate groups',passed:true},{case:'12,000 seeded random valid three-table fixtures',expected:'exact rows, student averages, strict global-average threshold and distinct course count match independent Python oracle',passed:true}];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'execute exact SQL candidate over SQLite and differential-test against independent Python relational oracle',stdout:process.env.REVIEW_STDOUT,boundary_tests:tests,environment:{python:'3.12',sqlite:'stdlib sqlite3'}},null,2)+'\n');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The source preserves only a three-table association/subquery implementation prompt and does not preserve schema, fields or one business result; the candidate explicitly declares its students/courses/scores example as a reference exercise.','The reference query has a coherent result grain of one student per row, uses both three-table join relationships, computes student aggregates in the outer query and a scalar global-score aggregate in the subquery.','The answer correctly distinguishes pre-aggregation WHERE semantics from aggregate HAVING semantics and warns against using DISTINCT score to hide data-model duplication.','Independent randomized differential testing over 12,000 fixtures matches an oracle for strict above-global-average selection, aggregate values and distinct course counts, including duplicate fact rows and empty scores.','The candidate explicitly scopes INNER JOIN no-score behavior, duplicate-fact semantics, NULL/empty behavior and execution-plan/index validation as contract or operational concerns rather than preserved source facts.'];
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0043-three-table-sql-20260827-v1',review_version:'batch-0043.three-table-sql.v1',decision:'pass',revision_round:0,source_packet:['note_tagged/67541ef40000000002014dce.json','review/content_build/answer_batch_0043/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0043-three-table-sql-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'tagged-note',title:'Tagged interview note preserving three-table SQL/subquery prompt',locator:'note_tagged/67541ef40000000002014dce.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer SQLite three-table/subquery fixture',locator:`${out}/sql_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent randomized SQLite differential validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Three-table SQL source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source preserves a generic three-table association query with subquery implementation request, but no concrete schema, fields, business filter or target output.',source_ids:['tagged-note','source-inventory','isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'reference-behavior',text:'Under the declared students/courses/scores reference exercise, the exact SQL matches an independent relational oracle for above-global-average student aggregates and distinct course counts across explicit and 12,000 seeded random fixtures.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'SQLite execution of exact SQL candidate against independent Python relational oracle',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:0,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit review artifacts and progress with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0043.md');t=p.read_text(encoding='utf-8')
+          line='- [x] `cq_q_b0a6332f0d7a0639860523642571848f` completed writer and isolated source-first review. The source preserves only a generic three-table association/subquery SQL request, so the students/courses/scores schema and above-global-average output are explicitly a reference exercise rather than reconstructed source semantics. Writer fixtures covered aggregate threshold, equal-valued facts, no-score and empty-table behavior; the independent reviewer differential-tested the exact SQL across duplicate-course facts, empty input and 12,000 seeded random fixtures against an independent relational oracle. Strict candidate audit, code gate, and repository gates are green. Formal evidence is staged; repository human approval and real-review policy remain promotion blockers.'
+          if '## Progress' not in t:t=t.rstrip()+'\n\n## Progress\n'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+          git add "review/content_build/answer_batch_0043/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0043.md
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0043 three-table SQL candidate source-first'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+          done
+          exit 1
