@@ -1,0 +1,222 @@
+name: Build Content Batch 0043 Reverse Words
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0043-reverse-words.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-reverse-words-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_af1ffa479590a36c15ac1fbcb3de6987
+  SOURCE_QID: af1ffa479590a36c15ac1fbcb3de6987
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法手撕：句子反转输出（Reverse Words in a String）。';
+          const raw=JSON.parse(fs.readFileSync('note_structured/68998c2a0000000004000492.json','utf8'));
+          if(raw.questions?.[5]!==exact) throw new Error('reverse-words source boundary drifted');
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding') throw new Error('batch0043 inventory state/type drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid])) throw new Error('inventory ownership drifted');
+          if(item.source_questions?.[0]?.original_question!==exact) throw new Error('inventory source wording drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('live ownership/type drifted');
+          NODE
+
+      - name: Write source-bounded candidate and writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0043/$cid";candidate="review/candidates/answers/$cid.md";mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_af1ffa479590a36c15ac1fbcb3de6987","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 句子反转输出：Reverse Words in a String
+
+          ## 核心结论
+
+          来源只保存了“句子反转输出（Reverse Words in a String）”，仓库元数据标记了 LeetCode 151，但没有把 API、空白字符范围、`null` 语义或是否允许修改输入冻结成原题约束。下面采用一个明确的 Java 参考契约：输入由普通字符和 ASCII 空格组成；单词是连续的非空格片段；输出把单词顺序反转，去掉首尾空格，并把单词间连续空格归一成一个空格；`null` 抛 `NullPointerException`。
+
+          最直接的实现不需要先构造完整单词数组：从字符串右端向左扫描，跳过空格，找到一个单词的 `[start,end]` 区间后追加到结果；重复这个过程直到扫描完成。这样天然按逆序输出，同时只在真正输出的单词之间补一个空格。
+
+          ## 1 分钟版
+
+          - 从右向左扫描，因为输出要求最后一个单词最先出现。
+          - 先跳过右侧连续空格；如果已经越过开头就结束。
+          - 记录当前单词结尾 `end`，继续向左走到空格或字符串开头，得到单词起点。
+          - 如果结果里已经有单词，先追加一个空格，再追加当前单词。
+          - 这个过程同时完成“单词逆序 + 首尾空格删除 + 多空格压成一个空格”。
+          - 每个输入位置最多被常数次扫描，时间 O(n)；返回新字符串本身需要 O(n) 输出空间，除输出外只用常数个索引。
+
+          ## 3 分钟版
+
+          ```java
+          public final class Solution {
+              private Solution() {}
+
+              public static String reverseWords(String s) {
+                  if (s == null) throw new NullPointerException("s");
+                  StringBuilder out = new StringBuilder(s.length());
+                  int i = s.length() - 1;
+
+                  while (i >= 0) {
+                      while (i >= 0 && s.charAt(i) == ' ') {
+                          i--;
+                      }
+                      if (i < 0) break;
+
+                      int end = i;
+                      while (i >= 0 && s.charAt(i) != ' ') {
+                          i--;
+                      }
+                      int start = i + 1;
+
+                      if (out.length() > 0) {
+                          out.append(' ');
+                      }
+                      out.append(s, start, end + 1);
+                  }
+                  return out.toString();
+              }
+          }
+          ```
+
+          例如输入 `"  hello   world  "`：先从右端跳过空格，提取 `world`；再跳过中间三个空格，提取 `hello`；结果只在两个已经确认的单词之间补一个空格，所以得到 `"world hello"`。
+
+          ## 关键细节
+
+          - **“反转”是单词顺序反转**：不是把每个字符倒过来；`hello world` 应得到 `world hello`，而不是 `dlrow olleh`。
+          - **空格契约**：本参考实现只把 ASCII `' '` 当分隔符。来源没有保存 tab、换行或其它 Unicode 空白的语义；若业务要按更广义空白分词，应明确替换分隔规则并补测试。
+          - **全空格或空串**：扫描不到任何单词，返回空串。
+          - **多空格**：扫描阶段直接跳过，不会原样复制，因此输出单词间只有一个空格。
+          - **Unicode 单词内容**：实现按 UTF-16 索引截取完整连续片段，不会主动反转单词内部字符；只要分隔符仍是 ASCII 空格，补充字符会随所属单词整体搬移。
+          - **复杂度**：扫描 O(n)，构造输出 O(n)；额外工作空间除返回结果外为 O(1)。如果把返回字符串占用也计入空间，则总新增空间是 O(n)。
+          - **替代方案**：`trim + split + reverse + join` 更直观，但通常会创建单词数组和多个中间对象；面试手撕时双指针扫描更能直接展示边界处理。
+
+          ## 原理机制
+
+          关键不变量是：每轮外层循环开始时，`i` 指向“尚未处理前缀”的最右位置，而 `out` 已经包含原字符串中所有位于 `i` 右侧的单词，并且这些单词已经按最终反转顺序、用单空格连接。
+
+          跳过空格不会丢失单词信息；找到下一个单词后，它正是尚未处理部分中最靠右的单词，也就是结果中下一个应该追加的单词。追加以后 `i` 移到这个单词左边，未知前缀严格缩短。终止时没有未处理单词，因此结果正好是全部单词的逆序。
+
+          ## 项目经验版
+
+          来源没有真实项目实现经历，不能虚构线上使用。工程里处理“句子/文本反转”前会先冻结分词契约：ASCII 空格、Unicode 空白、标点是否属于单词、是否保留原始空白、是否处理超大文本流。边界不同，正确的数据模型和实现也会不同。
+
+          ## 常见追问
+
+          - 问：为什么从右往左更方便？答：目标输出的第一个单词就是输入最右侧单词，逆向扫描可以边发现边输出，不需要先整体反转单词数组。
+          - 问：多个连续空格怎么处理？答：每次找单词前先把连续空格全部跳过；输出侧只在已有单词时补一个空格，因此自然完成归一化。
+          - 问：空串或全空格输入会怎样？答：找不到任何单词，`StringBuilder` 保持为空并返回空串。
+          - 问：为什么不是 O(1) 总空间？答：返回的新字符串本身需要与输出长度同阶的空间；只能说除输出外的辅助状态是 O(1)。
+          - 问：如果 tab 和换行也算分隔符呢？答：那是不同的分词契约，应把 `s.charAt(i) == ' '` 抽象成明确的空白判定，并针对目标字符集补测试。
+          - 问：能不能原地做？答：Java `String` 不可变；如果输入改成可写字符数组，可以讨论“整体反转 + 逐词反转 + 空格压缩”等原地方案，但那是另一个 API 契约。
+
+          ## 易错点
+
+          - 把“单词顺序反转”误写成逐字符反转。
+          - 没先跳过连续空格，导致输出出现多余空格或空单词。
+          - 把 `split(" ")` 当成无需边界处理的通用方案，忽略连续空格产生的空片段问题。
+          - 宣称 O(1) 总空间，却忽略返回新字符串必须占用空间。
+          - 来源没有定义 tab/换行等空白，却把某个更宽或更窄的分词规则冒充成原题事实。
+          EOF
+
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');const cid=process.env.CANONICAL_ID,p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p);const text=md.toString('utf8'),block=text.match(/```java\n([\s\S]*?)\n```/);if(!block||!block[1].includes('public static String reverseWords'))throw new Error('candidate code missing');fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(md).digest('hex')+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/WriterValidation.java <<'JAVA'
+          import java.util.*;
+          public final class WriterValidation {
+              static String oracle(String s){
+                  if(s==null)throw new NullPointerException("s");
+                  String t=s.trim();if(t.isEmpty())return "";
+                  String[] parts=t.split(" +");StringBuilder b=new StringBuilder();
+                  for(int i=parts.length-1;i>=0;i--){if(b.length()>0)b.append(' ');b.append(parts[i]);}return b.toString();
+              }
+              static void check(String s){String got=Solution.reverseWords(s),want=oracle(s);if(!got.equals(want))throw new AssertionError("input=["+s+"] got=["+got+"] want=["+want+"]");}
+              public static void main(String[] args){
+                  for(String s:new String[]{""," ","     ","a"," a ","hello world","  hello   world  ","the sky is blue","a good   example","🙂  hello  世界"})check(s);
+                  Random r=new Random(0x52575652495445L);String[] words={"a","bb","cat","delta","世界","🙂","x1"};long chars=0;
+                  for(int t=0;t<50000;t++){StringBuilder s=new StringBuilder();int lead=r.nextInt(5);s.append(" ".repeat(lead));int n=r.nextInt(12);for(int i=0;i<n;i++){if(i>0)s.append(" ".repeat(1+r.nextInt(5)));s.append(words[r.nextInt(words.length)]);}s.append(" ".repeat(r.nextInt(5)));chars+=s.length();check(s.toString());}
+                  try{Solution.reverseWords(null);throw new AssertionError("null accepted");}catch(NullPointerException expected){}
+                  System.out.println("PASS fixed=10 random=50000 chars="+chars+" trim-collapse=verified unicode-word-content=covered null=rejected");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/WriterValidation.java
+          stdout="$(java -cp /tmp WriterValidation)";echo "$stdout";grep -E '^PASS fixed=10 random=50000 chars=[0-9]+ trim-collapse=verified unicode-word-content=covered null=rejected$' <<<"$stdout";echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const tests=[{case:'empty, all-space, single and ordinary sentences',expected:'reverse word order with trimmed/collapsed ASCII spaces',passed:true},{case:'50,000 seeded random sentences',expected:'candidate equals independent split/reverse/join oracle',passed:true},{case:'non-ASCII content inside words',expected:'word content moves as a whole under ASCII-space contract',passed:true},{case:'null',expected:'NullPointerException',passed:true}];
+          fs.writeFileSync(`${out}/reverse_words_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate; fixed and seeded-random split/reverse/join oracle validation',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'structured-note',title:'Structured interview note preserving Reverse Words in a String prompt',locator:'note_structured/68998c2a0000000004000492.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Reverse-words deterministic/random Java validation',locator:`${out}/reverse_words_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source preserves a Reverse Words in a String coding task; API, exact whitespace domain, null handling and mutation semantics are not frozen by the source.',source_ids:['structured-note','source-inventory'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'reference-behavior',text:'Under the declared ASCII-space Java reference contract, right-to-left scanning reverses word order while trimming outer spaces and collapsing internal runs, matching an independent split/reverse/join oracle.',source_ids:['writer-validation'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed',candidate_sha256:sha},null,2)+'\n');
+          NODE
+
+      - name: Candidate repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID/writer_research.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/reverse_words_validation.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0043 reverse-words candidate'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+            sleep 5
+          done
+          exit 1
