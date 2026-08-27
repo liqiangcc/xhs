@@ -1,0 +1,216 @@
+name: Build Content Batch 0043 Symmetric Tree
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0043-symmetric-tree.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-symmetric-tree-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b2f3138ad7966d5ee56a02ddfbcc3892
+  SOURCE_QID: b2f3138ad7966d5ee56a02ddfbcc3892
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：判断二叉树是否镜像对称';
+          const raw=JSON.parse(fs.readFileSync('note_structured/680e66cb0000000023012aa3.json','utf8'));
+          if(raw.questions?.[0]!==exact) throw new Error('symmetric-tree source boundary drifted');
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding') throw new Error('batch0043 inventory state/type drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid])) throw new Error('inventory ownership drifted');
+          if(item.source_questions?.[0]?.original_question!==exact) throw new Error('inventory source wording drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('live ownership/type drifted');
+          NODE
+
+      - name: Write source-bounded candidate and writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0043/$cid";candidate="review/candidates/answers/$cid.md";mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b2f3138ad7966d5ee56a02ddfbcc3892","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 判断二叉树是否镜像对称
+
+          ## 核心结论
+
+          来源只保存了“判断二叉树是否镜像对称”，没有冻结语言、节点 API、空树语义或递归/迭代要求。下面采用一个明确的 Java 参考契约：节点包含 `int val`、`left`、`right`；空树视为对称。核心不是分别判断左右子树，而是比较一对“镜像位置”的节点：两者同时为空才相等；只有一个为空或值不同就不对称；否则递归比较 `left.left` 对 `right.right`，以及 `left.right` 对 `right.left`。
+
+          ## 1 分钟版
+
+          - 空树直接返回 `true`。
+          - 定义 `mirror(a,b)`：它表示“以 `a`、`b` 为根的两棵子树是否互为镜像”。
+          - `a`、`b` 都为空：`true`；只有一个为空：`false`；值不同：`false`。
+          - 值相同后，外侧必须互为镜像：`a.left` 对 `b.right`；内侧也必须互为镜像：`a.right` 对 `b.left`。
+          - 根节点自身不用与别的节点比较，所以答案是 `mirror(root.left, root.right)`。
+          - 每个节点最多比较一次，时间 O(n)；递归栈 O(h)，其中 h 是树高，退化树最坏 O(n)。
+
+          ## 3 分钟版
+
+          ```java
+          public final class Solution {
+              private Solution() {}
+
+              public static final class TreeNode {
+                  public int val;
+                  public TreeNode left;
+                  public TreeNode right;
+
+                  public TreeNode(int val) {
+                      this.val = val;
+                  }
+              }
+
+              public static boolean isSymmetric(TreeNode root) {
+                  return root == null || mirror(root.left, root.right);
+              }
+
+              private static boolean mirror(TreeNode a, TreeNode b) {
+                  if (a == null || b == null) {
+                      return a == b;
+                  }
+                  if (a.val != b.val) {
+                      return false;
+                  }
+                  return mirror(a.left, b.right)
+                      && mirror(a.right, b.left);
+              }
+          }
+          ```
+
+          例如根的左右孩子都为 `2`。如果左子树外侧是 `3`、内侧是 `4`，那么右子树必须外侧是 `3`、内侧是 `4`，也就是右孩子的 `right=3`、`left=4`。只比较同方向的 `left-left` 或 `right-right` 会把“结构相同”误当成“镜像相同”。
+
+          ## 关键细节
+
+          - **镜像比较的是成对位置**：外侧 `a.left ↔ b.right`，内侧 `a.right ↔ b.left`，方向必须交叉。
+          - **结构和值都要一致**：一个位置只有一边有节点，即使其它值相同也不是镜像。
+          - **空树语义**：本参考契约把空树定义为对称；这是常见约定，但来源没有单独冻结该 API 细节，所以答案明确声明而不是冒充题干事实。
+          - **复杂度**：每个可达节点只进入常数次判断，时间 O(n)；递归深度等于树高 O(h)。完全平衡树为 O(log n)，退化链最坏 O(n)。
+          - **迭代替代**：可用队列保存待比较的节点对 `(a,b)`，每次入队 `(a.left,b.right)` 和 `(a.right,b.left)`；这样消除递归调用栈，但仍需 O(w) 级队列空间，w 为同时待比较的镜像节点对数量。
+          - **值类型**：示例用 `int` 直接比较。若节点值是对象，应按题目定义的相等语义比较，不能机械套用 `==`。
+
+          ## 原理机制
+
+          递归函数的不变量是：`mirror(a,b)` 只回答一个问题——这两棵子树在以中轴翻转后是否完全重合。根位置要先满足“同时为空”或“同时非空且值相同”；若根位置成立，剩余问题恰好分成两个规模更小且互不遗漏的镜像子问题：左外侧对右外侧、左内侧对右内侧。叶子最终归约到两个空节点，得到 `true`。任何结构缺失或值不等都会在对应镜像位置立即返回 `false`。
+
+          ## 项目经验版
+
+          来源没有真实项目经历，不能虚构线上使用。工程里如果树来自反序列化、AST、组织结构或配置模型，首先要冻结“节点相等”的业务语义以及是否可能出现共享引用/环；普通二叉树题默认是无环树，若输入实际是一般对象图，就需要额外的访问状态和图语义，不能直接把递归树算法当成通用对象图算法。
+
+          ## 常见追问
+
+          - 问：为什么不是 `mirror(a.left,b.left)`？答：镜像后左边的外侧对应右边的外侧，也就是 `a.left` 对 `b.right`；同方向比较检查的是结构相似，不是镜像。
+          - 问：空树为什么返回 `true`？答：在本参考契约里，中轴两侧都没有节点，没有任何不匹配位置，因此定义为对称；如果题目 API 另有约定，应服从题目。
+          - 问：时间复杂度为什么是 O(n)？答：每个节点只作为某个镜像节点对的一部分被检查一次，每次除递归外只做常数工作。
+          - 问：递归会不会栈溢出？答：深度是树高，退化树可能达到 O(n)；若输入深度不可控，可改成显式队列/栈保存节点对。
+          - 问：如何改成迭代？答：队列初始放 `(root.left,root.right)`，每次做同样的空/值判断，再把两组交叉孩子入队。
+          - 问：只比较前序遍历结果行不行？答：普通值序列若不编码空节点位置，会丢失结构信息；必须保留结构标记，或者直接成对比较节点。
+
+          ## 易错点
+
+          - 左右孩子同方向比较，把“同构”误当“镜像”。
+          - 只比较节点值，不比较某个镜像位置是否一边为空。
+          - 忘记空树或单节点树的边界。
+          - 宣称递归空间恒为 O(log n)，忽略退化树最坏 O(n)。
+          - 输入若可能不是严格无环树，却没有定义环或共享节点语义。
+          EOF
+
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');const cid=process.env.CANONICAL_ID,p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p);const text=md.toString('utf8'),block=text.match(/```java\n([\s\S]*?)\n```/);if(!block||!block[1].includes('public static boolean isSymmetric'))throw new Error('candidate code missing');fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(md).digest('hex')+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/WriterValidation.java <<'JAVA'
+          import java.util.*;
+          public final class WriterValidation {
+              static Solution.TreeNode n(int v){return new Solution.TreeNode(v);}
+              static Solution.TreeNode cloneTree(Solution.TreeNode x){if(x==null)return null;Solution.TreeNode y=n(x.val);y.left=cloneTree(x.left);y.right=cloneTree(x.right);return y;}
+              static Solution.TreeNode mirrorClone(Solution.TreeNode x){if(x==null)return null;Solution.TreeNode y=n(x.val);y.left=mirrorClone(x.right);y.right=mirrorClone(x.left);return y;}
+              static Solution.TreeNode randomTree(Random r,int depth){if(depth==0||r.nextInt(5)==0)return null;Solution.TreeNode x=n(r.nextInt(7)-3);x.left=randomTree(r,depth-1);x.right=randomTree(r,depth-1);return x;}
+              static Solution.TreeNode symmetricFrom(Solution.TreeNode half){Solution.TreeNode root=n(99);root.left=cloneTree(half);root.right=mirrorClone(half);return root;}
+              static void must(boolean b,String m){if(!b)throw new AssertionError(m);}
+              public static void main(String[] args){
+                  must(Solution.isSymmetric(null),"empty");Solution.TreeNode one=n(1);must(Solution.isSymmetric(one),"single");
+                  Solution.TreeNode s=n(1);s.left=n(2);s.right=n(2);s.left.left=n(3);s.left.right=n(4);s.right.left=n(4);s.right.right=n(3);must(Solution.isSymmetric(s),"classic symmetric");
+                  s.right.right.val=8;must(!Solution.isSymmetric(s),"value mismatch");s.right.right.val=3;s.right.left=null;must(!Solution.isSymmetric(s),"structure mismatch");
+                  Random r=new Random(0x53594d4d45545259L);long checked=0;
+                  for(int t=0;t<30000;t++){Solution.TreeNode half=randomTree(r,7),root=symmetricFrom(half);must(Solution.isSymmetric(root),"generated symmetric "+t);if(root.left!=null){root.right.val++;must(!Solution.isSymmetric(root),"root-side value mutation "+t);}checked++;}
+                  System.out.println("PASS fixed=5 generated-symmetric="+checked+" mirror-construction=verified mutation-mismatch=verified empty-single=verified");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/WriterValidation.java
+          stdout="$(java -cp /tmp WriterValidation)";echo "$stdout";grep -E '^PASS fixed=5 generated-symmetric=30000 mirror-construction=verified mutation-mismatch=verified empty-single=verified$' <<<"$stdout";echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const tests=[{case:'empty/single/classic symmetric tree',expected:'true',passed:true},{case:'value and structural mismatch',expected:'false',passed:true},{case:'30,000 seeded generated mirror trees',expected:'true and mismatch after mirrored-side value mutation when non-empty',passed:true}];
+          fs.writeFileSync(`${out}/symmetric_tree_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact Java candidate and run WriterValidation',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'structured-note',title:'Structured interview note preserving symmetric-tree prompt',locator:'note_structured/680e66cb0000000023012aa3.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Generated-mirror deterministic Java validation',locator:`${out}/symmetric_tree_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source freezes only a symmetric-binary-tree coding task; language, node API, empty-tree semantics and recursive/iterative form are not preserved source constraints.',source_ids:['structured-note','source-inventory'],answer_locations:['核心结论','关键细节','项目经验版']},{claim_id:'reference-algorithm',text:'Under the declared Java tree contract, cross-pair mirror recursion accepts generated mirrored trees and rejects value/structure mismatches.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Writer repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID/writer_research.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/symmetric_tree_validation.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0043 symmetric-tree candidate'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+            sleep 5
+          done
+          exit 1
