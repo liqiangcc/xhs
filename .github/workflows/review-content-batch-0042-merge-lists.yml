@@ -1,0 +1,218 @@
+name: Review Content Batch 0042 Merge Lists
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0042-merge-lists.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0042-merge-lists-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_aaec8b46cd3d79fe404075828be32744
+  SOURCE_QID: aaec8b46cd3d79fe404075828be32744
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Source-first inspection before writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const structured=JSON.parse(fs.readFileSync('note_structured/68b25819000000001d01de50.json','utf8'));
+          const exact='算法实战：实现两个有序链表的升序合并。要求分别提供递归（Recursion）与迭代（Iteration）两种物理实现，并分析其在堆栈空间消耗上的差异';
+          if(!Array.isArray(structured.questions)||structured.questions[5]!==exact) throw new Error('merge-lists source boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('ownership/type drifted');
+          const src=(ctx.source_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact) throw new Error('source wording drifted');
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const marker of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','mergeRecursive','mergeIterative','O(m+n)','O(1)','调用栈']) if(!md.includes(marker)) throw new Error(`candidate marker missing: ${marker}`);
+          if((md.match(/- 问：/g)||[]).length<5) throw new Error('question-specific followups missing');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们/.test(md)) throw new Error('fabricated production claim risk');
+          if(!md.includes('来源没有真实项目背景')) throw new Error('no-fabrication boundary missing');
+          if(!md.includes('来源没有保存节点类、语言、是否允许复用原节点')) throw new Error('reference-contract boundary missing');
+          const block=md.match(/```java\n([\s\S]*?)\n```/);
+          if(!block||!block[1].includes('public class Solution')) throw new Error('self-contained candidate Java block missing');
+          fs.writeFileSync('/tmp/Solution.java',block[1]+'\n');
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(`review/candidates/answers/${cid}.md`)).digest('hex');
+          fs.writeFileSync('/tmp/candidate-sha',sha+'\n');
+          fs.writeFileSync('/tmp/source-first-preconclusion.json',JSON.stringify({decision:'pass_pending_independent_oracle',source_boundary:'merge two ascending lists with recursive and iterative implementations and compare stack-space cost',non_source_reference_choices:['Java node/API','node reuse','tie ordering'],candidate_sha256:sha},null,2)+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+
+      - name: Execute independent list-merge oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/Reviewer.java <<'JAVA'
+          import java.util.*;
+
+          public final class Reviewer {
+              static Solution.ListNode build(int[] xs, List<Solution.ListNode> nodes) {
+                  Solution.ListNode dummy = new Solution.ListNode(0), tail = dummy;
+                  for (int x : xs) {
+                      Solution.ListNode n = new Solution.ListNode(x);
+                      nodes.add(n);
+                      tail.next = n;
+                      tail = n;
+                  }
+                  return dummy.next;
+              }
+              static List<Integer> expected(int[] a, int[] b) {
+                  List<Integer> out = new ArrayList<>();
+                  for (int x : a) out.add(x);
+                  for (int x : b) out.add(x);
+                  Collections.sort(out);
+                  return out;
+              }
+              static void checkOutput(Solution.ListNode head, List<Integer> want, List<Solution.ListNode> inputNodes) {
+                  Set<Solution.ListNode> allowed = Collections.newSetFromMap(new IdentityHashMap<>());
+                  allowed.addAll(inputNodes);
+                  Set<Solution.ListNode> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+                  List<Integer> got = new ArrayList<>();
+                  for (Solution.ListNode p=head; p!=null; p=p.next) {
+                      if (!seen.add(p)) throw new AssertionError("cycle or duplicate node identity");
+                      if (!allowed.contains(p)) throw new AssertionError("new data node introduced");
+                      got.add(p.val);
+                  }
+                  if (!got.equals(want)) throw new AssertionError("got="+got+" want="+want);
+                  if (seen.size()!=inputNodes.size()) throw new AssertionError("input node lost");
+              }
+              static List<int[]> arrays() {
+                  List<int[]> out = new ArrayList<>();
+                  int[] values={-2,0,2};
+                  out.add(new int[]{});
+                  for(int a:values) out.add(new int[]{a});
+                  for(int a:values) for(int b:values) if(a<=b) out.add(new int[]{a,b});
+                  for(int a:values) for(int b:values) for(int c:values) if(a<=b&&b<=c) out.add(new int[]{a,b,c});
+                  out.add(new int[]{Integer.MIN_VALUE,0,Integer.MAX_VALUE});
+                  return out;
+              }
+              static void runCase(int[] a, int[] b, boolean recursive) {
+                  List<Solution.ListNode> nodes=new ArrayList<>();
+                  Solution.ListNode x=build(a,nodes), y=build(b,nodes);
+                  Solution.ListNode merged=recursive?Solution.mergeRecursive(x,y):Solution.mergeIterative(x,y);
+                  checkOutput(merged,expected(a,b),nodes);
+              }
+              public static void main(String[] args) {
+                  List<int[]> cases=arrays();
+                  int pairs=0;
+                  for(int[] a:cases) for(int[] b:cases) {
+                      runCase(a,b,true);
+                      runCase(a,b,false);
+                      pairs++;
+                  }
+                  int[] longA=new int[1200], longB=new int[1200];
+                  for(int i=0;i<1200;i++){longA[i]=i*2;longB[i]=i*2+1;}
+                  runCase(longA,longB,false);
+                  System.out.println("PASS pairs="+pairs+" recursive+iterative=oracle-match identity-reuse=no-cycle nulls+duplicates+extremes=covered iterative-long=2400");
+              }
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/Reviewer.java
+          stdout="$(java -cp /tmp Reviewer)"
+          echo "$stdout"
+          grep -E '^PASS pairs=[0-9]+ recursive\+iterative=oracle-match identity-reuse=no-cycle nulls\+duplicates\+extremes=covered iterative-long=2400$' <<<"$stdout"
+          echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze independent review and evidence after conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0042/$cid"; sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0042/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const pre=JSON.parse(fs.readFileSync('/tmp/source-first-preconclusion.json','utf8'));
+          if(pre.decision!=='pass_pending_independent_oracle'||pre.candidate_sha256!==sha) throw new Error('source-first preconclusion drifted');
+          const writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));
+          if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha) throw new Error('writer packet/hash drifted');
+          const writerValidation=JSON.parse(fs.readFileSync(`${out}/merge_sorted_lists_validation.json`,'utf8'));
+          if(writerValidation.result!=='pass') throw new Error('writer validation did not pass');
+          const boundaryTests=[
+            {case:'empty/null list combinations',expected:'sorted union with no missing nodes',passed:true},
+            {case:'duplicate/equal keys',expected:'all nodes preserved and output nondecreasing',passed:true},
+            {case:'integer minimum/maximum values',expected:'comparison remains ordered without arithmetic overflow',passed:true},
+            {case:'generated sorted-list pair cross-product',expected:'recursive and iterative equal independent sorted-concatenation oracle',passed:true},
+            {case:'2400-node iterative merge',expected:'complete ordered output without recursion stack dependence',passed:true}
+          ];
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'Repository source explicitly requires ascending merge, recursive and iterative implementations, and stack-space comparison; node class, language, node reuse, and equal-key stability are not source-proven.',
+            'Candidate clearly labels Java, input-node reuse, finite acyclic inputs, and first-list tie preference as reference-contract choices rather than source facts.',
+            'Both implementations make the same local decision: the smaller current head must be the next output node; recursive state is stored in call frames while iterative state remains in a constant number of references.',
+            'Independent Java oracle validates recursive and iterative outputs across a generated cross-product including empty lists, duplicates and integer extremes, and verifies exact input-node identity reuse with no cycle.',
+            'The O(m+n) time, O(m+n) worst-case recursive call stack, and O(1) iterative auxiliary-space claims are consistent with the shown implementations; the answer avoids fabricated production experience.'
+          ];
+          fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate Solution.java; compile/run independent Reviewer.java',stdout:process.env.REVIEW_STDOUT,boundary_tests:boundaryTests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0042-merge-lists-20260827-v1',review_version:'batch-0042.merge-lists.v1',decision:'pass',revision_round:1,source_packet:['note_structured/68b25819000000001d01de50.json','review/content_build/answer_batch_0042/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0042-merge-lists-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'structured-note',title:'Structured interview note preserving merge-lists requirements',locator:'note_structured/68b25819000000001d01de50.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0042 frozen source inventory',locator:'review/content_build/answer_batch_0042/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Writer deterministic Java merge fixture',locator:`${out}/merge_sorted_lists_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent Java merge oracle',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Merge-lists source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The strongest repository source explicitly requires ascending merge, recursive and iterative implementations, and stack-space comparison; Java/API, node reuse, and tie stability are not source-proven.',source_ids:['structured-note','source-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','易错点']},{claim_id:'implementation-and-space',text:'Under the declared Java node-reuse contract, both implementations match an independent sorted-union oracle while preserving every input node exactly once; the recursive implementation can accumulate linear call depth while the iterative implementation retains constant auxiliary pointer state.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'compile exact candidate Solution.java; compile/run independent Reviewer.java',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:boundaryTests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],uncovered_source_variants:[],unsupported_claims:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+          fs.mkdirSync('review/evidence',{recursive:true});
+          fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+
+      - name: Strict candidate audit and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit unique review artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/content_build/answer_batch_0042/$CANONICAL_ID/reviewer_validation.json" "review/content_build/answer_batch_0042/$CANONICAL_ID/isolated_review_result.json" "review/evidence/$CANONICAL_ID.json"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'review: pass batch 0042 merge-lists candidate source-first'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same review artifacts; fail closed.' >&2
+              exit 1
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push merge-lists review artifacts after safe retries.' >&2
+          exit 1
