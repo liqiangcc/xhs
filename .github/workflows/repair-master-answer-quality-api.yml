@@ -1,0 +1,120 @@
+name: Repair Master Answer Quality Public API
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/repair-master-answer-quality-api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-master-answer-quality-public-api
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Restore answer-quality implementation from tested content line
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "$CONTENT_BRANCH"
+          git show "origin/$CONTENT_BRANCH:scripts/lib/answer_quality.js" > /tmp/answer_quality.js
+          node <<'NODE'
+          const fs=require('fs');
+          const text=fs.readFileSync('/tmp/answer_quality.js','utf8');
+          for(const marker of [
+            'function sha256(',
+            'function extractCodeBlocks(',
+            'function runAnswerAudit(',
+            'function atomicPromote(',
+            'function atomicDemote(',
+            'function atomicDemoteMissingEvidence(',
+            'sha256,',
+            'extractCodeBlocks,',
+            'runAnswerAudit,',
+            'atomicDemoteMissingEvidence,',
+            'CREATE\\s+TABLE'
+          ]) if(!text.includes(marker)) throw new Error(`tested content implementation missing expected marker: ${marker}`);
+          NODE
+          cp /tmp/answer_quality.js scripts/lib/answer_quality.js
+          git diff --check
+          git diff --stat -- scripts/lib/answer_quality.js
+
+      - name: Run answer-quality regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test \
+            test/answer_candidate.test.js \
+            test/answer_completion.test.js \
+            test/answer_evidence.test.js \
+            test/answer_javascript_candidate.test.js \
+            test/answer_promote.test.js \
+            test/answer_code_validation.test.js
+
+      - name: Run complete repository gates before publishing repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit repair only after all gates pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add scripts/lib/answer_quality.js
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'Master already matches tested answer-quality implementation.'
+            exit 0
+          fi
+          git config user.name xhs-ci-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'ci: restore answer quality public API and gates'
+          for attempt in 1 2 3; do
+            git fetch origin master
+            if ! git rebase origin/master; then
+              git rebase --abort || true
+              echo 'Master changed in a conflicting answer-quality area; fail closed.' >&2
+              exit 1
+            fi
+            if git push origin HEAD:master; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Unable to publish answer-quality repair after safe retries.' >&2
+          exit 1
