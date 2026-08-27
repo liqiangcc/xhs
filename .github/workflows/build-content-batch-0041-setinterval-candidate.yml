@@ -1,0 +1,341 @@
+name: Build Content Batch 0041 setInterval Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0041-setinterval-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0041-setinterval-candidate
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a7ba6548994bab4e4412f98bf4a8dee2
+  SOURCE_QID: a7ba6548994bab4e4412f98bf4a8dee2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Verify exact source and current ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "$out/context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：实现 setInterval 和 clearInterval';
+          const tagged=JSON.parse(fs.readFileSync('note_tagged/6668131f00000000060061b3.json','utf8')).tagged_questions||[];
+          const src=tagged.find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('setInterval tagged source drifted');
+          const raw=fs.readFileSync('note_desc/6668131f00000000060061b3.txt','utf8');
+          if(!raw.includes('写两道题吧')) throw new Error('original note coding-question boundary drifted');
+          const ctx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0041/${cid}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('answer context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`expected singleton ownership, got ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0041/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||item.answer_type!=='coding'||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('Batch 0041 frozen inventory drifted');
+          const rr=fs.readFileSync('review/content_build/answer_batch_0041/recoverability_review.md','utf8');
+          if(!rr.includes(`### \`${cid}\` — recoverable as Coding with explicit API boundary`)) throw new Error('recoverability decision missing');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; out="review/content_build/answer_batch_0041/$cid"; candidate="review/candidates/answers/$cid.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a7ba6548994bab4e4412f98bf4a8dee2","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # 实现 setInterval 和 clearInterval
+
+          ## 核心结论
+
+          仓库能恢复出的题目只有“实现 `setInterval` 和 `clearInterval`”。没有保留下浏览器还是 Node、句柄必须是数字还是对象、参数转发、`this` 绑定、计时精度、异常传播和重入等规范细节。因此不能声称下面代码是原生 Timer API 的完整兼容实现。
+
+          这里给一个可执行的最小契约：用递归 `setTimeout` 实现重复调度，`setIntervalPolyfill(callback, delay)` 返回一个不透明对象句柄；`clearIntervalPolyfill(handle)` 幂等地取消当前待执行 timer，并保证该句柄之后不再安排新的回调。重点验证两个容易错的竞态边界：第一次触发前取消，以及回调内部取消自身。
+
+          ## 1 分钟版
+
+          - `setInterval` 的本质是“只要仍处于 active 状态，就在一次触发后继续安排下一次触发”。
+          - 每个 interval 保存自己的状态：是否 active，以及当前 `setTimeout` 返回的 timer id。
+          - 第一次调用时先安排一个 timeout；timeout 到期后执行 callback，只有句柄仍 active 才继续安排下一次。
+          - `clearInterval` 先把 active 置为 `false`，再取消当前 timer。这样即使在 callback 内部调用 clear，callback 返回后的代码也不会重新 schedule。
+          - 本实现每次是在 callback 结束后再等待一个 `delay`，所以会发生相对原生周期调度更明显的 drift；题目没有保存精确时钟语义，必须把这个差异说清楚。
+
+          ## 3 分钟版
+
+          ```javascript
+          function createIntervalApi(setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout) {
+            const states = new WeakMap();
+
+            function setIntervalPolyfill(callback, delay) {
+              if (typeof callback !== 'function') {
+                throw new TypeError('callback must be a function');
+              }
+
+              const handle = Object.freeze({});
+              const state = { active: true, timer: null };
+              states.set(handle, state);
+
+              const schedule = () => {
+                if (!state.active) return;
+                state.timer = setTimeoutFn(tick, delay);
+              };
+
+              const tick = () => {
+                if (!state.active) return;
+                try {
+                  callback();
+                } finally {
+                  if (state.active) schedule();
+                  else state.timer = null;
+                }
+              };
+
+              schedule();
+              return handle;
+            }
+
+            function clearIntervalPolyfill(handle) {
+              const state = states.get(handle);
+              if (!state || !state.active) return;
+              state.active = false;
+              if (state.timer !== null) {
+                clearTimeoutFn(state.timer);
+                state.timer = null;
+              }
+            }
+
+            return { setIntervalPolyfill, clearIntervalPolyfill };
+          }
+          ```
+
+          这里把 timer 后端作为依赖注入，是为了让核心状态机可以被确定性测试；实际使用时默认就是宿主环境的 `setTimeout` / `clearTimeout`。`WeakMap` 不负责“计时”，只用来把不透明句柄映射到内部状态，避免调用方通过修改句柄字段破坏 `active/timer` 不变量。
+
+          ## 关键细节
+
+          - **clear-before-first-fire**：第一次 timeout 已经排队，但 `clearInterval` 会把 active 置为 false 并调用 `clearTimeout`，所以 callback 不应执行。
+          - **clear-inside-callback**：callback 执行时当前 timeout 已经触发；clear 会关闭 active。`finally` 再检查 active，发现为 false 后不会安排下一次。
+          - **重复 clear**：第二次清理同一个句柄直接返回，不重复产生副作用。
+          - **不透明句柄**：示例返回冻结对象，真正状态保存在 `WeakMap` 中；这只是本参考实现的 API 选择，不是原题保留下来的格式要求。
+          - **计时漂移**：下一次 timeout 在 callback 结束后才创建，因此 callback 自己耗时也会叠加到周期。若面试官要求更接近固定节拍，需要重新定义基于目标时间点的调度策略并处理追赶/跳过策略。
+          - **宿主差异**：delay 的负数/小数归一化、最小 timer 精度、后台页面节流、numeric id、额外参数转发、`this` 和 event-loop 细节都由平台规范决定；当前来源没有保存这些契约。
+
+          ## 原理机制
+
+          这类实现最重要的是状态机而不是“递归”两个字。一个句柄只有 `active` 和 `cleared` 两种逻辑状态。`setIntervalPolyfill` 创建 active 状态并安排一个待执行任务；任务触发后先执行 callback，再根据同一个状态决定是否创建下一条 timer 边。`clearIntervalPolyfill` 是唯一把状态变成 cleared 的操作，并同时尝试删除当前待执行任务。
+
+          正确性依赖一个不变量：**只有 active 句柄能够创建新的 timer**。因此无论 clear 发生在第一次触发前、两次触发之间，还是 callback 内部，只要所有 schedule 路径都先检查 active，就不会在取消后“死灰复燃”。
+
+          ## 项目经验版
+
+          来源没有真实项目、浏览器版本或生产时序数据，不能虚构“线上实现过 Timer”。工程上如果只是需要原生能力，应直接使用平台 `setInterval/clearInterval`；自己封装通常是为了可取消任务、测试时钟或统一生命周期管理。若业务对固定节拍、长任务漂移、页面后台节流有严格要求，应先定义可接受的计时误差和追赶策略，再选择 timer、`requestAnimationFrame`、worker 或服务端调度，而不是把这个面试 polyfill 当生产级 scheduler。
+
+          ## 常见追问
+
+          - 问：为什么不用真正的 `setInterval`？答：题目就是要求实现这对 API；递归 `setTimeout` 能把“安排下一次”和“取消后禁止再安排”的状态机显式写出来。
+          - 问：为什么 callback 内 clear 不会继续执行？答：clear 把内部 active 改为 false；callback 返回进入 `finally` 时会再次检查 active，因此不 schedule 下一次。
+          - 问：为什么还要 `clearTimeout`，只改 active 不行吗？答：只改 active 也能让到期函数立即 return，但已排队 timer 仍占用宿主调度资源；能取消时应把当前 timer 一并撤掉。
+          - 问：这个和原生 `setInterval` 完全一致吗？答：不一致。这个参考契约不保证 numeric handle、参数转发、精确节拍、平台 delay 归一化等规范行为，而且按 callback 完成时间递归安排会产生漂移。
+          - 问：异常时会怎样？答：`finally` 会在 active 时安排下一次，但 callback 异常本身如何影响进程或全局错误处理取决于宿主运行时；来源没有保存异常语义，不能把某个平台行为写成原题要求。
+
+          ## 易错点
+
+          - callback 执行后无条件递归 schedule，导致 callback 内已经 clear 仍然重新启动。
+          - clear 只删除当前 timer id，却没有永久状态位，之后某条并发/重入路径又创建新 timer。
+          - 宣称递归 `setTimeout` 与浏览器/Node 原生 `setInterval` 在节拍、句柄和参数语义上完全等价。
+          - 用真实毫秒 sleep 做测试，导致 CI 受机器负载影响而出现时序抖动；更可靠的是注入 fake timer 做状态机测试。
+          - 没有区分“来源保存的要求”和为了形成可执行答案而补充的最小参考契约。
+          EOF
+
+          cat > "$out/interval_polyfill.js" <<'JS'
+          'use strict';
+
+          function createIntervalApi(setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout) {
+            const states = new WeakMap();
+
+            function setIntervalPolyfill(callback, delay) {
+              if (typeof callback !== 'function') throw new TypeError('callback must be a function');
+              const handle = Object.freeze({});
+              const state = { active: true, timer: null };
+              states.set(handle, state);
+
+              const schedule = () => {
+                if (!state.active) return;
+                state.timer = setTimeoutFn(tick, delay);
+              };
+              const tick = () => {
+                if (!state.active) return;
+                try {
+                  callback();
+                } finally {
+                  if (state.active) schedule();
+                  else state.timer = null;
+                }
+              };
+
+              schedule();
+              return handle;
+            }
+
+            function clearIntervalPolyfill(handle) {
+              const state = states.get(handle);
+              if (!state || !state.active) return;
+              state.active = false;
+              if (state.timer !== null) {
+                clearTimeoutFn(state.timer);
+                state.timer = null;
+              }
+            }
+
+            return { setIntervalPolyfill, clearIntervalPolyfill };
+          }
+
+          module.exports = { createIntervalApi };
+          JS
+
+          cat > "$out/interval_polyfill_test.js" <<'JS'
+          'use strict';
+          const assert = require('assert');
+          const { createIntervalApi } = require('./interval_polyfill');
+
+          class FakeTimers {
+            constructor() { this.nextId = 1; this.pending = new Map(); this.delays = []; }
+            setTimeout(fn, delay) {
+              const id = this.nextId++;
+              this.pending.set(id, { fn, delay });
+              this.delays.push(delay);
+              return id;
+            }
+            clearTimeout(id) { this.pending.delete(id); }
+            firstId() { return this.pending.keys().next().value; }
+            fire(id) {
+              const task = this.pending.get(id);
+              if (!task) return false;
+              this.pending.delete(id);
+              task.fn();
+              return true;
+            }
+          }
+
+          const timers = new FakeTimers();
+          const api = createIntervalApi(timers.setTimeout.bind(timers), timers.clearTimeout.bind(timers));
+
+          let calls = 0;
+          const repeating = api.setIntervalPolyfill(() => { calls++; }, 25);
+          assert.strictEqual(timers.pending.size, 1);
+          let id = timers.firstId();
+          assert.strictEqual(timers.fire(id), true);
+          assert.strictEqual(calls, 1);
+          assert.strictEqual(timers.pending.size, 1);
+          id = timers.firstId();
+          assert.strictEqual(timers.fire(id), true);
+          assert.strictEqual(calls, 2);
+          assert.strictEqual(timers.pending.size, 1);
+          api.clearIntervalPolyfill(repeating);
+          assert.strictEqual(timers.pending.size, 0);
+          api.clearIntervalPolyfill(repeating);
+          assert.strictEqual(timers.pending.size, 0);
+
+          let beforeFirst = 0;
+          const early = api.setIntervalPolyfill(() => { beforeFirst++; }, 7);
+          assert.strictEqual(timers.pending.size, 1);
+          api.clearIntervalPolyfill(early);
+          assert.strictEqual(timers.pending.size, 0);
+          assert.strictEqual(beforeFirst, 0);
+
+          let insideCalls = 0;
+          let self;
+          self = api.setIntervalPolyfill(() => {
+            insideCalls++;
+            api.clearIntervalPolyfill(self);
+          }, 11);
+          assert.strictEqual(timers.pending.size, 1);
+          assert.strictEqual(timers.fire(timers.firstId()), true);
+          assert.strictEqual(insideCalls, 1);
+          assert.strictEqual(timers.pending.size, 0);
+
+          assert.throws(() => api.setIntervalPolyfill(null, 1), TypeError);
+          api.clearIntervalPolyfill(Object.freeze({}));
+          assert.deepStrictEqual(timers.delays, [25, 25, 25, 7, 11]);
+
+          console.log('PASS repeat-reschedules clear-stops clear-before-first clear-inside-callback double-clear unknown-handle delay-forwarding callback-type-check');
+          JS
+
+      - name: Execute fixture and freeze writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0041/$cid"; candidate="review/candidates/answers/$cid.md"
+          stdout="$(node "$out/interval_polyfill_test.js")"
+          test "$stdout" = 'PASS repeat-reschedules clear-stops clear-before-first clear-inside-callback double-clear unknown-handle delay-forwarding callback-type-check'
+          STDOUT="$stdout" node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0041/${cid}`,candidate=`review/candidates/answers/${cid}.md`;
+          const sha=crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex');
+          fs.writeFileSync(`${out}/code_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'node interval_polyfill_test.js',stdout:process.env.STDOUT,checks:['normal repeated rescheduling','clear stops a pending next fire','clear before first fire','clear from inside callback','idempotent double clear','unknown-handle no-op','delay forwarded to timer backend','non-function callback rejected']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-tagged-question',title:'Image-derived tagged Coding Question preserving the requested setInterval/clearInterval API pair',locator:`note_tagged/6668131f00000000060061b3.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'repository-caption',title:'Original text caption preserving only that two coding questions were asked',locator:'note_desc/6668131f00000000060061b3.txt',source_type:'repository_source_record',checked_at:date},{source_id:'recoverability-review',title:'Batch 0041 pre-draft source-first recoverability decision',locator:'review/content_build/answer_batch_0041/recoverability_review.md',source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Deterministic fake-timer validation for the declared minimal polyfill contract',locator:`${out}/code_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-contract',text:'The strongest surviving repository question text requests implementing setInterval and clearInterval; the caption does not preserve the bodies of the two coding questions.',source_ids:['repository-tagged-question','repository-caption','recoverability-review'],answer_locations:['核心结论','1 分钟版']},{claim_id:'source-boundary',text:'Runtime, handle shape, exact timing, argument forwarding, this binding, delay normalization, error and reentrancy semantics are not source-preserved, so the answer labels an explicit minimal reference contract and non-equivalence to native platform specifications.',source_ids:['repository-tagged-question','repository-caption','recoverability-review'],answer_locations:['核心结论','关键细节','项目经验版','常见追问']},{claim_id:'reference-implementation',text:'Under the declared recursive-setTimeout contract, a deterministic fake-timer fixture verifies repeated scheduling, clear-before-first-fire, clear-inside-callback, idempotent clear and delay forwarding.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Run candidate-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit unique writer artifacts with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0041/$CANONICAL_ID"
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name 'xhs-content-builder'; git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: stage batch 0041 setInterval candidate'
+          for attempt in 1 2 3; do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH"; then
+              git rebase --abort || true
+              echo 'Content branch changed on the same writer artifacts; fail closed without push.'
+              exit 0
+            fi
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            sleep 5
+          done
+          echo 'Unable to push writer artifacts after safe retries.' >&2
+          exit 1
