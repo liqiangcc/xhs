@@ -1,0 +1,117 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_bb40d9794670196d600bbeb91c39f1c8",
+  "candidate_sha256": "3fa762fb17be6041f627a975c18561dc3f8a6b9a33904e305f423e4877aff0d8",
+  "checked_at": "2026-08-28",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "tagged-source",
+      "title": "Didi Go backend interview tagged Question",
+      "locator": "note_tagged/689ed8b2000000001d029f08.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "structured-source",
+      "title": "Didi Go backend interview structured note",
+      "locator": "note_structured/689ed8b2000000001d029f08.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "go-spec-channel",
+      "title": "The Go Programming Language Specification - Channel types",
+      "locator": "https://go.dev/ref/spec#Channel_types",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "go-memory-model",
+      "title": "The Go Memory Model",
+      "locator": "https://go.dev/ref/mem",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Exact ordered producer-consumer Go race/correctness validation",
+      "locator": "review/content_build/answer_batch_0045/cq_q_bb40d9794670196d600bbeb91c39f1c8/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved Question asks for a producer-consumer 1:2 program that outputs 1-100 in order. The surrounding note is a Go-backend interview and the tagged entities include producer-consumer/channel; the notation itself does not define a function signature or spell out the meaning of 1:2.",
+      "source_ids": [
+        "tagged-source",
+        "structured-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "channel-boundary",
+      "text": "Go channels are the communication mechanism selected by the surrounding Go context; ordered channel communication does not by itself serialize post-receive side effects performed by multiple independently scheduled consumers, so final ordered visibility is made a single-coordinator responsibility.",
+      "source_ids": [
+        "go-spec-channel",
+        "go-memory-model",
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "ordered-output",
+      "text": "The exact candidate with two consumers returns the sequence 1..100 on every repeated race-enabled test run and across concurrent independent invocations.",
+      "source_ids": [
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "lifecycle",
+      "text": "The producer owns jobs closure; a WaitGroup-backed closer closes results only after all consumers exit, and the single coordinator owns pending/next state.",
+      "source_ids": [
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "bb40d9794670196d600bbeb91c39f1c8",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
