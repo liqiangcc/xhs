@@ -1,0 +1,298 @@
+name: Content Batch 0047 Event Emitter Retry
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0047-event-emitter-retry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0047-event-emitter-retry
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_c25e775df5cf86a7d8a4e7352ef4fb7e
+  SOURCE_QID: c25e775df5cf86a7d8a4e7352ef4fb7e
+
+jobs:
+  validate-review-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0047/$cid"
+          mkdir -p "$out" /tmp/b47-emitter review/candidates/answers review/evidence
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/b47-emitter/context.json
+          python3 - <<'PY'
+          import json, os, pathlib
+          cid=os.environ['CANONICAL_ID']; qid=os.environ['SOURCE_QID']; exact='手写：实现 EventEmitter (on, emit, once, off)?'
+          ctx=json.loads(pathlib.Path('/tmp/b47-emitter/context.json').read_text())
+          if not ctx.get('ok') or ctx.get('canonical',{}).get('canonical_id')!=cid: raise SystemExit('canonical context drift')
+          if ctx.get('answer_type')!='coding': raise SystemExit('answer type drift')
+          if ctx.get('canonical',{}).get('question_ids')!=[qid]: raise SystemExit('ownership drift')
+          src=next((x for x in ctx.get('source_questions',[]) if x.get('question_id')==qid),None)
+          if not src or src.get('original_question')!=exact or src.get('is_valid_for_library') is not True: raise SystemExit('source wording/validity drift')
+          inv=json.loads(pathlib.Path('review/content_build/answer_batch_0047/source_inventory.json').read_text())
+          row=next((x for x in inv.get('items',[]) if x.get('canonical_id')==cid),None)
+          if not row or row.get('state')!='active' or row.get('answer_type')!='coding': raise SystemExit('batch inventory drift')
+          pathlib.Path(out).mkdir(parents=True,exist_ok=True)
+          pathlib.Path(out,'context.json').write_text(json.dumps(ctx,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Stage candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_c25e775df5cf86a7d8a4e7352ef4fb7e","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # 手写 EventEmitter：on / emit / once / off
+
+          ## 核心结论
+
+          原题只要求实现 `on`、`emit`、`once`、`off`，没有规定 Node.js `EventEmitter` 的全部兼容语义。这里采用一个明确且可测试的最小契约：同一事件按注册顺序执行；`emit` 透传参数并以 emitter 作为 `this`；`once` 在第一次调用前先注销，因此监听器内部同步重入同一事件也只执行一次；`off(event, listener)` 删除该事件下所有与这个原始函数相同的注册，包括 `once` 注册；每次 `emit` 使用开始时的监听器快照，因此本轮执行期间的 `on/off` 只影响后续轮次；监听器异常直接向调用方抛出。
+
+          ## 1 分钟版
+
+          - 用 `Map<event, ListenerRecord[]>` 保存事件到监听器列表，数组保留注册顺序。
+          - `on` 追加普通监听器记录；`once` 追加 `once: true` 的记录。
+          - `emit` 先复制监听器快照，再按顺序调用；遇到 `once` 记录时先从实时列表删除再调用，避免同步重入重复触发。
+          - `off` 按原始函数 identity 过滤，因此传给 `once` 的原函数也能直接注销。
+          - 注册通常 O(1)，一次 `emit` 是 O(k)，`off` 需要扫描该事件监听器，为 O(k)。
+
+          ## 3 分钟版
+
+          ```javascript
+          class EventEmitter {
+            constructor() {
+              this.events = new Map();
+            }
+
+            on(event, listener) {
+              this.#assertListener(listener);
+              const list = this.events.get(event) ?? [];
+              list.push({ listener, original: listener, once: false });
+              this.events.set(event, list);
+              return this;
+            }
+
+            once(event, listener) {
+              this.#assertListener(listener);
+              const list = this.events.get(event) ?? [];
+              list.push({ listener, original: listener, once: true });
+              this.events.set(event, list);
+              return this;
+            }
+
+            off(event, listener) {
+              this.#assertListener(listener);
+              const list = this.events.get(event);
+              if (!list) return this;
+              const next = list.filter(record => record.original !== listener);
+              if (next.length === 0) this.events.delete(event);
+              else this.events.set(event, next);
+              return this;
+            }
+
+            emit(event, ...args) {
+              const list = this.events.get(event);
+              if (!list || list.length === 0) return false;
+              const snapshot = [...list];
+              for (const record of snapshot) {
+                if (record.once) this.#removeRecord(event, record);
+                record.listener.apply(this, args);
+              }
+              return true;
+            }
+
+            #removeRecord(event, target) {
+              const list = this.events.get(event);
+              if (!list) return;
+              const next = list.filter(record => record !== target);
+              if (next.length === 0) this.events.delete(event);
+              else this.events.set(event, next);
+            }
+
+            #assertListener(listener) {
+              if (typeof listener !== 'function') {
+                throw new TypeError('listener must be a function');
+              }
+            }
+          }
+          ```
+
+          这里把“原始 listener”和“本次注册 record”分开保存。`off` 面向原始函数 identity；`once` 触发后的精确删除面向 record identity。这样既能让 `off(event, originalFn)` 取消一次性监听器，又不会在触发某个 `once` 时误删同一函数的其他注册实例。
+
+          ## 关键细节
+
+          - **once 先删再调**：若先执行 listener 再删除，而 listener 内同步 `emit` 同一事件，它仍在实时列表里，会重复触发。
+          - **emit 使用快照**：遍历实时数组时执行 `on/off` 会改变索引和长度，容易产生跳过、重复或新监听器提前参与本轮。快照固定当前轮次的观察集合。
+          - **重复注册的 off 语义**：原题没规定。这里明确选择一次 `off` 删除同一原始函数的全部注册；若面试官要求只删一个实例，可以按注册记录精确删除。
+          - **once 与 off 的关系**：record 保存 `original`，所以无需暴露包装函数也能用原函数取消 `once`。
+          - **异常语义**：这里不吞 listener 异常；某个监听器抛错时 `emit` 立即向上抛出，后续监听器不再执行。
+          - **返回值**：`on/once/off` 返回 `this`，`emit` 返回本轮开始时是否存在监听器；这些是实现选择，不是来源事实。
+
+          ## 原理机制
+
+          EventEmitter 的核心是维护两个状态不变量：同一事件的注册顺序稳定；一次触发有明确的迭代视图。实时列表负责跨轮次状态，快照负责当前轮次视图；`once` 在调用前修改实时列表，所以当前快照完成这次调用后，任何重入或下一轮都看不到该记录。
+
+          这也解释了为什么不能简单遍历实时数组然后事后清理一次性监听器：用户回调可以同步修改 emitter，甚至递归触发同一事件。先定义“本轮快照 + 调用前移除 once”的状态转移，行为才可推导和测试。
+
+          ## 项目经验版
+
+          来源没有提供真实项目中的事件总线、内存泄漏或故障案例，不能虚构。真实项目里还要根据场景决定监听器数量限制、全量清理、异步监听器、错误隔离、通配事件、优先级和调试元数据；这些都不是原题四个方法的必需语义，应在需求明确后再扩展。
+
+          ## 常见追问
+
+          - 问：为什么不用 `Set`？答：如果允许同一函数重复注册，`Set` 会去重；数组把每次注册表示成独立 record，也保留顺序。
+          - 问：`once` 为什么不只写成 `on(event, wrapper)`？答：可以，但必须保存 wrapper 与 original 的关系，否则 `off(event, originalFn)` 找不到一次性注册。
+          - 问：emit 中新增 listener 会立刻执行吗？答：本契约不会，因为当前轮使用开始时的快照；它从下一次 emit 才参与。
+          - 问：emit 中 off 另一个 listener，被删的 listener 本轮还执行吗？答：如果它已在本轮快照中仍会执行；删除影响实时列表和后续轮次。
+          - 问：如何避免 once 重入两次？答：调用 once listener 前先按 record identity 从实时列表删除。
+          - 问：事件很多会不会占内存？答：最后一个 record 被删除后清掉 Map key；更复杂的泄漏检测属于额外需求。
+
+          ## 易错点
+
+          - `once` 调完 listener 才删除，遇到同步重入时执行两次。
+          - 遍历实时数组同时 `splice`，导致索引错位或行为依赖修改顺序。
+          - 给 `once` 包匿名函数却不保存 original，导致 `off(event, originalFn)` 失效。
+          - 用 `Set` 后无意改变重复注册语义。
+          - 没定义 `off` 对重复注册删一个还是全部，却把实现偏好当成原题要求。
+          - 为了“健壮”吞掉 listener 异常，使调用方无法观察失败。
+          EOF
+          python3 - <<'PY'
+          import hashlib,os,pathlib,re
+          cid=os.environ['CANONICAL_ID'];p=pathlib.Path(f'review/candidates/answers/{cid}.md');md=p.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```javascript\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one JavaScript block, got {len(blocks)}')
+          pathlib.Path('/tmp/b47-emitter/EventEmitter.js').write_text(blocks[0].strip()+'\nmodule.exports={EventEmitter};\n')
+          pathlib.Path('/tmp/b47-emitter/candidate.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest()+'\n')
+          PY
+
+      - name: Execute deterministic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/b47-emitter
+          cat > event_emitter_test.js <<'JS'
+          'use strict';
+          const assert=require('assert');
+          const {EventEmitter}=require('./EventEmitter');
+          const ee=new EventEmitter();
+          assert.strictEqual(ee.emit('missing'),false);
+          const seen=[];
+          function a(x,y){assert.strictEqual(this,ee);seen.push(`a:${x+y}`)}
+          function b(x,y){seen.push(`b:${x*y}`)}
+          ee.on('calc',a).on('calc',b);
+          assert.strictEqual(ee.emit('calc',2,3),true);
+          assert.deepStrictEqual(seen,['a:5','b:6']);
+          let onceCount=0;
+          function onlyOnce(){onceCount++;ee.emit('reentrant')}
+          ee.once('reentrant',onlyOnce);ee.emit('reentrant');
+          assert.strictEqual(onceCount,1);
+          let cancelled=0;function cancelledOnce(){cancelled++}
+          ee.once('cancel',cancelledOnce).off('cancel',cancelledOnce);
+          assert.strictEqual(ee.emit('cancel'),false);assert.strictEqual(cancelled,0);
+          let duplicate=0;function dup(){duplicate++}
+          ee.on('dup',dup).on('dup',dup).off('dup',dup);
+          assert.strictEqual(ee.emit('dup'),false);assert.strictEqual(duplicate,0);
+          const mutation=[];function late(){mutation.push('late')}
+          function first(){mutation.push('first');ee.on('mut',late);ee.off('mut',second)}
+          function second(){mutation.push('second')}
+          ee.on('mut',first).on('mut',second);ee.emit('mut');
+          assert.deepStrictEqual(mutation,['first','second']);mutation.length=0;ee.emit('mut');
+          assert.deepStrictEqual(mutation,['first','late']);
+          const fail=new EventEmitter();let after=false;
+          fail.on('x',()=>{throw new Error('boom')}).on('x',()=>{after=true});
+          assert.throws(()=>fail.emit('x'),/boom/);assert.strictEqual(after,false);
+          console.log('PASS order-args-this=true once-reentrant=1 off-once=true off-duplicates=all snapshot=true mutation-next-round=true error-propagation=true');
+          JS
+          node event_emitter_test.js | tee stdout.txt
+          test "$(cat stdout.txt)" = 'PASS order-args-this=true once-reentrant=1 off-once=true off-duplicates=all snapshot=true mutation-next-round=true error-propagation=true'
+
+      - name: Freeze research review and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0047/$cid"
+          cp /tmp/b47-emitter/event_emitter_test.js "$out/event_emitter_test.js"
+          cp /tmp/b47-emitter/stdout.txt "$out/event_emitter_test.stdout.txt"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID'];date='2026-08-28'
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md');digest=hashlib.sha256(candidate.read_bytes()).hexdigest();out=pathlib.Path(f'review/content_build/answer_batch_0047/{cid}')
+          stdout=(out/'event_emitter_test.stdout.txt').read_text().strip()
+          validation={'schema_version':'answer_code_validation.v1','canonical_id':cid,'result':'pass','validated_at':date,'command':'node event_emitter_test.js','stdout':stdout,'checks':['registration order, arguments, and emitter this binding','once removed before reentrant emit','off cancels once by original listener','documented duplicate off semantics remove all matches','emit snapshot isolates current round from on/off mutations','listener error propagates and stops later listeners']}
+          (out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+          sources=[
+            {'source_id':'batch-inventory','title':'Answer Batch 0047 frozen source inventory','locator':'review/content_build/answer_batch_0047/source_inventory.json','source_type':'repository_structured_source','checked_at':date},
+            {'source_id':'writer-validation','title':'EventEmitter deterministic executable fixture','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date}
+          ]
+          claims=[
+            {'claim_id':'source-boundary','text':'The preserved source asks only to hand-write EventEmitter with on, emit, once and off; return values, duplicate-removal semantics, mutation-during-emit behavior and error handling are not source constraints, so the answer labels them explicit candidate-contract choices.','source_ids':['batch-inventory'],'answer_locations':['核心结论','关键细节']},
+            {'claim_id':'once-reentrancy','text':'Removing a once record before invoking its listener prevents synchronous reentrant emit from executing that once registration twice under the candidate contract.','source_ids':['writer-validation'],'answer_locations':['1 分钟版','关键细节','常见追问']},
+            {'claim_id':'snapshot-semantics','text':'The exact candidate fixture verifies registration order, argument forwarding, emitter this binding, stable per-emit snapshots, and that on/off mutations affect later rounds rather than changing the current snapshot.','source_ids':['writer-validation'],'answer_locations':['核心结论','3 分钟版','关键细节','原理机制']},
+            {'claim_id':'off-semantics','text':'The candidate explicitly chooses off(event, listener) to remove all registrations sharing the same original function, including once records, and the deterministic fixture verifies that documented choice.','source_ids':['writer-validation'],'answer_locations':['核心结论','关键细节','常见追问']}
+          ]
+          coverage=[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','项目经验版','常见追问','易错点']}]
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':sources,'claims':claims,'source_question_coverage':coverage,'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=['The answer preserves the narrow four-method source and does not claim undocumented Node.js compatibility.','Unspecified semantics that materially affect correctness are explicit contract choices rather than source facts.','Original-listener identity and registration-record identity are separated so off(originalFn) can cancel once while a fired once record is removed precisely.','The once listener is removed before invocation and the reentrancy fixture proves it cannot fire twice through synchronous recursive emit.','A stable snapshot gives deterministic mutation-during-emit behavior and the fixture verifies current-round and next-round observations.','Duplicate-off and exception-propagation choices are explicit and tested.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0047-event-emitter-20260828-v2','review_version':'batch-0047.event-emitter.v2','decision':'pass','revision_round':2,'source_packet':['review/content_build/answer_batch_0047/source_inventory.json',f'review/candidates/answers/{cid}.md',str(out/'writer_validation.json'),'docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0047-event-emitter-builder','writer_version':'xhs-answer-curator.v1'},'sources':sources+[{'source_id':'isolated-review','title':'EventEmitter source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':claims,'source_question_coverage':coverage,'validation':{'command':validation['command'],'result':'pass','reported_stdout':validation['stdout'],'checks':validation['checks'],'boundary_tests':[{'case':'once listener recursively emits same event','expected':'once total=1','actual':'1','passed':True},{'case':'on/off mutations during current emit','expected':'current snapshot unchanged','actual':'pass','passed':True},{'case':'off original function after once registration','expected':'once registration cancelled','actual':'pass','passed':True}]},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':2,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0047.md');text=task.read_text()
+          line='- [x] `cq_q_c25e775df5cf86a7d8a4e7352ef4fb7e` now has a source-bounded JavaScript EventEmitter candidate for `on/emit/once/off`. Unspecified API semantics are explicit candidate-contract choices: stable emit snapshots, remove-before-call once behavior, off-by-original-function removing all duplicate registrations, chaining returns, and direct error propagation. Deterministic Node 22 fixtures verify order/args/this binding, once reentrancy, off-once identity, duplicate removal, mutation-next-round behavior, and exception propagation. Isolated source-first review PASSes; formal promotion remains blocked by repository human-approval/real-review policy.'
+          if '## Progress' not in text:text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text:text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text,encoding='utf-8')
+          PY
+
+      - name: Run strict candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")";base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during candidate review: $base_head -> $remote_head";echo 'Discard verified local packet; rerun against the current branch instead of merging stale evidence.';exit 0;fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0047/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0047.md
+          if git diff --cached --quiet;then echo 'No EventEmitter candidate changes to commit.';exit 0;fi
+          git diff --cached --check
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: pass batch 0047 event-emitter candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
