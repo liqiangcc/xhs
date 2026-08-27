@@ -84,22 +84,41 @@ jobs:
           print('PASS batch0047 unrecoverable Java source retired fail-closed with explainable audit trail')
           PY
 
-      - name: Verify repository gates
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/content/check_question_coverage.js --check
-          node scripts/xhs.js canonical check --noWrite
-          node scripts/xhs.js review integrity --noWrite
-          node scripts/xhs.js answer type-audit --check --noWrite
-          node scripts/xhs.js answer validate --strict --noWrite
-          node scripts/xhs.js validate all --noWrite
-          npm test
-          npm run ci:check
-          npm run ci:answer:semantic
-          npm run ci:answer:evidence
-          npm run ci:answer:code
-          npm run ci:answer:coverage
+      - name: Gate question coverage
+        run: node scripts/content/check_question_coverage.js --check
+
+      - name: Gate canonical integrity
+        run: node scripts/xhs.js canonical check --noWrite
+
+      - name: Gate review integrity
+        run: node scripts/xhs.js review integrity --noWrite
+
+      - name: Gate answer type audit
+        run: node scripts/xhs.js answer type-audit --check --noWrite
+
+      - name: Gate strict answer validation
+        run: node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Gate full repository validation
+        run: node scripts/xhs.js validate all --noWrite
+
+      - name: Gate unit tests
+        run: npm test
+
+      - name: Gate aggregate CI
+        run: npm run ci:check
+
+      - name: Gate answer semantic quality
+        run: npm run ci:answer:semantic
+
+      - name: Gate answer evidence
+        run: npm run ci:answer:evidence
+
+      - name: Gate answer code validation
+        run: npm run ci:answer:code
+
+      - name: Gate answer coverage
+        run: npm run ci:answer:coverage
 
       - name: Record batch progress
         shell: bash
