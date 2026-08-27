@@ -1,0 +1,142 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_af37baf8fba8b0d54841f07b39bbf6a2",
+  "candidate_sha256": "fe2c5b6e987e3c7a3f5f6a9476d1e80c04dfdccd4a49b644d55fcd10c69def3e",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0043-go-concurrency-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "tagged-note",
+      "title": "Tagged interview note preserving the generic Go concurrency coding prompt",
+      "locator": "note_tagged/68c15ba3000000001d03b3ff.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0043 frozen live source inventory",
+      "locator": "review/content_build/answer_batch_0043/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer Go race-detector validation against sequential oracle",
+      "locator": "review/content_build/answer_batch_0043/cq_q_af37baf8fba8b0d54841f07b39bbf6a2/go_concurrency_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent bounded property and concurrency stress validation",
+      "locator": "review/content_build/answer_batch_0043/cq_q_af37baf8fba8b0d54841f07b39bbf6a2/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Go concurrency source-first isolated review",
+      "locator": "review/content_build/answer_batch_0043/cq_q_af37baf8fba8b0d54841f07b39bbf6a2/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source preserves a generic Go concurrency coding request, with goroutine synchronization or channel use as examples, but does not preserve a unique task API, ordering, concurrency degree or cancellation contract.",
+      "source_ids": [
+        "tagged-note",
+        "source-inventory",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "Under the declared square worker-pool reference exercise, the exact candidate preserves input order and matches the property oracle across bounded state-space and parallel stress runs under Go race detection.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "af37baf8fba8b0d54841f07b39bbf6a2",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "independent bounded property and concurrent stress under go test -race",
+    "result": "pass",
+    "reported_stdout": "PASS independent-small-state-space-depth=4 workers=1..7 invalid-workers=panic parallel-invocations=300 repeats=3 race-detector=pass timeout-deadlock-check=pass",
+    "boundary_tests": [
+      {
+        "case": "bounded exhaustive value sequences through depth 4 with workers 1..7",
+        "expected": "exact candidate equals independent sequential property oracle and every call returns before timeout",
+        "passed": true
+      },
+      {
+        "case": "workers 0 and negative",
+        "expected": "declared positive-worker reference contract rejects invalid worker counts by panic",
+        "passed": true
+      },
+      {
+        "case": "300 parallel independent invocations repeated under race detector",
+        "expected": "all invocations equal oracle with no race or deadlock timeout",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0043-go-concurrency-20260827-v1",
+    "review_version": "batch-0043.go-concurrency.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 0,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The source preserves only a generic Go concurrency coding request and does not preserve one unique task contract; the candidate explicitly marks the square worker-pool as a reference exercise instead of source fact.",
+      "The worker/channel implementation has a coherent close protocol: producer closes jobs, workers drain and exit, coordinator waits for workers and only then closes results, collector ranges until results closes.",
+      "Workers do not share-write the output slice; one collector owns writes and restores source order by index, decoupling execution order from result order.",
+      "Independent bounded state-space checks, invalid-worker boundaries, and 300 parallel invocations repeated under the race detector match the property oracle without timeout/deadlock.",
+      "The answer distinguishes channel transport/backpressure from WaitGroup lifecycle synchronization and explicitly scopes cancellation/error propagation as follow-up requirements rather than preserved source constraints."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
