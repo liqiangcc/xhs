@@ -1,0 +1,201 @@
+name: Build Content Batch 0040 URL Count Candidate v2
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0040-url-count-candidate-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-url-count-candidate-v2
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a249745620d03c0a683588f1653ed349
+  SOURCE_QID: a249745620d03c0a683588f1653ed349
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify exact repository source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/url-count-context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID;
+          const exact='Linux 指令应用：统计一个文件中每个 URL 出现的次数（awk, sort, uniq）？';
+          const note=JSON.parse(fs.readFileSync('note_tagged/66e90ac3000000001e01b16d.json','utf8'));
+          const src=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!src||src.original_question!==exact||src.question_type!=='算法手撕_Coding'||src.is_valid_for_library!==true) throw new Error('URL-count source drifted');
+          const rows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const q=rows.find(x=>x.question_id===qid);
+          if(!q||q.canonical_id!==cid||q.is_valid_for_library!==true) throw new Error(`Question ownership/validity drifted: ${JSON.stringify(q)}`);
+          const ctx=JSON.parse(fs.readFileSync('/tmp/url-count-context.json','utf8'));
+          if(!ctx.ok||ctx.canonical?.canonical_id!==cid||ctx.answer_type!=='coding') throw new Error('answer context drifted');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error(`expected singleton ownership, got ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0040/source_inventory.json','utf8'));
+          const item=inv.items?.find(x=>x.canonical_id===cid);
+          if(!item||!item.source_questions?.some(x=>x.question_id===qid&&x.original_question===exact)) throw new Error('Batch 0040 frozen source inventory drifted');
+          NODE
+          test ! -e "review/candidates/answers/$CANONICAL_ID.md"
+
+      - name: Write source-bounded candidate and executable fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"; qid="$SOURCE_QID"; out="review/content_build/answer_batch_0040/$cid"; candidate="review/candidates/answers/$cid.md"; mkdir -p "$out"
+          cp /tmp/url-count-context.json "$out/context.json"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_a249745620d03c0a683588f1653ed349","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # Linux：统计文件中每个 URL 出现次数（awk / sort / uniq）
+
+          ## 核心结论
+
+          题目只明确要求用 Linux 指令统计“文件中每个 URL 的出现次数”，并点名 `awk`、`sort`、`uniq`，但没有保留真实日志格式，也没有说明 URL 在第几列。因此不能把 `$1`、`$7` 等字段位置当成题目事实。最小可执行契约先按“每个非空行就是一个 URL”处理：先用 `awk` 提取 URL，再 `sort` 把相同 URL 排到一起，最后 `uniq -c` 计数；若真实文件是访问日志，只需要把 `awk` 的提取表达式替换成实际 URL 字段。
+
+          ## 1 分钟版
+
+          - `uniq -c` 只能统计相邻重复行，所以前面必须先 `sort`。
+          - 如果一行就是一个 URL：`awk 'NF {print $0}' file | sort | uniq -c`。
+          - 如果是结构化日志，先确认 URL 在哪个字段；题目没有给字段位置，不能默认 `$1` 或 `$7`。
+          - 想按出现次数从高到低展示，可在最后再加 `sort -nr`；这属于输出排序增强，不是计数本身的必要条件。
+          - URL 默认按完整字符串精确比较；是否忽略 query、大小写、协议或尾斜杠必须另行定义。
+
+          ## 3 分钟版
+
+          如果 `urls.txt` 每个非空行就是一个完整 URL：
+
+          ```bash
+          LC_ALL=C awk 'NF {print $0}' urls.txt \
+            | sort \
+            | uniq -c \
+            | sort -nr
+          ```
+
+          例如输入三次 `https://a.example/x`、两次 `https://b.example/y`、一次 `https://c.example/z`，结果就是 `3/2/1`。如果真实文件是访问日志，经过确认 URL 恰好在第 7 列，则只替换提取步骤为 `awk 'NF >= 7 {print $7}' access.log`；“第 7 列”只是示例，不是来源事实。
+
+          ## 关键细节
+
+          - **先 sort**：`uniq` 只合并连续相同行；不排序时，同一个 URL 分散在文件不同位置会被分成多组。
+          - **awk 的职责**：从原始记录提取 URL。日志 schema 不同，字段选择表达式也不同。
+          - **空行处理**：`NF` 过滤空白行，避免把空字符串统计成 URL。
+          - **匹配语义**：`https://a/x?a=1` 与 `https://a/x?a=2` 默认是两个字符串；若要按 path 聚合，必须先定义归一化口径。
+          - **locale**：`LC_ALL=C` 让排序采用稳定字节序，便于复现；不是计数正确性的必要前提。
+          - **复杂度**：`awk` 和 `uniq` 线性扫描，传统 `sort` 主导，约 O(n log n)；大文件可能使用外部排序和临时磁盘。
+          - **替代方案**：若不要求 `sort/uniq`，可以用 `awk` 关联数组直接计数，用内存保存唯一 URL 集合；题目点名这些命令时应先答标准流水线。
+
+          ## 原理机制
+
+          这是典型 Unix pipeline：`awk` 把原始记录投影成 URL 流；`sort` 按 URL key 把相同记录聚集成连续区间；`uniq -c` 对每个连续区间计数；最后的 `sort -nr` 再按计数排序。每一步职责单一，所以可以独立替换 URL 提取规则并做 fixture 验证。
+
+          ## 项目经验版
+
+          来源没有真实生产日志格式、文件规模或线上事故数据，不能虚构项目经历。真实落地时先取样确认字段、编码和 URL 归一化口径，再用已知计数的小 fixture 回归；文件很大时再关注 `sort` 的临时目录、磁盘和 locale。
+
+          ## 常见追问
+
+          - 问：为什么直接 `uniq -c file` 不行？答：因为 `uniq` 只统计相邻重复记录，同一 URL 若不连续会被拆成多组，所以通常必须先排序。
+          - 问：URL 在 nginx access log 里怎么取？答：先确认具体 `log_format`，只有字段位置确定后才能写 `$N`，不能根据常见格式猜。
+          - 问：如何按次数降序？答：在 `uniq -c` 后加 `sort -nr`；次数相同时若还要求固定 URL 次序，再定义次级排序。
+          - 问：query 参数不同算同一个 URL 吗？答：默认完整字符串不同就算不同；若要忽略 query，先定义归一化规则再计数。
+          - 问：文件特别大怎么办？答：`sort` 可能做外部排序并使用临时磁盘；可调临时目录/内存，或在允许时改用 `awk` 哈希计数，但后者把唯一 URL 集合留在内存。
+
+          ## 易错点
+
+          - 没有 `sort` 就直接 `uniq -c`。
+          - 来源没有日志 schema 却写死 `$1`、`$7`。
+          - 忘记过滤空行。
+          - 未定义 URL 归一化却擅自去 query、改大小写或删尾斜杠。
+          - 只看连续重复样例，没有验证非相邻重复。
+          EOF
+
+          cat > "$out/url_count_fixture.sh" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+          cat > "$tmp/urls.txt" <<'EOF'
+          https://a.example/x
+          https://b.example/y
+          https://a.example/x
+
+          https://c.example/z
+          https://b.example/y
+          https://a.example/x
+          EOF
+          LC_ALL=C awk 'NF {print $0}' "$tmp/urls.txt" | sort | uniq -c | awk '{$1=$1; print}' | sort -nr > "$tmp/actual"
+          cat > "$tmp/expected" <<'EOF'
+          3 https://a.example/x
+          2 https://b.example/y
+          1 https://c.example/z
+          EOF
+          diff -u "$tmp/expected" "$tmp/actual"
+          echo 'PASS non-adjacent-duplicates=grouped blank-lines=ignored counts=3,2,1'
+          SH
+          chmod +x "$out/url_count_fixture.sh"
+          stdout="$(bash "$out/url_count_fixture.sh")"
+          test "$stdout" = 'PASS non-adjacent-duplicates=grouped blank-lines=ignored counts=3,2,1'
+
+          CANDIDATE_SHA="$(sha256sum "$candidate" | awk '{print $1}')" STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0040/${cid}`;
+          fs.writeFileSync(`${out}/shell_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,result:'pass',validated_at:date,command:'bash url_count_fixture.sh',stdout:process.env.STDOUT,checks:['non-adjacent duplicate URLs become adjacent after sort','blank lines are ignored by awk NF guard','uniq -c produces expected 3/2/1 counts']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:process.env.CANDIDATE_SHA,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source',title:'Exact tagged Batch 0040 URL-count source',locator:`note_tagged/66e90ac3000000001e01b16d.json#question_id=${qid}`,source_type:'repository_source_record',checked_at:date},{source_id:'fixture',title:'Deterministic awk/sort/uniq URL-count fixture',locator:`${out}/shell_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The repository source asks to count each URL in a file and names awk/sort/uniq, but preserves no log schema or URL field position.',source_ids:['repository-source'],answer_locations:['核心结论','1 分钟版','3 分钟版']},{claim_id:'pipeline-behavior',text:'For the explicit one-URL-per-nonempty-line fixture, sorting groups equal URLs before uniq -c and produces the expected 3/2/1 counts while ignoring blank lines.',source_ids:['fixture'],answer_locations:['3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_a249745620d03c0a683588f1653ed349` URL-count writer slice is source-bounded and staged: the answer keeps the unspecified log schema fail-closed, explains the `awk -> sort -> uniq -c` pipeline, and a deterministic shell fixture verifies non-adjacent duplicates, blank-line filtering, and exact 3/2/1 counts. Writer evidence is frozen; independent source-first review is still required before any promotion.';
+          if(!text.includes(note)) fs.writeFileSync(task,text.trimEnd()+'\n'+note+'\n');
+          NODE
+
+      - name: Run candidate-safe repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          for marker in '## 核心结论' '## 1 分钟版' '## 3 分钟版' '## 关键细节' '## 原理机制' '## 项目经验版' '## 常见追问' '## 易错点'; do grep -Fq "$marker" "$candidate"; done
+          grep -Fq 'uniq -c' "$candidate"
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate safely
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0040/$CANONICAL_ID" tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git commit -m 'content: stage batch 0040 URL-count candidate'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_SHA"
+          git push origin "HEAD:$CONTENT_BRANCH"
