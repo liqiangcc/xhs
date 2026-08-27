@@ -1,0 +1,157 @@
+name: Patch Answer Quality Shell Audit
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/patch-answer-quality-shell-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-answer-quality-shell-audit
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Patch shell fence validation and regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('scripts/lib/answer_quality.js')
+          s=p.read_text(encoding='utf-8')
+          old="const regex = /(?:```|~~~)(java|sql|javascript|js|go|c|cpp|c\\+\\+|cc|cxx)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
+          new="const regex = /(?:```|~~~)(java|sql|javascript|js|go|c|cpp|c\\+\\+|cc|cxx|bash|sh|shell)\\s*\\n([\\s\\S]*?)\\n(?:```|~~~)/gi;"
+          if old not in s: raise SystemExit('extractCodeBlocks pattern drifted')
+          s=s.replace(old,new,1)
+
+          anchor="\nfunction compileGo(code) {"
+          shell_fn=r'''
+function validateShell(code) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xhs-answer-shell-'));
+    try {
+        const filePath = path.join(tempDir, 'candidate.sh');
+        fs.writeFileSync(filePath, code, 'utf8');
+        const result = childProcess.spawnSync('bash', ['-n', filePath], {
+            encoding: 'utf8',
+            timeout: 10000,
+        });
+        if (result.error?.code === 'ENOENT') return { ok: false, error: 'bash_not_available' };
+        if (result.error) return { ok: false, error: 'shell_parse_failed', detail: result.error.message };
+        if (result.status !== 0) {
+            return {
+                ok: false,
+                error: 'shell_parse_failed',
+                detail: String(result.stderr || result.stdout || '').trim().slice(0, 1200),
+            };
+        }
+        return { ok: true };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+}
+'''
+          if anchor not in s: raise SystemExit('compileGo anchor drifted')
+          s=s.replace(anchor,'\n'+shell_fn+anchor,1)
+
+          old_dispatch="""                        : ['cpp', 'c++', 'cc', 'cxx'].includes(block.language)
+                                ? compileCpp(block.code)
+                                : parseJavaScript(block.code);"""
+          new_dispatch="""                        : ['cpp', 'c++', 'cc', 'cxx'].includes(block.language)
+                                ? compileCpp(block.code)
+                                : ['bash', 'sh', 'shell'].includes(block.language)
+                                    ? validateShell(block.code)
+                                    : parseJavaScript(block.code);"""
+          if old_dispatch not in s: raise SystemExit('coding dispatch drifted')
+          s=s.replace(old_dispatch,new_dispatch,1)
+
+          old_export="""    compileCpp,
+    parseSql,"""
+          new_export="""    compileCpp,
+    validateShell,
+    parseSql,"""
+          if old_export not in s: raise SystemExit('module export anchor drifted')
+          s=s.replace(old_export,new_export,1)
+          p.write_text(s,encoding='utf-8')
+
+          t=Path('test/answer_code_validation.test.js')
+          x=t.read_text(encoding='utf-8')
+          old_import="const { compileJava, compileC, compileCpp, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
+          new_import="const { compileJava, compileC, compileCpp, validateShell, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');"
+          if old_import not in x: raise SystemExit('test import drifted')
+          x=x.replace(old_import,new_import,1)
+          marker="\ntest('SQL validation checks statement structure balance and placeholders', () => {"
+          shell_test=r'''
+
+test('shell validation accepts bash/sh fences and rejects malformed scripts', () => {
+    assert.equal(validateShell("set -euo pipefail\nprintf '%s\\n' ok").ok, true);
+    assert.equal(validateShell('if true; then\n  echo ok').ok, false);
+    const context = { canonical: { canonical_title: 'Linux URL 计数' }, primary_entities: ['awk', 'sort', 'uniq'], source_variants: ['统计 URL 次数'] };
+    const evidence = { validation: { boundary_tests: [
+        { case: 'non-adjacent duplicates', expected: '3/2/1', passed: true },
+        { case: 'blank line', expected: 'ignored', passed: true },
+        { case: 'query variants', expected: 'distinct', passed: true },
+    ] } };
+    for (const language of ['bash', 'sh', 'shell']) {
+        const candidate = { metadata: { answer_type: 'coding' }, content: [
+            '## 核心结论', 'awk、sort、uniq 组成 URL 计数流水线。',
+            '## 常见追问', '- 问：为何 sort？答：让重复行相邻。', '- 问：空行？答：过滤。', '- 问：query？答：按契约处理。',
+            '## 3 分钟版', `\`\`\`${language}`, "awk 'NF {print $0}' urls.txt | sort | uniq -c", '\`\`\`',
+        ].join('\n') };
+        const result = validateSpecializedCandidate(candidate, evidence, context);
+        assert.equal(result.errors.some((row) => row.error === 'coding_block_required'), false, language);
+        assert.equal(result.errors.some((row) => row.error.endsWith('_validation_failed')), false, language);
+    }
+});
+'''
+          if marker not in x: raise SystemExit('test insertion marker drifted')
+          x=x.replace(marker,shell_test+marker,1)
+          t.write_text(x,encoding='utf-8')
+          PY
+
+      - name: Run regression and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test test/answer_code_validation.test.js
+          npm test
+          npm run ci:check
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Commit patch safely
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name xhs-maintenance-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add scripts/lib/answer_quality.js test/answer_code_validation.test.js
+          git commit -m 'fix: validate shell coding answer fences'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_SHA"
+          git push origin "HEAD:$CONTENT_BRANCH"
