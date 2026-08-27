@@ -1,0 +1,226 @@
+name: Build Content Batch 0043 Word DFS Count
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-content-batch-0043-word-dfs-count.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0043-word-dfs-count-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_af10ec1e2112b975228ff2abfa549317
+  SOURCE_QID: af10ec1e2112b975228ff2abfa549317
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：给定单词，人工DFS查找出现次数';
+          const note=JSON.parse(fs.readFileSync('note_tagged/63ef8724000000001203c1aa.json','utf8'));
+          const row=(note.tagged_questions||[]).find(x=>x.question_id===qid);
+          if(!row||row.original_question!==exact)throw new Error(`source wording drifted: ${row?.original_question}`);
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0043/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||item.source_questions?.[0]?.original_question!==exact)throw new Error('batch0043 inventory drifted');
+          if(JSON.stringify(item.question_ids)!==JSON.stringify([qid]))throw new Error('inventory ownership drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||ctx.answer_type!=='coding'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('live ownership/type drifted');
+          NODE
+
+      - name: Write source-bounded candidate and execute writer validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0043/$cid";candidate="review/candidates/answers/$cid.md";mkdir -p "$out" review/candidates/answers
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_af10ec1e2112b975228ff2abfa549317","version":1,"status":"draft","updated_at":"2026-08-27","answer_type":"coding","quality_tier":"candidate"} -->
+          # DFS 查找单词出现次数：先定义“出现一次”是什么
+
+          ## 核心结论
+
+          来源只保留“给定单词，人工 DFS 查找出现次数”，没有保留单词是在哪种数据结构里查、相邻规则、能否复用位置，也没有说明是统计起点、字符串出现还是路径数。因此不能把二维矩阵规则冒充成原题。下面给出一个可执行参考契约：在矩形字符网格中，按上下左右 4 邻接寻找目标 `word`；同一条匹配路径里一个格子最多使用一次；**每一条不同的格子路径算一次出现**。空单词定义为 0 次。
+
+          ## 1 分钟版
+
+          - 先遍历每个格子，把字符等于 `word[0]` 的格子作为 DFS 起点。
+          - DFS 状态是 `(row, col, index)`，并用 `used` 保证当前路径不重复使用格子。
+          - 当前字符匹配后，如果 `index == word.length()-1`，这条路径贡献 1。
+          - 否则把当前格子标记为 used，递归四个方向，返回前恢复现场，这就是回溯。
+          - 统计的是“路径数”而不是“是否存在”，所以不能找到第一条后就提前返回；所有分支都要累加。
+
+          ## 3 分钟版
+
+          ```java
+          import java.util.*;
+
+          public final class Solution {
+              private Solution() {}
+              private static final int[][] DIRS = {{1,0},{-1,0},{0,1},{0,-1}};
+
+              public static long countOccurrences(char[][] board, String word) {
+                  Objects.requireNonNull(board, "board");
+                  Objects.requireNonNull(word, "word");
+                  if (word.isEmpty() || board.length == 0) return 0L;
+                  int cols = board[0] == null ? -1 : board[0].length;
+                  if (cols < 0) throw new IllegalArgumentException("null row");
+                  for (char[] row : board) {
+                      if (row == null || row.length != cols) throw new IllegalArgumentException("ragged board");
+                  }
+                  if (cols == 0 || word.length() > (long) board.length * cols) return 0L;
+
+                  boolean[][] used = new boolean[board.length][cols];
+                  long total = 0L;
+                  for (int r = 0; r < board.length; r++) {
+                      for (int c = 0; c < cols; c++) {
+                          if (board[r][c] == word.charAt(0)) {
+                              total = Math.addExact(total, dfs(board, word, r, c, 0, used));
+                          }
+                      }
+                  }
+                  return total;
+              }
+
+              private static long dfs(char[][] board, String word, int r, int c, int index, boolean[][] used) {
+                  if (r < 0 || r >= board.length || c < 0 || c >= board[0].length) return 0L;
+                  if (used[r][c] || board[r][c] != word.charAt(index)) return 0L;
+                  if (index == word.length() - 1) return 1L;
+
+                  used[r][c] = true;
+                  long total = 0L;
+                  try {
+                      for (int[] d : DIRS) {
+                          total = Math.addExact(total, dfs(board, word, r + d[0], c + d[1], index + 1, used));
+                      }
+                  } finally {
+                      used[r][c] = false;
+                  }
+                  return total;
+              }
+          }
+          ```
+
+          例如网格 `[[A,B],[B,A]]`，目标 `AB` 有 4 条合法路径：两个 `A` 各自都能走向两个相邻的 `B`。这里统计的是路径，因此共享起点或终点也可以分别构成不同出现；但同一条路径里不能重复使用同一个格子。
+
+          ## 关键细节
+
+          - **统计对象先定义**：如果题目实际问“字符串中某词出现次数”“字典树搜索”或“只判断存在性”，答案都会不同；二维网格只是本候选的参考契约。
+          - **为什么要恢复 used**：`used` 只属于当前递归路径。一个分支返回后必须撤销标记，否则会错误影响从同一起点或其他起点出发的路径。
+          - **不能全局 visited**：同一个格子完全可以在不同匹配路径中使用，只是不能在同一条路径里重复使用。
+          - **路径计数而非存在性**：成功一条路径后返回 1 给上层累加，不在第一条成功后剪掉其他分支。
+          - **复杂度**：设网格大小 `R*C=N`、单词长度 `L`。粗略上界是 `O(N * 4^(L-1))`，考虑不能立即走回已用格子后常写成更紧的 `O(N * 3^(L-1))` 量级；额外空间为 `O(N)` 的 used 加 `O(L)` 递归栈。
+          - **计数溢出**：返回 `long` 并用 `Math.addExact`，如果路径数超出 long 表示范围就显式失败，而不是静默回绕。
+
+          ## 原理机制
+
+          这是典型的“选择—递归—撤销选择”回溯。递归深度 `index` 表示已经匹配到目标词的哪个位置；当前位置通过边界、used 和字符三个条件后，把它加入当前路径，再枚举四个候选后继。`used` 保证路径是简单路径，回溯恢复则保证不同分支彼此独立。由于目标是计数，递归函数返回的是从当前状态出发的合法完成路径数量，各方向结果相加就是该状态的总数。
+
+          ## 项目经验版
+
+          来源没有真实数据规模、字符集或线上场景，不能虚构项目结果。实际落地会先确认是否只需要存在性、是否允许八方向、是否允许复用、是否批量查询很多单词；如果查询词很多，可能应改用 Trie 等共享前缀结构，而不是对每个词独立做完整 DFS。
+
+          ## 常见追问
+
+          - 问：为什么找到一个完整单词后不能直接返回 true？答：这里的参考契约要求统计所有不同路径，存在性和计数是两个不同问题。
+          - 问：为什么不能给每个格子一个全局 visited？答：visited 只限制当前路径；不同路径可以合法复用同一格子，全局 visited 会漏解。
+          - 问：如果允许八个方向怎么办？答：把方向集合扩成 8 个即可，但路径数量和复杂度上界都会变化；这是契约变化。
+          - 问：如果允许一个格子重复使用呢？答：要去掉 used 约束；如果同时没有长度上界则可能涉及环，但这里 word 长度给出了固定递归深度。
+          - 问：如果只问“是否存在”如何优化？答：一旦任一分支成功就可以短路返回，并可加入字符频次等预检查；计数问题不能使用同样的成功短路。
+
+          ## 易错点
+
+          - 没定义“出现次数”是起点数、路径数还是存在性就开始写代码。
+          - DFS 成功一条路径就提前停止，导致计数少算。
+          - 回溯后忘记恢复 used，污染兄弟分支。
+          - 用全局 visited 导致不同合法路径不能共享格子。
+          - 输入是非矩形网格、空词或计数溢出时没有明确行为。
+          EOF
+
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const p=`review/candidates/answers/${process.env.CANONICAL_ID}.md`,md=fs.readFileSync(p,'utf8');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('countOccurrences'))throw new Error('exact executable Java candidate missing/ambiguous');
+          fs.writeFileSync('/tmp/Solution.java',blocks[0][1]+'\n');
+          fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/WriterValidation.java <<'JAVA'
+          import java.util.*;
+          public final class WriterValidation {
+              record S(int pos,int idx,long mask){}
+              static long oracle(char[][]b,String w){if(w.isEmpty()||b.length==0||b[0].length==0)return 0;int r=b.length,c=b[0].length;if(w.length()>r*c)return 0;long total=0;ArrayDeque<S>st=new ArrayDeque<>();for(int i=0;i<r;i++)for(int j=0;j<c;j++)if(b[i][j]==w.charAt(0))st.push(new S(i*c+j,0,1L<<(i*c+j)));int[][]d={{1,0},{-1,0},{0,1},{0,-1}};while(!st.isEmpty()){S s=st.pop();if(s.idx()==w.length()-1){total++;continue;}int x=s.pos()/c,y=s.pos()%c;for(int[]q:d){int nx=x+q[0],ny=y+q[1];if(nx<0||nx>=r||ny<0||ny>=c)continue;int p=nx*c+ny;long bit=1L<<p;if((s.mask()&bit)!=0||b[nx][ny]!=w.charAt(s.idx()+1))continue;st.push(new S(p,s.idx()+1,s.mask()|bit));}}return total;}
+              static void check(char[][]b,String w){long got=Solution.countOccurrences(b,w),want=oracle(b,w);if(got!=want)throw new AssertionError("word="+w+" got="+got+" want="+want);}
+              public static void main(String[]args){check(new char[][]{{'A','B'},{'B','A'}},"AB");check(new char[][]{{'A','A','A'}},"AA");check(new char[][]{{'A'}},"A");check(new char[][]{{'A'}},"");check(new char[0][0],"A");Random r=new Random(0x574F5244444653L);char[]alphabet={'A','B','C'};for(int t=0;t<20000;t++){int rows=1+r.nextInt(4),cols=1+r.nextInt(4);char[][]b=new char[rows][cols];for(int i=0;i<rows;i++)for(int j=0;j<cols;j++)b[i][j]=alphabet[r.nextInt(alphabet.length)];int len=1+r.nextInt(Math.min(6,rows*cols));StringBuilder w=new StringBuilder();for(int i=0;i<len;i++)w.append(alphabet[r.nextInt(alphabet.length)]);check(b,w.toString());}boolean ragged=false;try{Solution.countOccurrences(new char[][]{{'A'},{'B','C'}},"A");}catch(IllegalArgumentException e){ragged=true;}if(!ragged)throw new AssertionError("ragged board accepted");System.out.println("PASS fixed-path-count=covered no-reuse=covered empty=covered random-vs-iterative=20000 ragged=rejected");}
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/WriterValidation.java
+          stdout="$(java -cp /tmp WriterValidation)";echo "$stdout";test "$stdout" = 'PASS fixed-path-count=covered no-reuse=covered empty=covered random-vs-iterative=20000 ragged=rejected';echo "WRITER_STDOUT=$stdout" >> "$GITHUB_ENV"
+
+      - name: Freeze writer research and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0043/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs');const cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,date='2026-08-27',out=`review/content_build/answer_batch_0043/${cid}`,sha=process.env.CANDIDATE_SHA;
+          const tests=[{case:'2x2 AB path-count example and repeated-letter line',expected:'all distinct simple four-neighbor paths counted',passed:true},{case:'single cell, empty word and empty board',expected:'declared boundary semantics hold',passed:true},{case:'20,000 seeded random boards up to 4x4 and words up to length 6',expected:'recursive candidate count equals structurally separate iterative path enumerator',passed:true},{case:'ragged board',expected:'reference contract rejects malformed grid',passed:true}];
+          fs.writeFileSync(`${out}/word_dfs_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact Java candidate and differential-test recursive DFS path count against iterative path enumeration',stdout:process.env.WRITER_STDOUT,boundary_tests:tests,environment:{java:'OpenJDK 21'}},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'tagged-note',title:'Tagged interview note preserving a word/DFS occurrence-count prompt',locator:'note_tagged/63ef8724000000001203c1aa.json',source_type:'repository_source_record',checked_at:date},{source_id:'source-inventory',title:'Batch 0043 frozen live source inventory',locator:'review/content_build/answer_batch_0043/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Recursive DFS path-count differential validation',locator:`${out}/word_dfs_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source preserves a word/DFS occurrence-count request but not the searched container, adjacency, reuse rule or exact meaning of one occurrence.',source_ids:['tagged-note','source-inventory'],answer_locations:['核心结论','3 分钟版','关键细节']},{claim_id:'reference-contract',text:'The candidate explicitly declares a rectangular character board, four-neighbor movement, no cell reuse within one path and distinct path count as one executable reference contract.',source_ids:['tagged-note','source-inventory'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节']},{claim_id:'reference-behavior',text:'Under that declared contract, the exact recursive Java DFS matches a structurally separate iterative path enumerator over fixed boundaries and 20,000 seeded random boards/words.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+
+      - name: Writer repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+
+      - name: Commit candidate with safe concurrent rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0043/$CANONICAL_ID/word_dfs_validation.json" "review/content_build/answer_batch_0043/$CANONICAL_ID/writer_research.json"
+          git diff --cached --check
+          if git diff --cached --quiet;then exit 0;fi
+          git config user.name xhs-content-builder
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: draft batch 0043 word-DFS count candidate'
+          for attempt in 1 2 3;do
+            git fetch origin "$CONTENT_BRANCH"
+            if ! git rebase "origin/$CONTENT_BRANCH";then git rebase --abort||true;exit 1;fi
+            if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi
+          done
+          exit 1
