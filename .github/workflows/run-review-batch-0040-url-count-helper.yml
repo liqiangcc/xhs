@@ -1,0 +1,73 @@
+name: Run Review Batch 0040 URL Count Helper
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - scripts/content/review_batch_0040_url_count_20260827.js
+      - .github/workflows/run-review-batch-0040-url-count-helper.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: run-review-batch-0040-url-count-helper
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_a249745620d03c0a683588f1653ed349
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Run independent review helper from master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master --depth=1
+          git show origin/master:scripts/content/review_batch_0040_url_count_20260827.js > /tmp/review-url-count.js
+          node /tmp/review-url-count.js
+      - name: Strict audit and full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+      - name: Commit review safely
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.base.outputs.head }}
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/content_build/answer_batch_0040/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          git commit -m 'review: pass batch 0040 URL-count candidate source-first'
+          git fetch origin "$CONTENT_BRANCH"
+          test "$(git rev-parse "origin/$CONTENT_BRANCH")" = "$BASE_SHA"
+          git push origin "HEAD:$CONTENT_BRANCH"
