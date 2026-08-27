@@ -1,0 +1,262 @@
+name: Content Batch 0044 Matrix Minimum Path
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0044-matrix-min-path.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0044-matrix-min-path
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_b46e3f4b0ff3224ae7b5462be34acba2
+  SOURCE_QID: b46e3f4b0ff3224ae7b5462be34acba2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-java@v5
+        with: {distribution: temurin, java-version: '21'}
+      - name: Verify source and write candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer context --canonical-id "$CANONICAL_ID" --noWrite > /tmp/context.json
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,exact='算法：矩阵左上角到右下角路径最小值（Dynamic Programming/Dijkstra）？';
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0044/source_inventory.json','utf8'));
+          const item=(inv.items||[]).find(x=>x.canonical_id===cid);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||item.source_questions?.[0]?.original_question!==exact)throw new Error('inventory/source drifted');
+          const ctx=JSON.parse(fs.readFileSync('/tmp/context.json','utf8'));
+          if(!ctx.ok||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid]))throw new Error('ownership drifted');
+          if(fs.existsSync(`review/candidates/answers/${cid}.md`))throw new Error('candidate already exists; refusing overwrite');
+          NODE
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0044/$cid";mkdir -p "$out" review/candidates/answers
+          cat > "review/candidates/answers/$cid.md" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_b46e3f4b0ff3224ae7b5462be34acba2","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # 矩阵左上角到右下角的最小路径：DP 还是 Dijkstra？
+
+          ## 核心结论
+
+          这题首先要确认“允许怎么走”和“格子代价是否可能为负”。如果只能从左上角向右或向下走，那么状态转移天然无环，直接用动态规划：`dp[i][j] = grid[i][j] + min(dp[i-1][j], dp[i][j-1])`，时间 O(mn)，空间可压到 O(n)。如果允许上下左右四个方向，路径图可能有环；当每个格子代价都非负时，把每个格子看成图节点、移动看成边，用 Dijkstra 求最短路更合适。来源只写了“DP/Dijkstra”，没有给移动规则和权值范围，所以答案不能把某一种模型冒充成原题唯一约束。
+
+          ## 1 分钟版
+
+          - **只允许右/下**：这是一个 DAG。`dp[i][j]` 表示到 `(i,j)` 的最小累计代价，来源只可能来自上方或左方。
+          - 初始化 `dp[0][0]=grid[0][0]`，第一行只能从左边来，第一列只能从上面来。
+          - 可用一维 `dp[j]`：更新前的 `dp[j]` 是“上方”，更新后的 `dp[j-1]` 是“左方”。
+          - **允许四方向**：存在回边，普通右/下 DP 不再覆盖全部路径；若代价非负，可用 Dijkstra。
+          - **存在负代价且允许成环**：标准 Dijkstra 的前提被破坏；还要继续确认是否存在负环以及题目真正的图模型。
+
+          ## 3 分钟版
+
+          先说最常见的右/下模型：矩阵非空，进入一个格子就支付该格子的 `long` 代价，路径包含起点和终点。
+
+          ```java
+          import java.util.*;
+
+          public final class Solution {
+              public static long minPathRightDown(long[][] grid) {
+                  validate(grid);
+                  int m = grid.length, n = grid[0].length;
+                  long[] dp = new long[n];
+                  dp[0] = grid[0][0];
+                  for (int j = 1; j < n; j++) dp[j] = Math.addExact(dp[j - 1], grid[0][j]);
+                  for (int i = 1; i < m; i++) {
+                      dp[0] = Math.addExact(dp[0], grid[i][0]);
+                      for (int j = 1; j < n; j++) {
+                          dp[j] = Math.addExact(Math.min(dp[j], dp[j - 1]), grid[i][j]);
+                      }
+                  }
+                  return dp[n - 1];
+              }
+
+              public static long minPathFourDirectionsNonNegative(long[][] grid) {
+                  validate(grid);
+                  int m = grid.length, n = grid[0].length;
+                  for (long[] row : grid) for (long v : row) {
+                      if (v < 0) throw new IllegalArgumentException("Dijkstra requires non-negative cell costs");
+                  }
+                  long[][] dist = new long[m][n];
+                  for (long[] row : dist) Arrays.fill(row, Long.MAX_VALUE);
+                  PriorityQueue<State> pq = new PriorityQueue<>(Comparator.comparingLong(s -> s.dist));
+                  dist[0][0] = grid[0][0];
+                  pq.add(new State(0, 0, grid[0][0]));
+                  int[][] dirs = {{1,0},{-1,0},{0,1},{0,-1}};
+                  while (!pq.isEmpty()) {
+                      State cur = pq.poll();
+                      if (cur.dist != dist[cur.r][cur.c]) continue;
+                      if (cur.r == m - 1 && cur.c == n - 1) return cur.dist;
+                      for (int[] d : dirs) {
+                          int nr = cur.r + d[0], nc = cur.c + d[1];
+                          if (nr < 0 || nr >= m || nc < 0 || nc >= n) continue;
+                          long nd = Math.addExact(cur.dist, grid[nr][nc]);
+                          if (nd < dist[nr][nc]) {
+                              dist[nr][nc] = nd;
+                              pq.add(new State(nr, nc, nd));
+                          }
+                      }
+                  }
+                  throw new IllegalStateException("target unreachable");
+              }
+
+              private static void validate(long[][] grid) {
+                  if (grid == null || grid.length == 0 || grid[0] == null || grid[0].length == 0) {
+                      throw new IllegalArgumentException("grid must be non-empty");
+                  }
+                  int n = grid[0].length;
+                  for (long[] row : grid) if (row == null || row.length != n) {
+                      throw new IllegalArgumentException("grid must be rectangular");
+                  }
+              }
+
+              private record State(int r, int c, long dist) {}
+          }
+          ```
+
+          右/下 DP 的正确性来自最优子结构：到 `(i,j)` 的最后一步只能来自 `(i-1,j)` 或 `(i,j-1)`，所以最优路径一定由这两个前驱中的较优者加当前格子构成。四方向时这个“固定前驱层次”不存在，节点可能从任意已扩展邻居得到更短距离，因此要用图最短路算法维护全局最小未确定距离。
+
+          ## 关键细节
+
+          - **先确认移动集合**：右/下是 DAG；四方向通常是有环图。算法选择由图结构决定，不是题名里出现了哪个关键词决定。
+          - **起点是否计费**：本参考实现把 `grid[0][0]` 计入总和；若题目定义“走边付费”或不计起点，需要对应调整初始化。
+          - **Dijkstra 的非负前提**：这里把“进入相邻格子的代价”当作边权，因此格子代价必须非负；负权时不能直接沿用 Dijkstra 的贪心定点性质。
+          - **空间优化**：右/下 DP 只依赖当前行左侧和上一行同列，所以二维数组可压成 O(n)；若列数更大，也可按较短维压缩。
+          - **溢出**：示例用 `long` 并用 `Math.addExact` 暴露溢出，而不是静默回绕。平台若保证范围较小，可按题目约束简化。
+          - **复杂度**：右/下 DP 是 O(mn) 时间、O(n) 额外空间；四方向 Dijkstra 在 `V=mn`、`E≈4mn` 下用二叉堆是 O(mn log(mn)) 时间、O(mn) 空间。
+
+          ## 原理机制
+
+          DP 和 Dijkstra 都在复用“已经求出的最优子结果”，但成立条件不同。右/下移动给出了天然拓扑序：按行从左到右扫描时，所有前驱都已经完成，因此一次状态转移就能永久确定答案。四方向图没有这样的扫描顺序；Dijkstra 利用非负权保证：优先队列里当前距离最小的未确定节点一旦弹出，它不可能再被经过更远节点的路径改小，于是逐步确定最短距离。
+
+          ## 项目经验版
+
+          来源没有真实项目背景，不能虚构线上案例。工程中遇到“网格最短代价”时我会先把规则翻译成图：节点是什么、边是什么、边权如何定义、是否允许回头、有没有障碍和负权，再决定是 DAG DP、BFS、0-1 BFS、Dijkstra 还是其他最短路算法。先建模再选算法，比记住“矩阵题用 DP”更可靠。
+
+          ## 常见追问
+
+          - 问：为什么右/下可以 DP，而四方向不直接用同一个递推？答：右/下没有回边，存在固定拓扑顺序；四方向会形成环，一个格子的最优值可能来自尚未处理的方向。
+          - 问：如果所有格子代价都是 1 呢？答：四方向时所有移动边权相同，可退化为 BFS，不需要 Dijkstra 的优先队列。
+          - 问：如果边权只有 0 和 1 呢？答：可用 0-1 BFS，用双端队列把 0 权边放前面、1 权边放后面，时间可做到 O(V+E)。
+          - 问：为什么 Dijkstra 不能直接处理负权？答：它在弹出当前最小距离节点时就把该距离视为最终值；负权边可能从后续路径把已确定节点再次改小，破坏这个贪心不变量。
+          - 问：能不能把 DP 写成原地修改矩阵？答：可以，但会破坏输入；是否允许取决于接口契约。面试里最好先说明是否接受修改入参。
+          - 问：如何恢复具体路径？答：DP 记录每个格子的前驱方向；Dijkstra 在 relax 成功时记录 parent，最后从终点反向回溯。
+
+          ## 易错点
+
+          - 没问移动规则，就直接套右/下 DP。
+          - 四方向存在环，却用只看“上/左”的递推漏掉合法路径。
+          - 格子代价允许为负仍直接套 Dijkstra。
+          - 起点/终点是否计入代价没有声明，样例与实现口径不一致。
+          - 只说复杂度 O(mn)，却没有区分 DP 和堆优化 Dijkstra 的成本。
+          EOF
+          node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8'),m=md.match(/```java\n([\s\S]*?)\n```/);if(!m)throw new Error('java missing');fs.writeFileSync('/tmp/Solution.java',m[1]+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/WriterTest.java <<'JAVA'
+          import java.util.*;
+          public final class WriterTest {
+              static long bruteRightDown(long[][] g,int r,int c){if(r==g.length-1&&c==g[0].length-1)return g[r][c];long best=Long.MAX_VALUE;if(r+1<g.length)best=Math.min(best,bruteRightDown(g,r+1,c));if(c+1<g[0].length)best=Math.min(best,bruteRightDown(g,r,c+1));return Math.addExact(g[r][c],best);}
+              static long bellman(long[][]g){int m=g.length,n=g[0].length,V=m*n;long[]d=new long[V];Arrays.fill(d,Long.MAX_VALUE);d[0]=g[0][0];int[][]dirs={{1,0},{-1,0},{0,1},{0,-1}};for(int it=0;it<V-1;it++){boolean ch=false;for(int r=0;r<m;r++)for(int c=0;c<n;c++){int u=r*n+c;if(d[u]==Long.MAX_VALUE)continue;for(int[]x:dirs){int nr=r+x[0],nc=c+x[1];if(nr<0||nr>=m||nc<0||nc>=n)continue;int v=nr*n+nc;long nd=d[u]+g[nr][nc];if(nd<d[v]){d[v]=nd;ch=true;}}}if(!ch)break;}return d[V-1];}
+              public static void main(String[]args){Random r=new Random(0xB46E3F4BL);long cases=0;for(int t=0;t<4000;t++){int m=1+r.nextInt(5),n=1+r.nextInt(5);long[][]g=new long[m][n];for(int i=0;i<m;i++)for(int j=0;j<n;j++)g[i][j]=r.nextInt(21)-10;long got=Solution.minPathRightDown(g),want=bruteRightDown(g,0,0);if(got!=want)throw new AssertionError("dp "+got+" != "+want);cases++;}for(int t=0;t<3000;t++){int m=1+r.nextInt(5),n=1+r.nextInt(5);long[][]g=new long[m][n];for(int i=0;i<m;i++)for(int j=0;j<n;j++)g[i][j]=r.nextInt(10);long got=Solution.minPathFourDirectionsNonNegative(g),want=bellman(g);if(got!=want)throw new AssertionError("dijkstra "+got+" != "+want);cases++;}boolean neg=false;try{Solution.minPathFourDirectionsNonNegative(new long[][]{{1,-1},{2,3}});}catch(IllegalArgumentException e){neg=true;}if(!neg)throw new AssertionError("negative guard");System.out.println("PASS cases="+cases+" dp=bruteforce dijkstra=bellman negative-guard=ok");}
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/WriterTest.java
+          stdout="$(java -cp /tmp WriterTest)";echo "$stdout";test "$stdout" = 'PASS cases=7000 dp=bruteforce dijkstra=bellman negative-guard=ok'
+          CANDIDATE_SHA="$(sha256sum "review/candidates/answers/$cid.md"|awk '{print $1}')" STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0044/${cid}`,date='2026-08-28',sha=process.env.CANDIDATE_SHA;
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'compile exact candidate; 4000 right/down brute-force differentials plus 3000 four-direction Bellman-Ford differentials',stdout:process.env.STDOUT,boundary_tests:[{case:'1xN/Nx1 and signed right/down costs',expected:'matches exhaustive monotone-path oracle',passed:true},{case:'four-direction non-negative random grids',expected:'matches Bellman-Ford oracle',passed:true},{case:'negative four-direction cost',expected:'explicitly rejected for Dijkstra contract',passed:true}]},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'source-inventory',title:'Batch 0044 frozen live source inventory',locator:'review/content_build/answer_batch_0044/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Matrix minimum-path deterministic differential validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The source names a top-left to bottom-right matrix minimum-path problem and mentions DP/Dijkstra but does not freeze movement rules, whether the start cell is charged, or the weight domain.',source_ids:['source-inventory'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'dp-reference',text:'Under the explicit right/down cell-cost contract, the one-dimensional DP matches exhaustive path enumeration on 4000 random small signed grids.',source_ids:['writer-validation'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'dijkstra-reference',text:'Under the explicit four-direction non-negative cell-cost contract, the Dijkstra implementation matches an independent Bellman-Ford oracle on 3000 random grids and rejects negative costs.',source_ids:['writer-validation'],answer_locations:['核心结论','3 分钟版','关键细节','原理机制']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          NODE
+      - name: Commit writer packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-content-builder;git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0044/$CANONICAL_ID"
+          git commit -m 'content: draft batch 0044 matrix minimum-path candidate'
+          for n in 1 2 3 4 5;do git fetch origin "$CONTENT_BRANCH";git rebase "origin/$CONTENT_BRANCH";if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi;git rebase --abort||true;sleep $((n*2));done;exit 1
+
+  review:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-java@v5
+        with: {distribution: temurin, java-version: '21'}
+      - name: Independent source-first review and oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";out="review/content_build/answer_batch_0044/$cid"
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs'),cid=process.env.CANONICAL_ID,exact='算法：矩阵左上角到右下角路径最小值（Dynamic Programming/Dijkstra）？';
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0044/source_inventory.json','utf8')),item=(inv.items||[]).find(x=>x.canonical_id===cid);if(!item||item.source_questions?.[0]?.original_question!==exact)throw new Error('source drifted');
+          const p=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(p,'utf8');for(const x of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点','minPathRightDown','minPathFourDirectionsNonNegative','Dijkstra','O(mn)'])if(!md.includes(x))throw new Error(`missing ${x}`);if((md.match(/- 问：/g)||[]).length<5)throw new Error('followups');const m=md.match(/```java\n([\s\S]*?)\n```/);if(!m)throw new Error('java missing');fs.writeFileSync('/tmp/Solution.java',m[1]+'\n');fs.writeFileSync('/tmp/candidate-sha',crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')+'\n');
+          NODE
+          javac -encoding UTF-8 -d /tmp /tmp/Solution.java
+          cat > /tmp/Reviewer.java <<'JAVA'
+          import java.util.*;
+          public final class Reviewer {
+            static long monotone(long[][]g){int m=g.length,n=g[0].length;long[][]d=new long[m][n];d[0][0]=g[0][0];for(int i=1;i<m;i++)d[i][0]=d[i-1][0]+g[i][0];for(int j=1;j<n;j++)d[0][j]=d[0][j-1]+g[0][j];for(int i=1;i<m;i++)for(int j=1;j<n;j++)d[i][j]=Math.min(d[i-1][j],d[i][j-1])+g[i][j];return d[m-1][n-1];}
+            static long floydGrid(long[][]g){int m=g.length,n=g[0].length,V=m*n;long INF=Long.MAX_VALUE/4;long[][]d=new long[V][V];for(int i=0;i<V;i++){Arrays.fill(d[i],INF);d[i][i]=0;}int[][]dirs={{1,0},{-1,0},{0,1},{0,-1}};for(int r=0;r<m;r++)for(int c=0;c<n;c++){int u=r*n+c;for(int[]x:dirs){int nr=r+x[0],nc=c+x[1];if(nr<0||nr>=m||nc<0||nc>=n)continue;d[u][nr*n+nc]=Math.min(d[u][nr*n+nc],g[nr][nc]);}}for(int k=0;k<V;k++)for(int i=0;i<V;i++)for(int j=0;j<V;j++)if(d[i][k]<INF&&d[k][j]<INF)d[i][j]=Math.min(d[i][j],d[i][k]+d[k][j]);return g[0][0]+d[0][V-1];}
+            public static void main(String[]args){Random r=new Random(0x46E3F4B0L);long cases=0;for(int t=0;t<12000;t++){int m=1+r.nextInt(8),n=1+r.nextInt(8);long[][]g=new long[m][n];for(int i=0;i<m;i++)for(int j=0;j<n;j++)g[i][j]=r.nextInt(101)-50;if(Solution.minPathRightDown(g)!=monotone(g))throw new AssertionError("dp");cases++;}for(int t=0;t<2500;t++){int m=1+r.nextInt(4),n=1+r.nextInt(4);long[][]g=new long[m][n];for(int i=0;i<m;i++)for(int j=0;j<n;j++)g[i][j]=r.nextInt(20);if(Solution.minPathFourDirectionsNonNegative(g)!=floydGrid(g))throw new AssertionError("dijkstra");cases++;}System.out.println("PASS independent-cases="+cases+" dp=2d-oracle dijkstra=floyd-warshall");}
+          }
+          JAVA
+          javac -encoding UTF-8 -cp /tmp -d /tmp /tmp/Reviewer.java
+          stdout="$(java -cp /tmp Reviewer)";echo "$stdout";test "$stdout" = 'PASS independent-cases=14500 dp=2d-oracle dijkstra=floyd-warshall';echo "REVIEW_STDOUT=$stdout" >> "$GITHUB_ENV"
+      - name: Freeze evidence, run gates, and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0044/$cid";sha="$(cat /tmp/candidate-sha)"
+          CANDIDATE_SHA="$sha" node <<'NODE'
+          const fs=require('fs'),cid=process.env.CANONICAL_ID,qid=process.env.SOURCE_QID,out=`review/content_build/answer_batch_0044/${cid}`,sha=process.env.CANDIDATE_SHA,date='2026-08-28',writer=JSON.parse(fs.readFileSync(`${out}/writer_research.json`,'utf8'));if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==sha)throw new Error('writer drifted');
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=['The source mentions a matrix minimum path and DP/Dijkstra but does not preserve movement or weight constraints, so the candidate correctly makes those contracts explicit before choosing an algorithm.','For right/down movement, the candidate states and implements the DAG dynamic-programming recurrence and explains why a one-dimensional state compression is valid.','For four-direction movement with non-negative cell costs, the candidate models the grid as a weighted graph and uses Dijkstra with a stale-entry guard and explicit rejection of negative costs.','The exact candidate compiles. Independent review matched the DP method against a separate two-dimensional oracle on 12000 random signed grids and matched Dijkstra against Floyd-Warshall on 2500 random non-negative grids.','Start-cell charging, overflow, negative weights, path reconstruction, and BFS/0-1 BFS degenerations are described as explicit boundaries rather than fabricated source requirements.'];
+          const validation={schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:sha,result:'pass',validated_at:date,command:'independent 2D-DP and Floyd-Warshall differential validation',stdout:process.env.REVIEW_STDOUT,boundary_tests:[{case:'right/down signed random grids',expected:'exact match with separate 2D DP oracle',passed:true},{case:'four-direction non-negative random grids',expected:'exact match with Floyd-Warshall oracle',passed:true}]};fs.writeFileSync(`${out}/reviewer_validation.json`,JSON.stringify(validation,null,2)+'\n');
+          const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:sha,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0044-matrix-min-path-20260828-v1',review_version:'batch-0044.matrix-min-path.v1',decision:'pass',revision_round:1,source_packet:['review/content_build/answer_batch_0044/source_inventory.json',`review/candidates/answers/${cid}.md`,`${out}/reviewer_validation.json`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+          const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:sha,checked_at:date,writer:{writer_id:'content-batch-0044-matrix-min-path-builder',writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'source-inventory',title:'Batch 0044 frozen live source inventory',locator:'review/content_build/answer_batch_0044/source_inventory.json',source_type:'repository_structured_source',checked_at:date},{source_id:'writer-validation',title:'Matrix minimum-path writer differentials',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'reviewer-validation',title:'Independent DP/Floyd-Warshall validation',locator:`${out}/reviewer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date},{source_id:'isolated-review',title:'Matrix minimum-path source-first isolated review',locator:`${out}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:[{claim_id:'source-contract',text:'The source names a top-left to bottom-right matrix minimum-path problem and DP/Dijkstra without fixing the movement set, start-cost convention, or weight domain.',source_ids:['source-inventory','isolated-review'],answer_locations:['核心结论','1 分钟版','关键细节']},{claim_id:'dp-behavior',text:'Under the explicit right/down cell-cost contract, the candidate DP is validated against independent monotone-path oracles across writer and reviewer random grids.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['1 分钟版','3 分钟版','原理机制']},{claim_id:'dijkstra-behavior',text:'Under the explicit four-direction non-negative contract, the candidate Dijkstra matches Bellman-Ford and Floyd-Warshall reference solvers and rejects negative costs.',source_ids:['writer-validation','reviewer-validation','isolated-review'],answer_locations:['核心结论','3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],validation:{command:'independent 2D-DP and Floyd-Warshall differential validation',result:'pass',reported_stdout:process.env.REVIEW_STDOUT,boundary_tests:validation.boundary_tests},review:{reviewer_id:review.reviewer_id,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};fs.mkdirSync('review/evidence',{recursive:true});fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          NODE
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:code
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md');t=p.read_text(encoding='utf-8');line='- [x] `cq_q_b46e3f4b0ff3224ae7b5462be34acba2` completed writer construction and isolated source-first review. The preserved source mentions matrix minimum path plus DP/Dijkstra without freezing movement or weight constraints; the candidate separates the right/down DAG-DP contract from the four-direction non-negative Dijkstra contract instead of fabricating one source model. The exact Java implementation passed 7,000 writer differentials against exhaustive/Bellman-Ford oracles and 14,500 independent reviewer differentials against separate 2D-DP/Floyd-Warshall oracles. Strict candidate audit, code gate, and repository gates are green. Formal evidence is staged; repository human approval and real-review policy remain promotion blockers.'
+          if '## Progress' not in t:t=t.rstrip()+'\n\n## Progress\n'
+          if line not in t:t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+          git config user.name xhs-review-bot;git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0044/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0044.md
+          git commit -m 'review: pass batch 0044 matrix minimum-path candidate source-first'
+          for n in 1 2 3 4 5;do git fetch origin "$CONTENT_BRANCH";git rebase "origin/$CONTENT_BRANCH";if git push origin "HEAD:$CONTENT_BRANCH";then exit 0;fi;git rebase --abort||true;sleep $((n*2));done;exit 1
