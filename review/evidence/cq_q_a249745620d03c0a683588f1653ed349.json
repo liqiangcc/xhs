@@ -1,0 +1,145 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_a249745620d03c0a683588f1653ed349",
+  "candidate_sha256": "a2d831e7cc8177fe02ad2c1ef9c96dd63d2549f9039638e6fa2f066d04c47309",
+  "checked_at": "2026-08-27",
+  "writer": {
+    "writer_id": "content-batch-0040-url-count-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Exact URL-count repository source",
+      "locator": "note_tagged/66e90ac3000000001e01b16d.json#question_id=a249745620d03c0a683588f1653ed349",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Writer URL-count shell validation",
+      "locator": "review/content_build/answer_batch_0040/cq_q_a249745620d03c0a683588f1653ed349/shell_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent awk-map URL-count oracle",
+      "locator": "review/content_build/answer_batch_0040/cq_q_a249745620d03c0a683588f1653ed349/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-27"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "URL-count source-first isolated review",
+      "locator": "review/content_build/answer_batch_0040/cq_q_a249745620d03c0a683588f1653ed349/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-27"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The source requires counting each URL and names awk/sort/uniq but does not define log fields or URL normalization.",
+      "source_ids": [
+        "repository-source",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "pipeline",
+      "text": "Sorting groups identical URL strings before uniq -c; independent review matches the pipeline against an awk associative-array oracle.",
+      "source_ids": [
+        "writer-validation",
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "boundaries",
+      "text": "Blank lines are ignored under the explicit fixture contract and distinct query strings remain distinct unless a separate normalization rule is defined.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "a249745620d03c0a683588f1653ed349",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "bash reviewer_url_count_fixture.sh",
+    "result": "pass",
+    "reported_stdout": "PASS pipeline=independent-awk-map counts=3,2,1 query-variants=distinct blank-lines=ignored",
+    "boundary_tests": [
+      {
+        "case": "non-adjacent duplicate URLs",
+        "expected": "counts 3 and 2 after grouping",
+        "passed": true
+      },
+      {
+        "case": "blank line",
+        "expected": "ignored by NF guard",
+        "passed": true
+      },
+      {
+        "case": "query variants",
+        "expected": "different complete strings remain distinct",
+        "passed": true
+      }
+    ]
+  },
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0040-url-count-20260827-v4",
+    "review_version": "batch-0040.url-count.v4",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "uncovered_source_variants": [],
+    "unsupported_claims": [],
+    "findings": [
+      "The repository source names awk, sort and uniq and asks for per-URL counts, but does not preserve a log schema or URL field position.",
+      "The candidate is fail-closed on field position and labels the seventh-field access-log form as an example only.",
+      "Independent awk associative-array counting matches the sort/uniq pipeline for non-adjacent duplicates, blank lines and query-string variants.",
+      "The explanation separates counting semantics from optional final frequency sorting.",
+      "The project-experience section explicitly states the evidence boundary rather than inventing production history."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
