@@ -49,7 +49,8 @@ jobs:
           git show "origin/$CONTENT_BRANCH:scripts/lib/answer_quality.js" > /tmp/answer_quality.js
           node <<'NODE'
           const fs=require('fs');
-          const text=fs.readFileSync('/tmp/answer_quality.js','utf8');
+          const file='/tmp/answer_quality.js';
+          let text=fs.readFileSync(file,'utf8');
           for(const marker of [
             'function sha256(',
             'function extractCodeBlocks(',
@@ -62,7 +63,17 @@ jobs:
             'runAnswerAudit,',
             'atomicDemoteMissingEvidence,',
             'CREATE\\s+TABLE'
-          ]) if(!text.includes(marker)) throw new Error(`tested content implementation missing expected marker: ${marker}`);
+          ]) if(!text.includes(marker)) throw new Error(`content implementation missing expected marker: ${marker}`);
+
+          // Master already has an explicit regression contract that JavaScript
+          // snippets may use ESM `export` syntax.  The content line validates
+          // JavaScript with `node --check`; use an .mjs scratch file so the
+          // parser checks the snippet as an ES module rather than CommonJS.
+          const old="const filePath = path.join(tempDir, 'candidate.js');";
+          const next="const filePath = path.join(tempDir, 'candidate.mjs');";
+          if(text.includes(old)) text=text.replace(old,next);
+          else if(!text.includes(next)) throw new Error('JavaScript syntax-check scratch path drifted');
+          fs.writeFileSync(file,text,'utf8');
           NODE
           cp /tmp/answer_quality.js scripts/lib/answer_quality.js
           git diff --check
