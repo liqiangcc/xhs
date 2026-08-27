@@ -1,0 +1,39 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_ab9374b0bb7cceded9319a8201cc2b24",
+  "candidate_sha256": "d2aef97c76da6dc4696c9d53986373c8a5f0ad2922b9dcbac6fbae77e4c87d71",
+  "result": "pass",
+  "validated_at": "2026-08-27",
+  "command": "extract main candidate SQL; execute against independent in-memory SQLite oracle",
+  "stdout": "PASS included=Alice,Cara,Eve,Gina exact60=included any-below60=excluded single-course-pass=included zero-course=excluded repeated60=included",
+  "boundary_tests": [
+    {
+      "case": "minimum score exactly 60",
+      "expected": "student included",
+      "passed": true
+    },
+    {
+      "case": "one score below 60 among higher scores",
+      "expected": "student excluded",
+      "passed": true
+    },
+    {
+      "case": "single passing course",
+      "expected": "student included",
+      "passed": true
+    },
+    {
+      "case": "zero score rows",
+      "expected": "student excluded by declared INNER JOIN contract",
+      "passed": true
+    },
+    {
+      "case": "multiple courses exactly 60",
+      "expected": "student included",
+      "passed": true
+    }
+  ],
+  "environment": {
+    "engine": "Python sqlite3 in-memory SQLite"
+  }
+}
