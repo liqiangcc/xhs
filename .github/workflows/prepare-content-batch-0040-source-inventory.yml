@@ -1,0 +1,173 @@
+name: Prepare Content Batch 0040 Source Inventory
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/prepare-content-batch-0040-source-inventory.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0040-source-inventory
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Extract current source-first contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/batch0040-context
+          for cid in \
+            cq_q_a13d56a67ff084ff89a8171b6df1c776 \
+            cq_q_a193569a39b993f4f71e524fae08295b \
+            cq_q_a2159736eae9112fc8f174c75e2e7b85 \
+            cq_q_a249745620d03c0a683588f1653ed349 \
+            cq_q_a2b09618bc23b15a51f221be46e00bd5 \
+            cq_q_a4a80af48b7e1af0a3cdd334e8e43506 \
+            cq_q_a53dd025bbdbfb8d46f36e82e4941af1 \
+            cq_q_a64d35ce4f90aa4b9addd876cac99df6 \
+            cq_q_a65a65d6ea6cb59d8a43c748dff80fa6 \
+            cq_q_a674ac13e38ba3f81a2eb37d1ef5e5e9; do
+              node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > "/tmp/batch0040-context/$cid.json"
+          done
+
+      - name: Freeze bounded source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p review/content_build/answer_batch_0040
+          node <<'NODE'
+          const fs=require('fs');
+          const ids=[
+            'cq_q_a13d56a67ff084ff89a8171b6df1c776',
+            'cq_q_a193569a39b993f4f71e524fae08295b',
+            'cq_q_a2159736eae9112fc8f174c75e2e7b85',
+            'cq_q_a249745620d03c0a683588f1653ed349',
+            'cq_q_a2b09618bc23b15a51f221be46e00bd5',
+            'cq_q_a4a80af48b7e1af0a3cdd334e8e43506',
+            'cq_q_a53dd025bbdbfb8d46f36e82e4941af1',
+            'cq_q_a64d35ce4f90aa4b9addd876cac99df6',
+            'cq_q_a65a65d6ea6cb59d8a43c748dff80fa6',
+            'cq_q_a674ac13e38ba3f81a2eb37d1ef5e5e9',
+          ];
+          const items=[];
+          for(const cid of ids){
+            const ctx=JSON.parse(fs.readFileSync(`/tmp/batch0040-context/${cid}.json`,'utf8'));
+            if(!ctx.ok) throw new Error(`${cid}: answer context failed`);
+            if(ctx.canonical?.canonical_id!==cid) throw new Error(`${cid}: canonical id drifted`);
+            if(ctx.answer_type!=='coding') throw new Error(`${cid}: expected coding, got ${ctx.answer_type}`);
+            const sourceQuestions=Array.isArray(ctx.source_questions)?ctx.source_questions:[];
+            if(sourceQuestions.length===0) throw new Error(`${cid}: no source questions in context`);
+            const owned=Array.isArray(ctx.canonical?.question_ids)?ctx.canonical.question_ids:[];
+            const sourceIds=sourceQuestions.map(q=>q.question_id).filter(Boolean);
+            if(JSON.stringify([...owned].sort())!==JSON.stringify([...sourceIds].sort())) {
+              throw new Error(`${cid}: canonical ownership/source context mismatch owned=${JSON.stringify(owned)} source=${JSON.stringify(sourceIds)}`);
+            }
+            items.push({
+              canonical_id:cid,
+              answer_type:ctx.answer_type,
+              canonical_question:ctx.canonical?.canonical_question ?? ctx.canonical?.question ?? null,
+              question_ids:owned,
+              source_questions:sourceQuestions,
+              active_answer_metadata:ctx.answer?.metadata ?? ctx.answer_metadata ?? null,
+            });
+          }
+          const out={
+            schema_version:'answer_batch_source_inventory.v1',
+            batch:'0040',
+            frozen_at:'2026-08-27',
+            canonical_count:items.length,
+            source_first:true,
+            note:'Repository-local inventory only. It preserves current Canonical ownership and exact source-question objects before any candidate drafting. Missing source contract details must not be invented.',
+            items,
+          };
+          fs.writeFileSync('review/content_build/answer_batch_0040/source_inventory.json',JSON.stringify(out,null,2)+'\n');
+          console.log(`PASS frozen ${items.length} batch0040 source contexts`);
+          NODE
+
+      - name: Validate inventory against live repository projections
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0040/source_inventory.json','utf8'));
+          if(inv.canonical_count!==10||inv.items.length!==10) throw new Error('expected exactly 10 batch0040 Canonicals');
+          const canonicalRows=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const questionRows=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          for(const item of inv.items){
+            const canonical=canonicalRows.find(x=>x.canonical_id===item.canonical_id);
+            if(!canonical) throw new Error(`${item.canonical_id}: live Canonical missing`);
+            if(JSON.stringify([...(canonical.question_ids||[])].sort())!==JSON.stringify([...item.question_ids].sort())) throw new Error(`${item.canonical_id}: frozen ownership drifted`);
+            for(const sq of item.source_questions){
+              const row=questionRows.find(x=>x.question_id===sq.question_id);
+              if(!row) throw new Error(`${item.canonical_id}: source Question ${sq.question_id} missing`);
+              if(row.canonical_id!==item.canonical_id||row.is_valid_for_library!==true) throw new Error(`${sq.question_id}: inactive or rebound during inventory`);
+              if(row.original_question!==sq.original_question) throw new Error(`${sq.question_id}: source wording mismatch`);
+            }
+          }
+          console.log('PASS batch0040 inventory matches active Question/Canonical projection');
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+
+      - name: Mark bounded task started
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md')
+          t=p.read_text(encoding='utf-8')
+          t=t.replace('- Status: `pending`','- Status: `in_progress`',1)
+          line='- [x] Source-first inventory frozen before candidate drafting: all 10 active Coding Canonicals have live ownership and exact repository source-question objects captured in `review/content_build/answer_batch_0040/source_inventory.json`; missing contract details remain fail-closed for the next recoverability review.'
+          if '## Progress' not in t:
+              t=t.rstrip()+'\n\n## Progress\n\n'
+          if line not in t:
+              t=t.rstrip()+'\n'+line+'\n'
+          p.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during inventory: $base_head -> $remote_head"
+            echo 'Discard verified local inventory; a later run may retry against current state.'
+            exit 0
+          fi
+          git add review/content_build/answer_batch_0040/source_inventory.json tasks/answer-batches/TASK-20260711-0313-answer-batch-0040.md
+          if git diff --cached --quiet; then echo 'No batch0040 inventory changes.'; exit 0; fi
+          git diff --cached --check
+          git config user.name xhs-source-audit-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: freeze batch 0040 source inventory'
+          git push origin "HEAD:$CONTENT_BRANCH"
