@@ -1,0 +1,139 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_cd492f07ab9e4f6446b576e165a75c8d",
+  "candidate_sha256": "aeed42d85b6f300408f3c093f7d8da7befa8252e3fd89b43d369ca88d9f07440",
+  "checked_at": "2026-08-28",
+  "writer": {
+    "writer_id": "content-batch-0048-majority-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0048 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0048/cq_q_cd492f07ab9e4f6446b576e165a75c8d/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Deterministic OpenJDK 21 majority-element fixture",
+      "locator": "review/content_build/answer_batch_0048/cq_q_cd492f07ab9e4f6446b576e165a75c8d/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Majority element source-first isolated review",
+      "locator": "review/content_build/answer_batch_0048/cq_q_cd492f07ab9e4f6446b576e165a75c8d/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source requires finding an array element whose occurrence count is strictly greater than half the array length; it does not specify language, API behavior, or guarantee that such an element always exists.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-behavior",
+      "text": "The executable Java fixture verifies a Boyer-Moore candidate pass plus explicit second-pass strict-majority validation across majority, no-majority, exact-half and boundary inputs.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "cd492f07ab9e4f6446b576e165a75c8d",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac MajorityElement.java MajorityElementTest.java && java MajorityElementTest",
+    "result": "pass",
+    "reported_stdout": "PASS classic odd negative singleton all-same no-majority exact-half empty null",
+    "checks": [
+      "classic strict-majority case",
+      "odd-length majority",
+      "negative values",
+      "singleton and all-same arrays",
+      "no-majority rejection",
+      "exact-half rejection",
+      "empty-array no-answer",
+      "null input rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "no majority",
+        "expected": "OptionalInt.empty",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "exactly half",
+        "expected": "not accepted as majority",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "negative strict majority",
+        "expected": "returned normally",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0048-majority-20260828-v1",
+    "review_version": "batch-0048.majority.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer preserves the source condition as strict majority (> n/2) and does not weaken it to >= half.",
+      "Because the source does not state that a majority is guaranteed, the candidate verifies the Boyer-Moore survivor in a second pass instead of presenting an unchecked candidate as a proven answer.",
+      "The cancellation argument explains why a genuine strict majority survives pairwise cancellation and separately states the limitation when no majority exists.",
+      "The Java implementation is complete and compilable, and deterministic tests cover majority, no-majority, exact-half, negative, singleton, empty and null cases.",
+      "Language/API/null semantics are identified as candidate-contract choices rather than source facts."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
