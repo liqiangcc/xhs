@@ -104,8 +104,27 @@ jobs:
       - name: Gate full repository validation
         run: node scripts/xhs.js validate all --noWrite
 
-      - name: Gate unit tests
-        run: npm test
+      - id: unit_tests
+        name: Gate unit tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee /tmp/batch0047-npm-test.log
+
+      - name: Upload unit-test diagnostics
+        if: steps.unit_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch0047-unit-test-diagnostics
+          path: /tmp/batch0047-npm-test.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail on unit-test regression
+        if: steps.unit_tests.outcome == 'failure'
+        shell: bash
+        run: exit 1
 
       - name: Gate aggregate CI
         run: npm run ci:check
