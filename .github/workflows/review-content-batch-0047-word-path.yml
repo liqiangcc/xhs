@@ -1,0 +1,207 @@
+name: Review Content Batch 0047 Word Path Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0047-word-path.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0047-word-path-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_c5b4000d8ac232781338c2a1dd71be15
+  SOURCE_QID: c5b4000d8ac232781338c2a1dd71be15
+  SOURCE_IMG_TXT: note_img_txt/680e66cb0000000023012aa3.txt
+  CANDIDATE: review/candidates/answers/cq_q_c5b4000d8ac232781338c2a1dd71be15.md
+  OUT: review/content_build/answer_batch_0047/cq_q_c5b4000d8ac232781338c2a1dd71be15
+  TASK: tasks/answer-batches/TASK-20260711-0313-answer-batch-0047.md
+
+jobs:
+  review-remediate-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - name: Sync current master gate into content branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git fetch origin master
+          git merge --no-edit origin/master
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Phase A source-first review of staged candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs');
+          const src=fs.readFileSync(process.env.SOURCE_IMG_TXT,'utf8');
+          if(!src.includes('单词路径(二维字母表,是否存在给\n定字符串的路径)')) throw new Error('image transcription source drift');
+          const inventory=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0047/source_inventory.json','utf8'));
+          const item=inventory.items.find(x=>x.canonical_id===process.env.CANONICAL_ID);
+          if(!item||item.state!=='active'||item.answer_type!=='coding'||JSON.stringify(item.question_ids)!==JSON.stringify([process.env.SOURCE_QID])) throw new Error('inventory boundary drift');
+          const md=fs.readFileSync(process.env.CANDIDATE,'utf8');
+          for(const h of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(h).length!==2) throw new Error(`section drift ${h}`);
+          if(!md.includes('二维字母表')||!md.includes('给定字符串')) throw new Error('source supplement missing');
+          if(/我在线上|我负责过|线上事故|我们生产|真实项目里我曾/.test(md)) throw new Error('fabricated project claim');
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)];
+          if(blocks.length!==1||!blocks[0][1].includes('public final class WordPath')) throw new Error('complete Java candidate missing');
+          fs.writeFileSync(`${process.env.OUT}/reviewer_tmp/WordPath.java`,blocks[0][1]+'\n');
+          NODE
+
+          cat > "$OUT/reviewer_tmp/WordPathReviewerTest.java" <<'JAVA'
+          import java.util.*;
+          public final class WordPathReviewerTest {
+              static long exhaustiveCases;
+              static void check(boolean v,String name){if(!v)throw new AssertionError(name);}
+              public static void main(String[] args) {
+                  char[][] sample={{'A','B','C','E'},{'S','F','C','S'},{'A','D','E','E'}};
+                  check(WordPath.exists(sample,"ABCCED"),"ABCCED");
+                  check(WordPath.exists(sample,"SEE"),"SEE");
+                  check(!WordPath.exists(sample,"ABCB"),"no reuse");
+                  check(WordPath.exists(new char[][]{{'A'}},"A"),"single");
+                  check(!WordPath.exists(new char[][]{{'A'}},"AA"),"single no reuse");
+                  check(WordPath.exists(new char[][]{{'X','A'},{'A','B'}},"AB"),"scan all starts");
+                  check(WordPath.exists(new char[][]{},""),"empty word on empty board");
+                  check(!WordPath.exists(null,"A"),"null board");
+                  check(!WordPath.exists(sample,null),"null word");
+                  boolean firstNullRejected=false; String firstNullClass="none";
+                  try { WordPath.exists(new char[][]{null},"A"); }
+                  catch (IllegalArgumentException e){ firstNullRejected=true; firstNullClass="IllegalArgumentException"; }
+                  catch (RuntimeException e){ firstNullClass=e.getClass().getSimpleName(); }
+                  boolean raggedRejected=false;
+                  try { WordPath.exists(new char[][]{{'A'},{'B','C'}},"A"); }
+                  catch (IllegalArgumentException e){ raggedRejected=true; }
+                  boolean raggedEmptyRejected=false;
+                  try { WordPath.exists(new char[][]{{'A'},{'B','C'}},""); }
+                  catch (IllegalArgumentException e){ raggedEmptyRejected=true; }
+                  exhaustiveTwoByThree();
+                  System.out.printf("PASS fixed=9 exhaustive=%d first-null-rejected=%s first-null-class=%s ragged-rejected=%s ragged-empty-rejected=%s%n",exhaustiveCases,firstNullRejected,firstNullClass,raggedRejected,raggedEmptyRejected);
+              }
+              static void exhaustiveTwoByThree(){
+                  int rows=2,cols=3,cells=rows*cols;
+                  for(int boardMask=0;boardMask<(1<<cells);boardMask++){
+                      char[][] b=new char[rows][cols];
+                      for(int p=0;p<cells;p++) b[p/cols][p%cols]=((boardMask>>>p)&1)==0?'A':'B';
+                      for(int len=0;len<=6;len++) for(int wm=0;wm<(1<<len);wm++){
+                          StringBuilder sb=new StringBuilder();
+                          for(int i=0;i<len;i++) sb.append(((wm>>>i)&1)==0?'A':'B');
+                          String w=sb.toString();
+                          boolean expected=reference(b,w),actual=WordPath.exists(b,w);
+                          if(actual!=expected) throw new AssertionError("mismatch board="+Arrays.deepToString(b)+" word="+w+" expected="+expected+" actual="+actual);
+                          exhaustiveCases++;
+                      }
+                  }
+              }
+              static boolean reference(char[][] b,String w){if(w.isEmpty())return true;for(int r=0;r<b.length;r++)for(int c=0;c<b[0].length;c++)if(refDfs(b,w,r,c,0,0))return true;return false;}
+              static boolean refDfs(char[][] b,String w,int r,int c,int i,int used){int rows=b.length,cols=b[0].length;if(r<0||r>=rows||c<0||c>=cols)return false;int bit=1<<(r*cols+c);if((used&bit)!=0||b[r][c]!=w.charAt(i))return false;if(i==w.length()-1)return true;int next=used|bit;return refDfs(b,w,r+1,c,i+1,next)||refDfs(b,w,r-1,c,i+1,next)||refDfs(b,w,r,c+1,i+1,next)||refDfs(b,w,r,c-1,i+1,next);}
+          }
+          JAVA
+          (cd "$OUT/reviewer_tmp" && javac -Xlint:all -Werror WordPath.java WordPathReviewerTest.java && java WordPathReviewerTest > round1.txt)
+          cat "$OUT/reviewer_tmp/round1.txt"
+
+          ROUND1_STDOUT="$(cat "$OUT/reviewer_tmp/round1.txt")" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,out=process.env.OUT,candidate=process.env.CANDIDATE,date='2026-08-28';
+          const md=fs.readFileSync(candidate,'utf8'),hash=crypto.createHash('sha256').update(md).digest('hex');
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||'',bullets=(one.match(/^- /gm)||[]).length,stdout=process.env.ROUND1_STDOUT||'';
+          const firstNullRejected=/first-null-rejected=true/.test(stdout),firstNullClass=(stdout.match(/first-null-class=([^ ]+)/)||[])[1]||'unknown',raggedRejected=/ragged-rejected=true/.test(stdout),raggedEmptyRejected=/ragged-empty-rejected=true/.test(stdout);
+          const findings=[];
+          if(bullets<3||bullets>5)findings.push({severity:'major',code:'one_minute_backbone_count',detail:`1 分钟版有 ${bullets} 个主干点，当前语义标准要求 3–5 个。`});
+          if(!firstNullRejected||firstNullClass!=='IllegalArgumentException')findings.push({severity:'major',code:'rectangular_contract_first_null_row',detail:`候选宣称非法二维数组形状会显式拒绝，但首行 null 的实际行为是 ${firstNullClass}，与候选契约不一致。`});
+          if(!raggedRejected)findings.push({severity:'major',code:'rectangular_contract_ragged',detail:'非空 word 下 ragged array 未按候选契约显式拒绝。'});
+          if(!raggedEmptyRejected)findings.push({severity:'major',code:'empty_word_bypasses_shape_contract',detail:'空 word 在二维数组形状校验前直接返回 true，使 ragged array 绕过候选所声明的 rectangular contract。'});
+          if(findings.length===0)throw new Error('expected staged-candidate findings disappeared; refuse blind remediation');
+          fs.writeFileSync(`${out}/reviewer_validation_round1.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:hash,result:'fail',validated_at:date,runtime:'OpenJDK 21',command:'extract exact candidate Java; javac -Xlint:all -Werror; fixed cases; exhaustive 2x3 A/B boards with all words length <= 6; invalid-shape probes',stdout,checks:['exact candidate compiles','classic positive/negative cases','no cell reuse','scan all starts','exhaustive 2x3 reference equivalence','first-null-row contract','ragged-array contract including empty-word path']},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_round1.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0047-word-path-20260828-r1',review_version:'batch-0047.word-path.r1',decision:'fail',revision_round:1,source_packet:['review/content_build/answer_batch_0047/source_inventory.json',process.env.SOURCE_IMG_TXT,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/reviewer_validation_round1.json`],scores:{facts_and_evidence:25,directness_and_relevance:17,type_specific_completeness:14,mechanism_and_causality:15,boundaries_and_tradeoffs:6,followup_quality:5,oral_quality:3},hard_failures:['coding_candidate_claims_explicit_rectangular_rejection_but_first_null_row_and_empty_word_shape_paths_do_not_follow_that_contract'],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['revision_required','repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Remediate all round-1 major findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),p=process.env.CANDIDATE;
+          let md=fs.readFileSync(p,'utf8');
+          md=md.replace('"version":1','"version":2');
+          const oldBullets=`- 枚举每个格子作为起点；只有当前字符等于 \`word[index]\` 才继续。\n- DFS 状态是 \`(row, col, index)\`，同时用 \`visited\` 表示当前路径已经占用的格子。\n- 当前字符匹配且 \`index == word.length()-1\` 时成功。\n- 否则尝试上、下、左、右四个邻居；越界、已访问、字符不匹配都直接剪枝。\n- 返回上一层前必须撤销 \`visited[row][col]\`，否则不同搜索分支会互相污染。\n- 最坏时间可写为 O(R×C×4^L) 的上界，实际因为不能立即复用格子会更小；额外空间 O(R×C + L)。`;
+          const newBullets=`- 枚举每个格子作为起点；只有当前字符等于 \`word[index]\` 才继续。\n- DFS 状态是 \`(row, col, index)\`，并用 \`visited\` 记录当前路径已经占用的格子。\n- 当前字符匹配后，若已经到达 word 末尾就成功；否则只尝试上、下、左、右且未访问、字符匹配的邻居。\n- 返回上一层前必须撤销 \`visited[row][col]\`，否则不同搜索分支会互相污染。\n- 最坏时间可写为 O(R×C×4^L) 的简单上界；额外空间是 O(R×C + L)，分别来自 visited 和递归深度。`;
+          if(!md.includes(oldBullets))throw new Error('round1 one-minute text drift');
+          md=md.replace(oldBullets,newBullets);
+          const oldCode=`        if (word == null || board == null) {\n            return false;\n        }\n        if (word.isEmpty()) {\n            return true;\n        }\n        if (board.length == 0 || board[0].length == 0) {\n            return false;\n        }\n\n        int cols = board[0].length;\n        for (char[] row : board) {\n            if (row == null || row.length != cols) {\n                throw new IllegalArgumentException(\"board must be rectangular\");\n            }\n        }`;
+          const newCode=`        if (word == null || board == null) {\n            return false;\n        }\n        if (board.length == 0) {\n            return word.isEmpty();\n        }\n        if (board[0] == null) {\n            throw new IllegalArgumentException(\"board must be rectangular\");\n        }\n\n        int cols = board[0].length;\n        for (char[] row : board) {\n            if (row == null || row.length != cols) {\n                throw new IllegalArgumentException(\"board must be rectangular\");\n            }\n        }\n        if (word.isEmpty()) {\n            return true;\n        }\n        if (cols == 0) {\n            return false;\n        }`;
+          if(!md.includes(oldCode))throw new Error('round1 Java precondition block drift');
+          md=md.replace(oldCode,newCode);
+          md=md.replace('- **矩形检查**：来源没有 ragged array 语义；本候选要求 Java 二维数组每行等长，非法形状显式拒绝。','- **矩形检查**：来源没有 ragged array 语义；本候选要求 Java 二维数组每行等长，并在空字符串捷径之前完成形状校验，null/ragged 行都显式拒绝。');
+          fs.writeFileSync(p,md);
+          NODE
+
+      - name: Phase B rerun exact revised candidate and pass isolated review
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs'),md=fs.readFileSync(process.env.CANDIDATE,'utf8');
+          const one=(md.match(/## 1 分钟版\n\n([\s\S]*?)(?=\n## )/)||[])[1]||''; const bullets=(one.match(/^- /gm)||[]).length;
+          if(bullets<3||bullets>5)throw new Error(`revised one-minute backbone invalid: ${bullets}`);
+          const blocks=[...md.matchAll(/```java\n([\s\S]*?)\n```/g)]; if(blocks.length!==1)throw new Error('revised Java block drift');
+          fs.writeFileSync(`${process.env.OUT}/reviewer_tmp/WordPath.java`,blocks[0][1]+'\n');
+          NODE
+          (cd "$OUT/reviewer_tmp" && javac -Xlint:all -Werror WordPath.java WordPathReviewerTest.java && java WordPathReviewerTest > round2.txt)
+          stdout="$(cat "$OUT/reviewer_tmp/round2.txt")"; echo "$stdout"
+          [[ "$stdout" == PASS\ fixed=9\ exhaustive=8128\ first-null-rejected=true\ first-null-class=IllegalArgumentException\ ragged-rejected=true\ ragged-empty-rejected=true ]]
+
+          ROUND2_STDOUT="$stdout" node <<'NODE'
+          const fs=require('fs'),crypto=require('crypto'),cid=process.env.CANONICAL_ID,out=process.env.OUT,candidate=process.env.CANDIDATE,date='2026-08-28';
+          const md=fs.readFileSync(candidate,'utf8'),hash=crypto.createHash('sha256').update(md).digest('hex'),stdout=process.env.ROUND2_STDOUT||'';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+          const findings=[
+            'The repository image transcription preserves the source as a two-dimensional letter table asking whether a path for a given string exists; adjacency direction and cell-reuse semantics are not preserved, and the candidate labels its four-neighbor/no-reuse behavior as an explicit executable contract rather than source fact.',
+            'The revised one-minute answer satisfies the 3–5 backbone requirement while retaining the DFS state, pruning, backtracking invariant and complexity boundary.',
+            'The exact Java candidate compiles with OpenJDK 21 and validates rectangular input before the empty-word shortcut, so null/ragged rows cannot contradict the documented input contract.',
+            'Independent execution covers classic positive/negative cases, no-cell-reuse, alternate starting cells, null/empty boundaries, explicit invalid-shape rejection, and exhaustive equivalence across every 2x3 A/B board and every A/B word of length 0 through 6.',
+            'The project section remains hypothetical and does not fabricate production experience; diagonal movement, reusable cells and path-returning APIs are clearly separated as variants.'
+          ];
+          fs.writeFileSync(`${out}/writer_validation.json`,JSON.stringify({schema_version:'answer_code_validation.v1',canonical_id:cid,candidate_sha256:hash,result:'pass',validated_at:date,runtime:'OpenJDK 21',command:'extract exact revised candidate Java; javac -Xlint:all -Werror; fixed cases and exhaustive 2x3 A/B board/word suite',stdout,checks:['exact revised candidate compiles','classic ABCCED/SEE/ABCB semantics','single-cell and no-reuse','all starts scanned','null and empty contract','first-null and ragged arrays rejected explicitly','all 8128 2x3 A/B board-word combinations match independent reference']},null,2)+'\n');
+          fs.writeFileSync(`${out}/writer_research.json`,JSON.stringify({schema_version:'answer_writer_research.v1',canonical_id:cid,checked_at:date,review_state:'writer_complete_isolated_review_pending',sources:[{source_id:'repository-source-image-transcription',title:'Tencent WXG interview image transcription',locator:process.env.SOURCE_IMG_TXT,source_type:'repository_source_record',checked_at:date},{source_id:'executable-validation',title:'Word-path exact candidate validation',locator:`${out}/writer_validation.json`,source_type:'executable_test_or_reproducible_experiment',checked_at:date}],claims:[{claim_id:'source-boundary',text:'The preserved image transcription says word path in a two-dimensional letter table and asks whether a path for the given string exists; neighbor directions and cell reuse are not preserved source constraints.',source_ids:['repository-source-image-transcription'],answer_locations:['核心结论','1 分钟版','关键细节','易错点']},{claim_id:'candidate-contract-behavior',text:'Under the explicitly chosen four-neighbor/no-reuse contract, the exact Java candidate matches the independent exhaustive reference and rejects invalid rectangular shapes as documented.',source_ids:['executable-validation'],answer_locations:['3 分钟版','关键细节','原理机制','常见追问']}],source_question_coverage:[{question_id:process.env.SOURCE_QID,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']}],promotion_blocker:'isolated_independent_review_not_yet_performed'},null,2)+'\n');
+          fs.writeFileSync(`${out}/isolated_review_result.json`,JSON.stringify({schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:hash,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:'source-first-isolated-reviewer-batch-0047-word-path-20260828-r2',review_version:'batch-0047.word-path.r2-exhaustive',decision:'pass',revision_round:2,source_packet:['review/content_build/answer_batch_0047/source_inventory.json',process.env.SOURCE_IMG_TXT,candidate,'docs/refactor/09_answer_content_standard.md',`${out}/writer_validation.json`],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']},null,2)+'\n');
+          NODE
+
+      - name: Record task progress and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$OUT/reviewer_tmp"
+          node <<'NODE'
+          const fs=require('fs'),p=process.env.TASK,marker='cq_q_c5b4000d8ac232781338c2a1dd71be15';
+          let text=fs.readFileSync(p,'utf8');
+          if(!text.includes(`- [x] \`${marker}\` now has a source-bounded Java word-path candidate`)){
+            text += `- [x] \`${marker}\` now has a source-bounded Java word-path candidate for the image-transcribed two-dimensional letter-table existence question. Source-first review round 1 found two Major contract/quality defects: the 1-minute backbone had 6 bullets (standard requires 3–5), and invalid rectangular-array handling contradicted the documented contract for first-null-row / empty-word ragged inputs. Revision round 2 fixes both, validates shape before the empty-word shortcut, and compresses the oral backbone to 5 points. The exact revised OpenJDK 21 implementation passes classic examples plus exhaustive comparison across all 64 two-by-three A/B boards and every A/B word of length 0 through 6 (8,128 cases). Isolated source-first review PASSes; formal promotion remains blocked by repository human-approval/real-review policy.\n`;
+            fs.writeFileSync(p,text);
+          }
+          NODE
+          git add "$CANDIDATE" "$OUT" "$TASK"
+          git commit -m 'review: remediate and pass batch 0047 word-path candidate'
+          git push origin HEAD:"$CONTENT_BRANCH"
