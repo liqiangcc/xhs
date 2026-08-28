@@ -1,0 +1,72 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_cb77c8ecb05522dcbfb90ee83e023ca9",
+  "candidate_sha256": "f7e0fda9a5391080ce9e55c0040f4281da6a011a5597b495f7f664cf1521a8e9",
+  "checked_at": "2026-08-28",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "raw-note",
+      "title": "Raw Didi interview note preserving the alternating-print task",
+      "locator": "note_desc/667119c2000000000d00e437.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "repository-context",
+      "title": "Batch 0048 frozen alternating-print canonical/source context",
+      "locator": "review/content_build/answer_batch_0048/cq_q_cb77c8ecb05522dcbfb90ee83e023ca9/context.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "java-condition-doc",
+      "title": "Condition (Java SE 21 & JDK 21)",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Condition.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "java-reentrant-lock-doc",
+      "title": "ReentrantLock (Java SE 21 & JDK 21)",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Deterministic OpenJDK 21 alternating-print fixture and stress test",
+      "locator": "review/content_build/answer_batch_0048/cq_q_cb77c8ecb05522dcbfb90ee83e023ca9/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The raw source requires two threads to interactively print the concrete arrays as 1a2b3c4d5e but does not mandate wait/notify, LockSupport, Condition, Semaphore, start ordering, unequal-length behavior, null handling, or interruption semantics.",
+      "source_ids": ["raw-note", "repository-context"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "易错点"]
+    },
+    {
+      "claim_id": "condition-semantics",
+      "text": "Java 21 Condition permits spurious wakeups, recommends waiting in a loop that rechecks the state predicate, atomically releases the associated lock while waiting, and reacquires it before await returns. ReentrantLock is a mutual-exclusion Lock.",
+      "source_ids": ["java-condition-doc", "java-reentrant-lock-doc"],
+      "answer_locations": ["1 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "reference-implementation",
+      "text": "Under the explicitly declared equal-length/non-null reference contract, the ReentrantLock + Condition + turn implementation produces exact alternation for the source example and boundary cases and preserved exact ordering across 2000 timeout-guarded stress rounds.",
+      "source_ids": ["fixture"],
+      "answer_locations": ["3 分钟版", "关键细节", "原理机制"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "cb77c8ecb05522dcbfb90ee83e023ca9",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
