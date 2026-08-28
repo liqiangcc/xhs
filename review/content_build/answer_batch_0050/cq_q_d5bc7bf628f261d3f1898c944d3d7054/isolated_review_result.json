@@ -1,0 +1,42 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_d5bc7bf628f261d3f1898c944d3d7054",
+  "candidate_sha256": "2d76dc50d3983fe4d57fe7b29bf2d4d7dfc6a4a12283b5194e546b7eafe5217e",
+  "reviewed_at": "2026-08-29",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0050-redis-atomic-20260829-v1",
+  "review_version": "batch-0050.redis-atomic.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0050/cq_q_d5bc7bf628f261d3f1898c944d3d7054/context.json",
+    "review/candidates/answers/cq_q_d5bc7bf628f261d3f1898c944d3d7054.md",
+    "review/content_build/answer_batch_0050/cq_q_d5bc7bf628f261d3f1898c944d3d7054/writer_validation.json",
+    "https://redis.io/docs/latest/commands/incrby/",
+    "https://redis.io/docs/latest/develop/interact/programmability/eval-intro/",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The candidate answers the exact concurrency problem with server-side delta accumulation rather than generic Redis locking advice.",
+    "Redis INCRBY/atomic-counter semantics and Lua script atomicity are bound to current official Redis documentation.",
+    "A live Redis fixture positively verifies 2880 concurrent INCRBY operations against the independently computed delta sum and negatively demonstrates forced GET/SET lost updates.",
+    "The same fixture validates a concurrent Lua cap rule and separates unconditional single-command accumulation from current-value-dependent conditional updates.",
+    "The answer explicitly separates Redis-side atomicity from Java client connection thread safety and from ambiguous timeout/retry exactly-once semantics.",
+    "No specific Java Redis client, production QPS, or source-unstated business policy is fabricated."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}

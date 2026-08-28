@@ -1,0 +1,130 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_d5bc7bf628f261d3f1898c944d3d7054",
+  "candidate_sha256": "2d76dc50d3983fe4d57fe7b29bf2d4d7dfc6a4a12283b5194e546b7eafe5217e",
+  "checked_at": "2026-08-29",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0050 canonical/source context",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d5bc7bf628f261d3f1898c944d3d7054/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "redis-incrby",
+      "title": "Redis INCRBY command documentation",
+      "locator": "https://redis.io/docs/latest/commands/incrby/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "redis-counter",
+      "title": "Redis strings as atomic counters documentation",
+      "locator": "https://redis.io/docs/latest/develop/data-types/strings/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "redis-lua",
+      "title": "Redis scripting with Lua documentation",
+      "locator": "https://redis.io/docs/latest/develop/interact/programmability/eval-intro/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Live Redis concurrent INCRBY / lost-update / Lua-cap reproducible experiment",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d5bc7bf628f261d3f1898c944d3d7054/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source asks for multiple threads to perform random accumulation on a Redis-held number while preserving consistency; it does not specify a client library, retry/idempotency contract, cap, multi-key invariant, or Redis version.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "atomic-counter",
+      "text": "Redis official documentation presents INCR/INCRBY as atomic counter operations, and the live fixture confirms concurrent independently generated deltas accumulate to the exact expected final sum.",
+      "source_ids": [
+        "redis-incrby",
+        "redis-counter",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "lua-atomicity",
+      "text": "Redis official Lua documentation guarantees atomic script execution, and the concurrent cap fixture verifies that GET/check/INCRBY inside one script never exceeds the explicit cap.",
+      "source_ids": [
+        "redis-lua",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "lost-update",
+      "text": "The fixture forces all workers to GET the same old value before any SET and demonstrates a final value equal to only one writer delta rather than the sum, proving the multi-command client-side read-modify-write race.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "retry-boundary",
+      "text": "Command atomicity and request-level exactly-once are separate contracts; the answer therefore treats timeout retry/idempotency as an explicit application-level boundary rather than claiming INCRBY alone provides exactly-once delivery.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d5bc7bf628f261d3f1898c944d3d7054",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
