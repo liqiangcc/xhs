@@ -1,0 +1,160 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_d6793c017bd5cd31952352d7a0e98464",
+  "candidate_sha256": "c6035bdfd2b8133f677a8b2ecb613c143bc0792a28512a0153d8409e47a4e711",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0050-kth-from-end-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0050 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d6793c017bd5cd31952352d7a0e98464/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 exhaustive kth-from-end executable validation",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d6793c017bd5cd31952352d7a0e98464/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Kth-from-end source-first isolated review",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d6793c017bd5cd31952352d7a0e98464/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source asks to find the m-th element from the end of a linked list and does not specify indexing origin, invalid-input disposition, mutation permission, or cyclic-input semantics.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-validation",
+      "text": "The executable OpenJDK 21 fixture verifies the fixed-gap two-pointer implementation for every valid m across list sizes 1 through 100 and independently checks tail, head, interior, single-node, invalid-input and topology-preservation boundaries.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "complexity-bound",
+      "text": "The implementation advances only two node references forward through a finite acyclic list and allocates no input-sized auxiliary structure; the fixture validates the implementation shape while the source code directly bounds the walks.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d6793c017bd5cd31952352d7a0e98464",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac KthFromEnd.java KthFromEndTest.java && java KthFromEndTest",
+    "result": "pass",
+    "reported_stdout": "PASS tail head middle single invalid-m empty exhaustive-n1-100 topology-preserved",
+    "checks": [
+      "m=1 returns tail, m=n returns head, and an interior m returns the expected node",
+      "single-node list is handled",
+      "m<=0, m>length, and empty-list positive-m inputs follow the explicit illegal-input contract",
+      "all n=1..100 and every valid m agree with an independent array-index oracle",
+      "the tested list topology remains unchanged after lookup"
+    ],
+    "boundary_tests": [
+      {
+        "case": "m=1 tail lookup",
+        "expected": "returns last node",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "m=list length",
+        "expected": "returns head node",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "invalid m and empty list",
+        "expected": "explicit IllegalArgumentException contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "exhaustive valid positions n=1..100",
+        "expected": "matches independent array-index oracle for every valid m",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "topology preservation",
+        "expected": "lookup does not rewrite next links",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0050-kth-from-end-20260829-v1",
+    "review_version": "batch-0050.kth-from-end.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate directly implements the exact m-th-from-end lookup instead of reusing generic linked-list advice.",
+      "The source leaves m indexing and invalid-input behavior unspecified; the candidate makes 1-based indexing and IllegalArgumentException explicit assumptions rather than source facts.",
+      "The fixed-gap invariant is explained and matches the executable implementation: fast advances m nodes, then both pointers move until fast reaches null.",
+      "OpenJDK 21 validation exhaustively checks every valid m for n=1..100 against an independent array oracle and separately covers invalid m, empty input, single node, head/tail/interior positions, and topology preservation.",
+      "The answer states the finite acyclic-list applicability boundary and explains why cyclic input invalidates null-based termination.",
+      "No production history or unsupported version-sensitive behavior is fabricated."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
