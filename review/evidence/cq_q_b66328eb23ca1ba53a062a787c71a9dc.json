@@ -1,0 +1,174 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_b66328eb23ca1ba53a062a787c71a9dc",
+  "candidate_sha256": "b45348bc9e13a29c4a96ac44e4af5f477534f439f70e7478b507c36fca7a16f2",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0050-adjacent-sum-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0050 split-child canonical/source context",
+      "locator": "review/content_build/answer_batch_0050/cq_q_b66328eb23ca1ba53a062a787c71a9dc/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 adjacent-sum elimination validation versus slow oracle",
+      "locator": "review/content_build/answer_batch_0050/cq_q_b66328eb23ca1ba53a062a787c71a9dc/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Adjacent-sum split-child source-first isolated review",
+      "locator": "review/content_build/answer_batch_0050/cq_q_b66328eb23ca1ba53a062a787c71a9dc/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The split repository source asks to eliminate adjacent pairs whose sum is 10 and return the final sequence; it does not define cascade semantics, null handling, numeric range, mutation policy, or deletion-order details.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-validation",
+      "text": "The OpenJDK 21 fixture validates the stack reduction against an independent repeated-leftmost-deletion implementation for 3000 deterministic random arrays plus explicit cascade and boundary cases.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "overflow-boundary",
+      "text": "The executable implementation promotes one operand to long before summation so the mathematical equality-to-10 predicate is not evaluated using overflowing int addition.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity-bound",
+      "text": "Each input element is pushed at most once and popped at most once from the array-backed stack, so the implementation performs linear work and uses at most n stack slots.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "b66328eb23ca1ba53a062a787c71a9dc",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac AdjacentSumElimination.java AdjacentSumEliminationTest.java && java AdjacentSumEliminationTest",
+    "result": "pass",
+    "reported_stdout": "PASS null empty single pair cascade stable overflow-safe input-preserved random3000-vs-slow-oracle",
+    "checks": [
+      "null input is rejected while empty input is accepted",
+      "single values, direct pairs, no-elimination sequences, and multi-step cascades match the explicit contract",
+      "long-promoted sum comparison avoids int-overflow misclassification",
+      "the input array remains unchanged and output contains no eliminable adjacent pair",
+      "3000 deterministic random arrays agree with an independent repeated-leftmost-deletion oracle"
+    ],
+    "boundary_tests": [
+      {
+        "case": "null versus empty",
+        "expected": "null rejected; empty returns empty",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "direct and cascading pairs",
+        "expected": "final stable sequence",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "int overflow edges",
+        "expected": "mathematical sum-to-10 comparison",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "3000 deterministic random arrays",
+        "expected": "matches independent repeated-deletion oracle",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "input preservation and result stability",
+        "expected": "input unchanged and no remaining adjacent sum-10 pair",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0050-adjacent-sum-20260829-v1",
+    "review_version": "batch-0050.adjacent-sum.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate directly answers the split adjacent-sum elimination contract rather than carrying over the retired compound source.",
+      "Cascade behavior, null handling, arbitrary-int support, and non-mutating output are explicitly labeled as answer-level contract choices because the source does not specify them.",
+      "The stack invariant is coherent with the implementation and preserves adjacency/order instead of turning the problem into arbitrary two-sum matching.",
+      "OpenJDK 21 validation covers direct and cascading elimination, stability, input preservation, integer-overflow boundaries, and 3000 deterministic random cases against an independent slow oracle.",
+      "The answer distinguishes final stable reduction from a hypothetical one-pass/no-cascade contract.",
+      "No project history or source-unstated constraints are fabricated."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
