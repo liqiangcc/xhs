@@ -1,0 +1,29 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_cb77c8ecb05522dcbfb90ee83e023ca9",
+  "result": "pass",
+  "validated_at": "2026-08-28",
+  "runtime": "OpenJDK 21.0.11",
+  "command": "javac AlternatingPrinter.java AlternatingPrinterTest.java && java AlternatingPrinterTest",
+  "stdout": "PASS source-example empty single long validation stress=2000 timeout=2s exact-order",
+  "reference_contract": "Both input arrays are non-null, equal length, contain no null elements, and are alternated A[i] then B[i]; empty inputs return the empty string. The reference implementation uses ReentrantLock + one Condition + an explicit A/B turn predicate and intentionally starts thread B before A.",
+  "checks": [
+    "source example produces exactly 1a2b3c4d5e",
+    "empty equal-length arrays",
+    "single pair",
+    "100-pair exact ordering",
+    "null A rejected",
+    "null B rejected",
+    "unequal length rejected",
+    "null element rejected",
+    "2000 stress rounds preserve exact order",
+    "each stress round is guarded by a 2-second timeout to expose deadlock/liveness regressions"
+  ],
+  "stress": {
+    "rounds": 2000,
+    "worker_pool_size": 8,
+    "per_round_timeout_seconds": 2,
+    "input_length_pattern": "round % 17",
+    "result": "pass"
+  }
+}
