@@ -1,0 +1,168 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_deae43be8cb0a78c37ec2eb91fe9736e",
+  "candidate_sha256": "c1bd3b359460794ac0cd285bfbbb0e58876b6183b2639fb463b16149cebdc87e",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0052-largest-number-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0052 exact largest-number source context",
+      "locator": "review/content_build/answer_batch_0052/cq_q_deae43be8cb0a78c37ec2eb91fe9736e/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 largest-number comparator validation versus exhaustive permutation oracle",
+      "locator": "review/content_build/answer_batch_0052/cq_q_deae43be8cb0a78c37ec2eb91fe9736e/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0052 largest-number source-first isolated review",
+      "locator": "review/content_build/answer_batch_0052/cq_q_deae43be8cb0a78c37ec2eb91fe9736e/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The exact source asks to rearrange a number array into the largest possible number but does not define negative values, empty input, result type, or examples.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "explicit-contract",
+      "text": "The candidate explicitly supports non-empty arrays of non-negative integers, returns a String, preserves duplicates/input order externally, and rejects negative values.",
+      "source_ids": [
+        "repository-source",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "ordering-rule",
+      "text": "Pairwise order is determined by comparing concatenations ab and ba rather than numeric or ordinary lexical order.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "algorithm-validation",
+      "text": "The comparator implementation is validated on named boundaries and 2000 deterministic random arrays of length at most seven against exhaustive permutation search.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "deae43be8cb0a78c37ec2eb91fe9736e",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac LargestNumber.java LargestNumberTest.java && java LargestNumberTest",
+    "result": "pass",
+    "reported_stdout": "PASS named zeros prefix-ambiguity duplicate random2000-vs-permutations input-unchanged invalid-boundaries",
+    "checks": [
+      "named concatenation cases and prefix-ambiguous values match expected maxima",
+      "all-zero input is normalized to a single zero",
+      "duplicate input elements are preserved",
+      "2000 deterministic random arrays of length <=7 match an independent exhaustive permutation oracle",
+      "caller input remains unchanged",
+      "null, empty and negative-element boundaries follow the explicit candidate contract"
+    ],
+    "boundary_tests": [
+      {
+        "case": "[10,2]",
+        "expected": "210",
+        "actual": "210",
+        "passed": true
+      },
+      {
+        "case": "[3,30,34,5,9]",
+        "expected": "9534330",
+        "actual": "9534330",
+        "passed": true
+      },
+      {
+        "case": "[0,0]",
+        "expected": "0",
+        "actual": "0",
+        "passed": true
+      },
+      {
+        "case": "2000 deterministic random arrays length <=7",
+        "expected": "equals exhaustive permutation oracle",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0052-largest-number-20260829-v1",
+    "review_version": "batch-0052.largest-number.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The source is kept narrow; non-negative domain, non-empty input, String result and negative rejection are explicitly labeled implementation boundaries.",
+      "The answer teaches the correct concatenation comparator ab versus ba instead of integer or plain string ordering.",
+      "All-zero normalization and duplicate preservation are explicit and executable.",
+      "OpenJDK 21 validation checks prefix ambiguity and 2000 deterministic random arrays against exhaustive permutation search, providing independent algorithm evidence.",
+      "The adjacent-swap explanation makes the comparator rationale causal rather than presenting it as a memorized trick.",
+      "The project section avoids fabricated experience and separates semantic correctness from optional allocation/performance optimization."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
