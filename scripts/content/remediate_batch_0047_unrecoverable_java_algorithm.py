@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Retry the fail-closed source remediation against the post word-path-review content snapshot (2026-08-28).
 """Retire the Batch 0047 Java coding singleton whose executable contract is not recoverable."""
 
 from __future__ import annotations
