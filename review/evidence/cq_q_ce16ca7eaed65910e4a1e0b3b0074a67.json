@@ -1,0 +1,146 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_ce16ca7eaed65910e4a1e0b3b0074a67",
+  "candidate_sha256": "032c7a6653445cdebd042e9c8f8e4c8e9d4a98447dd7be196a1f13269f9d228b",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0049-product-pairs-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0049 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0049/cq_q_ce16ca7eaed65910e4a1e0b3b0074a67/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Deterministic OpenJDK 21 product-pairs fixture and brute-force oracle",
+      "locator": "review/content_build/answer_batch_0049/cq_q_ce16ca7eaed65910e4a1e0b3b0074a67/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Product-pairs source-first isolated review",
+      "locator": "review/content_build/answer_batch_0049/cq_q_ce16ca7eaed65910e4a1e0b3b0074a67/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks for all pairs whose product equals target and shows value pairs, but does not specify index-pair multiplicity, duplicate-output policy, ordering, zero handling or negative-value constraints. The candidate therefore labels unique normalized value-pair semantics as an explicit answer contract rather than source fact.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-behavior",
+      "text": "Under the explicit unique-value-pair contract, the executable Java fixture validates the source example, duplicate/same-value requirements, negative values, zero-target behavior, integer-division boundary handling, null/single inputs, and 500 deterministic random arrays against a brute-force index-pair oracle reduced to unique normalized value pairs.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "ce16ca7eaed65910e4a1e0b3b0074a67",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac ProductPairs.java ProductPairsTest.java && java ProductPairsTest",
+    "result": "pass",
+    "reported_stdout": "PASS source duplicate same-value negative zero int-boundary null single random-oracle=500",
+    "checks": [
+      "source example returns unique normalized value pairs",
+      "same-value pair requires at least two occurrences",
+      "duplicate occurrences do not duplicate value-pair output",
+      "negative targets and negative values",
+      "target zero with one/two zeros",
+      "Integer.MIN_VALUE division boundary",
+      "null and single-element input",
+      "500 deterministic random cases match O(n^2) brute-force unique-value-pair oracle"
+    ],
+    "boundary_tests": [
+      {
+        "case": "one occurrence of x where x*x=target",
+        "expected": "no same-value pair",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "target=0 with one and two zeros",
+        "expected": "all valid zero pairs, (0,0) only with two zeros",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "Integer.MIN_VALUE target with divisor -1 present",
+        "expected": "out-of-int complement skipped without overflow",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "500 deterministic random arrays",
+        "expected": "optimized result equals brute-force unique normalized oracle",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0049-product-pairs-20260829-v1",
+    "review_version": "batch-0049.product-pairs.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer directly resolves the product-pair task and explicitly separates preserved source wording from the chosen unique-value-pair output contract.",
+      "The Java implementation handles duplicate counts, same-value pairing, negative values, target zero, normalized deduplication and a 32-bit division boundary without using placeholder code.",
+      "The target-zero branch is justified separately instead of applying division-by-complement logic where x=0 is undefined and zero can pair with every present value.",
+      "Deterministic Java 21 tests reproduce the source sample and compare 500 random small arrays against an independent brute-force oracle.",
+      "The answer states sorting cost, output-contract alternatives and project mapping without fabricating production experience."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
