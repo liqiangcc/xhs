@@ -1,13 +1,13 @@
 {
   "schema_version": "isolated_review.v1",
   "canonical_id": "cq_q_c4978f94d9d3615db2aded0150a80b42",
-  "candidate_sha256": "52ebad271a98da83af710b1b92f50c1429f3f0d55d7e14a0c56c0877005766a8",
+  "candidate_sha256": "de4b3f9d5739b79296a17027d4213a6454509e19029f3ae200af1243d0ad701f",
   "reviewed_at": "2026-08-28",
   "review_mode": "source_first_isolated",
-  "reviewer_id": "source-first-isolated-reviewer-batch-0047-merge-intervals-20260828-v1",
-  "review_version": "batch-0047.merge-intervals.v1",
-  "decision": "fail",
-  "revision_round": 1,
+  "reviewer_id": "source-first-isolated-reviewer-batch-0047-merge-intervals-20260828-v2",
+  "review_version": "batch-0047.merge-intervals.v2",
+  "decision": "pass",
+  "revision_round": 2,
   "source_packet": [
     "review/content_build/answer_batch_0047/source_inventory.json",
     "review/candidates/answers/cq_q_c4978f94d9d3615db2aded0150a80b42.md",
@@ -17,25 +17,23 @@
   "scores": {
     "facts_and_evidence": 25,
     "directness_and_relevance": 20,
-    "type_specific_completeness": 13,
+    "type_specific_completeness": 20,
     "mechanism_and_causality": 15,
     "boundaries_and_tradeoffs": 10,
     "followup_quality": 5,
     "oral_quality": 5
   },
-  "hard_failures": [
-    "coding_answer_contains_undefined_copyAndValidate_helper_in_presented_java_implementation"
-  ],
+  "hard_failures": [],
   "unsupported_claims": [],
   "uncovered_source_variants": [],
   "findings": [
-    "The answer is source-bounded and explicitly distinguishes candidate choices such as closed intervals, input copying, validation and result ordering from the sparse preserved source.",
-    "The sorting-and-scan invariant, endpoint-touching semantics, containment behavior and O(n log n) complexity are explained correctly, and the separate Java 21 fixture validates the declared cases.",
-    "However, the presented 3-minute Java implementation calls copyAndValidate(intervals) without defining that helper in the answer code block; the block also relies on utility types whose imports are outside the shown implementation. The content standard treats undefined functions in Coding answers as a hard failure.",
-    "Remediation is bounded: present the complete compilable implementation including imports and copyAndValidate, refresh candidate-bound validation/research hashes, then rerun isolated review."
+    "The sparse preserved source identifies interval merge / LeetCode 56; the answer explicitly labels closed-interval semantics, input copying, validation and output ordering as candidate-contract choices rather than recovered source constraints.",
+    "The presented Java block is now complete and compilable, including all required java.util imports and the copyAndValidate helper, removing the prior undefined-function/import hard failure.",
+    "The sort-then-scan invariant is explained correctly: once nextStart exceeds currentEnd under start ordering, the current merged interval cannot reconnect to a later interval.",
+    "The deterministic OpenJDK 21 fixture passes null/empty, single, overlap, endpoint-touching, containment, chain-overlap, input-immutability and invalid-interval cases against the implementation bound to this candidate hash.",
+    "Complexity, closed-versus-half-open variation, side-effect tradeoff and no-fabrication project mapping are explicit and internally consistent."
   ],
   "promotion_blockers": [
-    "hard_failure_requires_candidate_revision",
     "repository_human_approval_and_real_review_policy_not_yet_satisfied"
   ]
 }
