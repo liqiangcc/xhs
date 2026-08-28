@@ -1,0 +1,254 @@
+name: Content Batch 0047 UTF8 File Size
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0047-utf8-file-size.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0047-utf8-file-size
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_c5a2c0157f42b88c9be467292bfa54f0
+  SOURCE_QID: c5a2c0157f42b88c9be467292bfa54f0
+
+jobs:
+  validate-review-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Freeze exact source boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0047/$cid"
+          mkdir -p "$out" /tmp/b47-size review/candidates/answers review/evidence
+          node scripts/xhs.js answer context --canonical-id "$cid" --noWrite > /tmp/b47-size/context.json
+          python3 - <<'PY'
+          import json,os,pathlib
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID']
+          exact='计算题：一个 txt 文件，每行一条记录（5 个字符，UTF-8 编码），共 2000 万行。该文件大约占用多少磁盘空间？'
+          ctx=json.loads(pathlib.Path('/tmp/b47-size/context.json').read_text())
+          if not ctx.get('ok') or ctx.get('canonical',{}).get('canonical_id')!=cid: raise SystemExit('canonical context drift')
+          if ctx.get('answer_type')!='coding': raise SystemExit(f"answer type drift: {ctx.get('answer_type')}")
+          if ctx.get('canonical',{}).get('question_ids')!=[qid]: raise SystemExit('ownership drift')
+          src=next((x for x in ctx.get('source_questions',[]) if x.get('question_id')==qid),None)
+          if not src or src.get('original_question')!=exact or src.get('is_valid_for_library') is not True: raise SystemExit('source wording/validity drift')
+          out=pathlib.Path(f'review/content_build/answer_batch_0047/{cid}');out.mkdir(parents=True,exist_ok=True)
+          (out/'context.json').write_text(json.dumps(ctx,ensure_ascii=False,indent=2)+'\n')
+          PY
+
+      - name: Stage source-bounded candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="review/candidates/answers/$CANONICAL_ID.md"
+          cat > "$candidate" <<'EOF'
+          <!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_c5a2c0157f42b88c9be467292bfa54f0","version":1,"status":"draft","updated_at":"2026-08-28","answer_type":"coding","quality_tier":"candidate"} -->
+          # 2000 万行、每行 5 个 UTF-8 字符的 txt 文件有多大？
+
+          ## 核心结论
+
+          题目信息不足以得到唯一数值，因为 UTF-8 中“一个字符”不等于固定 1 字节，而且每行通常还要算换行符。若 5 个字符全是 ASCII 且使用 LF（`\n`，1 字节），每行约 6 字节，2000 万行约 `120,000,000` 字节，即 **120 MB（十进制）≈ 114.4 MiB**；若是常见 3 字节 UTF-8 汉字并使用 LF，则每行约 16 字节，总计 **320 MB ≈ 305.2 MiB**。Windows CRLF 会再多 1 字节/行，所以回答时先声明字符内容和换行约定。
+
+          ## 1 分钟版
+
+          - 先写公式：`总字节数 = 行数 × (每行正文编码后的字节数 + 换行字节数)`。
+          - UTF-8 是变长编码，5 个“字符”不能直接当作 5 字节；ASCII 通常 1 字节/字符，很多常用汉字通常 3 字节/字符。
+          - 若按 5 个 ASCII + LF：`20,000,000 × (5 + 1) = 120,000,000 B`，约 120 MB / 114.4 MiB。
+          - 若按 5 个 3 字节汉字 + LF：`20,000,000 × (15 + 1) = 320,000,000 B`，约 320 MB / 305.2 MiB。
+          - 所以面试里最好先给“不能唯一确定”，再给一两个明确假设下的数量级，而不是把 UTF-8 字符固定说成 1 或 3 字节。
+
+          ## 3 分钟版
+
+          这题真正考的是“字符数、编码后字节数、换行符和容量单位要分开”。文件大小取决于实际字节流。对每一行，先把 5 个字符按 UTF-8 编码成若干字节，再加行结束符；最后乘 2000 万行。
+
+          在最常见的两种估算下：
+
+          1. 5 个 ASCII 字符，例如 `abcde`，UTF-8 正文是 5 B；Linux/Unix 风格 LF 是 1 B，所以一行 6 B，总计 120,000,000 B。
+          2. 5 个常见汉字，若每个编码后是 3 B，正文 15 B；加 LF 后一行 16 B，总计 320,000,000 B。
+
+          如果文件是 CRLF，每行结束符是 2 B，于是 ASCII 场景为 140,000,000 B，5 个 3 字节字符场景为 340,000,000 B。若最后一行没有换行，还要减掉最后一个行结束符，但对 2000 万行的“约数”影响极小。
+
+          可执行的计算器只在“已经知道正文每字符占几字节且每行同构”的假设下使用；真实混合文本应直接对实际字符串做 UTF-8 编码后统计字节数：
+
+          ```java
+          public final class FileSizeEstimate {
+              public static long estimateHomogeneous(
+                      long lines, int charsPerLine, int bytesPerCharacter, int newlineBytes) {
+                  if (lines < 0 || charsPerLine < 0 || bytesPerCharacter < 0 || newlineBytes < 0) {
+                      throw new IllegalArgumentException("sizes must be non-negative");
+                  }
+                  long body = Math.multiplyExact((long) charsPerLine, bytesPerCharacter);
+                  long bytesPerLine = Math.addExact(body, newlineBytes);
+                  return Math.multiplyExact(lines, bytesPerLine);
+              }
+          }
+          ```
+
+          复杂度是 O(1)，因为这里只做已知参数下的算术估算；若扫描真实文件或逐行编码统计，则时间复杂度是 O(B)，B 为实际处理的字节/字符规模。
+
+          ## 关键细节
+
+          - **UTF-8 是变长编码**：ASCII 范围通常 1 B；许多常用汉字通常 3 B；其他 Unicode 字符可能占不同字节数，因此不能只由“5 个字符”推出正文固定大小。
+          - **换行也占空间**：LF 为 1 B，CRLF 为 2 B；题目没说明操作系统或文件格式，必须作为假设写出来。
+          - **MB 与 MiB 不同**：120,000,000 B 是 120 MB（10^6），换算成 MiB（2^20）约 114.4；面试中给“约 120 MB”通常已经表达了数量级，但不要把两种单位混写成完全相等。
+          - **最后一行**：文本文件最后一行可以有也可以没有行结束符；精确计算需要确认，粗略估算可忽略一行的差异。
+          - **磁盘占用 vs 文件逻辑大小**：题干通常是在估算文件内容字节数；真正“占用磁盘空间”还可能受文件系统分配块、稀疏文件、压缩等影响。没有这些条件时不应把文件系统开销硬加进答案。
+          - **溢出**：通用计算器使用 `Math.multiplyExact` / `addExact`，参数极大时显式失败，避免 long 静默溢出。
+
+          ## 原理机制
+
+          字符是抽象文本单位，文件最终保存的是字节。UTF-8 把 Unicode 码点编码成 1 到多个字节，因此“字符个数”只有结合具体内容才能映射到字节数；换行符同样是写入文件的字节序列。于是计算链路是：字符内容 → UTF-8 编码字节 → 加行结束符 → 乘行数 → 再选择十进制 MB 或二进制 MiB 展示。
+
+          这也解释了为什么“5 × 2000 万 = 100 MB”只在忽略换行且每字符恰好 1 B 的特殊假设下成立；为什么“每个 UTF-8 字符 3 B”也不通用。正确回答要把假设暴露出来，让数值可以被复算。
+
+          ## 项目经验版
+
+          来源没有真实项目背景，不能虚构生产文件大小。项目映射时，如果要做容量规划，我会先从真实样本统计“每条记录 UTF-8 编码后的字节分布”和换行格式，再乘预计记录数，并把文件系统、压缩、索引或副本开销分层计算；这些是验证方法，不是本题已经给出的事实。
+
+          ## 常见追问
+
+          - 问：为什么不能直接算 `5 × 2000 万 = 100 MB`？答：这默认每字符 1 B 且完全忽略每行换行符；题目只给 UTF-8，没有给字符内容和换行格式，所以这个数只能作为更窄假设下的正文大小。
+          - 问：如果 5 个字符都是中文呢？答：若这些字符各自的 UTF-8 编码都是 3 B，正文每行 15 B；加 LF 是 16 B，约 320 MB。仍应说这是“每字符 3 B”的具体假设，而不是所有中文/所有 Unicode 字符都固定 3 B。
+          - 问：为什么 120 MB 又说约 114.4 MiB？答：MB 按 10^6 字节，MiB 按 2^20 字节；120,000,000 / 1,048,576 ≈ 114.4。
+          - 问：Windows 会怎样？答：若每行用 CRLF 两个字节，ASCII 场景每行从 6 B 变成 7 B，总计约 140 MB。
+          - 问：怎么得到精确值？答：确认实际文本内容、UTF-8 编码、是否带 BOM、每行结束符和最后一行换行；对真实数据直接编码/写文件后统计字节长度，而不是用固定“字符字节数”猜。
+
+          ## 易错点
+
+          - 把 UTF-8 误说成“每个字符固定 1 字节”或“固定 3 字节”。
+          - 忘记每行的 LF/CRLF，导致 2000 万行时少算 20–40 MB。
+          - 把 MB 和 MiB 当成同一个单位，数字看起来对不上。
+          - 题目问内容大小，却未经条件就加入文件系统 block、压缩、元数据等额外假设。
+          - 为了给单一数字而隐藏字符集与换行假设，造成无法复算的答案。
+          EOF
+          python3 - <<'PY'
+          import hashlib,os,pathlib,re
+          cid=os.environ['CANONICAL_ID'];p=pathlib.Path(f'review/candidates/answers/{cid}.md');md=p.read_text()
+          for h in ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']:
+              if md.count(h)!=1: raise SystemExit(f'section drift {h}')
+          blocks=re.findall(r'```java\n(.*?)\n```',md,re.S)
+          if len(blocks)!=1: raise SystemExit(f'expected one Java block, got {len(blocks)}')
+          pathlib.Path('/tmp/b47-size/FileSizeEstimate.java').write_text(blocks[0].strip()+'\n')
+          pathlib.Path('/tmp/b47-size/candidate.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest()+'\n')
+          PY
+
+      - name: Execute deterministic arithmetic fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/b47-size
+          cat > FileSizeEstimateTest.java <<'JAVA'
+          public final class FileSizeEstimateTest {
+              private static void eq(long actual, long expected, String name) {
+                  if (actual != expected) throw new AssertionError(name + ": " + actual + " != " + expected);
+              }
+              public static void main(String[] args) {
+                  long n=20_000_000L;
+                  eq(FileSizeEstimate.estimateHomogeneous(n,5,1,1),120_000_000L,"ascii-lf");
+                  eq(FileSizeEstimate.estimateHomogeneous(n,5,1,2),140_000_000L,"ascii-crlf");
+                  eq(FileSizeEstimate.estimateHomogeneous(n,5,3,1),320_000_000L,"three-byte-lf");
+                  eq(FileSizeEstimate.estimateHomogeneous(n,5,3,2),340_000_000L,"three-byte-crlf");
+                  eq(FileSizeEstimate.estimateHomogeneous(0,5,1,1),0L,"zero-lines");
+                  boolean neg=false; try { FileSizeEstimate.estimateHomogeneous(-1,5,1,1); } catch (IllegalArgumentException e) { neg=true; }
+                  if (!neg) throw new AssertionError("negative input must fail");
+                  boolean overflow=false; try { FileSizeEstimate.estimateHomogeneous(Long.MAX_VALUE,5,4,2); } catch (ArithmeticException e) { overflow=true; }
+                  if (!overflow) throw new AssertionError("overflow must fail");
+                  System.out.println("PASS ascii-lf=120000000 ascii-crlf=140000000 three-byte-lf=320000000 three-byte-crlf=340000000 zero=0 negative=rejected overflow=rejected");
+              }
+          }
+          JAVA
+          javac FileSizeEstimate.java FileSizeEstimateTest.java
+          java FileSizeEstimateTest | tee stdout.txt
+          test "$(cat stdout.txt)" = 'PASS ascii-lf=120000000 ascii-crlf=140000000 three-byte-lf=320000000 three-byte-crlf=340000000 zero=0 negative=rejected overflow=rejected'
+
+      - name: Freeze writer research, isolated review, and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID";qid="$SOURCE_QID";out="review/content_build/answer_batch_0047/$cid";candidate="review/candidates/answers/$cid.md"
+          cp /tmp/b47-size/FileSizeEstimate.java "$out/FileSizeEstimate.java"
+          cp /tmp/b47-size/FileSizeEstimateTest.java "$out/FileSizeEstimateTest.java"
+          cp /tmp/b47-size/stdout.txt "$out/file_size_test.stdout.txt"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          cid=os.environ['CANONICAL_ID'];qid=os.environ['SOURCE_QID'];date='2026-08-28'
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md');digest=hashlib.sha256(candidate.read_bytes()).hexdigest();out=pathlib.Path(f'review/content_build/answer_batch_0047/{cid}')
+          stdout=(out/'file_size_test.stdout.txt').read_text().strip()
+          validation={'schema_version':'answer_code_validation.v1','canonical_id':cid,'result':'pass','validated_at':date,'command':'javac FileSizeEstimate.java FileSizeEstimateTest.java && java FileSizeEstimateTest','stdout':stdout,'checks':['20M x (5 ASCII bytes + LF) = 120,000,000 B','CRLF adds one byte per line','5 three-byte characters + LF = 320,000,000 B','zero-line boundary','negative-input rejection','long overflow rejection']}
+          (out/'writer_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+          sources=[
+            {'source_id':'source-context','title':'Batch 0047 exact source context','locator':str(out/'context.json'),'source_type':'repository_source_record','checked_at':date},
+            {'source_id':'writer-validation','title':'UTF-8 file-size arithmetic executable fixture','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':date},
+            {'source_id':'content-standard','title':'Answer content standard','locator':'docs/refactor/09_answer_content_standard.md','source_type':'repository_normative_document','checked_at':date}
+          ]
+          claims=[
+            {'claim_id':'source-boundary','text':'The source supplies 20 million lines, five UTF-8 characters per record and asks for approximate disk/file size, but does not identify the characters, newline convention, final newline or filesystem allocation details; therefore a unique byte count is not recoverable from the source alone.','source_ids':['source-context'],'answer_locations':['核心结论','1 分钟版','关键细节']},
+            {'claim_id':'arithmetic-scenarios','text':'The deterministic Java fixture verifies 120,000,000 bytes for five one-byte characters plus LF, 140,000,000 with CRLF, 320,000,000 for five three-byte characters plus LF, and 340,000,000 with CRLF across 20 million lines.','source_ids':['writer-validation'],'answer_locations':['核心结论','1 分钟版','3 分钟版']},
+            {'claim_id':'calculator-boundary','text':'The homogeneous estimator is only for an explicitly known per-character byte width and newline width; it rejects negative sizes and checked-arithmetic overflow.','source_ids':['writer-validation'],'answer_locations':['3 分钟版','关键细节','易错点']}
+          ]
+          coverage=[{'question_id':qid,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','项目经验版','常见追问','易错点']}]
+          research={'schema_version':'answer_writer_research.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'review_state':'writer_complete_isolated_review_pending','sources':sources,'claims':claims,'source_question_coverage':coverage,'promotion_blocker':'isolated_independent_review_not_yet_performed'}
+          (out/'writer_research.json').write_text(json.dumps(research,ensure_ascii=False,indent=2)+'\n')
+          scores={'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':19,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+          findings=['The answer leads with the key source-first conclusion that UTF-8 character count alone does not determine a unique byte size.','It gives concrete, reproducible ASCII/LF, ASCII/CRLF, three-byte/LF and three-byte/CRLF scenarios rather than hiding assumptions behind one number.','The five-point one-minute backbone is orally usable and separates formula, encoding width, newline width and final conclusion.','The Java estimator is explicitly scoped to homogeneous known byte widths and uses checked arithmetic; the fixture covers expected values and failure boundaries.','The answer distinguishes logical file bytes from filesystem allocation overhead, avoiding an unsupported storage-system assumption.']
+          review={'schema_version':'isolated_review.v1','canonical_id':cid,'candidate_sha256':digest,'reviewed_at':date,'review_mode':'source_first_isolated','reviewer_id':'source-first-isolated-reviewer-batch-0047-utf8-size-20260828-v1','review_version':'batch-0047.utf8-size.v1','decision':'pass','revision_round':1,'source_packet':[str(out/'context.json'),f'review/candidates/answers/{cid}.md',str(out/'writer_validation.json'),'docs/refactor/09_answer_content_standard.md'],'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings,'promotion_blockers':['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+          (out/'isolated_review_result.json').write_text(json.dumps(review,ensure_ascii=False,indent=2)+'\n')
+          evidence={'schema_version':'answer_evidence.v1','canonical_id':cid,'candidate_sha256':digest,'checked_at':date,'writer':{'writer_id':'content-batch-0047-utf8-size-builder','writer_version':'xhs-answer-curator.v1'},'sources':sources+[{'source_id':'isolated-review','title':'UTF-8 file-size source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':date}],'claims':claims,'source_question_coverage':coverage,'validation':{'command':validation['command'],'result':'pass','reported_stdout':validation['stdout'],'checks':validation['checks'],'boundary_tests':[{'case':'ASCII + LF','expected':'120,000,000 B','actual':'120,000,000 B','passed':True},{'case':'three-byte UTF-8 chars + LF','expected':'320,000,000 B','actual':'320,000,000 B','passed':True},{'case':'overflow','expected':'explicit failure','actual':'ArithmeticException','passed':True}]},'review_state':'independent_source_first_review_passed','review':{'reviewer_id':review['reviewer_id'],'review_version':review['review_version'],'independent':True,'decision':'pass','revision_round':1,'scores':scores,'hard_failures':[],'unsupported_claims':[],'uncovered_source_variants':[],'findings':findings},'promotion_blocker':'repository_human_approval_and_real_review_policy_not_yet_satisfied'}
+          pathlib.Path(f'review/evidence/{cid}.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2)+'\n')
+          task=pathlib.Path('tasks/answer-batches/TASK-20260711-0313-answer-batch-0047.md');text=task.read_text()
+          line='- [x] `cq_q_c5a2c0157f42b88c9be467292bfa54f0` source-first isolated review PASS: the source fixes 20 million lines and five UTF-8 characters per row but not the actual characters or newline convention, so the candidate correctly rejects a unique byte count and gives explicit reproducible scenarios instead. OpenJDK 21 validation proves 120 MB for five one-byte characters + LF, 140 MB with CRLF, 320 MB for five three-byte characters + LF, and 340 MB with CRLF; negative and overflow boundaries fail explicitly. Formal promotion remains blocked by repository human-approval/real-review policy.'
+          if '## Progress' not in text:text=text.rstrip()+'\n\n## Progress\n'
+          if line not in text:text=text.rstrip()+'\n'+line+'\n'
+          task.write_text(text,encoding='utf-8')
+          PY
+
+      - name: Run strict candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --require-code --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          npm test
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")";base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then echo "Content branch advanced during candidate review: $base_head -> $remote_head";echo 'Discard verified local packet; rerun against current branch instead of merging stale evidence.';exit 0;fi
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0047/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json" tasks/answer-batches/TASK-20260711-0313-answer-batch-0047.md
+          if git diff --cached --quiet;then echo 'No UTF8 file-size candidate changes to commit.';exit 0;fi
+          git diff --cached --check
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: pass batch 0047 utf8 file-size candidate source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
