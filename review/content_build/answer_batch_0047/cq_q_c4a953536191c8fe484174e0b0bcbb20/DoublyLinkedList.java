@@ -1,71 +1,69 @@
-public final class DoublyLinkedList {
-    private static final class Node {
-        final int value;
-        Node prev;
-        Node next;
+import java.util.ArrayList;
+import java.util.List;
 
-        Node(int value) {
+public final class DoublyLinkedList {
+    public static final class Node {
+        private final int value;
+        private Node prev;
+        private Node next;
+        private DoublyLinkedList owner;
+
+        private Node(int value, DoublyLinkedList owner) {
             this.value = value;
+            this.owner = owner;
         }
+
+        public int value() { return value; }
     }
 
-    private Node head;
-    private Node tail;
+    private final Node head = new Node(0, this);
+    private final Node tail = new Node(0, this);
     private int size;
 
-    public void insert(int index, int value) {
-        if (index < 0 || index > size) {
-            throw new IndexOutOfBoundsException("index=" + index + ", size=" + size);
-        }
-
-        if (index == size) {
-            linkLast(value);
-            return;
-        }
-
-        Node next = nodeAt(index);
-        Node prev = next.prev;
-        Node node = new Node(value);
-
-        node.prev = prev;
-        node.next = next;
-        next.prev = node;
-
-        if (prev == null) {
-            head = node;
-        } else {
-            prev.next = node;
-        }
-        size++;
+    public DoublyLinkedList() {
+        head.next = tail;
+        tail.prev = head;
     }
 
-    private void linkLast(int value) {
-        Node node = new Node(value);
-        Node prev = tail;
-        node.prev = prev;
-        tail = node;
-
-        if (prev == null) {
-            head = node;
-        } else {
-            prev.next = node;
-        }
-        size++;
+    public Node addFirst(int value) {
+        return insertBetween(head, head.next, value);
     }
 
-    private Node nodeAt(int index) {
-        if (index < (size >>> 1)) {
-            Node p = head;
-            for (int i = 0; i < index; i++) {
-                p = p.next;
-            }
-            return p;
-        }
+    public Node addLast(int value) {
+        return insertBetween(tail.prev, tail, value);
+    }
 
-        Node p = tail;
-        for (int i = size - 1; i > index; i--) {
-            p = p.prev;
+    public Node insertAfter(Node anchor, int value) {
+        if (anchor == null || anchor.owner != this || anchor == tail) {
+            throw new IllegalArgumentException("anchor must be a non-tail node of this list");
         }
-        return p;
+        return insertBetween(anchor, anchor.next, value);
+    }
+
+    private Node insertBetween(Node left, Node right, int value) {
+        if (left.next != right || right.prev != left) {
+            throw new IllegalStateException("broken insertion boundary");
+        }
+        Node x = new Node(value, this);
+        x.prev = left;
+        x.next = right;
+        left.next = x;
+        right.prev = x;
+        size++;
+        return x;
+    }
+
+    public int size() { return size; }
+
+    public List<Integer> valuesForward() {
+        List<Integer> out = new ArrayList<>();
+        for (Node p = head.next; p != tail; p = p.next) out.add(p.value);
+        return out;
+    }
+
+    public List<Integer> valuesBackward() {
+        List<Integer> out = new ArrayList<>();
+        for (Node p = tail.prev; p != head; p = p.prev) out.add(p.value);
+        return out;
     }
 }

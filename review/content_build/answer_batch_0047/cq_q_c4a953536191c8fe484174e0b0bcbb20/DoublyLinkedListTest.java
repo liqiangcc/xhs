@@ -1,74 +1,32 @@
-import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.List;
 
 public final class DoublyLinkedListTest {
-    private static Field field(Class<?> type, String name) throws Exception {
-        Field f = type.getDeclaredField(name);
-        f.setAccessible(true);
-        return f;
+    private static void eq(Object actual,Object expected,String name){
+        if(!actual.equals(expected)) throw new AssertionError(name+": "+actual+" != "+expected);
     }
-
-    private static List<Integer> values(DoublyLinkedList list, boolean forward) throws Exception {
-        Field endpoint = field(DoublyLinkedList.class, forward ? "head" : "tail");
-        Object node = endpoint.get(list);
-        List<Integer> out = new ArrayList<>();
-        while (node != null) {
-            Class<?> nodeType = node.getClass();
-            out.add((Integer) field(nodeType, "value").get(node));
-            Object next = field(nodeType, forward ? "next" : "prev").get(node);
-            if (next != null) {
-                Object back = field(next.getClass(), forward ? "prev" : "next").get(next);
-                if (back != node) {
-                    throw new AssertionError("bidirectional adjacency broken");
-                }
-            }
-            node = next;
-        }
-        return out;
-    }
-
-    private static void expect(List<Integer> expected, List<Integer> actual, String label) {
-        if (!expected.equals(actual)) {
-            throw new AssertionError(label + " expected=" + expected + " actual=" + actual);
-        }
-    }
-
-    private static void expectInvalid(DoublyLinkedList list, int index) {
-        try {
-            list.insert(index, 99);
-            throw new AssertionError("expected IndexOutOfBoundsException for index=" + index);
-        } catch (IndexOutOfBoundsException expected) {
-            // expected
-        }
-    }
-
-    public static void main(String[] args) throws Exception {
-        DoublyLinkedList list = new DoublyLinkedList();
-        list.insert(0, 2);
-        expect(List.of(2), values(list, true), "empty->first forward");
-        expect(List.of(2), values(list, false), "empty->first reverse");
-
-        list.insert(0, 1);
-        list.insert(1, 9);
-        list.insert(3, 3);
-        expect(List.of(1, 9, 2, 3), values(list, true), "head-middle-tail forward");
-        expect(List.of(3, 2, 9, 1), values(list, false), "head-middle-tail reverse");
-
-        Object head = field(DoublyLinkedList.class, "head").get(list);
-        Object tail = field(DoublyLinkedList.class, "tail").get(list);
-        if (field(head.getClass(), "prev").get(head) != null) {
-            throw new AssertionError("head.prev must be null");
-        }
-        if (field(tail.getClass(), "next").get(tail) != null) {
-            throw new AssertionError("tail.next must be null");
-        }
-        if ((Integer) field(DoublyLinkedList.class, "size").get(list) != 4) {
-            throw new AssertionError("size must be 4");
-        }
-
-        expectInvalid(list, -1);
-        expectInvalid(list, 5);
-        System.out.println("PASS empty=linked head=ok middle=ok tail=ok forward-reverse=consistent bounds=rejected size=4");
+    private static void yes(boolean value,String name){if(!value)throw new AssertionError(name);}
+    public static void main(String[] args){
+        DoublyLinkedList a=new DoublyLinkedList();
+        eq(a.size(),0,"empty-size");
+        eq(a.valuesForward(),List.of(),"empty-forward");
+        eq(a.valuesBackward(),List.of(),"empty-backward");
+        DoublyLinkedList.Node n2=a.addFirst(2);
+        a.addFirst(1);
+        DoublyLinkedList.Node n4=a.addLast(4);
+        DoublyLinkedList.Node n3=a.insertAfter(n2,3);
+        eq(a.valuesForward(),List.of(1,2,3,4),"forward");
+        eq(a.valuesBackward(),List.of(4,3,2,1),"backward");
+        eq(a.size(),4,"size");
+        a.insertAfter(n4,5);
+        eq(a.valuesForward(),List.of(1,2,3,4,5),"tail-via-anchor");
+        eq(a.valuesBackward(),List.of(5,4,3,2,1),"tail-backward");
+        yes(n3.value()==3,"returned-node");
+        DoublyLinkedList b=new DoublyLinkedList();
+        DoublyLinkedList.Node foreign=b.addFirst(9);
+        boolean rejected=false;try{a.insertAfter(foreign,8);}catch(IllegalArgumentException e){rejected=true;}
+        yes(rejected,"foreign-anchor-rejected");
+        boolean nullRejected=false;try{a.insertAfter(null,8);}catch(IllegalArgumentException e){nullRejected=true;}
+        yes(nullRejected,"null-anchor-rejected");
+        System.out.println("PASS empty=true first=true last=true middle=true forward=1,2,3,4,5 backward=5,4,3,2,1 foreign-anchor=rejected null-anchor=rejected");
     }
 }

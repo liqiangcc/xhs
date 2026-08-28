@@ -1,0 +1,158 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_c4a953536191c8fe484174e0b0bcbb20",
+  "candidate_sha256": "5ad9917563fb4b8703df9849139c58dc1811447f8e1ea984605ae51481636941",
+  "checked_at": "2026-08-28",
+  "writer": {
+    "writer_id": "content-batch-0047-dlist-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "source-context",
+      "title": "Batch 0047 exact source context",
+      "locator": "review/content_build/answer_batch_0047/cq_q_c4a953536191c8fe484174e0b0bcbb20/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Doubly linked list insertion executable fixture",
+      "locator": "review/content_build/answer_batch_0047/cq_q_c4a953536191c8fe484174e0b0bcbb20/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "content-standard",
+      "title": "Answer content standard",
+      "locator": "docs/refactor/09_answer_content_standard.md",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Doubly linked list insertion source-first isolated review",
+      "locator": "review/content_build/answer_batch_0047/cq_q_c4a953536191c8fe484174e0b0bcbb20/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source says only doubly linked list insertion and does not define insertion position, node API, sentinels, ownership checks or concurrency semantics; the answer labels insert-after with sentinels as an explicit candidate contract.",
+      "source_ids": [
+        "source-context"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "pointer-invariant",
+      "text": "Under the candidate contract, inserting x between adjacent left/right nodes replaces left<->right with left<->x<->right by maintaining both next and prev directions.",
+      "source_ids": [
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "behavior-validation",
+      "text": "The OpenJDK 21 fixture verifies empty/head/tail/middle insertion, exact forward and backward orders, returned node identity, and rejection of foreign/null anchors.",
+      "source_ids": [
+        "writer-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "c4a953536191c8fe484174e0b0bcbb20",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac DoublyLinkedList.java DoublyLinkedListTest.java && java DoublyLinkedListTest",
+    "result": "pass",
+    "reported_stdout": "PASS empty=true first=true last=true middle=true forward=1,2,3,4,5 backward=5,4,3,2,1 foreign-anchor=rejected null-anchor=rejected",
+    "checks": [
+      "empty-list sentinel boundary",
+      "head insertion",
+      "tail insertion",
+      "middle insertAfter",
+      "forward traversal order",
+      "backward traversal reverse order",
+      "foreign-anchor rejection",
+      "null-anchor rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty/head/tail/middle insertion",
+        "expected": "bidirectional order stays consistent",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "foreign anchor",
+        "expected": "reject",
+        "actual": "IllegalArgumentException",
+        "passed": true
+      },
+      {
+        "case": "null anchor",
+        "expected": "reject",
+        "actual": "IllegalArgumentException",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0047-dlist-20260828-v1",
+    "review_version": "batch-0047.dlist.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer does not invent a source-defined insertion API; it explicitly chooses insert-after with sentinels as the testable candidate contract.",
+      "The core four-pointer invariant is stated directly and then derived as replacement of one bidirectional adjacency with two.",
+      "The Java implementation is complete and compilable, and the fixture checks both forward and backward traversal so a missing prev update cannot hide behind one-direction tests.",
+      "Complexity is correctly conditional: O(1) only when the insertion position/anchor is already known, while index/value lookup adds O(n).",
+      "Ownership and concurrency behaviors are surfaced as implementation boundaries rather than source facts."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}

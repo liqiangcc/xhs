@@ -1,15 +1,15 @@
 {
   "schema_version": "isolated_review.v1",
   "canonical_id": "cq_q_c4a953536191c8fe484174e0b0bcbb20",
-  "candidate_sha256": "4081c34a57772debc4c09d4c96668237c4a869c1380c1926734a41a5200504df",
+  "candidate_sha256": "5ad9917563fb4b8703df9849139c58dc1811447f8e1ea984605ae51481636941",
   "reviewed_at": "2026-08-28",
   "review_mode": "source_first_isolated",
-  "reviewer_id": "source-first-isolated-reviewer-batch-0047-doubly-linked-list-insert-20260828-v1",
-  "review_version": "batch-0047.doubly-linked-list-insert.v1",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0047-dlist-20260828-v1",
+  "review_version": "batch-0047.dlist.v1",
   "decision": "pass",
   "revision_round": 1,
   "source_packet": [
-    "review/content_build/answer_batch_0047/source_inventory.json",
+    "review/content_build/answer_batch_0047/cq_q_c4a953536191c8fe484174e0b0bcbb20/context.json",
     "review/candidates/answers/cq_q_c4a953536191c8fe484174e0b0bcbb20.md",
     "review/content_build/answer_batch_0047/cq_q_c4a953536191c8fe484174e0b0bcbb20/writer_validation.json",
     "docs/refactor/09_answer_content_standard.md"
@@ -27,11 +27,11 @@
   "unsupported_claims": [],
   "uncovered_source_variants": [],
   "findings": [
-    "The source boundary is correctly kept narrow: the repository only preserves doubly-linked-list insertion, while index-based insertion, zero-based indexing and [0,size] legality are explicitly declared candidate-contract choices.",
-    "The presented Java implementation is self-contained and covers empty, head, middle and tail insertion without undefined helpers or placeholder code.",
-    "The explanation states the bidirectional adjacency invariant and correctly separates O(1) pointer rewiring from O(min(index,size-index)) location cost for this chosen API.",
-    "The deterministic OpenJDK 21 fixture checks both traversal directions, reciprocal prev/next links, head/tail null boundaries, size updates and invalid indices against the candidate implementation.",
-    "Sentinel-node and already-known-node variants, concurrency limitations and project no-fabrication boundaries are explicitly handled rather than generalized beyond the source."
+    "The answer does not invent a source-defined insertion API; it explicitly chooses insert-after with sentinels as the testable candidate contract.",
+    "The core four-pointer invariant is stated directly and then derived as replacement of one bidirectional adjacency with two.",
+    "The Java implementation is complete and compilable, and the fixture checks both forward and backward traversal so a missing prev update cannot hide behind one-direction tests.",
+    "Complexity is correctly conditional: O(1) only when the insertion position/anchor is already known, while index/value lookup adds O(n).",
+    "Ownership and concurrency behaviors are surfaced as implementation boundaries rather than source facts."
   ],
   "promotion_blockers": [
     "repository_human_approval_and_real_review_policy_not_yet_satisfied"
