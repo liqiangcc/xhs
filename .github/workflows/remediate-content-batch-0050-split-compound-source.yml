@@ -1,0 +1,146 @@
+name: Remediate Content Batch 0050 Split Compound Source
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0050-split-compound-source.yml
+      - scripts/content/remediate_batch_0050_split_compound_source.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0050-split-compound-source
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply source-first compound split
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/remediate_batch_0050_split_compound_source.py > /tmp/remediate.py
+          python3 -m py_compile /tmp/remediate.py
+          python3 /tmp/remediate.py
+          node scripts/xhs.js migrate build-questions --build-date 2026-08-29 --noManifest
+          node scripts/xhs.js index build --noManifest
+          node scripts/xhs.js answer type-audit --noManifest
+
+      - name: Verify exact split state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root=Path('.')
+          old_cid='cq_q_d6ed1b1964f238df266bdd7e8bd146f1'
+          old_qid='d6ed1b1964f238df266bdd7e8bd146f1'
+          expected={
+            'cq_q_88d86d8e4586504b5c9365f4126f7436':('88d86d8e4586504b5c9365f4126f7436','算法：检测链表是否有环（要求检测入参合法性）'),
+            'cq_q_b66328eb23ca1ba53a062a787c71a9dc':('b66328eb23ca1ba53a062a787c71a9dc','算法：设计一个消消乐算法（相邻两数和为 10 则消除，返回最终序列）'),
+          }
+          canon=[json.loads(x) for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_cid={r['canonical_id']:r for r in canon}
+          if old_cid in by_cid: raise SystemExit('legacy mixed Canonical remains active')
+          for cid,(qid,title) in expected.items():
+            row=by_cid.get(cid)
+            if not row or row.get('question_ids') != [qid] or row.get('canonical_title') != title or row.get('answer_status') != 'missing':
+              raise SystemExit(f'{cid}: split Canonical invalid: {row}')
+          questions=[json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()]
+          by_qid={r.get('question_id'):r for r in questions}
+          if old_qid in by_qid: raise SystemExit('legacy projected Question remains active')
+          for cid,(qid,title) in expected.items():
+            row=by_qid.get(qid)
+            if not row or row.get('canonical_id') != cid or row.get('original_question') != title or row.get('is_valid_for_library') is not True:
+              raise SystemExit(f'{qid}: split Question invalid: {row}')
+          note=json.loads((root/'note_tagged/67fd2286000000001d03b1bf.json').read_text(encoding='utf-8'))
+          tail=note.get('tagged_questions',[])[10:12]
+          if [r.get('question_id') for r in tail] != [v[0] for v in expected.values()] or len(note.get('tagged_questions',[])) != 12:
+            raise SystemExit('source split order/count invalid')
+          progress=json.loads((root/'review/progress.json').read_text(encoding='utf-8'))
+          items=progress.get('items',[]) if isinstance(progress,dict) else progress
+          if any(r.get('canonical_id') == old_cid for r in items): raise SystemExit('legacy ReviewProgress remains')
+          for cid in expected:
+            if (root/'review/answers'/f'{cid}.md').exists() or (root/'review/candidates/answers'/f'{cid}.md').exists():
+              raise SystemExit(f'{cid}: descendant must remain answer-missing')
+          if not (root/'review/archive/answers'/f'{old_cid}.md').exists():
+            raise SystemExit('legacy mixed baseline answer was not archived')
+          split=json.loads((root/'review/content_build/answer_batch_0050/compound_source_split_review.json').read_text(encoding='utf-8'))
+          if split.get('decision') != 'split' or len(split.get('descendants',[])) != 2:
+            raise SystemExit('split review record invalid')
+          print('PASS exact Batch 0050 compound source split verified')
+          PY
+
+      - name: Run full repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during compound split: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; retry against current state.'
+            exit 0
+          fi
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No compound-source split changes to commit.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name xhs-remediation-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: split batch 0050 compound source question'
+          git push origin "HEAD:$CONTENT_BRANCH"
