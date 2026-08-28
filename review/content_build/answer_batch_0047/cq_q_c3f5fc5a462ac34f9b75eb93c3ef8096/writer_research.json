@@ -1,0 +1,51 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_c3f5fc5a462ac34f9b75eb93c3ef8096",
+  "candidate_sha256": "31c437c0df32e033bb48905e428037e3344f7d6eb95448a9b3f2dc7bb9a45c8f",
+  "checked_at": "2026-08-28",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source-inventory",
+      "title": "Batch 0047 source-first inventory for top-quartile purchase-ranking SQL",
+      "locator": "review/content_build/answer_batch_0047/source_inventory.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Deterministic SQLite PERCENT_RANK purchase-ranking fixture",
+      "locator": "review/content_build/answer_batch_0047/cq_q_c3f5fc5a462ac34f9b75eb93c3ef8096/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks for users ranked in the top 25% by purchase volume and explicitly names PERCENT_RANK() or NTILE(4), but does not preserve a concrete schema or whether purchase volume means count, quantity or money; the candidate therefore states SUM(quantity) and its table shape as a minimal executable contract.",
+      "source_ids": ["repository-source-inventory"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节"]
+    },
+    {
+      "claim_id": "user-grain-ranking",
+      "text": "The executable fixture verifies that detail purchase records are first aggregated to user grain, then PERCENT_RANK is computed in descending purchase quantity and the <=0.25 threshold selects the leading users.",
+      "source_ids": ["writer-validation"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "ranking-boundaries",
+      "text": "The fixture verifies top-value ties, multiple records per user and the single-user boundary; the candidate explicitly distinguishes percentile-rank semantics from NTILE(4) row-bucket semantics and does not promise an exact 25% headcount when ties or small populations are present.",
+      "source_ids": ["writer-validation", "repository-source-inventory"],
+      "answer_locations": ["关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "c3f5fc5a462ac34f9b75eb93c3ef8096",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "项目经验版", "常见追问", "易错点"]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
