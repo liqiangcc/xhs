@@ -53,7 +53,12 @@ jobs:
           git fetch --depth=1 origin master
           git show origin/master:scripts/content/remediate_batch_0050_split_compound_source.py > /tmp/remediate.py
           python3 -m py_compile /tmp/remediate.py
-          python3 /tmp/remediate.py
+          python3 - <<'PY'
+          source = open('/tmp/remediate.py', encoding='utf-8').read()
+          namespace = {'__name__': 'batch0050_split_module', 'DATE': '2026-08-29'}
+          exec(compile(source, '/tmp/remediate.py', 'exec'), namespace)
+          namespace['main']()
+          PY
           node scripts/xhs.js migrate build-questions --build-date 2026-08-29 --noManifest
           node scripts/xhs.js index build --noManifest
           node scripts/xhs.js answer type-audit --noManifest
