@@ -1,0 +1,205 @@
+name: Remediate Content Batch 0048 Max Subarray Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0048-max-subarray-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0048-max-subarray-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  TARGET_QID: aee86527c929ecb06715c2c4d2fd738f
+  TARGET_CID: cq_q_aee86527c929ecb06715c2c4d2fd738f
+  SOURCE_QID: c71eb16010f7db00a06b21f9feff2569
+  SOURCE_CID: cq_q_c71eb16010f7db00a06b21f9feff2569
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Form source-first relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0048/max_subarray_relation'
+          mkdir -p "$out"
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const targetQ=byQ.get(process.env.TARGET_QID), sourceQ=byQ.get(process.env.SOURCE_QID);
+          const targetExact='算法：找到最大连续子数组的和';
+          const sourceExact='算法：和最大的子数组 leetcode 53';
+          if(!targetQ||targetQ.original_question!==targetExact||targetQ.is_valid_for_library!==true) throw new Error(`target source drifted: ${JSON.stringify(targetQ)}`);
+          if(!sourceQ||sourceQ.original_question!==sourceExact||sourceQ.is_valid_for_library!==true) throw new Error(`source question drifted: ${JSON.stringify(sourceQ)}`);
+          if(targetQ.canonical_id!==process.env.TARGET_CID||sourceQ.canonical_id!==process.env.SOURCE_CID) throw new Error('Question ownership drift before relation review');
+          const targetC=byC.get(process.env.TARGET_CID),sourceC=byC.get(process.env.SOURCE_CID);
+          if(!targetC||JSON.stringify(targetC.question_ids||[])!==JSON.stringify([process.env.TARGET_QID])) throw new Error('target Canonical is not the reviewed singleton expected by this bounded slice');
+          if(!sourceC||JSON.stringify(sourceC.question_ids||[])!==JSON.stringify([process.env.SOURCE_QID])) throw new Error('source Canonical is not the reviewed singleton expected by this bounded slice');
+
+          const rawTarget=fs.readFileSync('note_desc/659a2c620000000011033b5e.txt','utf8');
+          const rawSource=fs.readFileSync('note_desc/67d81c93000000001e003502.txt','utf8');
+          if(!rawTarget.includes('int数组，有正有负，找到最大连续子数组的和（动归）')) throw new Error('target raw-source phrase missing');
+          if(!rawSource.includes('和最大的子数组  leetcode53')) throw new Error('LeetCode 53 raw-source phrase missing');
+
+          const inventory=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0048/source_inventory.json','utf8'));
+          const scheduled=(inventory.items||[]).find(x=>x.canonical_id===process.env.SOURCE_CID);
+          if(!scheduled||scheduled.state!=='active'||scheduled.answer_type!=='coding'||JSON.stringify(scheduled.question_ids||[])!==JSON.stringify([process.env.SOURCE_QID])) throw new Error('batch 0048 frozen source inventory drifted');
+
+          const review=`# Maximum Subarray Source-First Relation Review\n\n`+
+            `## Primary-source facts\n\n`+
+            `- \`${process.env.TARGET_QID}\`: the raw interview note preserves an int array with positive and negative values and asks for the maximum sum of a contiguous subarray, with dynamic programming noted parenthetically.\n`+
+            `- \`${process.env.SOURCE_QID}\`: an independent raw note lists “和最大的子数组 leetcode53”, i.e. the named LeetCode 53 maximum-subarray problem.\n`+
+            `- Both current Questions are valid Coding records and each is currently the sole member of its own Canonical.\n`+
+            `- The second source names the standard problem but does not preserve a separate variant such as circular subarray, fixed-length window, product, absolute sum, or non-contiguous subsequence.\n\n`+
+            `No historical answer review, relation decision, or remediation record was consulted before this relation conclusion.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\`. Both sources ask for the same maximum-sum contiguous-subarray problem. Preserve \`${process.env.TARGET_CID}\` (“${targetExact}”) as the survivor and consolidate \`${process.env.SOURCE_CID}\` into it.\n\n`+
+            `## Content consequence\n\n`+
+            `Canonical consolidation is normalization only, not Answer promotion. The survivor's candidate/evidence must be refreshed after ownership changes so source_question_coverage includes both Questions; human approval and real-review policy remain separate gates.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0048/max_subarray_relation/relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Check survivor history only after conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.TARGET_CID;
+          const candidate=`review/candidates/answers/${cid}.md`;
+          const review=`review/content_build/answer_batch_0042/${cid}/isolated_review_result.json`;
+          if(!fs.existsSync(candidate)) throw new Error('survivor source-first candidate missing after relation conclusion');
+          if(!fs.existsSync(review)) throw new Error('survivor isolated review record missing after relation conclusion');
+          const r=JSON.parse(fs.readFileSync(review,'utf8'));
+          if(r.decision!=='pass'||r.review_mode!=='source_first_isolated') throw new Error('survivor historical review is not a source-first PASS');
+          fs.writeFileSync('review/content_build/answer_batch_0048/max_subarray_relation/post_conclusion_history_check.json',JSON.stringify({checked_after_relation_conclusion:true,target_canonical_id:cid,existing_candidate:candidate,existing_isolated_review:review,existing_review_decision:r.decision,required_next_step:'refresh survivor candidate/evidence for expanded two-question ownership before any promotion'},null,2)+'\n');
+          NODE
+
+      - name: Select decide and apply reviewed pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0048/max_subarray_relation'
+          node scripts/xhs.js canonical suggest --question-ids "$TARGET_QID,$SOURCE_QID" --noManifest > "$out/suggest.json"
+          key="$(node - "$out/suggest.json" <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected one explicit-pair RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0];
+          const actual=[...(c.question_ids||[])].sort();
+          const expected=[process.env.TARGET_QID,process.env.SOURCE_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected pair drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0048-max-subarray-source-first-review \
+            --actor-display-name 'Maximum subarray source-first reviewer' \
+            --rationale 'Two independent raw sources ask for the maximum-sum contiguous-subarray problem; the second explicitly names LeetCode 53. No source preserves a distinct circular, fixed-length, product, absolute-sum, or subsequence variant.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$TARGET_CID" \
+            --canonical-title '算法：找到最大连续子数组的和' > "$out/apply.json"
+
+      - name: Verify exact consolidation effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q])),byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          for(const qid of [process.env.TARGET_QID,process.env.SOURCE_QID]) if(byQ.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: survivor ownership missing`);
+          if(byC.has(process.env.SOURCE_CID)) throw new Error('duplicate max-subarray Canonical survived reviewed consolidation');
+          const members=[...(byC.get(process.env.TARGET_CID)?.question_ids||[])].sort();
+          const expected=[process.env.TARGET_QID,process.env.SOURCE_QID].sort();
+          if(JSON.stringify(members)!==JSON.stringify(expected)) throw new Error(`survivor member set drifted: ${JSON.stringify(members)}`);
+
+          fs.writeFileSync('review/content_build/answer_batch_0048/max_subarray_relation/relation_apply.md',
+            '# Maximum Subarray Relation Application\n\n'+
+            '- Relation: `same`.\n'+
+            '- Survivor: `'+process.env.TARGET_CID+'`.\n'+
+            '- Retired duplicate Canonical: `'+process.env.SOURCE_CID+'`.\n'+
+            '- Both source Questions are now owned by the survivor.\n'+
+            '- This slice does not promote the survivor Answer. Candidate/evidence refresh for the expanded source coverage remains required before human approval / real review.\n');
+
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0048.md';
+          let text=fs.readFileSync(task,'utf8');
+          const line='- [x] `cq_q_c71eb16010f7db00a06b21f9feff2569` was source-first compared with the independently sourced existing maximum-contiguous-subarray Canonical `cq_q_aee86527c929ecb06715c2c4d2fd738f`. The raw source explicitly names LeetCode 53 and preserves no distinct variant, so the relation is `same`; the duplicate Canonical is retired and its Question is consolidated into the survivor. This normalization is not promotion: the survivor candidate/evidence must be refreshed for two-source coverage, and human approval/real-review gates remain outstanding.';
+          if(!text.includes(line)) text=text.trimEnd()+`\n${line}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+
+      - name: Refresh audits and run repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during maximum-subarray relation slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No max-subarray relation changes to commit.'; exit 0; fi
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: normalize max-subarray source relation'
+          git push origin "HEAD:$CONTENT_BRANCH"
