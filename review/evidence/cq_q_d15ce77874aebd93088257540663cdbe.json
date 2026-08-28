@@ -1,0 +1,187 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_d15ce77874aebd93088257540663cdbe",
+  "candidate_sha256": "c6b62e266722fb25312a0ab3dc0fea30d6eee1fe0a1119f79671cc2fe5a83e0b",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0049-synchronized-granularity-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0049 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0049/cq_q_d15ce77874aebd93088257540663cdbe/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "jls-method",
+      "title": "Java SE 21 JLS 8.4.3.6 synchronized Methods",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4.3.6",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "jls-statement",
+      "title": "Java SE 21 JLS 14.19 synchronized Statement",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.19",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "jls-locks",
+      "title": "Java SE 21 JLS 17.1 Synchronization",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html#jls-17.1",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "mxbean",
+      "title": "Java SE 21 ThreadMXBean monitor deadlock detection",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/ThreadMXBean.html#findMonitorDeadlockedThreads()",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 synchronized granularity and monitor-deadlock fixture",
+      "locator": "review/content_build/answer_batch_0049/cq_q_d15ce77874aebd93088257540663cdbe/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "synchronized granularity source-first isolated review",
+      "locator": "review/content_build/answer_batch_0049/cq_q_d15ce77874aebd93088257540663cdbe/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "lock-identities",
+      "text": "Java SE 21 specifies that an instance synchronized method locks the monitor associated with this, a static synchronized method locks the declaring class Class object, and a synchronized statement locks the monitor associated with its evaluated non-null object.",
+      "source_ids": [
+        "jls-method",
+        "jls-statement",
+        "jls-locks"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks both for synchronized lock granularity and a simulated deadlock; the candidate covers lock identities/critical-section scope plus one deterministic opposite-order two-monitor cycle without adding JVM-version implementation claims.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "runtime-validation",
+      "text": "OpenJDK 21 validation demonstrates same-instance serialization, distinct-instance overlap, Class-monitor serialization, dedicated-block serialization, and detects the constructed monitor cycle with ThreadMXBean.",
+      "source_ids": [
+        "fixture",
+        "mxbean"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d15ce77874aebd93088257540663cdbe",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac SynchronizedGranularity.java SynchronizedGranularityTest.java && java SynchronizedGranularityTest",
+    "result": "pass",
+    "reported_stdout": "PASS same-instance=serial distinct-instances=overlap static-class=serial dedicated-block=serial monitor-deadlock=detected",
+    "checks": [
+      "same instance synchronized method serializes",
+      "different instances can overlap",
+      "static synchronized shares declaring Class monitor",
+      "same dedicated synchronized block monitor serializes",
+      "ThreadMXBean detects deterministic two-monitor deadlock"
+    ],
+    "boundary_tests": [
+      {
+        "case": "same this monitor",
+        "expected": "peak active=1",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "different this monitors",
+        "expected": "peak active=2",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "static synchronized",
+        "expected": "same Class monitor serializes",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "opposite nested monitors",
+        "expected": "both demo threads detected deadlocked and BLOCKED",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0049-synchronized-granularity-20260829-v1",
+    "review_version": "batch-0049.synchronized-granularity.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer directly covers both halves of the source question: synchronized lock identity/granularity and a reproducible deadlock scenario.",
+      "Instance, static and block monitor identities are tied to Java SE 21 JLS primary sources rather than HotSpot implementation folklore.",
+      "The executable fixture proves the expected concurrency domains: one instance serializes, distinct instances overlap, the declaring Class monitor serializes static calls, and a dedicated block monitor serializes its own critical section.",
+      "The deadlock uses opposite nested lock order plus a deterministic first-lock barrier, and ThreadMXBean proves the resulting monitor cycle instead of treating a hang as sufficient evidence.",
+      "The answer explicitly avoids cross-version claims about biased/lightweight/heavyweight implementation states and does not fabricate production experience."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
