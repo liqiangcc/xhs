@@ -1,0 +1,182 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_d7a0e349945f1c8c9028db1306383621",
+  "candidate_sha256": "401ee796145bb662879f0bf0e0b76903b731b97bf9bea2fab5261836f78dca9e",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0050-majority-element-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0050 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d7a0e349945f1c8c9028db1306383621/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "leetcode-official",
+      "title": "LeetCode 169 Majority Element official problem statement",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d7a0e349945f1c8c9028db1306383621/official_problem_snapshot.json",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 Boyer-Moore executable validation",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d7a0e349945f1c8c9028db1306383621/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Majority-element source-first isolated review",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d7a0e349945f1c8c9028db1306383621/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source explicitly identifies LeetCode 169, whose official contract defines a majority as appearing more than floor(n/2) times, guarantees a majority exists, and asks for linear time with O(1) space as the follow-up.",
+      "source_ids": [
+        "repository-source",
+        "leetcode-official"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-validation",
+      "text": "The OpenJDK 21 fixture validates the Boyer-Moore implementation on official examples, boundary shapes and 1000 deterministic random guaranteed-majority arrays against an independent frequency-map oracle.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "nonexistence-boundary",
+      "text": "The official problem guarantee is what allows the one-pass survivor candidate to be returned without a verification pass; the candidate explicitly separates the no-guarantee variant.",
+      "source_ids": [
+        "leetcode-official"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "complexity-bound",
+      "text": "The implementation performs one sequential pass and stores only candidate/count state, satisfying the official linear-time/O(1)-extra-space follow-up.",
+      "source_ids": [
+        "fixture",
+        "leetcode-official"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d7a0e349945f1c8c9028db1306383621",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac MajorityElementSolution.java MajorityElementSolutionTest.java && java MajorityElementSolutionTest",
+    "result": "pass",
+    "reported_stdout": "PASS official-examples single negative all-same odd-even null-empty random-majority-oracle=1000 input-preserved",
+    "checks": [
+      "both official examples return the documented majority element",
+      "single, all-same, negative-value, odd-length and even-length majority boundaries are handled",
+      "null and empty arrays follow the explicit local illegal-input contract",
+      "1000 deterministic random arrays with guaranteed majority agree with an independent frequency-map oracle",
+      "the input array remains unchanged"
+    ],
+    "boundary_tests": [
+      {
+        "case": "official examples",
+        "expected": "3 and 2",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "single/all-same/negative/odd-even majority",
+        "expected": "returns guaranteed majority",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "null/empty local contract",
+        "expected": "IllegalArgumentException",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "1000 deterministic random guaranteed-majority arrays",
+        "expected": "matches independent frequency-map oracle",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "input preservation",
+        "expected": "input array unchanged",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0050-majority-element-20260829-v1",
+    "review_version": "batch-0050.majority-element.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate is bound to the exact repository LeetCode 169 source and the current official majority-element contract.",
+      "The Boyer-Moore candidate/count state is implemented directly and the pair-cancellation mechanism is explained instead of asserted as a memorized template.",
+      "The candidate correctly relies on the official majority-exists guarantee and explicitly requires a second verification pass if that guarantee is removed.",
+      "OpenJDK 21 validation covers official examples, signed values, odd/even majority boundaries, illegal local inputs, input preservation and 1000 deterministic random majority arrays against an independent frequency oracle.",
+      "The implementation satisfies the official O(n) time/O(1) extra-space follow-up without sorting or a frequency map in the production solution.",
+      "No production history or unsupported business constraints are fabricated."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
