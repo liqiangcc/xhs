@@ -1,0 +1,112 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_d52ca0aa328f82f1166ebc5bd3cc0ad7",
+  "candidate_sha256": "f1ed6224a1b91e68b0c0a3a797a953ea87e9725ce8c9dbacd3fbb59986571939",
+  "checked_at": "2026-08-29",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0050 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d52ca0aa328f82f1166ebc5bd3cc0ad7/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "jdk-countdown-latch",
+      "title": "CountDownLatch Java SE 21 API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CountDownLatch.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "jdk-thread",
+      "title": "Thread Java SE 21 API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "jls-memory-model",
+      "title": "JLS SE 21 17.4.5 happens-before order",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html#jls-17.4.5",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 deterministic stage-order validation",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d52ca0aa328f82f1166ebc5bd3cc0ad7/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source requires t1 and t2 to have no serial dependency and t3 to run only after both first-stage executions complete, explicitly suggesting CountDownLatch or join.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "join-contract",
+      "text": "Java SE 21 Thread.join waits for thread termination, and JLS 17.4.5 gives successful join the relevant happens-before edge from all actions in the joined thread.",
+      "source_ids": [
+        "jdk-thread",
+        "jls-memory-model"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "latch-contract",
+      "text": "Java SE 21 CountDownLatch with count two blocks await until two countDown signals, is one-shot, and supplies the documented memory-consistency effect across countDown/await.",
+      "source_ids": [
+        "jdk-countdown-latch"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "execution-validation",
+      "text": "The OpenJDK 21 fixture verifies both implementations start both first-stage tasks before either finishes and records t3 only after both completion events.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d52ca0aa328f82f1166ebc5bd3cc0ad7",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
