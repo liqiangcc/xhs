@@ -1,0 +1,173 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_d80c5515628053be95dcb56bc561643a",
+  "candidate_sha256": "5bac2bcff696dff269130eec4c7c3fb12c2952c3b97b17b608ef46f6fe7c2e92",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0050-odd-even-split-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0050 canonical/source context",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d80c5515628053be95dcb56bc561643a/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 odd/even linked-list split validation",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d80c5515628053be95dcb56bc561643a/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Odd/even split source-first isolated review",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d80c5515628053be95dcb56bc561643a/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-ambiguity",
+      "text": "The repository source only says linked-list odd/even split and does not specify whether parity refers to node position or node value, whether output is two lists or one reordered list, or whether mutation is allowed.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "implementation-validation",
+      "text": "The OpenJDK 21 fixture validates stable two-list splitting for both position parity and value parity, including empty/single/negative-value cases and 2000 deterministic random inputs against independent array-filter oracles.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "ownership-boundary",
+      "text": "Both implementations reuse original nodes and explicitly detach old next edges, so they intentionally mutate input topology while avoiding stale cross-links between output lists.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "complexity-bound",
+      "text": "Each node is visited once and appended to exactly one tail with constant pointer work, so both implementations are O(n) time with O(1) auxiliary pointer state excluding the reused output nodes.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d80c5515628053be95dcb56bc561643a",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac OddEvenSplit.java OddEvenSplitTest.java && java OddEvenSplitTest",
+    "result": "pass",
+    "reported_stdout": "PASS ambiguity-both-contracts empty single position value negative-odd stable-order random2000 no-crosslink",
+    "checks": [
+      "both position-parity and value-parity interpretations are implemented explicitly because the source is ambiguous",
+      "empty and single-node boundaries behave according to each explicit contract",
+      "negative odd values are classified correctly",
+      "relative order is stable and result lists terminate without stale cross-links",
+      "2000 deterministic random arrays match independent array-filter oracles for both interpretations"
+    ],
+    "boundary_tests": [
+      {
+        "case": "source ambiguity",
+        "expected": "both common parity contracts explicit",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "empty/single boundaries",
+        "expected": "correct two-list outputs",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "negative odd values",
+        "expected": "value parity correct for signed ints",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "stable order/no stale crosslinks",
+        "expected": "same-group order preserved and result chains terminate",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "2000 deterministic random inputs",
+        "expected": "matches independent position/value array-filter oracles",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0050-odd-even-split-20260829-v1",
+    "review_version": "batch-0050.odd-even-split.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer does not silently guess the under-specified meaning of odd/even; it exposes both position-parity and value-parity contracts.",
+      "Both code paths perform a stable linked-list partition and explicitly detach next edges before appending, preventing stale cross-links.",
+      "The candidate clearly states that it mutates input topology and distinguishes two-list split from the one-list odd-position-then-even-position reorder variant.",
+      "OpenJDK 21 validation covers empty/single boundaries, negative odd values, stable order, termination/no-crosslink properties, and 2000 random inputs for both contracts.",
+      "The mechanism section states the stable-partition invariant rather than generic linked-list advice.",
+      "No project history or source-unstated LeetCode identity is fabricated."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
