@@ -1,13 +1,13 @@
 {
   "schema_version": "isolated_review.v1",
   "canonical_id": "cq_q_c38f2da41d7a94620f0f790aa50cdcdb",
-  "candidate_sha256": "dd87066cf4d02c7d6936ee8ee3f516e61e394da20eecd5912b345ed7720caf02",
+  "candidate_sha256": "090e817ab2ab4c06e8fea485e24f7850390d51423c630532f95da44769d6fa4d",
   "reviewed_at": "2026-08-28",
   "review_mode": "source_first_isolated",
-  "reviewer_id": "source-first-isolated-reviewer-batch-0047-big-number-addition-20260828-v1",
-  "review_version": "batch-0047.big-number-addition.v1",
-  "decision": "fail",
-  "revision_round": 1,
+  "reviewer_id": "source-first-isolated-reviewer-batch-0047-big-number-addition-20260828-v2",
+  "review_version": "batch-0047.big-number-addition.v2",
+  "decision": "pass",
+  "revision_round": 2,
   "source_packet": [
     "review/content_build/answer_batch_0047/source_inventory.json",
     "review/candidates/answers/cq_q_c38f2da41d7a94620f0f790aa50cdcdb.md",
@@ -17,25 +17,23 @@
   "scores": {
     "facts_and_evidence": 25,
     "directness_and_relevance": 20,
-    "type_specific_completeness": 14,
+    "type_specific_completeness": 20,
     "mechanism_and_causality": 15,
     "boundaries_and_tradeoffs": 10,
     "followup_quality": 5,
     "oral_quality": 5
   },
-  "hard_failures": [
-    "coding_answer_contains_undefined_validateDecimal_helper_in_presented_java_implementation"
-  ],
+  "hard_failures": [],
   "unsupported_claims": [],
   "uncovered_source_variants": [],
   "findings": [
-    "The source boundary is handled correctly: signed numbers, decimals, leading-zero policy and invalid-input behavior are declared candidate-contract choices rather than source facts.",
-    "The digit/carry algorithm and complexity explanation are correct, and the separate deterministic fixture passes the declared boundary cases.",
-    "However, the candidate's presented 3-minute Java implementation calls validateDecimal(a) and validateDecimal(b) without defining validateDecimal in the answer code block. The current content standard lists undefined functions in Coding answers as a hard failure even when an external fixture contains a complete implementation.",
-    "Remediation is bounded: include the small validateDecimal helper in the presented Java implementation, then refresh candidate-bound validation/research hashes and rerun isolated review."
+    "The preserved source asks only for string big-number addition, and the answer keeps signed-number, decimal, invalid-input and leading-zero behavior as explicit candidate-contract choices rather than source facts.",
+    "The presented Java implementation is now self-contained: validateDecimal is defined in the same code block, so the prior undefined-function hard failure is removed.",
+    "The right-to-left digit/carry invariant is explained correctly, including the final carry condition and the proof that decimal carry is limited to 0 or 1.",
+    "The deterministic OpenJDK 21 fixture passes zero, long carry-chain, beyond-long-range, equal/unequal-length, leading-zero normalization and invalid-input cases against the implementation bound to this candidate hash.",
+    "Complexity, unsupported negative/decimal variants, output normalization and the project no-fabrication boundary are all explicit and internally consistent."
   ],
   "promotion_blockers": [
-    "hard_failure_requires_candidate_revision",
     "repository_human_approval_and_real_review_policy_not_yet_satisfied"
   ]
 }
