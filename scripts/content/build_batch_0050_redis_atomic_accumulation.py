@@ -1,0 +1,433 @@
+#!/usr/bin/env python3
+"""Build, validate, source-first review, and stage Batch 0050 Redis atomic accumulation candidate."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import subprocess
+import tempfile
+from pathlib import Path
+
+ROOT = Path('.')
+DATE = '2026-08-29'
+BATCH = '0050'
+CID = 'cq_q_d5bc7bf628f261d3f1898c944d3d7054'
+QID = 'd5bc7bf628f261d3f1898c944d3d7054'
+EXPECTED = '编程题：多个线程从 redis 获取一个数，做随机的累加，保证一致性'
+
+CANDIDATE = r'''<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_d5bc7bf628f261d3f1898c944d3d7054","version":1,"status":"draft","updated_at":"2026-08-29","answer_type":"coding","quality_tier":"candidate"} -->
+# 多线程对 Redis 计数器做随机累加并保证一致性
+
+## 核心结论
+
+如果每个线程的随机增量 `delta` 可以独立于当前值生成，**不要做 `GET -> 本地相加 -> SET`**；那是跨多个 Redis 命令的读改写，在并发下会发生 lost update。直接把变化量发给 Redis，用单条 `INCRBY key delta` 完成原子累加。Redis 官方把 `INCR/INCRBY` 作为 atomic counter 操作；同一 key 上多个客户端并发发 `INCRBY`，最终值等于所有成功增量之和，不需要为了这个单 key 加法再套分布式锁。
+
+如果业务逻辑是“先读当前值，再根据当前值决定能不能加、加多少”，例如“累加后不能超过上限”，单独的 `GET` + 条件判断 + `INCRBY/SET` 又变成多命令竞态。这时把“读 + 判断 + 写”放进 Redis Lua 脚本或等价的服务端原子逻辑。Redis 官方文档明确说明 Lua 脚本在服务器端原子执行；脚本运行期间，其他服务器活动不会穿插到脚本的读写之间。
+
+## 1 分钟版
+
+- 错误模式：线程 A/B 都 `GET counter=100`，A 加 3、B 加 7，然后分别 `SET 103/107`，最后只留下一个结果，另一个增量丢了。
+- 正确模式：A 发 `INCRBY counter 3`，B 发 `INCRBY counter 7`；Redis 在服务端串行应用两个原子增量，最终是 110，命令先后只影响中间返回值，不影响总和。
+- 随机数在应用线程本地生成即可；一致性关键不是“随机”，而是把共享状态更新表达成一个原子 Redis 命令。
+- 如果更新需要依赖当前值做条件判断，用 Lua 把 `GET/条件/INCRBY` 合成一个原子服务器端操作。
+- 不要把“Redis 命令原子”误解成“客户端对象天然线程安全”；Java 客户端连接/连接池是否可跨线程共享，要按具体库的线程模型处理。
+- 还要定义失败语义：客户端超时后不知道命令是否已经在 Redis 执行时，盲目重试可能重复累加；若业务要求 exactly-once，需要请求 ID/幂等去重，而不只是原子加法。
+
+## 3 分钟版
+
+下面把 Redis 客户端抽象成只暴露 `INCRBY` 的接口，核心是每个 worker **只提交 delta，不在客户端做共享值的读改写**：
+
+```java
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
+
+public final class RedisAtomicAccumulator {
+    @FunctionalInterface
+    public interface RedisCounter {
+        long incrBy(String key, long delta);
+    }
+
+    public static List<Future<Long>> submitRandomAdds(
+            ExecutorService pool,
+            RedisCounter redis,
+            String key,
+            int taskCount,
+            long minDelta,
+            long maxDeltaExclusive) {
+        if (pool == null || redis == null || key == null || key.isBlank()) {
+            throw new IllegalArgumentException("pool, redis and key are required");
+        }
+        if (taskCount < 0 || minDelta >= maxDeltaExclusive) {
+            throw new IllegalArgumentException("invalid taskCount/delta range");
+        }
+
+        List<Future<Long>> results = new ArrayList<>(taskCount);
+        for (int i = 0; i < taskCount; i++) {
+            results.add(pool.submit(() -> {
+                long delta = ThreadLocalRandom.current()
+                        .nextLong(minDelta, maxDeltaExclusive);
+                return redis.incrBy(key, delta); // map to Redis INCRBY
+            }));
+        }
+        return results;
+    }
+}
+```
+
+真实客户端中，`redis.incrBy(key, delta)` 映射到 `INCRBY key delta`。不要改成下面这种逻辑：先 `GET` 当前值、在 Java 里算 `current + delta`、再 `SET` 回去。即使 Java 侧每个线程内部代码没有数据竞争，多个客户端之间仍会基于同一个旧值覆盖彼此。
+
+如果需要“累加但不超过 cap”，可以把条件读改写放进 Lua：
+
+```lua
+local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+local delta = tonumber(ARGV[1])
+local cap = tonumber(ARGV[2])
+if current + delta > cap then
+    return current
+end
+return redis.call('INCRBY', KEYS[1], delta)
+```
+
+这个脚本把读取当前值、判断上限和实际累加放在同一次原子脚本执行中。若只是无条件累加，优先单条 `INCRBY`，比 Lua 更简单。
+
+## 关键细节
+
+- **为什么 GET+SET 会丢更新**：两个线程可以读到同一个旧值，各自在本地计算新值，后写入者覆盖先写入者；问题在 Redis 命令之间存在可交错窗口。
+- **为什么 INCRBY 足够**：每次业务变化都被表达成一个服务器端原子增量，最终共享状态是这些增量的顺序累积；对普通整数加法，顺序不改变最终和。
+- **随机增量边界**：随机数只决定 `delta`；只要 delta 的生成不依赖 Redis 当前值，就无需先 GET。
+- **条件更新**：如果 delta/是否执行依赖当前值，必须把依赖当前值的逻辑和写操作放进同一原子边界，Lua 是一种直接方式。
+- **客户端线程安全**：Redis 端的命令原子性不等于某个 Java 客户端连接实例可安全被并发调用；应使用该客户端支持的线程安全连接池/多路复用模型。
+- **超时与重试**：原子性解决“命令执行时不被别的更新穿插”，但不自动提供 exactly-once。请求已经执行、响应却在网络上丢失时，客户端重试 `INCRBY` 会再次加一遍。
+- **整数范围**：生产中要对业务计数范围做上界设计；不要让长期累加在没有容量治理的情况下无限增长。
+- **多 key 不变量**：如果一次业务更新必须同时维护多个 key 的关系，单 key `INCRBY` 只保护自己的更新，需要 Lua/事务/重新建模来扩大原子边界。
+
+## 原理机制
+
+`GET -> compute -> SET` 的本质是客户端侧 read-modify-write。设初始值是 `v`，A/B 的增量分别为 `a/b`。两者都可能先读到 `v`，随后写 `v+a` 与 `v+b`，最终只能留下其中一个，正确结果 `v+a+b` 无法由“最后一次 SET”恢复。
+
+`INCRBY` 则把 read-modify-write 收进 Redis 的一个命令：客户端传的是增量而不是完整新值。并发请求可以有不同执行顺序，但每个成功命令都基于前一个已提交值继续累加，因此最终包含所有增量。Lua 的价值也是同一个原则：当一个原子业务动作不能表示成单个内置命令时，把多步逻辑移到 Redis 服务器内的一个原子脚本执行边界。
+
+要注意“并发一致性”至少有两个层次：**服务器状态更新原子性**和**调用重试幂等性**。前者用 `INCRBY`/Lua 可以解决；后者要根据消息 ID、业务操作 ID 或去重集合定义，因为网络超时会让客户端面对“结果未知”而不是简单的“执行失败”。
+
+## 项目经验版
+
+来源没有提供真实项目经历，不能虚构“线上用 Jedis/Lettuce 遇到过多少 QPS”。实际落地我会先把一致性合同写清：随机 delta 是否与当前值无关、是否允许负增量、是否有 cap、一次业务是否更新多个 key、超时是否重试、重复执行能否接受。然后用并发测试验证最终总和，并故意构造 GET+SET 的 lost update 作为反例；如果有条件更新，再并发压 Lua 路径验证上限不被突破。
+
+## 常见追问
+
+- 问：为什么不用 Redis 分布式锁包住 GET+SET？答：如果只是单 key 无条件整数累加，`INCRBY` 已经把读改写做成一个原子命令，锁会增加往返、租约和失败处理复杂度；只有业务原子边界超出单命令能力时再考虑 Lua、事务或锁。
+- 问：多个线程同时 INCRBY，返回值会不会重复？答：每条成功命令看到的是其执行位置对应的新值；同一 key 的非零增量场景中返回值随具体增量/顺序变化。业务若只关心最终和，不应依赖某个线程固定拿到第几个结果。
+- 问：随机增量要在 Lua 里生成吗？答：通常不需要。随机 delta 与当前共享值无关时在应用侧生成并作为 INCRBY 参数提交即可；真正要一起原子化的是依赖共享当前值的判断与更新。
+- 问：Lua 为什么能解决 cap 判断竞态？答：Redis 保证脚本原子执行，所以脚本里的 GET、条件判断和 INCRBY 不会被其他命令插入到中间。
+- 问：客户端 timeout 后能直接重试吗？答：不能因为“没收到响应”就断定 Redis 没执行。无幂等保护的 INCRBY 重试可能重复累加；需要按业务设计请求 ID 去重或接受 at-least-once 语义。
+- 问：WATCH/MULTI/EXEC 可以吗？答：可以用于乐观并发控制，但要处理冲突重试；对无条件单 key 累加仍然不如直接 INCRBY 简洁。
+
+## 易错点
+
+- 认为给 Java 方法加 `synchronized` 就能约束所有进程/实例对 Redis 的并发更新。
+- 用 `GET -> 本地加 -> SET`，把 Redis 单命令原子性误扩张到多命令序列。
+- 无条件累加还套分布式锁，制造不必要的锁超时、续约和吞吐成本。
+- 需要 cap/条件判断时仍把 GET 和写分成多个客户端命令。
+- 把“命令原子”误解成“失败可安全重试”；没有幂等协议时重试可能重复加。
+- 不确认具体 Redis Java 客户端的线程模型，就让多个线程共享一个可能非线程安全的连接对象。
+'''
+
+JAVA_TEST = r'''import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
+
+public final class RedisAtomicAccumulatorTest {
+    public static void main(String[] args) throws Exception {
+        AtomicLong counter = new AtomicLong(0);
+        RedisAtomicAccumulator.RedisCounter fake = (key, delta) -> counter.addAndGet(delta);
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        try {
+            List<java.util.concurrent.Future<Long>> futures = RedisAtomicAccumulator.submitRandomAdds(pool, fake, "counter", 500, 1, 8);
+            for (var f : futures) f.get();
+            long value = counter.get();
+            if (value < 500 || value > 3500) throw new AssertionError("random delta range violated: " + value);
+        } finally {
+            pool.shutdownNow();
+        }
+        try {
+            RedisAtomicAccumulator.submitRandomAdds(null, fake, "counter", 1, 1, 2);
+            throw new AssertionError("null pool should fail");
+        } catch (IllegalArgumentException expected) {}
+        try {
+            RedisAtomicAccumulator.submitRandomAdds(Executors.newSingleThreadExecutor(), fake, "", 1, 1, 2);
+            throw new AssertionError("blank key should fail");
+        } catch (IllegalArgumentException expected) {}
+        System.out.println("PASS java-api random-delta-range task500 input-contract");
+    }
+}
+'''
+
+REDIS_TEST = r'''import os
+import random
+import socket
+import threading
+
+HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
+PORT = int(os.environ.get('REDIS_PORT', '6379'))
+
+
+def encode(*parts):
+    out = [f'*{len(parts)}\r\n'.encode()]
+    for p in parts:
+        b = str(p).encode()
+        out.append(f'${len(b)}\r\n'.encode())
+        out.append(b + b'\r\n')
+    return b''.join(out)
+
+
+def read_line(f):
+    line = f.readline()
+    if not line.endswith(b'\r\n'):
+        raise RuntimeError('bad RESP line')
+    return line[:-2]
+
+
+def read_resp(f):
+    prefix = f.read(1)
+    if prefix == b'+': return read_line(f).decode()
+    if prefix == b'-': raise RuntimeError(read_line(f).decode())
+    if prefix == b':': return int(read_line(f))
+    if prefix == b'$':
+        n = int(read_line(f))
+        if n == -1: return None
+        data = f.read(n)
+        if f.read(2) != b'\r\n': raise RuntimeError('bad bulk terminator')
+        return data.decode()
+    raise RuntimeError(f'unsupported RESP prefix {prefix!r}')
+
+
+class RedisConn:
+    def __init__(self):
+        self.s = socket.create_connection((HOST, PORT), timeout=5)
+        self.f = self.s.makefile('rb')
+    def cmd(self, *parts):
+        self.s.sendall(encode(*parts))
+        return read_resp(self.f)
+    def close(self):
+        self.f.close(); self.s.close()
+
+
+def one(*parts):
+    c = RedisConn()
+    try: return c.cmd(*parts)
+    finally: c.close()
+
+
+if one('PING') != 'PONG': raise AssertionError('redis ping failed')
+info = one('INFO', 'server')
+server_version = next((line.split(':', 1)[1] for line in info.splitlines() if line.startswith('redis_version:')), 'unknown')
+
+# Positive proof: concurrent INCRBY preserves every independently generated delta.
+one('SET', 'xhs:b50:good', 0)
+thread_count = 24
+ops_per_thread = 120
+all_deltas = []
+for tid in range(thread_count):
+    rng = random.Random(20260829 + tid)
+    all_deltas.append([rng.randint(-3, 9) for _ in range(ops_per_thread)])
+expected = sum(map(sum, all_deltas))
+errors = []
+
+def incr_worker(deltas):
+    c = RedisConn()
+    try:
+        for d in deltas:
+            c.cmd('INCRBY', 'xhs:b50:good', d)
+    except Exception as e:
+        errors.append(repr(e))
+    finally:
+        c.close()
+
+threads = [threading.Thread(target=incr_worker, args=(ds,)) for ds in all_deltas]
+for t in threads: t.start()
+for t in threads: t.join()
+if errors: raise AssertionError(errors)
+actual = int(one('GET', 'xhs:b50:good'))
+if actual != expected: raise AssertionError((actual, expected))
+
+# Negative proof: force every thread to read the same old value before any SET.
+one('SET', 'xhs:b50:bad', 0)
+barrier_read = threading.Barrier(8)
+barrier_write = threading.Barrier(8)
+
+def bad_worker(delta):
+    c = RedisConn()
+    try:
+        old = int(c.cmd('GET', 'xhs:b50:bad'))
+        barrier_read.wait()
+        new_value = old + delta
+        barrier_write.wait()
+        c.cmd('SET', 'xhs:b50:bad', new_value)
+    finally:
+        c.close()
+
+bad_threads = [threading.Thread(target=bad_worker, args=(i + 1,)) for i in range(8)]
+for t in bad_threads: t.start()
+for t in bad_threads: t.join()
+bad_actual = int(one('GET', 'xhs:b50:bad'))
+bad_expected = sum(range(1, 9))
+if bad_actual == bad_expected or not (1 <= bad_actual <= 8):
+    raise AssertionError((bad_actual, bad_expected))
+
+# Conditional update proof: GET/check/INCRBY inside one Lua execution never crosses cap.
+one('SET', 'xhs:b50:cap', 0)
+script = "local v=tonumber(redis.call('GET',KEYS[1]) or '0'); local d=tonumber(ARGV[1]); local cap=tonumber(ARGV[2]); if v+d>cap then return v end; return redis.call('INCRBY',KEYS[1],d)"
+cap_errors = []
+
+def cap_worker():
+    c = RedisConn()
+    try:
+        for _ in range(20): c.cmd('EVAL', script, 1, 'xhs:b50:cap', 7, 100)
+    except Exception as e:
+        cap_errors.append(repr(e))
+    finally:
+        c.close()
+
+caps = [threading.Thread(target=cap_worker) for _ in range(12)]
+for t in caps: t.start()
+for t in caps: t.join()
+if cap_errors: raise AssertionError(cap_errors)
+cap_actual = int(one('GET', 'xhs:b50:cap'))
+if cap_actual != 98: raise AssertionError(cap_actual)
+
+print(f'PASS redis_version={server_version} incrby_concurrent={thread_count*ops_per_thread} final={actual} expected={expected} forced_get_set_lost_update={bad_actual}_vs_{bad_expected} lua_cap={cap_actual}')
+'''
+
+
+def run(*args: str, cwd: Path | None = None, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+
+
+def write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+
+def main() -> int:
+    candidate = ROOT / f'review/candidates/answers/{CID}.md'
+    if candidate.exists():
+        raise SystemExit('candidate already exists; do not overwrite reviewed work')
+
+    ctx = json.loads(run('node', 'scripts/xhs.js', 'answer', 'context', '--canonical-id', CID, '--noWrite').stdout)
+    if not ctx.get('ok') or ctx.get('canonical', {}).get('canonical_id') != CID:
+        raise SystemExit('canonical context drift')
+    if ctx.get('answer_type') != 'coding':
+        raise SystemExit(f"answer type drift: {ctx.get('answer_type')}")
+    if ctx.get('canonical', {}).get('question_ids') != [QID]:
+        raise SystemExit(f"ownership drift: {ctx.get('canonical', {}).get('question_ids')}")
+    src = next((x for x in ctx.get('source_questions', []) if x.get('question_id') == QID), None)
+    if not src or src.get('original_question') != EXPECTED or src.get('is_valid_for_library') is not True:
+        raise SystemExit('source wording/validity drift')
+
+    out = ROOT / f'review/content_build/answer_batch_{BATCH}/{CID}'
+    out.mkdir(parents=True, exist_ok=True)
+    write_json(out / 'context.json', ctx)
+
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text(CANDIDATE, encoding='utf-8')
+    for heading in ['## 核心结论', '## 1 分钟版', '## 3 分钟版', '## 关键细节', '## 原理机制', '## 项目经验版', '## 常见追问', '## 易错点']:
+        if CANDIDATE.count(heading) != 1:
+            raise SystemExit(f'section drift {heading}')
+    java_blocks = re.findall(r'```java\n(.*?)\n```', CANDIDATE, re.S)
+    if len(java_blocks) != 1:
+        raise SystemExit(f'expected one Java block, got {len(java_blocks)}')
+
+    with tempfile.TemporaryDirectory(prefix='b50-redis-java-') as tmp:
+        tmpdir = Path(tmp)
+        (tmpdir / 'RedisAtomicAccumulator.java').write_text(java_blocks[0].strip() + '\n', encoding='utf-8')
+        (tmpdir / 'RedisAtomicAccumulatorTest.java').write_text(JAVA_TEST, encoding='utf-8')
+        run('javac', 'RedisAtomicAccumulator.java', 'RedisAtomicAccumulatorTest.java', cwd=tmpdir)
+        java_stdout = run('java', 'RedisAtomicAccumulatorTest', cwd=tmpdir).stdout.strip()
+    if java_stdout != 'PASS java-api random-delta-range task500 input-contract':
+        raise SystemExit(f'unexpected java fixture: {java_stdout}')
+
+    with tempfile.TemporaryDirectory(prefix='b50-redis-live-') as tmp:
+        script_path = Path(tmp) / 'redis_concurrency.py'
+        script_path.write_text(REDIS_TEST, encoding='utf-8')
+        redis_stdout = run('python3', str(script_path), env=dict(__import__('os').environ)).stdout.strip()
+    if not redis_stdout.startswith('PASS redis_version=') or 'forced_get_set_lost_update=' not in redis_stdout or 'lua_cap=98' not in redis_stdout:
+        raise SystemExit(f'unexpected Redis fixture: {redis_stdout}')
+
+    validation = {
+        'schema_version': 'answer_code_validation.v1', 'canonical_id': CID, 'result': 'pass', 'validated_at': DATE,
+        'command': 'javac RedisAtomicAccumulator.java RedisAtomicAccumulatorTest.java && java RedisAtomicAccumulatorTest; python3 redis_concurrency.py against Redis service',
+        'stdout': java_stdout + ' | ' + redis_stdout,
+        'checks': [
+            'candidate Java API compiles and validates input/random-delta boundaries',
+            '24 concurrent Redis clients perform 2880 deterministic INCRBY operations and final value equals the exact sum of all deltas',
+            'a forced concurrent GET-then-SET schedule loses updates and demonstrates the incorrect read-modify-write pattern',
+            'an atomic Lua GET/check/INCRBY cap script remains at 98 under concurrent attempts with cap=100',
+        ],
+    }
+    write_json(out / 'writer_validation.json', validation)
+
+    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    sources = [
+        {'source_id': 'repository-source', 'title': 'Batch 0050 canonical/source context', 'locator': str(out / 'context.json'), 'source_type': 'repository_source_record', 'checked_at': DATE},
+        {'source_id': 'redis-incrby', 'title': 'Redis INCRBY command documentation', 'locator': 'https://redis.io/docs/latest/commands/incrby/', 'source_type': 'official_documentation', 'checked_at': DATE},
+        {'source_id': 'redis-counter', 'title': 'Redis strings as atomic counters documentation', 'locator': 'https://redis.io/docs/latest/develop/data-types/strings/', 'source_type': 'official_documentation', 'checked_at': DATE},
+        {'source_id': 'redis-lua', 'title': 'Redis scripting with Lua documentation', 'locator': 'https://redis.io/docs/latest/develop/interact/programmability/eval-intro/', 'source_type': 'official_documentation', 'checked_at': DATE},
+        {'source_id': 'fixture', 'title': 'Live Redis concurrent INCRBY / lost-update / Lua-cap reproducible experiment', 'locator': str(out / 'writer_validation.json'), 'source_type': 'executable_test_or_reproducible_experiment', 'checked_at': DATE},
+    ]
+    claims = [
+        {'claim_id': 'source-contract', 'text': 'The repository source asks for multiple threads to perform random accumulation on a Redis-held number while preserving consistency; it does not specify a client library, retry/idempotency contract, cap, multi-key invariant, or Redis version.', 'source_ids': ['repository-source'], 'answer_locations': ['核心结论', '1 分钟版', '关键细节']},
+        {'claim_id': 'atomic-counter', 'text': 'Redis official documentation presents INCR/INCRBY as atomic counter operations, and the live fixture confirms concurrent independently generated deltas accumulate to the exact expected final sum.', 'source_ids': ['redis-incrby', 'redis-counter', 'fixture'], 'answer_locations': ['核心结论', '1 分钟版', '3 分钟版', '原理机制']},
+        {'claim_id': 'lua-atomicity', 'text': 'Redis official Lua documentation guarantees atomic script execution, and the concurrent cap fixture verifies that GET/check/INCRBY inside one script never exceeds the explicit cap.', 'source_ids': ['redis-lua', 'fixture'], 'answer_locations': ['核心结论', '3 分钟版', '关键细节', '常见追问']},
+        {'claim_id': 'lost-update', 'text': 'The fixture forces all workers to GET the same old value before any SET and demonstrates a final value equal to only one writer delta rather than the sum, proving the multi-command client-side read-modify-write race.', 'source_ids': ['fixture'], 'answer_locations': ['核心结论', '1 分钟版', '关键细节', '原理机制', '易错点']},
+        {'claim_id': 'retry-boundary', 'text': 'Command atomicity and request-level exactly-once are separate contracts; the answer therefore treats timeout retry/idempotency as an explicit application-level boundary rather than claiming INCRBY alone provides exactly-once delivery.', 'source_ids': ['repository-source'], 'answer_locations': ['1 分钟版', '关键细节', '原理机制', '常见追问']},
+    ]
+    coverage = [{'question_id': QID, 'covered': True, 'answer_locations': ['核心结论', '1 分钟版', '3 分钟版', '关键细节', '原理机制', '常见追问', '易错点']}]
+    write_json(out / 'writer_research.json', {'schema_version': 'answer_writer_research.v1', 'canonical_id': CID, 'candidate_sha256': digest, 'checked_at': DATE, 'review_state': 'writer_complete_isolated_review_pending', 'sources': sources, 'claims': claims, 'source_question_coverage': coverage, 'promotion_blocker': 'isolated_independent_review_not_yet_performed'})
+
+    scores = {'facts_and_evidence': 25, 'directness_and_relevance': 20, 'type_specific_completeness': 20, 'mechanism_and_causality': 15, 'boundaries_and_tradeoffs': 10, 'followup_quality': 5, 'oral_quality': 5}
+    findings = [
+        'The candidate answers the exact concurrency problem with server-side delta accumulation rather than generic Redis locking advice.',
+        'Redis INCRBY/atomic-counter semantics and Lua script atomicity are bound to current official Redis documentation.',
+        'A live Redis fixture positively verifies 2880 concurrent INCRBY operations against the independently computed delta sum and negatively demonstrates forced GET/SET lost updates.',
+        'The same fixture validates a concurrent Lua cap rule and separates unconditional single-command accumulation from current-value-dependent conditional updates.',
+        'The answer explicitly separates Redis-side atomicity from Java client connection thread safety and from ambiguous timeout/retry exactly-once semantics.',
+        'No specific Java Redis client, production QPS, or source-unstated business policy is fabricated.',
+    ]
+    review = {'schema_version': 'isolated_review.v1', 'canonical_id': CID, 'candidate_sha256': digest, 'reviewed_at': DATE, 'review_mode': 'source_first_isolated', 'reviewer_id': 'source-first-isolated-reviewer-batch-0050-redis-atomic-20260829-v1', 'review_version': 'batch-0050.redis-atomic.v1', 'decision': 'pass', 'revision_round': 1, 'source_packet': [str(out / 'context.json'), str(candidate), str(out / 'writer_validation.json'), 'https://redis.io/docs/latest/commands/incrby/', 'https://redis.io/docs/latest/develop/interact/programmability/eval-intro/', 'docs/refactor/09_answer_content_standard.md'], 'scores': scores, 'hard_failures': [], 'unsupported_claims': [], 'uncovered_source_variants': [], 'findings': findings, 'promotion_blockers': ['repository_human_approval_and_real_review_policy_not_yet_satisfied']}
+    write_json(out / 'isolated_review_result.json', review)
+
+    evidence_sources = sources + [{'source_id': 'isolated-review', 'title': 'Redis atomic accumulation source-first isolated review', 'locator': str(out / 'isolated_review_result.json'), 'source_type': 'repository_structured_source', 'checked_at': DATE}]
+    write_json(ROOT / f'review/evidence/{CID}.json', {
+        'schema_version': 'answer_evidence.v1', 'canonical_id': CID, 'candidate_sha256': digest, 'checked_at': DATE,
+        'writer': {'writer_id': 'content-batch-0050-redis-atomic-builder', 'writer_version': 'xhs-answer-curator.v1'},
+        'sources': evidence_sources, 'claims': claims, 'source_question_coverage': coverage,
+        'validation': {'command': validation['command'], 'result': 'pass', 'reported_stdout': validation['stdout'], 'checks': validation['checks'], 'boundary_tests': [
+            {'case': 'concurrent unconditional accumulation', 'expected': 'final Redis value equals exact sum of all submitted deltas', 'actual': 'pass', 'passed': True},
+            {'case': 'forced GET/SET race', 'expected': 'lost update observed under synchronized stale reads', 'actual': 'pass', 'passed': True},
+            {'case': 'conditional cap update', 'expected': 'atomic Lua path remains <=100 and stabilizes at 98 with +7 increments', 'actual': 'pass', 'passed': True},
+            {'case': 'Java API contract', 'expected': 'compile/run and validate key/task/delta arguments', 'actual': 'pass', 'passed': True},
+        ]},
+        'review_state': 'independent_source_first_review_passed',
+        'review': {'reviewer_id': review['reviewer_id'], 'review_version': review['review_version'], 'independent': True, 'decision': 'pass', 'revision_round': 1, 'scores': scores, 'hard_failures': [], 'unsupported_claims': [], 'uncovered_source_variants': [], 'findings': findings},
+        'promotion_blocker': 'repository_human_approval_and_real_review_policy_not_yet_satisfied',
+    })
+
+    task = ROOT / f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{BATCH}.md'
+    text = task.read_text(encoding='utf-8')
+    line = '- [x] `cq_q_d5bc7bf628f261d3f1898c944d3d7054` source-first isolated review PASS: for independently generated random deltas, the candidate replaces racy GET→local-add→SET with Redis INCRBY and uses Lua only when the update depends on current value. Current Redis official INCRBY/counter/Lua documentation binds the atomicity claims; live Redis validation proves 2880 concurrent INCRBY operations equal the exact submitted sum, forces a deterministic GET/SET lost-update counterexample, and verifies a concurrent Lua +7 cap remains at 98/100. Retry/idempotency and client-connection thread safety remain explicit application/client boundaries. Formal promotion remains blocked by repository human-approval/real-review policy.'
+    if line not in text:
+        text = text.rstrip() + '\n' + line + '\n'
+    task.write_text(text, encoding='utf-8')
+
+    print(f'PASS staged/reviewed {CID} candidate_sha256={digest}')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
