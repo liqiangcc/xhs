@@ -1,0 +1,181 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_d6d0edf2910f05b10c1ef3911f26b7f5",
+  "candidate_sha256": "f375410e9aaf8f76ca6909f190b924f992ed7de918446bf33da2711e3691896d",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0050-stock-iii-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0050 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d6d0edf2910f05b10c1ef3911f26b7f5/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "leetcode-official",
+      "title": "LeetCode 123 Best Time to Buy and Sell Stock III official problem statement",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d6d0edf2910f05b10c1ef3911f26b7f5/official_problem_snapshot.json",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 four-state stock DP executable validation",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d6d0edf2910f05b10c1ef3911f26b7f5/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Stock-III source-first isolated review",
+      "locator": "review/content_build/answer_batch_0050/cq_q_d6d0edf2910f05b10c1ef3911f26b7f5/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source explicitly identifies LeetCode 123; the official problem allows at most two transactions and forbids simultaneous transactions, requiring a sell before another buy.",
+      "source_ids": [
+        "repository-source",
+        "leetcode-official"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "dp-validation",
+      "text": "The OpenJDK 21 fixture validates the four-state DP on all official examples, boundary cases and 500 deterministic random arrays against an independent exhaustive non-overlapping two-transaction oracle.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "state-order",
+      "text": "Second-buy state transitions only from first-sell state, preserving the official no-simultaneous-transactions ordering.",
+      "source_ids": [
+        "leetcode-official",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity-bound",
+      "text": "The production solution performs one pass over prices and retains four scalar DP states, yielding O(n) time and O(1) extra space.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d6d0edf2910f05b10c1ef3911f26b7f5",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac StockIII.java StockIIITest.java && java StockIIITest",
+    "result": "pass",
+    "reported_stdout": "PASS official-examples single one-two max-profit null-empty random-bruteforce-oracle=500 input-preserved",
+    "checks": [
+      "all three official examples return the documented maximum profit",
+      "single-day, falling, one-transaction, two-transaction and maximum-price boundaries are handled",
+      "null and empty arrays follow the explicit local illegal-input contract",
+      "500 deterministic random arrays agree with an independent exhaustive two-transaction oracle",
+      "the input array remains unchanged"
+    ],
+    "boundary_tests": [
+      {
+        "case": "three official examples",
+        "expected": "6, 4, 0",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "single/one/two/max-price transaction boundaries",
+        "expected": "matches exact optimum",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "null/empty local contract",
+        "expected": "IllegalArgumentException",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "500 deterministic random arrays",
+        "expected": "matches independent exhaustive two-transaction oracle",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "input preservation",
+        "expected": "prices array unchanged",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0050-stock-iii-20260829-v1",
+    "review_version": "batch-0050.stock-iii.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate is bound to the exact repository LeetCode 123 source and current official at-most-two, no-simultaneous-transactions contract.",
+      "The four DP states are defined by completed action stage and the second buy can only follow a first sell, preserving transaction ordering.",
+      "The implementation uses previous-day state snapshots for every transition, avoiding hidden in-place update-order semantics.",
+      "OpenJDK 21 validation covers all official examples, one/two/no-transaction boundaries, maximum-price profit, illegal local inputs, input preservation and 500 deterministic random arrays against an independent exhaustive oracle.",
+      "The answer explains why sell2 includes fewer-than-two-transaction optima and why the state compression is O(1) extra space.",
+      "No production trading history, fees, cooldowns or market constraints are fabricated."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
