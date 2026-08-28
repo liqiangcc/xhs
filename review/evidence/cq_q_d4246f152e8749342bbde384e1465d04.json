@@ -1,0 +1,148 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_d4246f152e8749342bbde384e1465d04",
+  "candidate_sha256": "308cfdc583795fd20dde45477913d6d0c6cbf5ee06508092caaa090630ebd195",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0049-clone-nary-tree-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0049 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0049/cq_q_d4246f152e8749342bbde384e1465d04/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "leetcode-1490",
+      "title": "LeetCode 1490 Clone N-ary Tree problem reference",
+      "locator": "https://leetcode.com/problems/clone-n-ary-tree/",
+      "source_type": "official_problem_statement",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 N-ary-tree clone fixture",
+      "locator": "review/content_build/answer_batch_0049/cq_q_d4246f152e8749342bbde384e1465d04/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "N-ary-tree clone source-first isolated review",
+      "locator": "review/content_build/answer_batch_0049/cq_q_d4246f152e8749342bbde384e1465d04/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The preserved repository source identifies Clone N-ary Tree as LeetCode 1490 but does not itself preserve the full platform contract; the candidate therefore labels its minimal Node(val, ordered children) tree assumptions instead of inventing hidden constraints.",
+      "source_ids": [
+        "repository-source",
+        "leetcode-1490"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "runtime-validation",
+      "text": "OpenJDK 21 validation proves null handling, equal structure/value, distinct node and child-list identity, child-order preservation, mutation isolation, and a 10001-node wide-tree boundary.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d4246f152e8749342bbde384e1465d04",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac CloneNaryTree.java CloneNaryTreeTest.java && java CloneNaryTreeTest",
+    "result": "pass",
+    "reported_stdout": "PASS null=pass deep-identity=pass child-order=pass mutation-isolation=pass nodes=10001",
+    "checks": [
+      "null root",
+      "recursive deep identity",
+      "child-order preservation",
+      "clone mutation isolation",
+      "10001-node wide tree"
+    ],
+    "boundary_tests": [
+      {
+        "case": "null root",
+        "expected": "null",
+        "actual": "null",
+        "passed": true
+      },
+      {
+        "case": "sample-shaped tree",
+        "expected": "deep equal clone",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "mutation isolation",
+        "expected": "original unchanged",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "wide tree",
+        "expected": "10001 nodes cloned",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0049-clone-nary-tree-20260829-v1",
+    "review_version": "batch-0049.clone-nary-tree.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The generic long-tail baseline is replaced by a direct N-ary-tree deep-clone implementation.",
+      "The answer labels the minimal tree/ordered-children contract because the repository source preserves the LeetCode 1490 identity but not the full problem statement.",
+      "Tree-specific no-map recursion is distinguished from DAG/graph cloning rather than conflated.",
+      "OpenJDK 21 validation proves deep identity, list independence, child order, mutation isolation and a 10001-node wide-tree boundary.",
+      "Auxiliary O(h) recursion space is separated from unavoidable O(n) output storage."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
