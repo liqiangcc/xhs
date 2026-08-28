@@ -1,0 +1,186 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_cff7d30b3ad4c9fb5929904f2da7a932",
+  "candidate_sha256": "9f6f46e7cc870e77c8bef00f6718932fd486a47bbed11a45624b9ae1e543ddfc",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0049-async-sum-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0049 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0049/cq_q_cff7d30b3ad4c9fb5929904f2da7a932/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "ecma-promise-all",
+      "title": "ECMAScript 2026 Language Specification: Promise.all",
+      "locator": "https://tc39.es/ecma262/2026/multipage/control-abstraction-objects.html#sec-promise.all",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "ecma-async-functions",
+      "title": "ECMAScript 2026 Language Specification: Async Function Definitions",
+      "locator": "https://tc39.es/ecma262/2026/multipage/ecmascript-language-functions-and-classes.html#sec-async-function-definitions",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Deterministic Node.js 22 bounded-concurrency async-sum fixture",
+      "locator": "review/content_build/answer_batch_0049/cq_q_cff7d30b3ad4c9fb5929904f2da7a932/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Async-sum source-first isolated review",
+      "locator": "review/content_build/answer_batch_0049/cq_q_cff7d30b3ad4c9fb5929904f2da7a932/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks to use Promise.all and async/await for array-element addition and concurrency optimization, but does not define the asynchronous transform, concurrency limit, error policy or cancellation semantics; the candidate labels its bounded-worker fail-fast contract explicitly.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "promise-all-semantics",
+      "text": "ECMAScript specifies Promise.all as returning a promise fulfilled with an array of fulfillment values corresponding to the passed promises, or rejecting with the reason of the first passed promise that rejects; the candidate uses Promise.all only as the aggregate join rather than as a concurrency limiter.",
+      "source_ids": [
+        "ecma-promise-all"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "async-await-language-boundary",
+      "text": "ECMAScript defines await expressions in async-function bodies; the candidate uses await inside each fixed worker to serialize that worker while multiple worker promises progress concurrently.",
+      "source_ids": [
+        "ecma-async-functions"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "pool-behavior",
+      "text": "The Node.js 22 fixture verifies the explicit worker-pool contract: correct sums, in-flight count never above limit, input-order result placement, Promise.all input-order aggregation, fail-fast propagation without assuming automatic cancellation, boundary rejection, and 100 randomized cases against a synchronous oracle.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "cff7d30b3ad4c9fb5929904f2da7a932",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "node async_sum_test.js",
+    "result": "pass",
+    "reported_stdout": "PASS sum bounded=2 input-order promise-all-order rejection-no-auto-cancel empty invalid worker-failure overflow random=100",
+    "checks": [
+      "async sum returns expected total under bounded concurrency",
+      "maximum in-flight transform count is capped by limit",
+      "mapLimit result positions preserve source indexes despite out-of-order completion",
+      "Promise.all result order follows input positions despite completion order",
+      "aggregate rejection does not imply automatic cancellation of an already-started promise",
+      "empty array and limit greater than input length",
+      "invalid input/limit/non-finite transform result and finite-sum overflow rejection",
+      "worker rejection propagates",
+      "100 deterministic randomized arrays match synchronous sum oracle while respecting concurrency bound"
+    ],
+    "boundary_tests": [
+      {
+        "case": "six delayed transforms with limit=2",
+        "expected": "sum=21 and peak in-flight=2",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "out-of-order completion",
+        "expected": "results remain aligned to input positions",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "Promise.all rejection plus later side effect",
+        "expected": "aggregate rejects and already-started later promise still runs",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "100 deterministic randomized arrays",
+        "expected": "async result equals synchronous oracle and peak never exceeds limit",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0049-async-sum-20260829-v1",
+    "review_version": "batch-0049.async-sum.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate answers the source task directly and makes its async-transform, bounded-concurrency and fail-fast contract explicit instead of inventing missing source requirements.",
+      "Promise.all language semantics are tied to the ECMAScript 2026 specification, while the concurrency-limit guarantee is supported by an executable worker-pool fixture rather than attributed to Promise.all.",
+      "The implementation preserves input indexes under out-of-order completion and limits simultaneously active transforms to the number of fixed workers.",
+      "The fixture demonstrates that aggregate rejection is not equivalent to cancelling an already-started promise, preventing a common unsafe claim about Promise.all.",
+      "Boundary tests cover empty input, oversized/invalid limits, worker failure, non-finite values, finite-Number overflow and 100 deterministic randomized sums with a concurrency tracker."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
