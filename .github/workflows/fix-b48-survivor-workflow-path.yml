@@ -1,0 +1,33 @@
+name: Fix Batch 0048 Survivor Audit Path
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/fix-b48-survivor-workflow-path.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - name: Repair generated answer type audit path
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=.github/workflows/refresh-content-batch-0048-max-subarray-survivor.yml
+          grep -F 'data/manifests/quality/answer_type_audit.json' "$target"
+          sed -i 's#data/manifests/quality/answer_type_audit\.json#data/manifests/quality/answer_type_audit.jsonl#g' "$target"
+          grep -F 'data/manifests/quality/answer_type_audit.jsonl' "$target"
+          git diff --check
+          git add "$target"
+          git config user.name xhs-ci-maintainer
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'ci: fix max-subarray survivor audit manifest path'
+          git push origin HEAD:master
