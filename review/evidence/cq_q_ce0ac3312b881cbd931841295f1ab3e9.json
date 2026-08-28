@@ -1,0 +1,149 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_ce0ac3312b881cbd931841295f1ab3e9",
+  "candidate_sha256": "b9531bc3feca56d38839b79fba0c91294e4244595c49e10513a6c614ef9df784",
+  "checked_at": "2026-08-28",
+  "writer": {
+    "writer_id": "content-batch-0048-sum10-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-tagged-source",
+      "title": "Batch 0048 tagged canonical/source context",
+      "locator": "review/content_build/answer_batch_0048/cq_q_ce0ac3312b881cbd931841295f1ab3e9/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "repository-raw-note",
+      "title": "Raw Didi interview note preserving the sum-to-ten wording",
+      "locator": "note_desc/66b4a040000000001e01e8d8.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 sum-to-ten subset differential fixture",
+      "locator": "review/content_build/answer_batch_0048/cq_q_ce0ac3312b881cbd931841295f1ab3e9/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Sum-to-ten source-first isolated review",
+      "locator": "review/content_build/answer_batch_0048/cq_q_ce0ac3312b881cbd931841295f1ab3e9/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks for all combinations of array elements whose sum is 10, but does not state a fixed combination length, element reuse, duplicate-result semantics, positivity, API, or output order.",
+      "source_ids": [
+        "repository-tagged-source",
+        "repository-raw-note"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "reference-contract",
+      "text": "The executable Java fixture validates one explicitly labeled contract: each array index is used at most once, combinations may have arbitrary positive length, results are deduplicated by sorted values, negatives/zero/duplicates are supported, input is not mutated, and sums use long arithmetic.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "ce0ac3312b881cbd931841295f1ab3e9",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac SumTenCombinations.java SumTenCombinationsTest.java && java SumTenCombinationsTest",
+    "result": "pass",
+    "reported_stdout": "PASS deterministic=7 randomized=5000 duplicates negatives zeros no-mutation long-sum null",
+    "checks": [
+      "singleton target and empty input",
+      "multiple positive-length combinations",
+      "duplicate values with unique value-combination output",
+      "zero-valued elements",
+      "negative values without positive-only pruning",
+      "wide int values with long accumulation",
+      "input is not mutated",
+      "5000 seeded randomized arrays compared with exhaustive subset oracle",
+      "null rejected under explicit reference contract"
+    ],
+    "boundary_tests": [
+      {
+        "case": "duplicate input values such as [5,5,5]",
+        "expected": "one [5,5] value combination, using two real positions",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "negative and zero values",
+        "expected": "no positivity-only pruning; exact exhaustive-oracle agreement",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "5000 seeded arrays of length 0..12",
+        "expected": "candidate output equals exhaustive subset oracle and contains no duplicates",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0048-sum10-20260828-v1",
+    "review_version": "batch-0048.sum10.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer keeps the preserved source boundary explicit and does not silently collapse “all combinations” into a pair-only two-sum problem.",
+      "All missing semantics—index reuse, arbitrary combination length, value-based deduplication, support for negative/zero values, null policy and output identity—are labeled as answer-side reference-contract choices.",
+      "The Java implementation is complete, does not mutate the caller array, uses strictly increasing source indices, and applies duplicate skipping only within one recursion depth so real duplicate elements can still participate.",
+      "The implementation deliberately avoids positivity-dependent sum pruning, and long accumulation prevents int intermediate-sum wraparound from corrupting the target comparison.",
+      "Deterministic cases plus 5000 seeded randomized arrays match an exhaustive subset oracle while checking duplicate-free output and input immutability.",
+      "The answer distinguishes pair-only and repeat-use variants and does not fabricate production experience."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
