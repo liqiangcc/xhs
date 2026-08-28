@@ -1,0 +1,34 @@
+{
+  "schema_version": "answer_code_validation.v1",
+  "canonical_id": "cq_q_c9140120c502ec6ff9bb5b3a272a7cc7",
+  "result": "pass",
+  "validated_at": "2026-08-28",
+  "runtime": "OpenJDK 21.0.11",
+  "command": "javac MinSubarrayLen.java MinSubarrayLenTest.java && java MinSubarrayLenTest",
+  "stdout": "PASS positive-contract classic exact shrink no-solution duplicates empty long-sum invalid-input; signed-variant property=5000",
+  "reference_contract": "target > 0; nums is non-null and contains strictly positive int values; return the minimum non-empty contiguous-subarray length with sum >= target, or 0 when no solution exists; null/nonpositive target/nonpositive elements are rejected; sum is accumulated in long.",
+  "checks": [
+    "classic target=7 example returns length 2",
+    "single element exactly meeting target",
+    "repeated shrinking reaches a one-element optimum",
+    "no-solution returns 0 under the declared contract",
+    "duplicate positive values",
+    "empty array returns 0",
+    "long accumulation avoids 32-bit sum overflow",
+    "nonpositive target rejected",
+    "null array rejected",
+    "zero element rejected by the strict-positive reference contract",
+    "negative element rejected by the strict-positive reference contract",
+    "signed-array prefix-sum plus monotonic-deque variant matches brute force on 5000 deterministic random cases"
+  ],
+  "signed_variant_validation": {
+    "algorithm": "prefix sum + monotonic deque",
+    "seed": 48,
+    "property_cases": 5000,
+    "array_length_range": "0..8",
+    "value_range": "-5..9",
+    "target_range": "1..15",
+    "oracle": "quadratic brute-force minimum-length scan",
+    "result": "pass"
+  }
+}
