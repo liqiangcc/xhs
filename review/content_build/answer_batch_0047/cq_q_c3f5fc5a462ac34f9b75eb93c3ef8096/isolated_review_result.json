@@ -1,0 +1,39 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_c3f5fc5a462ac34f9b75eb93c3ef8096",
+  "candidate_sha256": "31c437c0df32e033bb48905e428037e3344f7d6eb95448a9b3f2dc7bb9a45c8f",
+  "reviewed_at": "2026-08-28",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0047-top-quartile-purchase-sql-20260828-v1",
+  "review_version": "batch-0047.top-quartile-purchase-sql.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0047/source_inventory.json",
+    "review/candidates/answers/cq_q_c3f5fc5a462ac34f9b75eb93c3ef8096.md",
+    "review/content_build/answer_batch_0047/cq_q_c3f5fc5a462ac34f9b75eb93c3ef8096/writer_validation.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The answer preserves the source's explicit top-25%-by-purchase-volume objective and its PERCENT_RANK()/NTILE(4) hint, while clearly separating the assumed purchase_events(user_id, quantity) schema and SUM(quantity) metric from recovered source facts.",
+    "The SQL has the correct two-stage grain: detail rows are first aggregated to one purchase quantity per user, then a descending window rank is computed over users before applying the 0.25 cutoff.",
+    "The deterministic SQLite fixture validates an eight-user baseline, top-value ties, multiple purchase rows per user and the one-user boundary against the exact candidate contract.",
+    "The answer does not falsely equate PERCENT_RANK and NTILE: it explicitly explains the tie-preserving percentile-rank tradeoff versus near-equal row buckets and warns that a percentile threshold does not guarantee an exact 25% headcount.",
+    "Metric definition, refund/statistical-period questions, final ordering and strict-headcount tie-breaking are treated as boundaries or variants, and no production facts or personal experience are fabricated."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
