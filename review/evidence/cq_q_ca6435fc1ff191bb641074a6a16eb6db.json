@@ -1,0 +1,141 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_ca6435fc1ff191bb641074a6a16eb6db",
+  "candidate_sha256": "3696d7236a9b02674181ac98a0651a0167d54447d31953d2fb52ca12ded96613",
+  "checked_at": "2026-08-28",
+  "writer": {
+    "writer_id": "content-batch-0048-string-to-int-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0048 frozen canonical/source context",
+      "locator": "review/content_build/answer_batch_0048/cq_q_ca6435fc1ff191bb641074a6a16eb6db/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Deterministic OpenJDK 21 string-to-int parser fixture",
+      "locator": "review/content_build/answer_batch_0048/cq_q_ca6435fc1ff191bb641074a6a16eb6db/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-28"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "String-to-int source-first isolated review",
+      "locator": "review/content_build/answer_batch_0048/cq_q_ca6435fc1ff191bb641074a6a16eb6db/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-28"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks which conditions must be considered when converting a string to an integer and explicitly says oral explanation is sufficient; it does not define a concrete API or atoi-style error policy.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "reference-contract",
+      "text": "The executable Java fixture validates one explicitly labeled reference contract covering signs, surrounding ASCII spaces, decimal digits, int bounds, malformed input and overflow-before-mutation checks.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "ca6435fc1ff191bb641074a6a16eb6db",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac StringToInt.java StringToIntTest.java && java StringToIntTest",
+    "result": "pass",
+    "reported_stdout": "PASS zero positive signed spaces zeros bounds overflow malformed null",
+    "checks": [
+      "zero and positive decimal",
+      "optional sign",
+      "leading/trailing ASCII spaces",
+      "leading zeros",
+      "Integer MAX/MIN",
+      "positive and negative overflow rejection",
+      "empty/sign-only/junk rejection",
+      "embedded-space rejection",
+      "non-ASCII-digit rejection",
+      "null rejection"
+    ],
+    "boundary_tests": [
+      {
+        "case": "Integer.MAX_VALUE / Integer.MIN_VALUE",
+        "expected": "accepted exactly",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "one beyond either int bound",
+        "expected": "rejected before unsafe accumulation",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "empty/sign-only/junk/embedded-space/non-ASCII digit",
+        "expected": "rejected under explicit reference contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0048-string-to-int-20260828-v1",
+    "review_version": "batch-0048.string-to-int.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 19,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 14,
+      "boundaries_and_tradeoffs": 9,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer directly addresses the requested oral boundary checklist instead of treating one library/API policy as source truth.",
+      "The reference Java contract is explicitly labeled as a candidate choice and distinguishes syntax rules from error-policy choices.",
+      "The implementation checks the next decimal accumulation against the signed int limit before multiplication/addition, and handles the asymmetric negative boundary.",
+      "Deterministic Java 21 tests cover signs, surrounding spaces, leading zeros, exact int bounds, overflow, malformed input, non-ASCII digits and null.",
+      "The answer includes complexity, state-machine reasoning, alternative atoi semantics and project-mapping guidance without fabricating production experience."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
