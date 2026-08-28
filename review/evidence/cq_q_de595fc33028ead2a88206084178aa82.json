@@ -1,0 +1,169 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_de595fc33028ead2a88206084178aa82",
+  "candidate_sha256": "a206983b868bc7599da3eb71e3c8a04aa764697fa5a719434d5fe04d567248a1",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0052-longest-repeated-subarray-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0052 exact longest-repeated-subarray context",
+      "locator": "review/content_build/answer_batch_0052/cq_q_de595fc33028ead2a88206084178aa82/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 longest common contiguous subarray validation versus brute-force oracle",
+      "locator": "review/content_build/answer_batch_0052/cq_q_de595fc33028ead2a88206084178aa82/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0052 longest-repeated-subarray source-first isolated review",
+      "locator": "review/content_build/answer_batch_0052/cq_q_de595fc33028ead2a88206084178aa82/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The exact source only names “longest repeated subarray”; it does not preserve a signature, element domain, examples, or scale constraints.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "explicit-contract",
+      "text": "The candidate explicitly interprets the Canonical as the longest common contiguous segment between two integer arrays and distinguishes that from longest common subsequence semantics.",
+      "source_ids": [
+        "repository-source",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "algorithm-validation",
+      "text": "The one-row reverse-update DP is validated on named boundaries and 5000 deterministic random array pairs against an independent brute-force contiguous-match oracle.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "The implementation compares every position pair once for O(MN) time and stores one row for the shorter array for O(min(M,N)) auxiliary space.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "de595fc33028ead2a88206084178aa82",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac LongestRepeatedSubarray.java LongestRepeatedSubarrayTest.java && java LongestRepeatedSubarrayTest",
+    "result": "pass",
+    "reported_stdout": "PASS named all-equal disjoint empty singleton repeated random5000-vs-bruteforce symmetry input-unchanged null-boundary",
+    "checks": [
+      "named contiguous-overlap example returns length 3",
+      "all-equal, disjoint, empty, singleton and repeated-value boundaries are correct",
+      "5000 deterministic random array pairs match an independent cubic brute-force oracle",
+      "result is symmetric under exchanging the two arrays",
+      "caller arrays remain unchanged",
+      "null follows the explicit invalid-input boundary"
+    ],
+    "boundary_tests": [
+      {
+        "case": "[1,2,3,2,1] vs [3,2,1,4,7]",
+        "expected": 3,
+        "actual": 3,
+        "passed": true
+      },
+      {
+        "case": "all equal length 5",
+        "expected": 5,
+        "actual": 5,
+        "passed": true
+      },
+      {
+        "case": "disjoint arrays",
+        "expected": 0,
+        "actual": 0,
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic random pairs",
+        "expected": "equals brute-force oracle",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0052-longest-repeated-subarray-20260829-v1",
+    "review_version": "batch-0052.longest-repeated-subarray.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The sparse source wording is not expanded into invented samples or scale constraints; the two-array integer contract is explicitly labeled as the executable interpretation.",
+      "The answer correctly makes contiguity the decisive semantic difference from LCS and resets mismatched ending states to zero.",
+      "The reverse one-dimensional update preserves the previous-row diagonal dependency and the explanation calls out the left-to-right overwrite failure mode.",
+      "OpenJDK 21 validation covers named edge shapes and 5000 deterministic random cases against a structurally independent brute-force oracle.",
+      "Symmetry, caller-input immutability, null handling, repeated values, time complexity and shorter-row space optimization are explicit.",
+      "The project section avoids fabricated experience and only introduces hash/suffix alternatives under changed scale assumptions."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
