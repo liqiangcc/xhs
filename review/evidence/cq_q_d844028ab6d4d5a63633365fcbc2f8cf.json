@@ -1,0 +1,175 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_d844028ab6d4d5a63633365fcbc2f8cf",
+  "candidate_sha256": "0e812da65ff171e92cdc8a53de541611cb35fb7cee9a6719adbbdc05ff3311a5",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0051-move-zeroes-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0051 canonical/source context",
+      "locator": "review/content_build/answer_batch_0051/cq_q_d844028ab6d4d5a63633365fcbc2f8cf/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "leetcode-283",
+      "title": "LeetCode 283 Move Zeroes problem statement",
+      "locator": "https://leetcode.com/problems/move-zeroes/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 Move Zeroes deterministic validation",
+      "locator": "review/content_build/answer_batch_0051/cq_q_d844028ab6d4d5a63633365fcbc2f8cf/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Move Zeroes source-first isolated review",
+      "locator": "review/content_build/answer_batch_0051/cq_q_d844028ab6d4d5a63633365fcbc2f8cf/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "problem-contract",
+      "text": "The repository source names Move Zeroes; the current LeetCode 283 statement requires moving all zeroes to the end, preserving the relative order of non-zero elements, and modifying the array in place without copying the array.",
+      "source_ids": [
+        "repository-source",
+        "leetcode-283"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-validation",
+      "text": "The OpenJDK 21 fixture validates the two-pointer stable compaction against an independent stable-filter reference for the official example, edge cases, and 5000 deterministic random arrays.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "complexity-bound",
+      "text": "The implementation performs one read scan plus one tail-fill scan and keeps only read/write indices, so it is O(n) time with O(1) auxiliary state.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "interface-boundary",
+      "text": "Empty-array support and explicit null rejection are implementation-level extensions because the cited LeetCode constraints specify a non-empty input array rather than Java null behavior.",
+      "source_ids": [
+        "leetcode-283",
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d844028ab6d4d5a63633365fcbc2f8cf",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac MoveZeroes.java MoveZeroesTest.java && java MoveZeroesTest",
+    "result": "pass",
+    "reported_stdout": "PASS null empty single official-example all-nonzero all-zero negative edge-zero random5000 stable-inplace",
+    "checks": [
+      "official example [0,1,0,3,12] becomes [1,3,12,0,0]",
+      "stable relative order is preserved for non-zero values",
+      "all-zero, all-nonzero, leading/trailing-zero, negative-value, empty, and single-element boundaries pass",
+      "5000 deterministic random arrays match an independent stable-filter reference",
+      "the implementation mutates the supplied array and allocates no length-n auxiliary array"
+    ],
+    "boundary_tests": [
+      {
+        "case": "official example",
+        "expected": "[1,3,12,0,0]",
+        "actual": "[1,3,12,0,0]",
+        "passed": true
+      },
+      {
+        "case": "stable order",
+        "expected": "relative order of all non-zero values preserved",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "all-zero/all-nonzero/negative/edge zeroes",
+        "expected": "correct stable in-place result",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic random arrays",
+        "expected": "matches independent stable-filter oracle",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0051-move-zeroes-20260829-v1",
+    "review_version": "batch-0051.move-zeroes.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The repository title is resolved against the current authoritative LeetCode 283 statement instead of guessing the missing contract.",
+      "The candidate directly preserves the three defining requirements: zeroes at the end, stable non-zero order, and in-place mutation.",
+      "The implementation states and explains a stable-compaction invariant rather than relying on generic two-pointer wording.",
+      "OpenJDK 21 validation covers the official example plus all-zero/all-nonzero/negative/edge-zero/empty/single boundaries and 5000 random arrays against an independent oracle.",
+      "The answer labels null/empty handling and operation-count commentary as implementation boundaries rather than source facts.",
+      "No project history or source-unstated performance claim is fabricated."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
