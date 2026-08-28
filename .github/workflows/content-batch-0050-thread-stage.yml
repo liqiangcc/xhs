@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/content-batch-0050-thread-stage.yml
       - scripts/content/build_batch_0050_thread_stage.py
+      - scripts/content/fixup_batch_0050_thread_stage_evidence.py
   workflow_dispatch:
 
 permissions:
@@ -53,8 +54,10 @@ jobs:
           set -euo pipefail
           git fetch --depth=1 origin master
           git show origin/master:scripts/content/build_batch_0050_thread_stage.py > /tmp/build.py
-          python3 -m py_compile /tmp/build.py
+          git show origin/master:scripts/content/fixup_batch_0050_thread_stage_evidence.py > /tmp/fixup.py
+          python3 -m py_compile /tmp/build.py /tmp/fixup.py
           python3 /tmp/build.py
+          python3 /tmp/fixup.py
 
       - name: Run strict candidate and repository gates
         shell: bash
