@@ -1,17 +1,16 @@
 {
   "schema_version": "answer_code_validation.v1",
   "canonical_id": "cq_q_c5a2c0157f42b88c9be467292bfa54f0",
-  "candidate_sha256": "00780df2c8600ba4394bde691b705f5d99114f4d4cc9b1ea20faad6ab4deb363",
   "result": "pass",
   "validated_at": "2026-08-28",
-  "runtime": "OpenJDK 21",
-  "command": "javac Utf8TextSize.java Utf8TextSizeTest.java && java Utf8TextSizeTest",
-  "stdout": "PASS ascii-lf=120000000 cjk-lf=320000000 four-byte-lf=420000000 ascii-crlf=140000000 invalid=rejected",
+  "command": "javac FileSizeEstimate.java FileSizeEstimateTest.java && java FileSizeEstimateTest",
+  "stdout": "PASS ascii-lf=120000000 ascii-crlf=140000000 three-byte-lf=320000000 three-byte-crlf=340000000 zero=0 negative=rejected overflow=rejected",
   "checks": [
-    "five ASCII code points plus LF produce 120,000,000 bytes for 20,000,000 lines",
-    "five common CJK code points plus LF produce 320,000,000 bytes",
-    "five four-byte code points plus LF produce 420,000,000 bytes",
-    "CRLF adds one byte per line relative to LF in the ASCII example",
-    "record code-point count and non-negative line count are validated"
+    "20M x (5 ASCII bytes + LF) = 120,000,000 B",
+    "CRLF adds one byte per line",
+    "5 three-byte characters + LF = 320,000,000 B",
+    "zero-line boundary",
+    "negative-input rejection",
+    "long overflow rejection"
   ]
 }
