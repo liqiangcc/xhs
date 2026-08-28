@@ -1,0 +1,168 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_dc192e205c8fbcf5673927a9d9382f41",
+  "candidate_sha256": "75e6b9bd82ed17d100da51717ac235716d276b75151c31d87744893279693c76",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0051-kth-largest-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0051 exact Kth-largest source context",
+      "locator": "review/content_build/answer_batch_0051/cq_q_dc192e205c8fbcf5673927a9d9382f41/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 three-method Kth-largest validation versus full-sort oracle",
+      "locator": "review/content_build/answer_batch_0051/cq_q_dc192e205c8fbcf5673927a9d9382f41/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0051 Kth-largest source-first isolated review",
+      "locator": "review/content_build/answer_batch_0051/cq_q_dc192e205c8fbcf5673927a9d9382f41/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-requirement",
+      "text": "The exact source asks for the Kth largest element and explicitly requests a max-heap labeled O(N log K) plus Quick Select expected O(N).",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "heap-mismatch",
+      "text": "The requested O(N log K) bounded-heap strategy needs a size-K min-heap so that the smallest retained top-K value can be evicted; a literal max-heap over all values has a different complexity profile.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "algorithm-validation",
+      "text": "The executable fixture validates bounded min-heap, literal max-heap, and randomized three-way Quick Select against an independent full-sort oracle on named and 5000 deterministic random inputs.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "duplicate-semantics",
+      "text": "All three validated implementations treat duplicate values as separate ranked elements, matching ordinary positional Kth-largest semantics.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "dc192e205c8fbcf5673927a9d9382f41",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac KthLargest.java KthLargestTest.java && java KthLargestTest",
+    "result": "pass",
+    "reported_stdout": "PASS named duplicate equal negative random5000-vs-sort three-methods input-unchanged invalid-boundaries",
+    "checks": [
+      "bounded size-K min-heap, literal max-heap, and randomized three-way Quick Select agree on named cases",
+      "duplicates are counted by position rather than deduplicated",
+      "5000 deterministic random arrays match an independent full-sort oracle for all sampled K",
+      "Quick Select handles equal-heavy arrays through three-way partitioning",
+      "public methods leave the caller input unchanged",
+      "null and out-of-range K follow explicit implementation boundaries"
+    ],
+    "boundary_tests": [
+      {
+        "case": "[3,2,1,5,6,4], k=2",
+        "expected": 5,
+        "actual": 5,
+        "passed": true
+      },
+      {
+        "case": "duplicate [5,5,4], k=2",
+        "expected": 5,
+        "actual": 5,
+        "passed": true
+      },
+      {
+        "case": "all equal",
+        "expected": 9,
+        "actual": 9,
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic random arrays/K",
+        "expected": "equals full-sort oracle for all three methods",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0051-kth-largest-20260829-v1",
+    "review_version": "batch-0051.kth-largest.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer preserves the exact source request but explicitly identifies the max-heap/O(N log K) mismatch instead of silently teaching the wrong heap orientation.",
+      "It provides both the literal max-heap interpretation and the standard bounded size-K min-heap that actually realizes O(N log K).",
+      "Quick Select maps Kth-largest to ascending target N-K and uses randomized three-way partitioning so duplicate-heavy inputs do not repeatedly shrink by one equal element.",
+      "OpenJDK 21 validation makes all three implementations agree with an independent full-sort oracle on 5000 deterministic random inputs.",
+      "Duplicate rank semantics, invalid K, input mutation, expected-versus-worst Quick Select complexity, and heap space tradeoffs are explicit.",
+      "The project section avoids fabricated experience and gives decision criteria for streaming versus in-memory selection."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
