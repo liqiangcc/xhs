@@ -1,0 +1,180 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_d93cde9e42e0a0b9afc1cdaf23fecf4c",
+  "candidate_sha256": "562f816f576787b1bcb17e8cf7792973a6345553ffc0b5c9436438abe10c4b74",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0051-suspect-truth-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-context",
+      "title": "Batch 0051 structured canonical/source context",
+      "locator": "review/content_build/answer_batch_0051/cq_q_d93cde9e42e0a0b9afc1cdaf23fecf4c/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "source-note-body",
+      "title": "Original interview note body with four suspect statements",
+      "locator": "note_desc/66b4a040000000001e01e8d8.txt",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 exhaustive four-state truth-table validation",
+      "locator": "review/content_build/answer_batch_0051/cq_q_d93cde9e42e0a0b9afc1cdaf23fecf4c/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Four-suspect truth puzzle source-first isolated review",
+      "locator": "review/content_build/answer_batch_0051/cq_q_d93cde9e42e0a0b9afc1cdaf23fecf4c/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "recovered-problem",
+      "text": "The same original source note states: A accuses B, B accuses D, C denies being the culprit, D says B is lying, and exactly one person tells the truth.",
+      "source_ids": [
+        "repository-context",
+        "source-note-body"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "truth-table",
+      "text": "Exhaustive evaluation of culprit A/B/C/D yields truth counts 2/3/1/2 respectively, so only culprit C satisfies the exactly-one-truth constraint.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "truthful-person",
+      "text": "In the unique culprit=C state, A/B/C statements are false and D statement is true, so D is the only non-liar.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "d-negates-b",
+      "text": "Because B states that D is the culprit and D states that B is lying, D predicate is the boolean negation of B predicate.",
+      "source_ids": [
+        "source-note-body",
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "d93cde9e42e0a0b9afc1cdaf23fecf4c",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac SuspectTruthPuzzle.java SuspectTruthPuzzleTest.java && java SuspectTruthPuzzleTest",
+    "result": "pass",
+    "reported_stdout": "PASS truth-table=2,3,1,2 unique-solution culprit=C truthful=D",
+    "checks": [
+      "source-note body recovers all four exact natural-language predicates and exactly-one-truth constraint",
+      "truth-table counts for culprit A/B/C/D are exactly 2/3/1/2",
+      "there is exactly one satisfying state",
+      "the unique state has culprit=C and truthful=D"
+    ],
+    "boundary_tests": [
+      {
+        "case": "culprit A",
+        "expected": "2 truthful statements",
+        "actual": "2",
+        "passed": true
+      },
+      {
+        "case": "culprit B",
+        "expected": "3 truthful statements",
+        "actual": "3",
+        "passed": true
+      },
+      {
+        "case": "culprit C",
+        "expected": "1 truthful statement, D",
+        "actual": "1/D",
+        "passed": true
+      },
+      {
+        "case": "culprit D",
+        "expected": "2 truthful statements",
+        "actual": "2",
+        "passed": true
+      },
+      {
+        "case": "solution cardinality",
+        "expected": "exactly one",
+        "actual": "one: culprit C / truthful D",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0051-suspect-truth-20260829-v1",
+    "review_version": "batch-0051.suspect-truth.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate recovers the full executable puzzle from the original note body instead of treating the lossy structured summary as unrecoverable.",
+      "All four natural-language statements are mapped to explicit boolean predicates, with D correctly represented as the negation of B statement.",
+      "The exhaustive four-state truth table has counts 2/3/1/2 and a unique satisfying state, culprit C with D as the only truthful person.",
+      "The answer distinguishes the requested truthful person from the additionally derivable culprit identity.",
+      "OpenJDK 21 compiles the candidate and mechanically verifies every candidate state and uniqueness.",
+      "No extra role rule such as culprit-must-lie is invented."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
