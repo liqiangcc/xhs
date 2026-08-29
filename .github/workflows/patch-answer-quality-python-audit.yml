@@ -1,0 +1,62 @@
+name: Patch Answer Quality Python Audit
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/patch-answer-quality-python-audit.yml
+      - scripts/content/patch_python_candidate_validation_20260829.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-answer-quality-python-audit
+  cancel-in-progress: true
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Add Python fence validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/content/patch_python_candidate_validation_20260829.py
+          node --test test/answer_code_validation.test.js
+          npm test
+          npm run ci:check
+      - name: Commit only if master stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          remote_head="$(git rev-parse origin/master)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "master advanced during Python audit patch: $base_head -> $remote_head"
+            echo 'Discard local mutation; retry on the next workflow trigger.'
+            exit 0
+          fi
+          git add scripts/lib/answer_quality.js test/answer_code_validation.test.js
+          if git diff --cached --quiet; then
+            echo 'No Python audit changes to commit.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name xhs-ci-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'ci: validate Python coding candidates'
+          git push origin HEAD:master
