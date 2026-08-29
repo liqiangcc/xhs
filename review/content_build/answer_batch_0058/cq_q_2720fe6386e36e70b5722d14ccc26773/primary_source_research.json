@@ -1,0 +1,148 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_2720fe6386e36e70b5722d14ccc26773",
+  "checked_at": "2026-08-29",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0058/cq_q_2720fe6386e36e70b5722d14ccc26773/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "2720fe6386e36e70b5722d14ccc26773",
+      "3292271dbb42bf804b328cd5a9822362",
+      "37211932767b9de49b715fec0191cbeb",
+      "bb7bab4af6eb2171a29a0f90c8c1d953"
+    ],
+    "preserved_question_intent": "Compare java.util.HashMap and java.util.Hashtable, especially synchronization, null handling, API history and modern selection."
+  },
+  "sources": [
+    {
+      "source_id": "hashmap-api-se21",
+      "title": "Java SE 21 HashMap API",
+      "source_type": "official_api_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html",
+      "version": "Java SE 21",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "class contract",
+        "null key/value support",
+        "unsynchronized contract",
+        "fail-fast iterator warning"
+      ]
+    },
+    {
+      "source_id": "hashtable-api-se21",
+      "title": "Java SE 21 Hashtable API",
+      "source_type": "official_api_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Hashtable.html",
+      "version": "Java SE 21",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "class contract",
+        "non-null key/value contract",
+        "synchronized contract",
+        "ConcurrentHashMap recommendation",
+        "Dictionary/Map history"
+      ]
+    },
+    {
+      "source_id": "openjdk-hashmap-jdk21ga",
+      "title": "OpenJDK 21 GA HashMap.java",
+      "source_type": "primary_source_code",
+      "locator": "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/HashMap.java",
+      "version": "jdk-21-ga",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "class implementation",
+        "tree bins",
+        "resize"
+      ]
+    },
+    {
+      "source_id": "openjdk-hashtable-jdk21ga",
+      "title": "OpenJDK 21 GA Hashtable.java",
+      "source_type": "primary_source_code",
+      "locator": "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/Hashtable.java",
+      "version": "jdk-21-ga",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "Dictionary inheritance",
+        "synchronized methods",
+        "rehash",
+        "Enumeration compatibility"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "synchronization-contract",
+      "text": "HashMap is unsynchronized and requires external synchronization for concurrent structural modification, whereas Hashtable is documented as synchronized; Java SE 21 recommends ConcurrentHashMap for a thread-safe highly-concurrent map.",
+      "source_ids": [
+        "hashmap-api-se21",
+        "hashtable-api-se21"
+      ],
+      "source_anchors": [
+        "unsynchronized contract",
+        "synchronized contract",
+        "ConcurrentHashMap recommendation"
+      ]
+    },
+    {
+      "claim_id": "null-contract",
+      "text": "HashMap permits null values and the null key, while Hashtable requires non-null keys and values and throws NullPointerException for null key/value operations such as put.",
+      "source_ids": [
+        "hashmap-api-se21",
+        "hashtable-api-se21"
+      ],
+      "source_anchors": [
+        "null key/value support",
+        "non-null key/value contract"
+      ]
+    },
+    {
+      "claim_id": "history-api-shape",
+      "text": "Hashtable predates the Collections Framework, extends Dictionary and was retrofitted to implement Map, while HashMap is an AbstractMap-based Collections Framework implementation.",
+      "source_ids": [
+        "hashtable-api-se21",
+        "hashmap-api-se21"
+      ],
+      "source_anchors": [
+        "Dictionary/Map history",
+        "class contract"
+      ]
+    },
+    {
+      "claim_id": "fail-fast-boundary",
+      "text": "HashMap's fail-fast iterator behavior is best-effort and must not be used as a correctness or synchronization mechanism.",
+      "source_ids": [
+        "hashmap-api-se21"
+      ],
+      "source_anchors": [
+        "fail-fast iterator warning"
+      ]
+    },
+    {
+      "claim_id": "implementation-version-boundary",
+      "text": "JDK 21 GA implementation details such as HashMap tree bins and Hashtable's internal synchronized/rehash structure are version-bound implementation details, not the primary cross-version semantic comparison.",
+      "source_ids": [
+        "openjdk-hashmap-jdk21ga",
+        "openjdk-hashtable-jdk21ga"
+      ],
+      "source_anchors": [
+        "tree bins",
+        "resize",
+        "synchronized methods",
+        "rehash"
+      ]
+    }
+  ],
+  "writer_constraints": [
+    "Use the Java class name Hashtable, while acknowledging source wording may say HashTable.",
+    "Do not reduce the answer to speed claims; performance depends on synchronization needs and workload.",
+    "Do not claim Hashtable makes arbitrary multi-call business invariants atomic.",
+    "Do not treat HashMap fail-fast behavior as thread safety.",
+    "Recommend ConcurrentHashMap as the official modern highly-concurrent alternative when thread-safe high concurrency is required.",
+    "Keep JDK 21 implementation internals explicitly version-bound.",
+    "Do not fabricate project experience."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write source-bounded concept candidate, bind writer research, then perform isolated source-first review before evidence promotion"
+}
