@@ -25,7 +25,10 @@ CANONICALS = [
 
 
 def run(*args: str) -> str:
-    return subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True).stdout
+    proc = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if proc.returncode != 0:
+        raise SystemExit(f"command failed ({proc.returncode}): {' '.join(args)}\n{proc.stdout}")
+    return proc.stdout
 
 
 def main() -> int:
