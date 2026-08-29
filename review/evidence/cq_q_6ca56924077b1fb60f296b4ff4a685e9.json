@@ -1,0 +1,152 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_6ca56924077b1fb60f296b4ff4a685e9",
+  "candidate_sha256": "b772af8d1a7ec31877c1822d6e0ae297d1c12287bc1bea453ae025b34bd5d195",
+  "checked_at": "2026-08-30",
+  "writer": {
+    "writer_id": "content-batch-0059-4ff4a685e9-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0059 frozen Redis/MySQL consistency repository source context",
+      "locator": "review/content_build/answer_batch_0059/cq_q_6ca56924077b1fb60f296b4ff4a685e9/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "primary-source-packet",
+      "title": "Batch 0059 frozen Redis/MySQL consistency primary-source research packet",
+      "locator": "review/content_build/answer_batch_0059/cq_q_6ca56924077b1fb60f296b4ff4a685e9/primary_source_research.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "redis-cache-aside",
+      "title": "Redis cache-aside",
+      "locator": "https://redis.io/docs/latest/develop/use-cases/cache-aside/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "redis-transactions",
+      "title": "Redis Transactions",
+      "locator": "https://redis.io/docs/latest/develop/using-commands/transactions/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "redis-expire",
+      "title": "Redis EXPIRE",
+      "locator": "https://redis.io/docs/latest/commands/expire/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "mysql-8.4-binlog",
+      "title": "MySQL 8.4 Reference Manual: Binary Logging Options and Variables",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication-options-binary-log.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "canal-official-repository",
+      "title": "Alibaba Canal: MySQL binlog incremental subscription and consumption",
+      "locator": "https://github.com/alibaba/canal",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "batch-0056-repair-experiment",
+      "title": "Repository Batch 0056 versioned cache-repair executable experiment",
+      "locator": "scripts/content/build_batch_0056_binlog_mq_repair.py",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh Batch 0059 Redis/MySQL consistency isolated source-first review",
+      "locator": "review/content_build/answer_batch_0059/cq_q_6ca56924077b1fb60f296b4ff4a685e9/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-30"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "consistency-contract-and-cache-aside",
+      "text": "Redis and MySQL are separate consistency domains; Redis MULTI/EXEC does not create a shared atomic transaction with MySQL, so the default design treats the database as authoritative and Redis as rebuildable cache state with an explicit consistency target.",
+      "source_ids": ["redis-transactions", "redis-cache-aside", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "db-first-invalidation-and-refill-race",
+      "text": "The normal write path commits the authoritative database first and invalidates Redis afterward; failure after commit is repaired by retry/TTL/CDC/reconciliation, while a concurrent old read can still refill stale data after deletion and therefore needs an explicit race-window mitigation.",
+      "source_ids": ["redis-cache-aside", "batch-0056-repair-experiment", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "delayed-double-delete-boundary",
+      "text": "Delayed double-delete is a best-effort way to remove a stale value reinserted by a concurrent old read; a fixed delay cannot prove strong consistency and the second invalidation still needs retry/TTL/repair coverage.",
+      "source_ids": ["redis-cache-aside", "redis-expire", "batch-0056-repair-experiment", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "cdc-canal-replay-boundary",
+      "text": "MySQL binlog plus Canal/CDC can asynchronously derive cache invalidation or refresh from committed database changes, but the consumer still needs checkpointing, replay, retry, idempotency, lag monitoring and log-retention recovery; this is eventual repair rather than synchronous strong consistency.",
+      "source_ids": ["mysql-8.4-binlog", "canal-official-repository", "batch-0056-repair-experiment", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "non-regression-and-reconciliation",
+      "text": "If CDC refreshes values rather than only deleting keys, stale or duplicate events must not regress a newer cache version or resurrect deleted state; comparable versions/change positions plus periodic database-to-cache reconciliation provide a concrete non-regression and recovery boundary.",
+      "source_ids": ["batch-0056-repair-experiment", "mysql-8.4-binlog", "isolated-review"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "scenario-operability-and-no-fabrication",
+      "text": "Capacity and SLO numbers are explicitly labeled as illustrative assumptions, while the production design calls for hit/miss load, DB headroom, invalidation latency/failure rate, CDC lag/oldest-event age, reconciliation throughput, fault injection, rollout and rollback observability instead of fabricated project metrics.",
+      "source_ids": ["repository-source", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["3 分钟版", "项目经验版", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6ca56924077b1fb60f296b4ff4a685e9",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "9edfed6b500ba81ee05155b769fa47e9",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0059-4ff4a685e9-20260830-v1",
+    "review_version": "batch-0059.scenarios.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The frozen repository source contains both Redis/database and Redis/MySQL consistency variants and explicitly preserves delayed double-delete and Canal/binlog as interview entities; the candidate covers both variants rather than narrowing to one trick.",
+      "The frozen primary-source packet establishes the database-as-authoritative cache-aside boundary, Redis-local transaction limits, TTL expiration semantics, MySQL binlog availability/retention, Canal incremental consumption, and the repository's executable non-regression repair experiment.",
+      "The candidate turns those facts into a complete scenario design: DB-first invalidation, the old-read refill race, delayed double-delete as best-effort mitigation, retry/outbox or CDC repair, checkpoint/idempotency/version boundaries, reconciliation, observability, fault injection, and a stricter read-after-write path when eventual consistency is insufficient.",
+      "The candidate labels capacity and SLO numbers as illustrative assumptions, does not claim cache-aside/double-delete/Canal provide strong consistency, and does not fabricate production topology, incidents, metrics or personal project experience."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
