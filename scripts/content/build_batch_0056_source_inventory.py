@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Reconcile and freeze Batch 0056 repository source contexts before answer writing.
 
-The batch task is only a historical schedule. Current Question rows and the current
-Canonical graph are the SSOT: stale scheduled Canonicals may have been merged,
-split, or retired. This builder follows current ownership, keeps invalid/noise
-records retired, validates the scheduled answer-type intent, and freezes exact
-repository source wording for the next source-first bounded slice.
+The batch task is only a historical schedule. Current Question rows, Canonical graph,
+and current answer-type audit are the SSOT: stale scheduled Canonicals may have been
+merged, split, retired, or explicitly reclassified. This builder follows current
+ownership, keeps invalid/noise records retired, records allowed historical type
+overrides, and freezes exact repository source wording for the next source-first slice.
 """
 
 from __future__ import annotations
@@ -28,6 +28,13 @@ SCHEDULED_TYPES = {
     'cq_q_01c2da5dde2dcb36ad3f9d17b210ab5c': 'mechanism',
     'cq_q_7d7a2efb76976df46319df21283287c6': 'mechanism',
     'cq_q_7daa5cfddb93ce44e349bd4978214d71': 'mechanism',
+}
+# The task explicitly marks these historical mechanism classifications with
+# `source_type_overridden`; current answer context/type audit is authoritative.
+TYPE_OVERRIDE_ALLOWED = {
+    'cq_q_01c2da5dde2dcb36ad3f9d17b210ab5c',
+    'cq_q_7d7a2efb76976df46319df21283287c6',
+    'cq_q_7daa5cfddb93ce44e349bd4978214d71',
 }
 
 
@@ -65,7 +72,7 @@ def main() -> int:
     active_targets: dict[str, dict] = {}
     seen_source_qids: set[str] = set()
 
-    for scheduled_cid, expected_type in SCHEDULED_TYPES.items():
+    for scheduled_cid, scheduled_type in SCHEDULED_TYPES.items():
         scheduled_qid = scheduled_cid.removeprefix('cq_q_')
         row = question_rows.get(scheduled_qid)
         if row is None:
@@ -74,7 +81,7 @@ def main() -> int:
         direct = load_context(scheduled_cid)
         if direct is not None:
             target_cid = scheduled_cid
-            status = 'active_as_scheduled'
+            ownership_resolution = 'active_as_scheduled'
             ctx = direct
         else:
             current_cid = row.get('canonical_id')
@@ -83,7 +90,7 @@ def main() -> int:
                 resolutions.append({
                     'scheduled_canonical_id': scheduled_cid,
                     'scheduled_question_id': scheduled_qid,
-                    'scheduled_answer_type': expected_type,
+                    'scheduled_answer_type': scheduled_type,
                     'resolution': 'retired_invalid_or_noise',
                     'current_canonical_id': current_cid,
                     'question': {
@@ -101,13 +108,19 @@ def main() -> int:
             if ctx is None:
                 raise SystemExit(f'{scheduled_cid}: remapped to unresolved current Canonical {current_cid}')
             target_cid = current_cid
-            status = 'remapped_to_current_canonical'
+            ownership_resolution = 'remapped_to_current_canonical'
 
         actual_type = ctx.get('answer_type')
-        if actual_type != expected_type:
+        if actual_type == scheduled_type:
+            type_resolution = 'scheduled_type_matches_current_audit'
+        elif scheduled_cid in TYPE_OVERRIDE_ALLOWED:
+            if actual_type not in {'coding', 'mechanism', 'concept', 'scenario', 'project', 'behavior'}:
+                raise SystemExit(f'{scheduled_cid}: current answer type is invalid: {actual_type}')
+            type_resolution = 'historical_type_overridden_by_current_audit'
+        else:
             raise SystemExit(
                 f'{scheduled_cid}: resolved target {target_cid} answer type drift; '
-                f'scheduled={expected_type} current={actual_type}'
+                f'scheduled={scheduled_type} current={actual_type} without source_type_overridden marker'
             )
 
         qids = list(ctx.get('canonical', {}).get('question_ids') or [])
@@ -154,8 +167,10 @@ def main() -> int:
         resolutions.append({
             'scheduled_canonical_id': scheduled_cid,
             'scheduled_question_id': scheduled_qid,
-            'scheduled_answer_type': expected_type,
-            'resolution': status,
+            'scheduled_answer_type': scheduled_type,
+            'current_answer_type': actual_type,
+            'type_resolution': type_resolution,
+            'resolution': ownership_resolution,
             'current_canonical_id': target_cid,
             'question': {
                 'original_question': row.get('original_question'),
@@ -165,6 +180,11 @@ def main() -> int:
 
     retired = [r for r in resolutions if r['resolution'] == 'retired_invalid_or_noise']
     remapped = [r for r in resolutions if r['resolution'] == 'remapped_to_current_canonical']
+    type_overrides = [r for r in resolutions if r.get('type_resolution') == 'historical_type_overridden_by_current_audit']
+    current_type_counts: dict[str, int] = {}
+    for item in active_targets.values():
+        current_type_counts[item['answer_type']] = current_type_counts.get(item['answer_type'], 0) + 1
+
     inventory = {
         'schema_version': 'answer_batch_source_inventory.v1',
         'batch': BATCH,
@@ -174,16 +194,18 @@ def main() -> int:
         'retired_invalid_or_noise_count': len(retired),
         'remapped_count': len(remapped),
         'source_question_count': len(seen_source_qids),
+        'historical_type_override_count': len(type_overrides),
         'boundary_result': 'pass',
         'scheduled_type_counts': {
             'coding': sum(1 for x in SCHEDULED_TYPES.values() if x == 'coding'),
             'mechanism': sum(1 for x in SCHEDULED_TYPES.values() if x == 'mechanism'),
         },
+        'current_type_counts': dict(sorted(current_type_counts.items())),
         'writer_rule': (
             'Writers must use these frozen current repository contexts as the source boundary. '
             'Stale task Canonical IDs are not resurrected; invalid/noise Questions stay retired; '
-            'remapped Questions follow current Canonical ownership; and scheduled coding/mechanism '
-            'intent must still agree with the current answer-type audit before writing.'
+            'remapped Questions follow current Canonical ownership; and entries historically marked '
+            '`source_type_overridden` use the current answer-type audit rather than stale task typing.'
         ),
         'scheduled_resolutions': resolutions,
         'canonicals': list(active_targets.values()),
@@ -193,11 +215,11 @@ def main() -> int:
     task = ROOT / f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{BATCH}.md'
     text = task.read_text(encoding='utf-8')
     marker = (
-        f'- [x] Batch 0056 scheduling reconciled against the current Question/Canonical SSOT and frozen in '
+        f'- [x] Batch 0056 scheduling reconciled against the current Question/Canonical/type SSOT and frozen in '
         f'`review/content_build/answer_batch_0056/source_inventory.json`: {len(active_targets)} active Canonicals, '
-        f'{len(remapped)} stale assignments remapped to current ownership, and {len(retired)} invalid/noise assignments '
-        'kept retired with repository-recorded explanation fields. The frozen contexts preserve the current coding/mechanism '
-        'answer-type boundary; candidate writing must use only those source packets.'
+        f'{len(remapped)} stale assignments remapped to current ownership, {len(retired)} invalid/noise assignments '
+        f'kept retired, and {len(type_overrides)} historical `source_type_overridden` classifications resolved by the '
+        'current answer-type audit. Candidate writing must use only the frozen current source packets.'
     )
     if '## Source boundary' not in text:
         text = text.rstrip() + '\n\n## Source boundary\n\n' + marker + '\n'
@@ -208,11 +230,13 @@ def main() -> int:
 
     print(
         f'PASS batch={BATCH} scheduled={len(SCHEDULED_TYPES)} active={len(active_targets)} '
-        f'remapped={len(remapped)} retired={len(retired)} source_questions={len(seen_source_qids)}'
+        f'remapped={len(remapped)} retired={len(retired)} type_overrides={len(type_overrides)} '
+        f'source_questions={len(seen_source_qids)} current_types={dict(sorted(current_type_counts.items()))}'
     )
     for resolution in resolutions:
         print(
             f"RESOLUTION\t{resolution['scheduled_canonical_id']}\t{resolution['scheduled_answer_type']}\t"
+            f"{resolution.get('current_answer_type') or '-'}\t{resolution.get('type_resolution') or '-'}\t"
             f"{resolution['resolution']}\t{resolution.get('current_canonical_id') or '-'}\t"
             f"{resolution['question'].get('original_question') or ''}"
         )
