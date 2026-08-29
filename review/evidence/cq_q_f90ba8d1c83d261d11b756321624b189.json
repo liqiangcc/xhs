@@ -1,0 +1,146 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_f90ba8d1c83d261d11b756321624b189",
+  "candidate_sha256": "853731aa4be52a8173a867dd41983b6c6b3e80b4c484b1ca830f90925cb5ef7b",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0055-ordered-abc-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0055 frozen source context for ordered-abc",
+      "locator": "review/content_build/answer_batch_0055/cq_q_f90ba8d1c83d261d11b756321624b189/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Deterministic executable validation for ordered-abc",
+      "locator": "review/content_build/answer_batch_0055/cq_q_f90ba8d1c83d261d11b756321624b189/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0055 ordered-abc source-first isolated review",
+      "locator": "review/content_build/answer_batch_0055/cq_q_f90ba8d1c83d261d11b756321624b189/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source requires multiple threads to repeatedly print A, B, C in order but does not specify language, round count, cancellation protocol, or synchronization primitive.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "ordering-correctness",
+      "text": "The executable OpenJDK fixture verifies the semaphore token-ring contract for zero, one, 1000 rounds, repeated runs, and invalid round counts.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "f90ba8d1c83d261d11b756321624b189",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac OrderedABC.java OrderedABCTest.java && java OrderedABCTest",
+    "result": "pass",
+    "reported_stdout": "PASS zero one 1000-round exact-order 20-repeat-runs negative-rejected",
+    "checks": [
+      "zero rounds produces empty output",
+      "one round produces ABC",
+      "1000 rounds produce exactly 3000 characters in ABC order",
+      "20 repeated executions preserve deterministic order",
+      "negative rounds fail closed"
+    ],
+    "boundary_tests": [
+      {
+        "case": "zero rounds produces empty output",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "one round produces ABC",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "1000 rounds produce exactly 3000 characters in ABC order",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "20 repeated executions preserve deterministic order",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "negative rounds fail closed",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0055-ordered-abc-20260829-v1",
+    "review_version": "batch-0055.ordered-abc.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate models ordering as an explicit A→B→C semaphore token ring rather than timing-based sleep coordination.",
+      "Only one initial permit exists, preserving the unique-turn invariant independent of scheduler interleaving.",
+      "The answer distinguishes the interview synchronization core from a production-grade cancellation/lifecycle protocol.",
+      "OpenJDK validation checks exact order over 1000 rounds and 20 repeated executions plus boundary inputs."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
