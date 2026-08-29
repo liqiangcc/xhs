@@ -55,6 +55,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The active content branch predates the Python-fence validator added to
+          # master. Use the tested current validator/test bytes for this dry-run
+          # gate without staging them into the content candidate commit; PR #2's
+          # base already carries the canonical validator change.
+          git show origin/master:scripts/lib/answer_quality.js > scripts/lib/answer_quality.js
+          git show origin/master:test/answer_code_validation.test.js > test/answer_code_validation.test.js
           for cid in \
             cq_q_b454431bf82c811ddfc2d5dd208269bc \
             cq_q_fe0291a155ad4a502b6d0607ba6ad0b9; do
@@ -77,6 +83,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Restore branch-local validator bytes so the commit contains only
+          # reviewed Batch 0057 content artifacts.
+          git checkout -- scripts/lib/answer_quality.js test/answer_code_validation.test.js
           git fetch --depth=1 origin "$CONTENT_BRANCH"
           remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
           base_head='${{ steps.base.outputs.head }}'
