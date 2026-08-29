@@ -1,0 +1,90 @@
+name: Review Content Batch 0059 Redis MySQL Consistency
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0059-redis-mysql-consistency.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-batch-0059-redis-mysql-consistency-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_6ca56924077b1fb60f296b4ff4a685e9
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Recheck source-first review boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto');
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const qids=['6ca56924077b1fb60f296b4ff4a685e9','9edfed6b500ba81ee05155b769fa47e9'];
+          const base=`review/content_build/answer_batch_0059/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='scenario'||ctx.canonical?.canonical_id!==cid) throw new Error('context/type drift');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify(qids)) throw new Error(`ownership drift: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          if(!qids.every(qid=>(ctx.source_questions||[]).some(x=>x.question_id===qid&&x.is_valid_for_library===true))) throw new Error('source coverage drift');
+          const variants=new Set(ctx.source_variants||[]);
+          for(const text of ['如何保证 Redis 缓存与数据库之间的数据一致性？','如何保证 Redis 缓存与 MySQL 数据库之间的数据一致性？']) if(!variants.has(text)) throw new Error(`source variant missing: ${text}`);
+          const primary=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+          if(primary.schema_version!=='answer_primary_source_research.v1'||primary.canonical_id!==cid||primary.source_boundary?.answer_type!=='scenario') throw new Error('primary research drift');
+          const mdPath=`review/candidates/answers/${cid}.md`;
+          const md=fs.readFileSync(mdPath,'utf8');
+          const sections=['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点'];
+          for(const section of sections) if(md.split(section).length-1!==1) throw new Error(`section drift ${section}`);
+          for(const marker of ['cache-aside','延时双删','Canal','binlog','checkpoint','reconciliation','read-after-write']) if(!md.includes(marker)) throw new Error(`required scenario marker missing: ${marker}`);
+          if((md.match(/^- 问：/gm)||[]).length<5) throw new Error('followups insufficient');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
+          if(!md.includes('数字只是容量设计输入，不冒充题目事实')) throw new Error('illustrative capacity assumptions are not clearly bounded');
+          const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
+          const expected='b772af8d1a7ec31877c1822d6e0ae297d1c12287bc1bea453ae025b34bd5d195';
+          if(digest!==expected) throw new Error(`candidate digest drifted: ${digest}`);
+          const review=JSON.parse(fs.readFileSync(`${base}/isolated_review_result.json`,'utf8'));
+          if(review.review_mode!=='source_first_isolated'||review.decision!=='pass'||review.candidate_sha256!==digest||review.hard_failures?.length||review.uncovered_source_variants?.length) throw new Error('isolated review drift');
+          const evidence=JSON.parse(fs.readFileSync(`review/evidence/${cid}.json`,'utf8'));
+          if(evidence.review_state!=='independent_source_first_review_passed'||evidence.candidate_sha256!==digest||evidence.review?.decision!=='pass'||evidence.review?.independent!==true) throw new Error('evidence/review drift');
+          if(JSON.stringify((evidence.source_question_coverage||[]).map(x=>x.question_id))!==JSON.stringify(qids)) throw new Error('evidence source coverage drift');
+          NODE
+
+      - name: Strict candidate audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
+
+      - name: Repository closure gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:coverage
