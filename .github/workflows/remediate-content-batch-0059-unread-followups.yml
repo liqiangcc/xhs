@@ -1,0 +1,79 @@
+name: Remediate Content Batch 0059 Unread Followups
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0059-unread-followups.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0059-unread-followups-remediation
+  cancel-in-progress: false
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_7ffd77e47644a9811d55358f51bb54a7
+  OLD_SHA256: f4f303e5c304594fe928c152565650918a72f7b7a52b8e2f65c86c9483a51964
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - name: Normalize question-specific followup syntax and invalidate stale review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import hashlib, json, os, pathlib, re
+          cid=os.environ['CANONICAL_ID']
+          candidate=pathlib.Path(f'review/candidates/answers/{cid}.md')
+          raw=candidate.read_bytes()
+          old=hashlib.sha256(raw).hexdigest()
+          if old != os.environ['OLD_SHA256']:
+              raise SystemExit(f'candidate drifted before remediation: {old}')
+          text=raw.decode('utf-8')
+          pattern=re.compile(r'^- \*\*问：(.*?)\*\*  \n  答：(.*)$', re.MULTILINE)
+          text2,n=pattern.subn(lambda m: f'- 问：{m.group(1)}\n  答：{m.group(2)}', text)
+          if n < 5:
+              raise SystemExit(f'expected >=5 followups, normalized {n}')
+          candidate.write_text(text2, encoding='utf-8')
+          new=hashlib.sha256(candidate.read_bytes()).hexdigest()
+          if new == old:
+              raise SystemExit('digest did not change')
+          writer=pathlib.Path(f'review/content_build/answer_batch_0059/{cid}/writer_research.json')
+          obj=json.loads(writer.read_text(encoding='utf-8'))
+          if obj.get('candidate_sha256') != old:
+              raise SystemExit('writer research old digest drift')
+          obj['candidate_sha256']=new
+          obj['checked_at']='2026-08-30'
+          obj['review_state']='writer_complete_isolated_review_pending'
+          obj['promotion_blocker']='isolated_independent_review_not_yet_performed'
+          writer.write_text(json.dumps(obj, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+          stale=pathlib.Path(f'review/content_build/answer_batch_0059/{cid}/isolated_review_result.json')
+          if stale.exists(): stale.unlink()
+          evidence=pathlib.Path(f'review/evidence/{cid}.json')
+          if evidence.exists(): evidence.unlink()
+          pathlib.Path('/tmp/new_digest').write_text(new)
+          print(f'normalized_followups={n} old={old} new={new}')
+          PY
+
+      - name: Commit remediation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'xhs-content-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add "review/candidates/answers/$CANONICAL_ID.md" "review/content_build/answer_batch_0059/$CANONICAL_ID/writer_research.json"
+          git add -u "review/content_build/answer_batch_0059/$CANONICAL_ID" "review/evidence/$CANONICAL_ID.json"
+          git commit -m "content: normalize batch 0059 unread-message followups"
+          git push origin HEAD:"$CONTENT_BRANCH"
