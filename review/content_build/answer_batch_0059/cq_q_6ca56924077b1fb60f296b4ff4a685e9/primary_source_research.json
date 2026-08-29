@@ -1,0 +1,140 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_6ca56924077b1fb60f296b4ff4a685e9",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0059/cq_q_6ca56924077b1fb60f296b4ff4a685e9/context.json",
+    "answer_type": "scenario",
+    "question_ids": [
+      "6ca56924077b1fb60f296b4ff4a685e9",
+      "9edfed6b500ba81ee05155b769fa47e9"
+    ],
+    "preserved_question_intent": "Design a practical consistency strategy between Redis cache and an authoritative database/MySQL, including the source-mentioned delayed double-delete and Canal/binlog approaches, while making the consistency level, race windows, failure recovery and operational tradeoffs explicit."
+  },
+  "sources": [
+    {
+      "source_id": "redis-cache-aside",
+      "title": "Redis cache-aside",
+      "source_type": "official_documentation",
+      "locator": "https://redis.io/docs/latest/develop/use-cases/cache-aside/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "cache-aside read pattern",
+        "TTL-bounded staleness",
+        "primary database remains authoritative",
+        "cache stampede boundary"
+      ]
+    },
+    {
+      "source_id": "redis-transactions",
+      "title": "Redis Transactions",
+      "source_type": "official_documentation",
+      "locator": "https://redis.io/docs/latest/develop/using-commands/transactions/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "MULTI EXEC atomic execution inside Redis",
+        "WATCH optimistic locking",
+        "no rollback support"
+      ]
+    },
+    {
+      "source_id": "redis-expire",
+      "title": "Redis EXPIRE",
+      "source_type": "official_documentation",
+      "locator": "https://redis.io/docs/latest/commands/expire/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "key TTL",
+        "automatic deletion after expiry"
+      ]
+    },
+    {
+      "source_id": "mysql-8.4-binlog",
+      "title": "MySQL 8.4 Reference Manual: Binary Logging Options and Variables",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication-options-binary-log.html",
+      "version": "MySQL 8.4",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "binary log records data-changing statements/events",
+        "binary log availability",
+        "binary log automatic expiration and purge boundary"
+      ]
+    },
+    {
+      "source_id": "canal-official-repository",
+      "title": "Alibaba Canal: MySQL binlog incremental subscription and consumption",
+      "source_type": "upstream_source_code_or_release_note",
+      "locator": "https://github.com/alibaba/canal",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "incremental MySQL binlog parsing",
+        "incremental subscription and consumption",
+        "cache refresh use case",
+        "simulates MySQL replica dump protocol"
+      ]
+    },
+    {
+      "source_id": "batch-0056-repair-experiment",
+      "title": "Repository Batch 0056 versioned cache-repair executable experiment",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "locator": "scripts/content/build_batch_0056_binlog_mq_repair.py",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "duplicate and stale replay rejection",
+        "database reconciliation wins over stale events",
+        "delete tombstone/version prevents stale resurrection"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "consistency-contract-first",
+      "text": "Redis and MySQL are separate systems; Redis MULTI/EXEC provides atomic execution for queued Redis commands but does not create a shared atomic transaction with an external database. A cache/database design must therefore define an acceptable consistency contract and explicit failure compensation rather than assume cross-store atomicity.",
+      "source_ids": ["redis-transactions"],
+      "source_anchors": ["MULTI EXEC atomic execution inside Redis", "no rollback support"]
+    },
+    {
+      "claim_id": "cache-aside-source-of-truth",
+      "text": "For a cache-aside design, the database remains the authoritative source and Redis serves derived cached state. Reads may refill Redis from the database; TTL can bound how long a forgotten stale value survives but is not by itself a strong consistency protocol.",
+      "source_ids": ["redis-cache-aside", "redis-expire"],
+      "source_anchors": ["cache-aside read pattern", "TTL-bounded staleness", "automatic deletion after expiry"]
+    },
+    {
+      "claim_id": "db-first-invalidate-reasoning",
+      "text": "For ordinary cache-aside writes, updating the authoritative database and then invalidating the cache is safer than updating cache first: if cache invalidation fails after the database commit, the stale cache is visible but recoverable by retry, TTL, CDC or reconciliation; if the database write fails, no new cache value should have been published as authoritative state.",
+      "source_ids": ["redis-cache-aside", "batch-0056-repair-experiment"],
+      "source_anchors": ["primary database remains authoritative", "database reconciliation wins over stale events"]
+    },
+    {
+      "claim_id": "delayed-double-delete-boundary",
+      "text": "Delayed double-delete is a best-effort race-window mitigation, not a proof of strong consistency. A second delayed invalidation can remove a stale value repopulated by a concurrent read, but a fixed delay cannot cover unbounded scheduling, network or process failure and therefore still needs retry/TTL/repair paths.",
+      "source_ids": ["redis-cache-aside", "redis-expire", "batch-0056-repair-experiment"],
+      "source_anchors": ["TTL-bounded staleness", "duplicate and stale replay rejection"]
+    },
+    {
+      "claim_id": "binlog-cdc-canal-boundary",
+      "text": "MySQL binary logs provide a change stream that can drive asynchronous cache invalidation or refresh. Canal is explicitly built to parse MySQL incremental binlog and lists cache refresh as a use case. This yields eventual consistency and replayability only while the required log/change position remains available and the consumer applies events idempotently and in a non-regressing order.",
+      "source_ids": ["mysql-8.4-binlog", "canal-official-repository", "batch-0056-repair-experiment"],
+      "source_anchors": ["binary log records data-changing statements/events", "binary log automatic expiration and purge boundary", "incremental MySQL binlog parsing", "cache refresh use case", "duplicate and stale replay rejection"]
+    },
+    {
+      "claim_id": "repair-and-version-boundary",
+      "text": "Retries, CDC replay and reconciliation must not allow an older event to overwrite a newer cache state or resurrect a deleted value. A comparable version/change position or stable event-id plus tombstone/version memory provides a concrete idempotency/non-regression boundary; periodic database-to-cache reconciliation is the final safety net when logs or consumer checkpoints are incomplete.",
+      "source_ids": ["batch-0056-repair-experiment", "mysql-8.4-binlog"],
+      "source_anchors": ["duplicate and stale replay rejection", "delete tombstone/version prevents stale resurrection", "binary log automatic expiration and purge boundary"]
+    }
+  ],
+  "writer_constraints": [
+    "Start by defining the consistency target. Do not promise strong consistency from cache-aside, delayed double-delete or Canal/binlog CDC alone.",
+    "Use the database/MySQL as the authoritative source for the default design; Redis is derived state.",
+    "Explain the normal write ordering and enumerate each failure window: database write failure, cache delete failure, concurrent read refill, retry duplication, CDC lag, stale/late CDC event and log-retention exhaustion.",
+    "Cover the source-mentioned delayed double-delete explicitly, but label it as a best-effort race mitigation whose delay must be derived from observed read/refill latency and which still needs retry/repair.",
+    "Cover the source-mentioned Canal/binlog approach explicitly and describe it as asynchronous eventual consistency with checkpoint/replay/idempotency requirements.",
+    "State that TTL bounds stale lifetime but does not prove correctness during the TTL window.",
+    "Include capacity/operability assumptions required by scenario answers: hot-key read rate, update rate, acceptable stale window, cache miss amplification, CDC lag SLO, retry/DLQ/reconciliation throughput and rollout/rollback observability.",
+    "Do not fabricate production QPS, Redis cluster topology, MySQL version, Canal deployment or incident metrics; present illustrative assumptions as assumptions only."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded scenario candidate and writer research, then perform isolated source-first review before evidence/promotion"
+}
