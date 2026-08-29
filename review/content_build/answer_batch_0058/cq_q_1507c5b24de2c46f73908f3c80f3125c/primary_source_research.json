@@ -1,0 +1,192 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_1507c5b24de2c46f73908f3c80f3125c",
+  "checked_at": "2026-08-29",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0058/cq_q_1507c5b24de2c46f73908f3c80f3125c/context.json",
+    "answer_type": "mechanism",
+    "question_ids": [
+      "1507c5b24de2c46f73908f3c80f3125c",
+      "1b2a72e9861d5d01edc38582fcf33b5b",
+      "478d66e323fd4c15f300b0ea0ef1d684",
+      "b1f6d9d99d023ec66d13b1d2ab889409",
+      "b88de442145e28f43f13a559712b6fd0"
+    ],
+    "preserved_question_intent": "Compare Java synchronized and ReentrantLock, including their shared locking semantics and the additional control exposed by ReentrantLock."
+  },
+  "sources": [
+    {
+      "source_id": "jls-se21-synchronized",
+      "title": "Java Language Specification SE 21 — synchronized statement and monitor synchronization",
+      "source_type": "language_specification",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.19",
+      "version": "Java SE 21",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "14.19 synchronized Statement",
+        "17.1 Synchronization",
+        "17.4.5 Happens-before Order"
+      ]
+    },
+    {
+      "source_id": "lock-api-se21",
+      "title": "Java SE 21 Lock API",
+      "source_type": "official_api_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html",
+      "version": "Java SE 21",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "block-structured synchronized comparison",
+        "tryLock",
+        "lockInterruptibly",
+        "newCondition",
+        "Memory Synchronization"
+      ]
+    },
+    {
+      "source_id": "reentrantlock-api-se21",
+      "title": "Java SE 21 ReentrantLock API",
+      "source_type": "official_api_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html",
+      "version": "Java SE 21",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "class contract",
+        "fairness parameter",
+        "untimed tryLock fairness exception",
+        "reentrant hold count",
+        "unlock",
+        "monitoring methods"
+      ]
+    },
+    {
+      "source_id": "condition-api-se21",
+      "title": "Java SE 21 Condition API",
+      "source_type": "official_api_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Condition.html",
+      "version": "Java SE 21",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "multiple wait-sets",
+        "await atomic release/reacquire",
+        "signal/signalAll"
+      ]
+    },
+    {
+      "source_id": "openjdk-reentrantlock-jdk21ga",
+      "title": "OpenJDK 21 GA ReentrantLock.java",
+      "source_type": "primary_source_code",
+      "locator": "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/concurrent/locks/ReentrantLock.java",
+      "version": "jdk-21-ga",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "Sync extends AbstractQueuedSynchronizer",
+        "FairSync",
+        "NonfairSync",
+        "tryRelease",
+        "newCondition"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "both-reentrant-mutual-exclusion",
+      "text": "Both synchronized monitors and ReentrantLock are reentrant mutual-exclusion mechanisms: a thread may reacquire the same monitor/lock, with balanced unlock actions required before full release.",
+      "source_ids": [
+        "jls-se21-synchronized",
+        "reentrantlock-api-se21"
+      ],
+      "source_anchors": [
+        "17.1 Synchronization",
+        "class contract",
+        "reentrant hold count",
+        "unlock"
+      ]
+    },
+    {
+      "claim_id": "structured-vs-explicit-lifecycle",
+      "text": "A synchronized statement automatically unlocks its monitor on normal or abrupt block completion, while Lock removes block-structured lifetime and therefore requires explicit unlock, conventionally in finally.",
+      "source_ids": [
+        "jls-se21-synchronized",
+        "lock-api-se21"
+      ],
+      "source_anchors": [
+        "14.19 synchronized Statement",
+        "block-structured synchronized comparison"
+      ]
+    },
+    {
+      "claim_id": "reentrantlock-acquisition-capabilities",
+      "text": "The Lock/ReentrantLock API exposes non-blocking tryLock, timed acquisition, interruptible acquisition and optional fair ordering, capabilities not exposed as equivalent controls by synchronized syntax.",
+      "source_ids": [
+        "lock-api-se21",
+        "reentrantlock-api-se21"
+      ],
+      "source_anchors": [
+        "tryLock",
+        "lockInterruptibly",
+        "fairness parameter"
+      ]
+    },
+    {
+      "claim_id": "fairness-boundary",
+      "text": "ReentrantLock can be constructed with a fair policy, but fairness is a lock-admission property rather than JVM/OS scheduling fairness, and untimed tryLock does not honor the fairness setting.",
+      "source_ids": [
+        "reentrantlock-api-se21"
+      ],
+      "source_anchors": [
+        "fairness parameter",
+        "untimed tryLock fairness exception"
+      ]
+    },
+    {
+      "claim_id": "condition-separation",
+      "text": "Condition factors Object monitor wait/notify behavior into lock-associated condition objects and permits multiple distinct wait-sets for one Lock; await atomically releases and later reacquires the associated lock.",
+      "source_ids": [
+        "condition-api-se21",
+        "lock-api-se21"
+      ],
+      "source_anchors": [
+        "multiple wait-sets",
+        "await atomic release/reacquire",
+        "newCondition"
+      ]
+    },
+    {
+      "claim_id": "memory-semantics-equivalence",
+      "text": "Successful Lock lock/unlock operations are required to provide the same memory synchronization effects as monitor lock/unlock; synchronized monitor unlock happens-before subsequent lock of the same monitor.",
+      "source_ids": [
+        "lock-api-se21",
+        "jls-se21-synchronized"
+      ],
+      "source_anchors": [
+        "Memory Synchronization",
+        "17.4.5 Happens-before Order"
+      ]
+    },
+    {
+      "claim_id": "implementation-vs-contract-boundary",
+      "text": "OpenJDK 21 implements ReentrantLock on AbstractQueuedSynchronizer, while synchronized monitor semantics are language-level contracts; implementation optimization details should not be promoted to cross-JVM language guarantees.",
+      "source_ids": [
+        "openjdk-reentrantlock-jdk21ga",
+        "jls-se21-synchronized"
+      ],
+      "source_anchors": [
+        "Sync extends AbstractQueuedSynchronizer",
+        "14.19 synchronized Statement",
+        "17.1 Synchronization"
+      ]
+    }
+  ],
+  "writer_constraints": [
+    "Do not claim synchronized is non-reentrant; both mechanisms are reentrant.",
+    "Do not claim ReentrantLock is universally faster than synchronized; performance is workload/JDK dependent and is not the semantic distinction.",
+    "Distinguish ReentrantLock.lock() from lockInterruptibly(); only the latter is the explicit interruptible acquisition API.",
+    "State that synchronized automatically releases the monitor on normal or abrupt scope exit, while explicit Lock usage requires unlock in finally.",
+    "Preserve the fairness boundary: fair ReentrantLock is not scheduler fairness, and untimed tryLock() bypasses the fairness policy.",
+    "Do not present HotSpot monitor implementation details as Java language guarantees.",
+    "Do not fabricate project experience; the frozen repository packet contains comparison questions only."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write source-bounded mechanism candidate, bind it with writer_research, then perform isolated source-first review before evidence promotion"
+}
