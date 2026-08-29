@@ -1,0 +1,102 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_01c2da5dde2dcb36ad3f9d17b210ab5c",
+  "candidate_sha256": "c2f0c8361240f082355a68c4ce64d4a9b3de770ba8db8f8a1c96067dae2d1b4b",
+  "checked_at": "2026-08-29",
+  "review_state": "writer_complete_isolated_review_passed",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0056 frozen binlog/MQ inconsistency source context",
+      "locator": "review/content_build/answer_batch_0056/cq_q_01c2da5dde2dcb36ad3f9d17b210ab5c/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "mysql-replication",
+      "title": "MySQL 8.4 Replication",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "mysql-replica-setup",
+      "title": "MySQL 8.4 Setting Up Replicas",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication-setup-replicas.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "mysql-binlog-retention",
+      "title": "MySQL 8.4 Binary Logging Options",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/replication-options-binary-log.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK deterministic versioned-cache repair validation",
+      "locator": "review/content_build/answer_batch_0056/cq_q_01c2da5dde2dcb36ad3f9d17b210ab5c/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source asks for remediation when a binlog consumer stalls or MQ processing is too slow and cache/database state diverges; it does not identify a specific MQ product or checkpoint contract.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "replay-boundary",
+      "text": "MySQL primary documentation supports binary-log/position or GTID based change replay and documents binlog expiration/purge, which bounds the recommendation to replay only while required history remains available.",
+      "source_ids": [
+        "mysql-replication",
+        "mysql-replica-setup",
+        "mysql-binlog-retention"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "repair-invariant",
+      "text": "The executable fixture verifies a versioned/idempotent repair rule that accepts newer state, skips duplicate/stale replay, lets newer DB reconciliation win, and prevents stale resurrection after a delete.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "01c2da5dde2dcb36ad3f9d17b210ab5c",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
