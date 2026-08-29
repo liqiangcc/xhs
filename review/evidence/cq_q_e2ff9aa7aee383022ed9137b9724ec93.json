@@ -1,0 +1,166 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_e2ff9aa7aee383022ed9137b9724ec93",
+  "candidate_sha256": "e5a82be7800bb2eeadc350c2011dca2d5517a71ee587f38b6225f42261be2ca9",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0052-majority-element-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0052 exact majority-element source context",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e2ff9aa7aee383022ed9137b9724ec93/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 Boyer-Moore majority validation",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e2ff9aa7aee383022ed9137b9724ec93/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0052 majority-element source-first isolated review",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e2ff9aa7aee383022ed9137b9724ec93/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The exact source requires finding an element occurring more than half the time in O(N), but does not explicitly guarantee existence or define empty/null behavior.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "candidate-verification",
+      "text": "The first Boyer-Moore pass produces a necessary candidate when a majority exists; a second linear pass validates strict count > n/2 so no-majority inputs are not falsely accepted.",
+      "source_ids": [
+        "repository-source",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "linear-constant-space",
+      "text": "The implementation performs two linear read-only scans and retains only fixed scalar state, satisfying O(N) time with O(1) auxiliary space.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "Executable validation covers exact-half rejection, missing-majority inputs, 5000 deterministic random arrays against an independent frequency oracle, and a large threshold-crossing case.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "e2ff9aa7aee383022ed9137b9724ec93",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac MajorityElement.java MajorityElementTest.java && java MajorityElementTest",
+    "result": "pass",
+    "reported_stdout": "PASS directed null-boundary strict-half 5000-random-oracle large-majority verification",
+    "checks": [
+      "directed majority, no-majority, exact-half, empty, signed and extreme-int cases",
+      "explicit null-input exception boundary",
+      "5000 deterministic random arrays compared with an independent HashMap frequency oracle",
+      "large 300001-element case verifies majority detection and second-pass rejection after crossing the strict-half boundary"
+    ],
+    "boundary_tests": [
+      {
+        "case": "exact half",
+        "expected": "empty",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "no majority",
+        "expected": "empty after second-pass verification",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic random arrays",
+        "expected": "matches frequency oracle",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "300001-element threshold crossing",
+        "expected": "majority then empty after one occurrence removed from majority",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0052-majority-element-20260829-v1",
+    "review_version": "batch-0052.majority-element.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer satisfies the preserved O(N) requirement while avoiding a fabricated assumption that a majority is guaranteed to exist.",
+      "Boyer-Moore candidate generation is separated from second-pass proof, preventing false answers on no-majority inputs.",
+      "The strict “more than half” boundary is explicit and validated against exact-half cases.",
+      "The cancellation invariant and m > r argument explain why a true majority survives instead of presenting the vote loop as a memorized template.",
+      "OpenJDK 21 validation covers directed boundaries, 5000 deterministic random arrays against an independent frequency oracle, and a 300001-element threshold-crossing case.",
+      "The implementation is read-only, handles full int equality without arithmetic overflow, and uses fixed auxiliary state.",
+      "The project section avoids fabricated production claims and correctly exposes the second-pass limitation for non-replayable streams."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
