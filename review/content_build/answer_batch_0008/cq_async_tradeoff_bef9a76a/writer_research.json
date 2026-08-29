@@ -1,0 +1,76 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_async_tradeoff_bef9a76a",
+  "checked_at": "2026-08-29",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source-boundary",
+      "title": "Repository source boundary for transaction-chain sync/async tradeoff",
+      "locator": "review/content_build/answer_batch_0008/cq_async_tradeoff_bef9a76a/source_boundary.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "aws-transactional-outbox",
+      "title": "Transactional outbox pattern - AWS Prescriptive Guidance",
+      "locator": "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "aws-saga",
+      "title": "Saga pattern - AWS Prescriptive Guidance",
+      "locator": "https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/saga-pattern.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "kafka-design-41",
+      "title": "Apache Kafka 4.1 Design - message delivery semantics and transactions",
+      "locator": "https://kafka.apache.org/41/design/design/",
+      "source_type": "upstream_official_documentation",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The repository source asks for sync/async boundary selection in a transaction chain and the UX/write-performance tradeoff, but preserves no production topology, SLO, QPS, mandatory middleware, or company-specific implementation.",
+      "source_ids": ["repository-source-boundary"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "项目经验版"]
+    },
+    {
+      "claim_id": "outbox-dual-write",
+      "text": "Transactional outbox addresses the dual-write gap between a database state change and event publication by persisting the business update and outbox record in one local transaction, with later publication; consumers still need idempotence because duplicate delivery can occur.",
+      "source_ids": ["aws-transactional-outbox"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "distributed-compensation",
+      "text": "Long-lived multi-service transactions can use Saga-style state transitions and compensating actions rather than pretending one local database transaction spans independent services.",
+      "source_ids": ["aws-saga"],
+      "answer_locations": ["3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "delivery-semantics-boundary",
+      "text": "Kafka documents at-most-once, at-least-once and exactly-once scopes; producer idempotence/transactions have bounded guarantees and do not by themselves make arbitrary external side effects exactly-once.",
+      "source_ids": ["kafka-design-41"],
+      "answer_locations": ["3 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "queue-capacity-derivation",
+      "text": "The recovery-capacity inequality mu_recovery > lambda + B/T is an explicit queue-drain derivation from arrival rate, backlog and desired drain time, not a repository-source fact or vendor threshold.",
+      "source_ids": ["repository-source-boundary"],
+      "answer_locations": ["3 分钟版"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "666b5874989e6739065dccba4cb0d81a",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed_and_repository_human_approval_real_review_policy_still_required"
+}
