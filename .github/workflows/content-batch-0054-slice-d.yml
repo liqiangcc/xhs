@@ -5,7 +5,7 @@ on:
     branches: [master]
     paths:
       - .github/workflows/content-batch-0054-slice-d.yml
-      - scripts/content/build_batch_0054_slice_d.py
+      - scripts/content/validate_batch_0054_slice_d.py
   workflow_dispatch:
 
 permissions:
@@ -36,14 +36,14 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Build validate and source-first review bounded slice
+      - name: Validate staged artifacts and perform source-first review
         shell: bash
         run: |
           set -euo pipefail
           git fetch --depth=1 origin master
-          git show origin/master:scripts/content/build_batch_0054_slice_d.py > /tmp/build.py
-          python3 -m py_compile /tmp/build.py
-          python3 /tmp/build.py
+          git show origin/master:scripts/content/validate_batch_0054_slice_d.py > /tmp/validate.py
+          python3 -m py_compile /tmp/validate.py
+          python3 /tmp/validate.py
 
       - name: Run strict candidate and repository gates
         shell: bash
@@ -94,5 +94,3 @@ jobs:
           git config user.email 43640935+liqiangcc@users.noreply.github.com
           git commit -m 'review: pass batch 0054 SQL slice D source-first'
           git push origin "HEAD:$CONTENT_BRANCH"
-
-# Registered-workflow trigger: 2026-08-29 slice D
