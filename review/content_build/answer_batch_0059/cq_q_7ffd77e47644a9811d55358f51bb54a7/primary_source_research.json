@@ -1,0 +1,146 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_7ffd77e47644a9811d55358f51bb54a7",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0059/cq_q_7ffd77e47644a9811d55358f51bb54a7/context.json",
+    "answer_type": "scenario",
+    "question_ids": [
+      "7ffd77e47644a9811d55358f51bb54a7",
+      "9fd2e9d7869a759c9f64b4a938f45ffe"
+    ],
+    "preserved_question_intent": "Design an in-app unread-message system for a stated 500k QPS/OPS target, preserving the source-mentioned unread-message, inverted/recipient index, sharded storage, high-concurrency and Redis concerns while making workload assumptions, durable truth, read-state semantics, fanout strategy, hot-shard boundaries, recovery and load-test proof explicit."
+  },
+  "sources": [
+    {
+      "source_id": "redis-cluster-spec",
+      "title": "Redis Cluster specification",
+      "source_type": "official_documentation",
+      "locator": "https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "16384 hash slots and key distribution",
+        "client redirection during slot ownership changes",
+        "asynchronous replication write-safety boundary",
+        "acknowledged writes can be lost in some failover or partition scenarios"
+      ]
+    },
+    {
+      "source_id": "redis-cluster-scaling",
+      "title": "Scale with Redis Cluster",
+      "source_type": "official_documentation",
+      "locator": "https://redis.io/docs/latest/operate/oss_and_stack/management/scaling/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "keyspace sharded across 16384 hash slots",
+        "nodes own subsets of slots",
+        "slots can be moved when adding or removing nodes",
+        "Redis Cluster does not guarantee strong consistency"
+      ]
+    },
+    {
+      "source_id": "redis-sorted-sets",
+      "title": "Redis sorted sets",
+      "source_type": "official_documentation",
+      "locator": "https://redis.io/docs/latest/develop/data-types/sorted-sets/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "members are unique",
+        "members are ordered by score",
+        "ZADD adds or updates members",
+        "ZRANGE reads ordered ranges"
+      ]
+    },
+    {
+      "source_id": "redis-streams",
+      "title": "Redis Streams",
+      "source_type": "official_documentation",
+      "locator": "https://redis.io/docs/latest/develop/data-types/streams/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "append-only stream IDs",
+        "consumer-group delivery state",
+        "explicit acknowledgement",
+        "pending entries and claiming unprocessed messages"
+      ]
+    },
+    {
+      "source_id": "redis-wait",
+      "title": "Redis WAIT",
+      "source_type": "official_documentation",
+      "locator": "https://redis.io/docs/latest/commands/wait/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "replica acknowledgement can improve data safety",
+        "WAIT does not make Redis strongly consistent"
+      ]
+    },
+    {
+      "source_id": "kafka-4.3-basic-operations",
+      "title": "Apache Kafka 4.3 Basic Kafka Operations",
+      "source_type": "official_documentation",
+      "locator": "https://kafka.apache.org/43/operations/basic-kafka-operations/",
+      "version": "Apache Kafka 4.3",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "topic partition count shards the log",
+        "partition count bounds consumer parallelism",
+        "replication factor controls message replicas",
+        "changing partition count can change key distribution and ordering assumptions"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "capacity-target-is-a-workload-contract",
+      "text": "The stated 500k QPS/OPS is a system target, not a proof that one Redis node, one database shard or one queue partition can sustain that load. The design must first separate read/write/fanout rates and payload sizes, then derive shard and consumer counts from measured safe per-shard throughput and headroom.",
+      "source_ids": ["redis-cluster-scaling", "kafka-4.3-basic-operations"],
+      "source_anchors": ["nodes own subsets of slots", "partition count bounds consumer parallelism"]
+    },
+    {
+      "claim_id": "redis-is-sharded-derived-state-not-unqualified-truth",
+      "text": "Redis Cluster can distribute keys across hash slots and move slot ownership as the cluster scales, but it does not provide strong consistency and acknowledged writes can be lost in some failure windows. For an unread system where message loss is unacceptable, Redis should therefore be treated as a rebuildable hot index/count/cache unless the product explicitly accepts Redis's durability boundary.",
+      "source_ids": ["redis-cluster-spec", "redis-cluster-scaling", "redis-wait"],
+      "source_anchors": ["16384 hash slots and key distribution", "acknowledged writes can be lost in some failover or partition scenarios", "WAIT does not make Redis strongly consistent"]
+    },
+    {
+      "claim_id": "recipient-index-can-be-ordered-and-sharded",
+      "text": "A per-recipient hot inbox index can be modeled as an ordered set of message references and partitioned by recipient/user key. Redis sorted sets provide unique ordered members and range reads, while Redis Cluster provides key-level slot sharding; this is an example implementation primitive, not a claim that one key or one shard meets the 500k target.",
+      "source_ids": ["redis-sorted-sets", "redis-cluster-spec"],
+      "source_anchors": ["members are unique", "members are ordered by score", "ZRANGE reads ordered ranges", "16384 hash slots and key distribution"]
+    },
+    {
+      "claim_id": "fanout-workers-need-replayable-delivery-state",
+      "text": "If a stream is used to build recipient indexes or materialized unread state asynchronously, worker delivery must be replayable and acknowledged only after the durable or idempotent side effect succeeds. Redis Streams consumer groups expose pending entries, explicit acknowledgements and claiming of unprocessed messages; Kafka partitions provide an alternative sharded log whose partition count controls parallelism.",
+      "source_ids": ["redis-streams", "kafka-4.3-basic-operations"],
+      "source_anchors": ["explicit acknowledgement", "pending entries and claiming unprocessed messages", "partition count bounds consumer parallelism"]
+    },
+    {
+      "claim_id": "hot-key-and-order-boundary",
+      "text": "Sharding by recipient keeps one user's inbox operations colocated but does not remove a celebrity or broadcast hot-key problem: one key still maps to one Redis hash slot. Likewise, partitioned event logs only preserve the ordering contract attached to the chosen partitioning scheme; changing partition count can disturb key-to-partition mapping assumptions.",
+      "source_ids": ["redis-cluster-spec", "kafka-4.3-basic-operations"],
+      "source_anchors": ["single hash slot served by a single node while stable", "changing partition count can change key distribution and ordering assumptions"]
+    },
+    {
+      "claim_id": "durable-rebuild-and-load-test-boundary",
+      "text": "Because Redis replication and failover do not create a strong-consistency durability guarantee, a high-value unread system should retain a durable message/read-state source or replay log from which Redis materializations can be rebuilt. The exact number of shards, replicas and consumers must be demonstrated by target-environment load tests and failure tests rather than copied from a generic benchmark.",
+      "source_ids": ["redis-cluster-spec", "redis-wait", "kafka-4.3-basic-operations"],
+      "source_anchors": ["asynchronous replication write-safety boundary", "WAIT does not make Redis strongly consistent", "topic partition count shards the log"]
+    }
+  ],
+  "writer_constraints": [
+    "Start by resolving what 500k means: total requests, unread-query QPS, message-ingest OPS or fanout writes. State a concrete illustrative read/write mix only as an assumption and show how the design scales if the mix changes.",
+    "Define unread semantics before choosing data structures: whether users can mark individual messages read, whether 'read all up to cursor' exists, whether unread count must be exact, and whether system-wide broadcasts are included.",
+    "Separate durable truth from Redis materialization. Do not claim Redis Cluster or WAIT makes the unread state strongly consistent or lossless.",
+    "Preserve the source's 'inverted index' concern by explaining it as a recipient/user -> ordered message-reference index (or explicitly disambiguating the term), and shard that index by user/recipient rather than by message alone for the dominant read path.",
+    "Cover both targeted fanout and high-fanout/broadcast traffic. Do not materialize an O(all users) write path for every system broadcast without stating the cost; consider a shared broadcast/topic log plus per-user cursor/segment state as an alternative.",
+    "Use idempotent event_id + recipient or equivalent uniqueness for fanout replay. Advance queue/stream acknowledgement only after the inbox/read-state side effect has succeeded or is durably recoverable.",
+    "Treat unread count as materialized state with a repair path. Explain how duplicate delivery, out-of-order delivery, mark-read races and replay cannot permanently double-count or resurrect unread state.",
+    "Call out hot-user/hot-broadcast skew explicitly: user-key sharding gives locality but one user key remains one Redis slot. Give a mitigation such as shared immutable broadcast data, split hot materializations, local cache, batching or admission control rather than pretending uniform hashing solves all skew.",
+    "For capacity, show a formula such as required_shards = ceil(target_qps / measured_safe_qps_per_shard) with replication/headroom, but do not invent a universal Redis/Kafka per-node throughput number. Require target-environment load tests at 500k plus failover and backlog-recovery tests.",
+    "Include observability and rollout: p50/p99/p999 read latency, write/fanout throughput, queue lag/oldest-event age, pending/retry counts, Redis hit rate, shard skew/hot-key rate, durable-store latency, unread-count drift/reconciliation deltas, cache rebuild time, and rollback/bypass switches.",
+    "Do not fabricate company-specific topology, production QPS split, node count, message size, retention, Redis/Kafka versions or incident metrics; clearly label every numeric capacity example that is not in the source as illustrative."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded 500k-QPS unread-message scenario candidate and writer research, then perform isolated source-first review before evidence/promotion"
+}
