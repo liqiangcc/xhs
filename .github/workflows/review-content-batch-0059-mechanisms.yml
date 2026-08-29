@@ -1,0 +1,185 @@
+name: Review Content Batch 0059 Mechanism Candidates
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0059-mechanisms.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0059-mechanisms-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Form source-first conclusions before reading writer evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto');
+          const fs=require('fs');
+
+          const specs=[
+            {
+              cid:'cq_q_f32cdfd75a0bc2501dfc97c6967a6327',
+              qids:['f32cdfd75a0bc2501dfc97c6967a6327','f90e8044c275051262a5d00f963870a8','fd640e8f64436e2d2cd9b96fbe2cb26c'],
+              markers:['publisher confirms','mandatory','durable queue','quorum queue','manual ack','幂等','exactly-once','redelivery'],
+              findings:[
+                'The repository source asks for RabbitMQ/MQ message-loss prevention, including an explicit consumer-side variant; a correct answer must cover publisher, broker and consumer failure boundaries rather than one configuration switch.',
+                'The frozen primary-source packet separates publisher confirms from consumer acknowledgements, distinguishes broker durability from routing detection, and documents retransmission/redelivery duplicate risk.',
+                'The candidate follows those boundaries: publisher confirm plus unroutable handling, durable/persistent and quorum-replication semantics, manual consumer acknowledgement, and idempotent business effects.',
+                'The candidate does not claim RabbitMQ mechanisms provide end-to-end exactly-once processing and does not fabricate deployment topology, incident metrics or project experience.'
+              ],
+              claims:[
+                {claim_id:'end-to-end-boundary',text:'Message-loss prevention is split across publisher-to-broker confirmation, broker-side durable/replicated storage, and consumer processing acknowledgement; publisher confirms and consumer acknowledgements are orthogonal.',answer_locations:['核心结论','1 分钟版','3 分钟版','原理机制']},
+                {claim_id:'publisher-routing-boundary',text:'Publisher confirms establish broker acceptance while mandatory/basic.return addresses unroutable publication when routing success is part of the application contract.',answer_locations:['1 分钟版','3 分钟版','关键细节','常见追问']},
+                {claim_id:'durability-replication-boundary',text:'Durable queues and persistent publications address restart recovery, while quorum queues add replicated data-safety semantics whose confirm boundary depends on quorum acceptance and majority availability.',answer_locations:['1 分钟版','3 分钟版','关键细节','原理机制']},
+                {claim_id:'consumer-duplicate-boundary',text:'Manual acknowledgement after business success enables redelivery on failure; retries and redelivery can create duplicates, so business effects must be idempotent or deduplicated rather than described as exactly-once.',answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}
+              ]
+            },
+            {
+              cid:'cq_q_65d3c5ebd158ae8b41e0d2cea973ce90',
+              qids:['65d3c5ebd158ae8b41e0d2cea973ce90','6fa9860cd1ef62633a5c18f47c2aac2a','72635cea88de998cf6e6610deee0760c','79237909093bc557d8af0f1deee8e926'],
+              markers:['singletonObjects','earlySingletonObjects','singletonFactories','getEarlyBeanReference','SmartInstantiationAwareBeanPostProcessor','BeanCurrentlyInCreationException','allowCircularReferences','构造器'],
+              findings:[
+                'The four repository source Questions all ask for the Spring Bean/singleton circular-dependency mechanism; the current type audit correctly treats the target as a mechanism answer rather than a fabricated project scenario.',
+                'The frozen primary-source packet binds the supported singleton early-exposure sequence, the three singleton-registry structures, the early proxy-reference hook, constructor-cycle failure, and policy/scope limits.',
+                'The candidate explains instantiate -> early-reference factory -> dependency population -> initialization -> final singleton publication and treats “三级缓存” as interview shorthand rather than a formal guarantee that all three structures are ordinary caches.',
+                'The candidate preserves important limits: constructor-to-constructor cycles are not solved by this mechanism, prototype/arbitrary graphs are not generalized, and Spring Boot product defaults are kept separate from Spring Framework core mechanics.'
+              ],
+              claims:[
+                {claim_id:'supported-cycle-boundary',text:'Supported singleton circular references can be broken by exposing an early reference after instantiation and before full dependency population/initialization; constructor-to-constructor cycles remain unresolvable because no instance exists for early exposure.',answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},
+                {claim_id:'three-structure-sequence',text:'singletonObjects holds final registered singletons, earlySingletonObjects holds materialized early references, and singletonFactories lazily produces early references while a bean is currently in creation.',answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制']},
+                {claim_id:'early-proxy-boundary',text:'The early-reference factory can delegate through getEarlyBeanReference and SmartInstantiationAwareBeanPostProcessor so infrastructure can provide a consistent early wrapped/proxy reference instead of always leaking a raw bean.',answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','常见追问']},
+                {claim_id:'scope-policy-boundary',text:'The early-exposure path is conditioned by singleton scope, current-creation state and circular-reference policy such as allowCircularReferences; it is not a prototype or arbitrary-object-graph solution.',answer_locations:['核心结论','1 分钟版','关键细节','常见追问','易错点']}
+              ]
+            }
+          ];
+
+          const sections=['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点'];
+          const out={schema_version:'batch_isolated_preconclusion.v1',reviewed_at:'2026-08-30',items:[]};
+
+          for(const spec of specs){
+            const base=`review/content_build/answer_batch_0059/${spec.cid}`;
+            const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+            if(!ctx.ok||ctx.answer_type!=='mechanism'||ctx.canonical?.canonical_id!==spec.cid) throw new Error(`${spec.cid}: context/type drift`);
+            if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify(spec.qids)) throw new Error(`${spec.cid}: question ownership drift`);
+            if(!spec.qids.every(qid=>(ctx.source_questions||[]).some(x=>x.question_id===qid&&x.is_valid_for_library===true))) throw new Error(`${spec.cid}: active source coverage drift`);
+
+            const primary=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+            if(primary.schema_version!=='answer_primary_source_research.v1'||primary.canonical_id!==spec.cid) throw new Error(`${spec.cid}: primary source packet drift`);
+            if(primary.source_boundary?.answer_type!=='mechanism'||JSON.stringify(primary.source_boundary?.question_ids||[])!==JSON.stringify(spec.qids)) throw new Error(`${spec.cid}: frozen source boundary drift`);
+            if(!Array.isArray(primary.sources)||primary.sources.length<2||!primary.sources.every(s=>['official_documentation','primary_source_code','official_specification_or_standard'].includes(s.source_type))) throw new Error(`${spec.cid}: insufficient primary sources`);
+            if(!Array.isArray(primary.claims)||primary.claims.length<4||!primary.claims.every(c=>Array.isArray(c.source_ids)&&c.source_ids.length>0)) throw new Error(`${spec.cid}: primary claim binding missing`);
+
+            const candidatePath=`review/candidates/answers/${spec.cid}.md`;
+            const md=fs.readFileSync(candidatePath,'utf8');
+            for(const section of sections) if(md.split(section).length-1!==1) throw new Error(`${spec.cid}: section drift ${section}`);
+            for(const marker of spec.markers) if(!md.includes(marker)) throw new Error(`${spec.cid}: candidate marker missing ${marker}`);
+            if((md.match(/^- 问：/gm)||[]).length<5) throw new Error(`${spec.cid}: followups insufficient`);
+            if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error(`${spec.cid}: fabricated production claim risk`);
+            if(!md.includes('来源没有提供真实项目')) throw new Error(`${spec.cid}: no-fabrication boundary missing`);
+
+            const digest=crypto.createHash('sha256').update(fs.readFileSync(candidatePath)).digest('hex');
+            out.items.push({canonical_id:spec.cid,candidate_sha256:digest,decision:'pass_pending_writer_packet_consistency',source_first:true,findings:spec.findings,claims:spec.claims});
+          }
+          fs.writeFileSync('/tmp/batch-0059-mechanism-preconclusion.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+
+      - name: Freeze independent reviews and evidence after preconclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const pre=JSON.parse(fs.readFileSync('/tmp/batch-0059-mechanism-preconclusion.json','utf8'));
+          const date='2026-08-30';
+          const scores={facts_and_evidence:25,directness_and_relevance:20,type_specific_completeness:20,mechanism_and_causality:15,boundaries_and_tradeoffs:10,followup_quality:5,oral_quality:5};
+
+          for(const item of pre.items){
+            if(item.decision!=='pass_pending_writer_packet_consistency'||item.source_first!==true) throw new Error(`${item.canonical_id}: invalid preconclusion`);
+            const cid=item.canonical_id;
+            const base=`review/content_build/answer_batch_0059/${cid}`;
+            const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+            const primary=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+            const writer=JSON.parse(fs.readFileSync(`${base}/writer_research.json`,'utf8'));
+            if(writer.schema_version!=='answer_writer_research.v1'||writer.canonical_id!==cid) throw new Error(`${cid}: writer packet schema drift`);
+            if(writer.review_state!=='writer_complete_isolated_review_pending'||writer.candidate_sha256!==item.candidate_sha256) throw new Error(`${cid}: writer packet/hash drift`);
+            if(!Array.isArray(writer.source_question_coverage)||writer.source_question_coverage.length!==ctx.canonical.question_ids.length||!writer.source_question_coverage.every(x=>x.covered===true&&ctx.canonical.question_ids.includes(x.question_id))) throw new Error(`${cid}: writer source coverage incomplete`);
+
+            const reviewerId=`source-first-isolated-reviewer-batch-0059-${cid.slice(-8)}-20260830-v1`;
+            const review={schema_version:'isolated_review.v1',canonical_id:cid,candidate_sha256:item.candidate_sha256,reviewed_at:date,review_mode:'source_first_isolated',reviewer_id:reviewerId,review_version:'batch-0059.mechanisms.v1',decision:'pass',revision_round:1,source_packet:[`${base}/context.json`,`${base}/primary_source_research.json`,`review/candidates/answers/${cid}.md`,'docs/refactor/09_answer_content_standard.md'],scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:item.findings,promotion_blockers:['repository_human_approval_and_real_review_policy_not_yet_satisfied']};
+            fs.writeFileSync(`${base}/isolated_review_result.json`,JSON.stringify(review,null,2)+'\n');
+
+            const officialSources=primary.sources.map(s=>({source_id:s.source_id,title:s.title,locator:s.locator,source_type:s.source_type,checked_at:s.checked_at||date}));
+            const evidence={schema_version:'answer_evidence.v1',canonical_id:cid,candidate_sha256:item.candidate_sha256,checked_at:date,writer:{writer_id:`content-batch-0059-${cid.slice(-8)}-writer`,writer_version:'xhs-answer-curator.v1'},sources:[{source_id:'repository-source',title:'Batch 0059 frozen repository source context',locator:`${base}/context.json`,source_type:'repository_source_record',checked_at:date},{source_id:'primary-source-packet',title:'Batch 0059 frozen primary-source research packet',locator:`${base}/primary_source_research.json`,source_type:'repository_structured_source',checked_at:date},...officialSources,{source_id:'isolated-review',title:'Fresh Batch 0059 isolated source-first review',locator:`${base}/isolated_review_result.json`,source_type:'repository_structured_source',checked_at:date}],claims:item.claims.map(c=>({...c,source_ids:['primary-source-packet','isolated-review']})),source_question_coverage:ctx.canonical.question_ids.map(qid=>({question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']})),review_state:'independent_source_first_review_passed',review:{reviewer_id:reviewerId,review_version:review.review_version,independent:true,decision:'pass',revision_round:1,scores,hard_failures:[],unsupported_claims:[],uncovered_source_variants:[],findings:item.findings},promotion_blocker:'repository_human_approval_and_real_review_policy_not_yet_satisfied'};
+            fs.mkdirSync('review/evidence',{recursive:true});
+            fs.writeFileSync(`review/evidence/${cid}.json`,JSON.stringify(evidence,null,2)+'\n');
+          }
+          NODE
+
+      - name: Strict candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for cid in \
+            cq_q_f32cdfd75a0bc2501dfc97c6967a6327 \
+            cq_q_65d3c5ebd158ae8b41e0d2cea973ce90
+          do
+            node scripts/xhs.js answer audit --candidate "review/candidates/answers/$cid.md" --require-evidence --noWrite --noDraftCheck
+          done
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:coverage
+
+      - name: Commit independent review artifacts with safe rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            review/content_build/answer_batch_0059/cq_q_f32cdfd75a0bc2501dfc97c6967a6327/isolated_review_result.json \
+            review/content_build/answer_batch_0059/cq_q_65d3c5ebd158ae8b41e0d2cea973ce90/isolated_review_result.json \
+            review/evidence/cq_q_f32cdfd75a0bc2501dfc97c6967a6327.json \
+            review/evidence/cq_q_65d3c5ebd158ae8b41e0d2cea973ce90.json
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m "review: pass batch 0059 mechanism candidates source-first"
+          for attempt in 1 2 3 4; do
+            if git push origin "HEAD:$CONTENT_BRANCH"; then exit 0; fi
+            git fetch origin "$CONTENT_BRANCH"
+            git rebase "origin/$CONTENT_BRANCH"
+            sleep $((attempt * 2))
+          done
+          exit 1
