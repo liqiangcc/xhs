@@ -1,0 +1,92 @@
+name: Content Batch 0008 Async Tradeoff Review
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0008-async-tradeoff-review.yml
+      - scripts/content/review_batch_0008_async_tradeoff.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0008-async-tradeoff-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_async_tradeoff_bef9a76a
+
+jobs:
+  review-evidence-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run source-first isolated review and evidence builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/review_batch_0008_async_tradeoff.py > /tmp/review.py
+          python3 -m py_compile /tmp/review.py
+          python3 /tmp/review.py
+
+      - name: Run candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Batch 0008 async-tradeoff review: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; retry against current state.'
+            exit 0
+          fi
+          git add \
+            "review/content_build/answer_batch_0008/$CANONICAL_ID/isolated_review_result.json" \
+            "review/content_build/answer_batch_0008/$CANONICAL_ID/writer_research.json" \
+            "review/evidence/$CANONICAL_ID.json" \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0008.md
+          if git diff --cached --quiet; then
+            echo 'No Batch 0008 async-tradeoff review changes to commit.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: pass batch 0008 async tradeoff source-first'
+          git push origin "HEAD:$CONTENT_BRANCH"
