@@ -1,0 +1,164 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_e32f0b333daf71b238b08a44759e2420",
+  "candidate_sha256": "034f89b88987284dc45f3fd8a5a8a448ebe202a395434f8a2c19cda3794e3541",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0052-stock-121-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0052 exact stock-121 source context",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e32f0b333daf71b238b08a44759e2420/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 stock one-transaction deterministic validation",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e32f0b333daf71b238b08a44759e2420/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0052 stock-121 source-first isolated review",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e32f0b333daf71b238b08a44759e2420/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source only identifies the stock problem as LeetCode 121 and does not preserve the external constraint table or invalid-input semantics.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "explicit-contract",
+      "text": "The candidate explicitly defines non-negative daily prices, at most one buy-before-sell transaction, optional no-trade result 0, and null/negative rejection.",
+      "source_ids": [
+        "repository-source",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "prefix-min-invariant",
+      "text": "For each sell day, subtracting the minimum earlier price yields the best legal profit ending that day; the global best over those values equals the one-transaction optimum.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "Executable validation covers directed boundaries, 5000 deterministic random arrays against a quadratic legal-pair oracle, and large rising/falling inputs.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "e32f0b333daf71b238b08a44759e2420",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac BestTimeToBuySellStock.java BestTimeToBuySellStockTest.java && java BestTimeToBuySellStockTest",
+    "result": "pass",
+    "reported_stdout": "PASS directed null-negative-boundary 5000-random-oracle large-rising-falling",
+    "checks": [
+      "directed canonical/up/down/equal/extreme cases",
+      "explicit null and negative-price boundaries",
+      "5000 deterministic random arrays against independent quadratic buy-before-sell oracle",
+      "200000-element rising and falling arrays"
+    ],
+    "boundary_tests": [
+      {
+        "case": "monotone falling",
+        "expected": "0",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "null/negative input",
+        "expected": "IllegalArgumentException",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic random arrays",
+        "expected": "matches quadratic buy-before-sell oracle",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "200000-element rising/falling",
+        "expected": "199999 / 0",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0052-stock-121-20260829-v1",
+    "review_version": "batch-0052.stock-121.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate respects the sparse repository source and does not reconstruct an unpreserved LeetCode constraint table.",
+      "The prefix-minimum invariant enforces buy-before-sell ordering and avoids the common invalid global-max-minus-global-min shortcut.",
+      "At-most-one-transaction and optional no-trade semantics are explicit, with falling markets returning zero.",
+      "The implementation compresses the DP state to minimum prior price and best profit, giving O(N) time and O(1) auxiliary space.",
+      "OpenJDK 21 validation compares 5000 deterministic random arrays with an independent quadratic legal-pair oracle and includes 200000-element monotone inputs.",
+      "Null and negative-price behavior are explicit candidate boundaries rather than accidental runtime behavior.",
+      "The project section avoids fabricated experience and keeps streaming/system concerns outside the stored algorithm contract."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
