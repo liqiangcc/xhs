@@ -1,0 +1,73 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_51ccf7e50ca31c7d3361ba62e3d19e76",
+  "candidate_sha256": "85a6fdaa36f83a5b207eab35d77a4386552f804f46ab330d085ac27606c848cc",
+  "checked_at": "2026-08-29",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0058 frozen repository source context for AQS/ReentrantLock fairness",
+      "locator": "review/content_build/answer_batch_0058/cq_q_51ccf7e50ca31c7d3361ba62e3d19e76/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "primary-source-research",
+      "title": "Frozen OpenJDK 21 GA primary-source research for ReentrantLock and AQS",
+      "locator": "review/content_build/answer_batch_0058/cq_q_51ccf7e50ca31c7d3361ba62e3d19e76/primary_source_research.json",
+      "source_type": "primary_source_research_record",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "All frozen repository variants ask how AQS/ReentrantLock realizes fair versus non-fair lock acquisition; the candidate stays on that mechanism and does not invent project history.",
+      "source_ids": ["repository-source"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "项目经验版"]
+    },
+    {
+      "claim_id": "aqs-policy-separation",
+      "text": "OpenJDK 21 GA AQS supplies synchronization-state and FIFO wait-queue/acquire/release mechanics while allowing barging policies; ReentrantLock subclasses supply the actual fair/non-fair admission policy.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "fair-vs-nonfair-admission",
+      "text": "The non-fair synchronizer can CAS an available state without predecessor checks, while the fair synchronizer gates the CAS on queue-state/predecessor checks; both use the AQS queue after acquisition failure.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "reentrancy-release-boundary",
+      "text": "Both policies preserve owner reentrancy by incrementing the hold count, and release only clears ownership when the hold count reaches zero.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "fairness-boundaries",
+      "text": "The candidate explicitly preserves OpenJDK's fairness boundaries: fairness is a lock-admission policy rather than JVM/OS scheduling fairness, and untimed tryLock() does not honor the fairness setting.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["关键细节", "项目经验版", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "03dab3852b6badd5deb4c9b5e3d1a119",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "51ccf7e50ca31c7d3361ba62e3d19e76",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "e4158ba658b260c52beff9556840619e",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
