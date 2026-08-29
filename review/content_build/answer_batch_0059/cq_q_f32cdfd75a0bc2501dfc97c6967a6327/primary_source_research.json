@@ -1,0 +1,146 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_f32cdfd75a0bc2501dfc97c6967a6327",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0059/cq_q_f32cdfd75a0bc2501dfc97c6967a6327/context.json",
+    "answer_type": "mechanism",
+    "question_ids": [
+      "f32cdfd75a0bc2501dfc97c6967a6327",
+      "f90e8044c275051262a5d00f963870a8",
+      "fd640e8f64436e2d2cd9b96fbe2cb26c"
+    ],
+    "preserved_question_intent": "Explain how RabbitMQ prevents message loss end to end, including the publisher-to-broker path, broker durability/replication, and consumer processing acknowledgements."
+  },
+  "sources": [
+    {
+      "source_id": "rabbitmq-4.2-confirms",
+      "title": "RabbitMQ 4.2 Consumer Acknowledgements and Publisher Confirms",
+      "source_type": "official_documentation",
+      "locator": "https://www.rabbitmq.com/docs/4.2/confirms",
+      "version": "RabbitMQ 4.2",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "consumer acknowledgements and publisher confirms are orthogonal",
+        "manual acknowledgement semantics",
+        "automatic requeue after channel or connection loss",
+        "publisher confirm mode",
+        "persistent-message confirm timing",
+        "unroutable mandatory return ordering"
+      ]
+    },
+    {
+      "source_id": "rabbitmq-4.2-queues",
+      "title": "RabbitMQ 4.2 Queues",
+      "source_type": "official_documentation",
+      "locator": "https://www.rabbitmq.com/docs/4.2/queues",
+      "version": "RabbitMQ 4.2",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "queue durability",
+        "persistent versus transient messages",
+        "durable queue recovery",
+        "quorum queues must be durable"
+      ]
+    },
+    {
+      "source_id": "rabbitmq-4.2-reliability",
+      "title": "RabbitMQ 4.2 Reliability Guide",
+      "source_type": "official_documentation",
+      "locator": "https://www.rabbitmq.com/docs/4.2/reliability",
+      "version": "RabbitMQ 4.2",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "data safety is shared by publisher broker and consumer",
+        "retransmit unconfirmed publications after connection failure",
+        "retransmission can create duplicates",
+        "idempotent consumer recommendation",
+        "mandatory flag for routing failures",
+        "redelivery after failure"
+      ]
+    },
+    {
+      "source_id": "rabbitmq-4.2-quorum-queues",
+      "title": "RabbitMQ 4.2 Quorum Queues",
+      "source_type": "official_documentation",
+      "locator": "https://www.rabbitmq.com/docs/4.2/quorum-queues",
+      "version": "RabbitMQ 4.2",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "publisher confirms after quorum replication",
+        "manual consumer acknowledgements",
+        "majority data-safety condition",
+        "unconfirmed publications have no safety guarantee"
+      ]
+    },
+    {
+      "source_id": "rabbitmq-4.2-nack",
+      "title": "RabbitMQ Negative Acknowledgements",
+      "source_type": "official_documentation",
+      "locator": "https://www.rabbitmq.com/docs/nack",
+      "version": "RabbitMQ 4.x documentation",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "basic.reject and basic.nack",
+        "requeue versus discard/dead-letter",
+        "bulk negative acknowledgement"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "three-segment-reliability-model",
+      "text": "RabbitMQ message-loss prevention is an end-to-end responsibility split across publisher-to-broker confirmation, broker-side durable/replicated storage, and consumer-side processing acknowledgement; publisher confirms and consumer acknowledgements solve different links and are explicitly orthogonal.",
+      "source_ids": ["rabbitmq-4.2-confirms", "rabbitmq-4.2-reliability"],
+      "source_anchors": ["consumer acknowledgements and publisher confirms are orthogonal", "data safety is shared by publisher broker and consumer"]
+    },
+    {
+      "claim_id": "publisher-confirm-boundary",
+      "text": "A publisher must not equate a successful socket write with broker acceptance. Publisher confirms tell the publisher which publications the broker has accepted; after a connection/channel failure, unconfirmed publications should be retransmitted, which can create duplicates and therefore requires idempotent handling downstream.",
+      "source_ids": ["rabbitmq-4.2-confirms", "rabbitmq-4.2-reliability"],
+      "source_anchors": ["publisher confirm mode", "retransmit unconfirmed publications after connection failure", "retransmission can create duplicates"]
+    },
+    {
+      "claim_id": "routing-boundary",
+      "text": "A publisher confirm alone does not mean a message matched the intended queue. When the application requires detection of unroutable AMQP 0-9-1 publications, it should use the mandatory publishing path and handle basic.return in addition to confirms.",
+      "source_ids": ["rabbitmq-4.2-confirms", "rabbitmq-4.2-reliability"],
+      "source_anchors": ["unroutable mandatory return ordering", "mandatory flag for routing failures"]
+    },
+    {
+      "claim_id": "durability-boundary",
+      "text": "For restart durability with queues, applications use durable queues and persistent publications; a durable queue alone does not make transient messages survive recovery. Publisher confirms are still required to know whether a persistent publication reached the broker's durable acceptance point.",
+      "source_ids": ["rabbitmq-4.2-queues", "rabbitmq-4.2-confirms"],
+      "source_anchors": ["queue durability", "persistent versus transient messages", "persistent-message confirm timing"]
+    },
+    {
+      "claim_id": "replication-boundary",
+      "text": "For quorum queues, publisher confirms are tied to quorum replication: a confirmed publication is considered safe once accepted by a quorum, subject to the documented majority-availability assumptions; unconfirmed publications have no such safety guarantee.",
+      "source_ids": ["rabbitmq-4.2-quorum-queues"],
+      "source_anchors": ["publisher confirms after quorum replication", "majority data-safety condition", "unconfirmed publications have no safety guarantee"]
+    },
+    {
+      "claim_id": "consumer-ack-boundary",
+      "text": "Consumers that require redelivery on failure should use manual acknowledgements and acknowledge only after successful business processing. If a delivery remains unacknowledged when its channel or connection closes, RabbitMQ can requeue/redeliver it; explicit nack/reject controls requeue versus discard/dead-letter behavior.",
+      "source_ids": ["rabbitmq-4.2-confirms", "rabbitmq-4.2-nack"],
+      "source_anchors": ["manual acknowledgement semantics", "automatic requeue after channel or connection loss", "requeue versus discard/dead-letter"]
+    },
+    {
+      "claim_id": "at-least-once-idempotency-boundary",
+      "text": "Reliable retry/redelivery paths can produce duplicate deliveries, so 'do not lose messages' is not the same as 'exactly once'. Consumer business effects should be idempotent or deduplicated around a stable business/message identifier.",
+      "source_ids": ["rabbitmq-4.2-reliability"],
+      "source_anchors": ["retransmission can create duplicates", "idempotent consumer recommendation", "redelivery after failure"]
+    }
+  ],
+  "writer_constraints": [
+    "Structure the answer by loss boundary: producer -> broker, broker storage/replication, broker -> consumer/business processing.",
+    "Do not say that message persistence alone guarantees no loss; pair durability with publisher confirms and the selected queue type's safety semantics.",
+    "Do not say publisher confirms prove consumer processing; publisher confirms and consumer acknowledgements are orthogonal.",
+    "Do not say a consumer should ack immediately on receipt when business processing still can fail; ack after the intended success boundary.",
+    "Explain that retries/redelivery introduce duplicate risk and therefore require idempotent business handling; do not promise exactly-once semantics from RabbitMQ mechanisms alone.",
+    "Treat dead-lettering as poison/failure routing, not as an automatic proof of end-to-end no-loss correctness.",
+    "Keep quorum-queue guarantees conditional on publisher confirms and majority availability; do not generalize them to every queue type.",
+    "Do not fabricate project experience, incident metrics, broker topology, or application-specific retry thresholds."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded mechanism candidate and writer research, then perform an isolated source-first review before evidence/promotion"
+}
