@@ -57,14 +57,34 @@ jobs:
           if((md.match(/^- 问：/gm)||[]).length<5) throw new Error('followups insufficient');
           if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
           const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
+          const writer=JSON.parse(fs.readFileSync(`${base}/writer_research.json`,'utf8'));
+          if(writer.candidate_sha256!==digest||writer.review_state!=='writer_complete_isolated_review_pending') throw new Error('writer research/digest drift');
           console.log(`CANDIDATE_SHA256=${digest}`);
           NODE
 
-      - name: Writer-side candidate audit without evidence gate
+      - name: Writer-stage audit has only expected pre-review blockers
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --noWrite --noDraftCheck
+          set +e
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --noWrite --noDraftCheck > /tmp/audit.json
+          rc=$?
+          set -e
+          cat /tmp/audit.json
+          test "$rc" -ne 0
+          node <<'NODE'
+          const fs=require('fs');
+          const report=JSON.parse(fs.readFileSync('/tmp/audit.json','utf8'));
+          const row=report.rows?.[0];
+          if(!row) throw new Error('audit row missing');
+          const actual=[...(row.hard_failures||[])].sort();
+          const expected=['missing_evidence','missing_independent_review'].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`unexpected writer-stage hard failures: ${JSON.stringify(actual)}`);
+          const errors=(row.errors||[]).map(x=>x.error);
+          for(const e of errors){
+            if(!['missing_evidence','missing_dimension_score','review_not_passed','total_score_below_minimum'].includes(e)) throw new Error(`unexpected writer-stage audit error: ${e}`);
+          }
+          NODE
 
       - name: Baseline repository invariants
         shell: bash
