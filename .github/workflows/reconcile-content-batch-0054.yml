@@ -1,0 +1,105 @@
+name: Reconcile Content Batch 0054 Candidate Phase
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/reconcile-content-batch-0054.yml
+      - scripts/content/reconcile_batch_0054_after_fail_closed.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-content-batch-0054
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Reconcile source inventory and task state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/reconcile_batch_0054_after_fail_closed.py > /tmp/reconcile.py
+          python3 -m py_compile /tmp/reconcile.py
+          python3 /tmp/reconcile.py
+
+      - name: Audit every live Batch 0054 candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for cid in \
+            cq_q_eaf825db44ef16c9fe652237862bf9da \
+            cq_q_ebf82deb445242d83925695958995ed1 \
+            cq_q_eca9481c0a2d7dcacb23e1da17356b47 \
+            cq_q_f04ccedc97d093d669b3f71ba92dbcaf \
+            cq_q_f213ccebb77d694fa4eb9062e4f03a01 \
+            cq_q_f278e0d3e4b7873755b454efd1dc9692 \
+            cq_q_f2f20fa1ec0f76281dd0318941535a0c \
+            cq_q_f34538afb5aea9588064914f98531c46 \
+            cq_q_f4495c3cafbc49411bce1eab8525b2f0; do
+            node scripts/xhs.js answer audit --candidate "review/candidates/answers/$cid.md" --require-evidence --require-code --noWrite --noDraftCheck
+          done
+
+      - name: Run repository closure gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"; base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during reconciliation: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; retry against current state.'
+            exit 0
+          fi
+          git add "review/content_build/answer_batch_0054/source_inventory.json" "tasks/answer-batches/TASK-20260711-0313-answer-batch-0054.md"
+          if git diff --cached --quiet; then echo 'No Batch 0054 reconciliation changes.'; exit 0; fi
+          git diff --cached --check
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'tasks: reconcile batch 0054 reviewed candidate set'
+          git push origin "HEAD:$CONTENT_BRANCH"
