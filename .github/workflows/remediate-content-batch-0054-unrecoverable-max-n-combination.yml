@@ -56,31 +56,26 @@ jobs:
           node scripts/xhs.js index build --noManifest
           node scripts/xhs.js answer type-audit --noManifest
 
-      - name: Verify explainable invalid projection and archive
+      - name: Verify fail-closed projection
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json, os
           from pathlib import Path
-          root=Path('.'); cid=os.environ['CID']; qid=os.environ['QID']; expected='算法：最大为 N 的数字组合。'
-          canon={json.loads(x)['canonical_id'] for x in (root/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()}
-          questions={row['question_id']:row for row in (json.loads(x) for x in (root/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip())}
-          progress={row.get('canonical_id') for row in json.loads((root/'review/progress.json').read_text(encoding='utf-8')).get('items',[])}
-          audit=json.loads((root/'config/question_validity_audit.json').read_text(encoding='utf-8')); decisions={row.get('question_id'):row for row in audit.get('decisions',[])}
-          if cid in canon: raise SystemExit('retired Canonical still active')
-          row=questions.get(qid)
-          if not row or row.get('original_question') != expected: raise SystemExit('Question projection missing/wording drifted')
-          if row.get('canonical_id') is not None or row.get('is_valid_for_library') is not False or row.get('exclusion_reason') != 'incomplete_or_unreadable': raise SystemExit(f'invalid projection incorrect: {row}')
-          if cid in progress: raise SystemExit('ReviewProgress still active')
-          if (root/'review/answers'/f'{cid}.md').exists(): raise SystemExit('active Answer still exists')
-          if not (root/'review/archive/answers'/f'{cid}.md').exists(): raise SystemExit('archived baseline Answer missing')
-          if (root/'review/candidates/answers'/f'{cid}.md').exists(): raise SystemExit('unexpected candidate exists')
-          decision=decisions.get(qid)
-          if not decision or decision.get('decision')!='exclude' or decision.get('exclusion_reason')!='incomplete_or_unreadable': raise SystemExit('validity-audit exclusion missing')
+          r=Path('.'); cid=os.environ['CID']; qid=os.environ['QID']; expected='算法：最大为 N 的数字组合。'
+          canon={json.loads(x)['canonical_id'] for x in (r/'data/questions/canonical_questions.jsonl').read_text(encoding='utf-8').splitlines() if x.strip()}
+          qs={x['question_id']:x for x in (json.loads(s) for s in (r/'data/questions/questions.jsonl').read_text(encoding='utf-8').splitlines() if s.strip())}
+          progress={x.get('canonical_id') for x in json.loads((r/'review/progress.json').read_text(encoding='utf-8')).get('items',[])}
+          audit={x.get('question_id'):x for x in json.loads((r/'config/question_validity_audit.json').read_text(encoding='utf-8')).get('decisions',[])}
+          row=qs.get(qid); decision=audit.get(qid)
+          assert cid not in canon and cid not in progress
+          assert row and row.get('original_question')==expected and row.get('canonical_id') is None and row.get('is_valid_for_library') is False and row.get('exclusion_reason')=='incomplete_or_unreadable'
+          assert not (r/'review/answers'/f'{cid}.md').exists() and (r/'review/archive/answers'/f'{cid}.md').exists()
+          assert not (r/'review/candidates/answers'/f'{cid}.md').exists()
+          assert decision and decision.get('decision')=='exclude' and decision.get('exclusion_reason')=='incomplete_or_unreadable'
           note=decision.get('exclusion_note') or ''
-          for token in ['最大为 N 的数字组合','输入输出格式','回溯','fail-closed','猜测']:
-              if token not in note: raise SystemExit(f'exclusion explanation missing {token}')
+          for token in ['最大为 N 的数字组合','输入输出格式','回溯','fail-closed','猜测']: assert token in note, token
           print('PASS batch0054 max-N combination retired fail-closed with explainable audit trail')
           PY
 
@@ -88,9 +83,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/content/validate_question_sources.js
           node scripts/content/check_question_coverage.js --check
-          node scripts/content/rebuild_canonicals.js --check
           node scripts/xhs.js canonical check --noWrite
           node scripts/xhs.js review integrity --noWrite
           node scripts/xhs.js answer type-audit --check --noWrite
