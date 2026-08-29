@@ -19,6 +19,7 @@ env:
   TARGET_QID: 68a77b01c3a999732bc21dc888503621
   TARGET_CID: cq_q_68a77b01c3a999732bc21dc888503621
   DUP_QID: 3590292944e8b631aa2e0cf561c565e5
+  DUP_QID_2: 8eab176c51a37f667765b1624f8aca4d
   DUP_CID: cq_q_3590292944e8b631aa2e0cf561c565e5
 
 jobs:
@@ -51,7 +52,7 @@ jobs:
           const target=byC.get(process.env.TARGET_CID), dup=byC.get(process.env.DUP_CID);
           if(!target||!dup) throw new Error('both level-order Canonicals must exist before bounded relation review');
           if(!target.question_ids?.includes(process.env.TARGET_QID)) throw new Error('target bridge Question ownership drifted');
-          if(!dup.question_ids?.includes(process.env.DUP_QID)) throw new Error('duplicate bridge Question ownership drifted');
+          for(const qid of [process.env.DUP_QID,process.env.DUP_QID_2]) if(!dup.question_ids?.includes(qid)) throw new Error(`${qid}: duplicate-side ownership drifted`);
 
           const targetCtx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0058/${process.env.TARGET_CID}/context.json`,'utf8'));
           const dupCtx=JSON.parse(fs.readFileSync(`review/content_build/answer_batch_0058/${process.env.DUP_CID}/context.json`,'utf8'));
@@ -94,26 +95,36 @@ jobs:
           set -euo pipefail
           out='review/content_build/answer_batch_0058/level_order_relation_apply'
           mkdir -p "$out"
-          node scripts/xhs.js canonical suggest --question-ids "$TARGET_QID,$DUP_QID" --noManifest > "$out/suggest.json"
-          key="$(node - "$out/suggest.json" <<'NODE'
+
+          select_key() {
+            local qid="$1" file="$2"
+            node scripts/xhs.js canonical suggest --question-ids "$TARGET_QID,$qid" --noManifest > "$file"
+            node - "$file" "$qid" <<'NODE'
           const fs=require('fs');
           const r=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+          const qid=process.argv[3];
           if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected one RelationCandidate, got ${r.relation_candidates?.length}`);
           const c=r.relation_candidates[0];
-          const actual=[...c.question_ids].sort(), expected=[process.env.TARGET_QID,process.env.DUP_QID].sort();
+          const actual=[...c.question_ids].sort(), expected=[process.env.TARGET_QID,qid].sort();
           if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected pair drifted: ${JSON.stringify(actual)}`);
           process.stdout.write(c.relation_candidate_key);
           NODE
-          )"
-          node scripts/xhs.js dedup decide \
-            --relation-candidate-key "$key" \
-            --relation same \
-            --actor-type ai \
-            --actor-id batch-0058-level-order-source-first-review \
-            --actor-display-name 'Level-order source-first reviewer' \
-            --rationale 'Current frozen repository sources on both Canonicals ask for ordinary tree/binary-tree breadth-first level-order traversal. LeetCode 102 is the named binary-tree instance; no source preserves a distinct traversal order, tree-kind-only contract, or output semantic.' > "$out/decide.json"
+          }
+
+          key1="$(select_key "$DUP_QID" "$out/suggest-primary.json")"
+          key2="$(select_key "$DUP_QID_2" "$out/suggest-secondary.json")"
+          for spec in "$key1:primary" "$key2:secondary"; do
+            key="${spec%%:*}"; label="${spec##*:}"
+            node scripts/xhs.js dedup decide \
+              --relation-candidate-key "$key" \
+              --relation same \
+              --actor-type ai \
+              --actor-id batch-0058-level-order-source-first-review \
+              --actor-display-name 'Level-order source-first reviewer' \
+              --rationale 'Current frozen repository sources on both Canonicals ask for ordinary tree/binary-tree breadth-first level-order traversal. LeetCode 102 is the named binary-tree instance; no source preserves a distinct traversal order, tree-kind-only contract, or output semantic.' > "$out/decide-$label.json"
+          done
           node scripts/xhs.js dedup apply \
-            --relation-candidate-key "$key" \
+            --relation-candidate-key "$key1" \
             --canonical-id "$TARGET_CID" \
             --canonical-title '算法：二叉树的层序遍历（Level Order Traversal / LeetCode 102）' > "$out/apply.json"
 
@@ -136,10 +147,11 @@ jobs:
             '- Relation: `same`.\n'+
             '- Survivor: `'+process.env.TARGET_CID+'`; it now owns all six reviewed level-order source Questions.\n'+
             '- Retired duplicate Canonical: `'+process.env.DUP_CID+'`.\n'+
+            '- Both duplicate-side Questions were explicitly reviewed before consolidation.\n'+
             '- No Answer was promoted by this normalization.\n');
           const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0058.md';
           let text=fs.readFileSync(task,'utf8');
-          const note='- [x] `cq_q_3590292944e8b631aa2e0cf561c565e5` was reviewed source-first against `cq_q_68a77b01c3a999732bc21dc888503621`: current repository sources on both sides preserve the same ordinary tree/binary-tree breadth-first level-order traversal operation, with LeetCode 102 only naming the standard binary-tree instance. Relation is `same`; all six valid source Questions are consolidated under the survivor and the duplicate Canonical is retired. Candidate writing must target only the survivor.';
+          const note='- [x] `cq_q_3590292944e8b631aa2e0cf561c565e5` was reviewed source-first against `cq_q_68a77b01c3a999732bc21dc888503621`: current repository sources on both sides preserve the same ordinary tree/binary-tree breadth-first level-order traversal operation, with LeetCode 102 only naming the standard binary-tree instance. Relation is `same`; both duplicate-side source Questions were explicitly reviewed, all six valid source Questions are consolidated under the survivor, and the duplicate Canonical is retired. Candidate writing must target only the survivor.';
           if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
           fs.writeFileSync(task,text);
           NODE
