@@ -1,0 +1,169 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_async_tradeoff_bef9a76a",
+  "candidate_sha256": "2ce81f23b930876289f030528444c3f041588536c4d286538dc7b047607aae5e",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0008-async-tradeoff-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source-boundary",
+      "title": "Repository source boundary for transaction-chain sync/async tradeoff",
+      "locator": "review/content_build/answer_batch_0008/cq_async_tradeoff_bef9a76a/source_boundary.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "aws-transactional-outbox",
+      "title": "Transactional outbox pattern - AWS Prescriptive Guidance",
+      "locator": "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "aws-saga",
+      "title": "Saga pattern - AWS Prescriptive Guidance",
+      "locator": "https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/saga-pattern.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "kafka-design-41",
+      "title": "Apache Kafka 4.1 Design - Message Delivery Semantics",
+      "locator": "https://kafka.apache.org/41/design/design/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0008 async-tradeoff source-first isolated review",
+      "locator": "review/content_build/answer_batch_0008/cq_async_tradeoff_bef9a76a/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-contract",
+      "text": "The preserved source asks how to select sync/async boundaries in a transaction chain and how async processing changes user experience and write performance; it preserves no production QPS/SLO, mandatory middleware, company implementation, or personal experience.",
+      "source_ids": [
+        "repository-source-boundary"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "outbox-dual-write",
+      "text": "Transactional outbox closes the database/event dual-write gap by persisting the business change and outbox record in one local transaction and publishing later; duplicate publication remains possible, so consumers still require idempotent handling.",
+      "source_ids": [
+        "aws-transactional-outbox"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "saga-compensation",
+      "text": "Saga is a consistency/failure-management option for multi-service or long-lived transactions and requires explicit compensating actions rather than pretending one local database transaction spans independent services.",
+      "source_ids": [
+        "aws-saga"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "delivery-semantics-scope",
+      "text": "Kafka distinguishes at-most-once, at-least-once and exactly-once scopes; exactly-once for Kafka topic processing does not automatically make arbitrary external destination side effects exactly once without cooperation from the destination.",
+      "source_ids": [
+        "kafka-design-41"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "backlog-recovery-derivation",
+      "text": "The inequality mu_recovery > lambda + B/T is explicitly presented as a queue-drain derivation from arrival rate, backlog and target drain time, not as a source-preserved production threshold.",
+      "source_ids": [
+        "repository-source-boundary"
+      ],
+      "answer_locations": [
+        "3 分钟版"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "666b5874989e6739065dccba4cb0d81a",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "python3 scripts/content/review_batch_0008_async_tradeoff.py",
+    "result": "pass",
+    "checks": [
+      "exact Canonical/source boundary and Scenario type",
+      "all eight oral-answer sections present exactly once",
+      "outbox dual-write scope and residual duplicate/idempotence boundary present",
+      "Saga compensation option present without claiming a cross-service local transaction",
+      "Kafka exactly-once scope is not extended to arbitrary external side effects",
+      "capacity/backlog derivation is explicit and no production threshold is invented",
+      "no personal/company production experience is fabricated",
+      "Scenario completeness includes failure, observability, rollout and alternative semantics"
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0008-async-tradeoff-20260829-v1",
+    "review_version": "batch-0008.async-tradeoff.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate answers the preserved boundary/tradeoff question directly and does not infer company-specific production topology, QPS, SLO, middleware, or personal experience.",
+      "Sync/async placement is tied to the response promise and compensability rather than component names; both synchronous completion and accepted/processing semantics are treated as conditional alternatives.",
+      "The database/message dual-write gap is correctly bounded to a local transactional-outbox/CDC pattern, with duplicate delivery and consumer idempotence retained as explicit residual concerns.",
+      "The answer does not over-claim broker exactly-once semantics for external side effects and explicitly keeps ordering, idempotence, retry, DLQ and reconciliation in the consumer contract.",
+      "Scenario completeness covers assumptions, main data flow, idempotence/data model, capacity and backlog recovery, timeout/retry/degradation/compensation, observability, rollout, and alternative response semantics with their costs.",
+      "The backlog recovery formula is presented as a derivation rather than a vendor or production threshold, preserving the source boundary."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_genuine_real_review_policy_not_yet_satisfied"
+}
