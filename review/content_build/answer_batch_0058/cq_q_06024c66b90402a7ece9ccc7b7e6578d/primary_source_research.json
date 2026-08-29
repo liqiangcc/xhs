@@ -1,0 +1,159 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_06024c66b90402a7ece9ccc7b7e6578d",
+  "checked_at": "2026-08-29",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0058/cq_q_06024c66b90402a7ece9ccc7b7e6578d/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "06024c66b90402a7ece9ccc7b7e6578d",
+      "68d8ebb4ed971abcbcd7f3f2b43e63a4",
+      "76352499dc77dd4f665c1b6842775c8e",
+      "9bd7f75703cdad3dc6ca109e129735f6"
+    ],
+    "preserved_question_intent": "Compare MySQL InnoDB and MyISAM storage engines; one source variant also asks what storage engines exist."
+  },
+  "version_boundary": "MySQL 8.4 Reference Manual",
+  "sources": [
+    {
+      "source_id": "mysql84-storage-engines",
+      "title": "MySQL 8.4 Reference Manual — Alternative Storage Engines",
+      "source_type": "official_product_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/storage-engines.html",
+      "version": "MySQL 8.4",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "InnoDB default and general-purpose recommendation",
+        "SHOW ENGINES discovery",
+        "InnoDB transactions row-level locking foreign keys crash recovery clustered indexes",
+        "MyISAM table-level locking read-only/read-mostly positioning",
+        "storage-engine feature summary"
+      ]
+    },
+    {
+      "source_id": "mysql84-myisam",
+      "title": "MySQL 8.4 Reference Manual — The MyISAM Storage Engine",
+      "source_type": "official_product_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/myisam-storage-engine.html",
+      "version": "MySQL 8.4",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "transactions no",
+        "locking granularity table",
+        "MVCC no",
+        "foreign keys no",
+        "clustered indexes no",
+        "concurrent inserts under stated conditions",
+        "MYD and MYI storage files"
+      ]
+    },
+    {
+      "source_id": "mysql84-innodb-benefits",
+      "title": "MySQL 8.4 Reference Manual — Benefits of Using InnoDB Tables",
+      "source_type": "official_product_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-benefits.html",
+      "version": "MySQL 8.4",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "automatic crash recovery",
+        "foreign keys",
+        "buffer pool",
+        "primary-key-oriented clustered organization",
+        "concurrent read and write access"
+      ]
+    },
+    {
+      "source_id": "mysql84-innodb-locks",
+      "title": "MySQL 8.4 Reference Manual — Locks Set by Different SQL Statements in InnoDB",
+      "source_type": "official_product_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-locks-set.html",
+      "version": "MySQL 8.4",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "consistent reads",
+        "index-record locking",
+        "scan and lock-range relationship",
+        "importance of appropriate indexes"
+      ]
+    },
+    {
+      "source_id": "mysql84-innodb-fulltext",
+      "title": "MySQL 8.4 Reference Manual — InnoDB Full-Text Indexes",
+      "source_type": "official_product_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-fulltext-index.html",
+      "version": "MySQL 8.4",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "InnoDB FULLTEXT support"
+      ]
+    },
+    {
+      "source_id": "mysql84-engines-table",
+      "title": "MySQL 8.4 Reference Manual — INFORMATION_SCHEMA ENGINES Table",
+      "source_type": "official_product_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/information-schema-engines-table.html",
+      "version": "MySQL 8.4",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "runtime storage-engine support state",
+        "SHOW ENGINES equivalence",
+        "default engine discovery"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "modern-default-selection",
+      "text": "In MySQL 8.4, InnoDB is the default and most general-purpose storage engine, and Oracle recommends it except for specialized use cases.",
+      "source_ids": ["mysql84-storage-engines"],
+      "source_anchors": ["InnoDB default and general-purpose recommendation"]
+    },
+    {
+      "claim_id": "transactions-recovery",
+      "text": "InnoDB is ACID/transaction-safe with commit, rollback and crash-recovery capabilities; MyISAM does not support transactions.",
+      "source_ids": ["mysql84-storage-engines", "mysql84-myisam", "mysql84-innodb-benefits"],
+      "source_anchors": ["InnoDB transactions row-level locking foreign keys crash recovery clustered indexes", "transactions no", "automatic crash recovery"]
+    },
+    {
+      "claim_id": "locking-and-concurrency",
+      "text": "InnoDB supports row-level locking and consistent nonlocking reads, while MyISAM uses table-level locking; this is a concurrency-model distinction rather than a universal performance ranking.",
+      "source_ids": ["mysql84-storage-engines", "mysql84-myisam", "mysql84-innodb-locks"],
+      "source_anchors": ["MyISAM table-level locking read-only/read-mostly positioning", "locking granularity table", "consistent reads"]
+    },
+    {
+      "claim_id": "mvcc-foreign-key-index-organization",
+      "text": "MyISAM does not support MVCC, foreign keys or clustered indexes; InnoDB provides multi-versioning/consistent reads, foreign keys and stores user data in clustered indexes.",
+      "source_ids": ["mysql84-storage-engines", "mysql84-myisam", "mysql84-innodb-benefits"],
+      "source_anchors": ["storage-engine feature summary", "MVCC no", "foreign keys no", "clustered indexes no", "foreign keys", "primary-key-oriented clustered organization"]
+    },
+    {
+      "claim_id": "engine-discovery",
+      "text": "MySQL uses a pluggable storage-engine architecture and the actual engines supported by a target server should be checked with SHOW ENGINES or INFORMATION_SCHEMA.ENGINES instead of assuming a timeless fixed list.",
+      "source_ids": ["mysql84-storage-engines", "mysql84-engines-table"],
+      "source_anchors": ["SHOW ENGINES discovery", "runtime storage-engine support state"]
+    },
+    {
+      "claim_id": "myisam-concurrent-insert-boundary",
+      "text": "MyISAM remains table-lock based but supports concurrent inserts in specific file-layout conditions, so 'MyISAM cannot do any write concurrency' is too absolute.",
+      "source_ids": ["mysql84-myisam"],
+      "source_anchors": ["concurrent inserts under stated conditions"]
+    },
+    {
+      "claim_id": "fulltext-version-boundary",
+      "text": "In MySQL 8.4 both MyISAM and InnoDB support full-text indexes; the historical claim that FULLTEXT is a MyISAM-only feature must not be presented as current behavior.",
+      "source_ids": ["mysql84-myisam", "mysql84-innodb-fulltext"],
+      "source_anchors": ["InnoDB FULLTEXT support"]
+    }
+  ],
+  "writer_constraints": [
+    "Bind concrete behavior to MySQL 8.4 and flag historical-version traps.",
+    "Cover the source variant that asks which storage engines exist, but do not pretend the supported-engine list is immutable; prefer SHOW ENGINES for the target instance.",
+    "Do not claim InnoDB always locks exactly one row; actual record/range locking depends on access path and SQL semantics.",
+    "Do not claim MyISAM has zero write concurrency; preserve the documented conditional concurrent-insert exception.",
+    "Do not repeat the obsolete claim that only MyISAM supports FULLTEXT.",
+    "Do not assert either engine is universally faster; selection and performance depend on transaction/concurrency semantics and workload.",
+    "Do not fabricate project experience or migration metrics."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded concept candidate, bind writer research, then perform an isolated source-first review in a separate review round before evidence promotion"
+}
