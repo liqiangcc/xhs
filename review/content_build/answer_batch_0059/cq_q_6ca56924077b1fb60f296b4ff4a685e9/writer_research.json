@@ -1,0 +1,68 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_6ca56924077b1fb60f296b4ff4a685e9",
+  "candidate_sha256": "b772af8d1a7ec31877c1822d6e0ae297d1c12287bc1bea453ae025b34bd5d195",
+  "checked_at": "2026-08-30",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0059 frozen Redis/MySQL consistency source context",
+      "locator": "review/content_build/answer_batch_0059/cq_q_6ca56924077b1fb60f296b4ff4a685e9/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "primary-source-research",
+      "title": "Redis/MySQL consistency primary-source research packet",
+      "locator": "review/content_build/answer_batch_0059/cq_q_6ca56924077b1fb60f296b4ff4a685e9/primary_source_research.json",
+      "source_type": "primary_source_research_record",
+      "checked_at": "2026-08-30"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The frozen source Questions ask how to keep Redis cache consistent with an authoritative database/MySQL and explicitly preserve delayed double-delete and Canal as interview entities; the source does not provide production QPS, topology, SLO or incident metrics.",
+      "source_ids": ["repository-source"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "项目经验版"]
+    },
+    {
+      "claim_id": "consistency-contract-and-cache-aside",
+      "text": "Redis and MySQL do not share an automatic cross-store atomic transaction; the candidate therefore defines the database as authoritative, uses cache-aside with database-first invalidation for the default path, and treats TTL as stale-lifetime bounding rather than a correctness proof.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "delayed-double-delete-boundary",
+      "text": "Delayed double-delete is presented as a best-effort mitigation for the old-read refill race, with the delay derived from observed latency and the second delete still requiring reliable retry/repair; it is not presented as a strong-consistency guarantee.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "cdc-replay-and-non-regression",
+      "text": "The Canal/binlog path is described as asynchronous repair from committed database change facts, with checkpoint, replay, idempotency, log-retention and stale-event boundaries; refresh events require a version/change-position rule so late events cannot regress cache state.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "operability-and-recovery",
+      "text": "The scenario explicitly separates illustrative capacity/SLO assumptions from source facts and requires retry, lag/oldest-event monitoring, reconciliation, fault injection and a stricter read-after-write path when ordinary eventual consistency is insufficient.",
+      "source_ids": ["repository-source", "primary-source-research"],
+      "answer_locations": ["3 分钟版", "关键细节", "项目经验版", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "6ca56924077b1fb60f296b4ff4a685e9",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "9edfed6b500ba81ee05155b769fa47e9",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
