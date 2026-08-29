@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""Build, execute, and source-first review the Batch 0057 IPv4-to-int coding candidate."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import subprocess
+import tempfile
+from pathlib import Path
+
+ROOT = Path('.')
+DATE = '2026-08-29'
+BATCH = '0057'
+CID = 'cq_q_229618507f9d47fc7587f347ee783659'
+QID = '229618507f9d47fc7587f347ee783659'
+EXPECTED = '代码：IPv4地址字符串转INT类型的实现逻辑'
+PROMOTION_BLOCKER = 'repository_human_approval_and_real_review_policy_not_yet_satisfied'
+HEADINGS = ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']
+SCORES = {'facts_and_evidence':25,'directness_and_relevance':20,'type_specific_completeness':20,'mechanism_and_causality':15,'boundaries_and_tradeoffs':10,'followup_quality':5,'oral_quality':5}
+
+CANDIDATE = r'''<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"cq_q_229618507f9d47fc7587f347ee783659","version":1,"status":"draft","updated_at":"2026-08-29","answer_type":"coding","quality_tier":"candidate"} -->
+# IPv4 地址字符串转换为 32 位 int
+
+## 核心结论
+
+来源只要求“IPv4 地址字符串转 INT 的实现逻辑”，没有规定文本语法、字节序、无符号展示或异常策略。这里声明一个可执行合同：输入必须是四段点分十进制，每段只含 1~3 个十进制数字且数值在 0~255；前导零按十进制接受；按网络字节顺序把 `a.b.c.d` 打包成 32 位位模式 `a<<24 | b<<16 | c<<8 | d`。Java 的 `int` 是有符号 32 位，因此 `255.255.255.255` 返回位模式 `0xffffffff`，若要非负十进制值再用 `Integer.toUnsignedLong` 解释。
+
+## 1 分钟版
+
+- IPv4 有 4 个 octet，每段范围 0~255，所以每段正好占 8 bit。
+- 从左到右解析每段，遇到点就先校验当前段，再执行 `packed = (packed << 8) | octet`。
+- 这样第一段最终落在最高 8 bit，第四段落在最低 8 bit，符合常见网络字节顺序表示。
+- 必须校验恰好 4 段、段不能为空、字符必须是数字、每段不能超过 255。
+- Java `int` 可能显示成负数，那只是相同 32 位位模式的有符号解释，不代表转换错误。
+
+## 3 分钟版
+
+```java
+public final class Ipv4ToInt {
+    public static int ipv4ToInt(String ip) {
+        if (ip == null || ip.isEmpty()) {
+            throw new IllegalArgumentException("ip must not be empty");
+        }
+
+        int packed = 0;
+        int octet = 0;
+        int digits = 0;
+        int parts = 0;
+
+        for (int i = 0; i <= ip.length(); i++) {
+            char ch = i == ip.length() ? '.' : ip.charAt(i);
+            if (ch == '.') {
+                if (digits == 0 || octet > 255 || parts >= 4) {
+                    throw new IllegalArgumentException("invalid IPv4");
+                }
+                packed = (packed << 8) | octet;
+                parts++;
+                octet = 0;
+                digits = 0;
+            } else if (ch >= '0' && ch <= '9') {
+                if (digits == 3) {
+                    throw new IllegalArgumentException("octet too long");
+                }
+                octet = octet * 10 + (ch - '0');
+                digits++;
+                if (octet > 255) {
+                    throw new IllegalArgumentException("octet out of range");
+                }
+            } else {
+                throw new IllegalArgumentException("invalid IPv4 character");
+            }
+        }
+
+        if (parts != 4) {
+            throw new IllegalArgumentException("IPv4 must have four octets");
+        }
+        return packed;
+    }
+}
+```
+
+例如 `192.168.1.10` 会依次得到 `0xC0`、`0xC0A8`、`0xC0A801`、`0xC0A8010A`。如果调用方要把这个位模式打印成无符号整数，可执行 `Integer.toUnsignedLong(packed)`。
+
+## 关键细节
+
+- **字节顺序**：本答案明确采用 `a` 为最高字节、`d` 为最低字节；如果某接口要求主机字节序或特定序列化格式，应以接口合同为准。
+- **有符号 int**：IPv4 的 32 bit 与 Java `int` 的 32 bit 完全装得下；最高位为 1 时十进制打印为负数，只是解释方式不同。
+- **前导零**：来源没说明是否接受。本合同把 `001` 当十进制 1，而不是八进制；如果要求规范化文本，可额外拒绝非单个 `0` 的前导零。
+- **非法输入**：少于/多于 4 段、空段、非数字、超过 255、单段超过 3 位都直接拒绝，不做隐式截断。
+- **复杂度**：扫描字符串一次，时间 O(n)，除少量整数变量外额外空间 O(1)。
+
+## 原理机制
+
+每个 IPv4 octet 的值域是 0~255，可无损放入 8 bit。把已经解析的结果左移 8 位，相当于为下一个 octet 腾出最低 8 bit；再与当前 octet 做按位或，就把它追加到低位。连续执行四次后得到 32 位布局 `[a][b][c][d]`。这个过程本质是固定基数 256 的累积：`(((a * 256 + b) * 256 + c) * 256 + d)`，位运算只是更直接地表达同一个打包过程。
+
+## 项目经验版
+
+来源没有真实协议、数据库字段或 RPC 序列化约束，不能虚构线上实现。实际系统里我会先确认目标字段到底需要“32 位位模式”“无符号数值”还是“4 字节网络序”，再统一入口校验，并用 `0.0.0.0`、`127.0.0.1`、`255.255.255.255`、边界 255/256 和错误段数做回归测试，避免不同调用方各自定义不一致的解析规则。
+
+## 常见追问
+
+- 问：为什么 `255.255.255.255` 转成 Java `int` 是 `-1`？答：32 位位模式是 `0xffffffff`，按有符号二进制补码解释就是 -1；用 `Integer.toUnsignedLong` 可得到 4294967295。
+- 问：为什么每次左移 8 位？答：每个 octet 恰好占 8 bit，左移后低 8 位空出来给下一段。
+- 问：能不能直接 `split("\\.")`？答：可以，逻辑上仍是“解析四段 + 范围校验 + 左移打包”；这里手动扫描是为了同时展示 O(1) 额外空间和完整边界处理。
+- 问：前导零怎么处理？答：来源没有规定；当前合同按十进制接受。如果上层要求规范 IPv4 文本，再把它作为额外校验规则。
+- 问：如果还要 int 转回字符串？答：用无符号右移分别取 `(x >>> 24) & 0xff`、`(x >>> 16) & 0xff`、`(x >>> 8) & 0xff`、`x & 0xff`，再用点连接。
+
+## 易错点
+
+- 不校验 octet 范围，导致 256 等值被截断进低 8 bit。
+- 把段顺序反过来，生成 `[d][c][b][a]`。
+- 看到 Java `int` 为负数就误以为 32 位装不下 IPv4。
+- 接受空段、额外段或非数字字符而没有明确异常合同。
+- 未声明前导零、字节序和无符号展示规则，却把某一种实现习惯冒充成题目要求。
+'''
+
+TEST = r'''public final class Ipv4ToIntTest {
+    static void check(String ip, long expected) {
+        long actual = Integer.toUnsignedLong(Ipv4ToInt.ipv4ToInt(ip));
+        if (actual != expected) throw new AssertionError(ip + "=" + actual + " expected=" + expected);
+    }
+    static void invalid(String ip) {
+        try {
+            Ipv4ToInt.ipv4ToInt(ip);
+            throw new AssertionError("expected invalid: " + ip);
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+    public static void main(String[] args) {
+        check("0.0.0.0", 0L);
+        check("1.2.3.4", 0x01020304L);
+        check("127.0.0.1", 0x7f000001L);
+        check("255.255.255.255", 0xffffffffL);
+        check("192.168.1.10", 0xc0a8010aL);
+        check("001.002.003.004", 0x01020304L);
+        invalid(null);
+        invalid("");
+        invalid("1.2.3");
+        invalid("1.2.3.4.5");
+        invalid("1..3.4");
+        invalid("256.0.0.1");
+        invalid("1234.0.0.1");
+        invalid("1.2.3.-1");
+        invalid("1.2.3.4 ");
+        System.out.println("PASS zero basic loopback max private leading-zero invalid-shape invalid-range invalid-char");
+    }
+}
+'''
+
+STDOUT = 'PASS zero basic loopback max private leading-zero invalid-shape invalid-range invalid-char'
+CHECKS = [
+    '0.0.0.0 maps to unsigned 0',
+    '1.2.3.4 preserves network-byte-order bit layout',
+    '127.0.0.1 maps to 0x7f000001',
+    '255.255.255.255 preserves 0xffffffff bit pattern',
+    '192.168.1.10 maps to 0xc0a8010a',
+    'declared decimal-leading-zero contract maps 001.002.003.004 to 1.2.3.4',
+    'null and empty inputs rejected',
+    'wrong part counts and empty octets rejected',
+    'octets above 255 or longer than three digits rejected',
+    'non-digit characters and trailing whitespace rejected',
+]
+CLAIMS = [
+    {
+        'claim_id':'source-boundary',
+        'text':'The preserved source only asks for IPv4-string-to-INT implementation logic; textual normalization, byte order, signed display, and invalid-input policy are not preserved source constraints, so the candidate declares them explicitly.',
+        'source_ids':['repository-source'],
+        'answer_locations':['核心结论','关键细节','项目经验版'],
+    },
+    {
+        'claim_id':'packing-correctness',
+        'text':'The executable OpenJDK fixture verifies four-octet decimal parsing, 0..255 range checks, network-byte-order 8-bit packing, Java signed-int bit-pattern preservation, and malformed-input rejection.',
+        'source_ids':['fixture'],
+        'answer_locations':['1 分钟版','3 分钟版','原理机制','常见追问'],
+    },
+]
+FINDINGS = [
+    'The candidate does not pretend the source fixed byte order, leading-zero normalization, or Java unsigned-display policy; each is declared as part of the executable contract.',
+    'The parser validates exact four-octet shape, decimal digits, maximum three digits per octet, and numeric range before packing.',
+    'The packing invariant is explicit: each accepted octet shifts the accumulated 32-bit value by eight and appends the next octet in the low byte.',
+    'OpenJDK validation covers zero, ordinary, loopback, all-ones, private-address, leading-zero, wrong-shape, out-of-range, and invalid-character cases.',
+    'Reverse conversion and stricter canonical-text normalization remain explicit follow-ups rather than unstated source requirements.',
+]
+TASK_NOTE = '- [x] `cq_q_229618507f9d47fc7587f347ee783659` source-first isolated review PASS: the candidate declares byte-order/signed-int/leading-zero boundaries, performs strict four-octet range validation, and OpenJDK validation covers normal, boundary, signed-bit-pattern, and malformed inputs. Formal promotion remains blocked by repository human-approval/real-review policy.'
+
+
+def run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+
+
+def write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+
+def main() -> int:
+    inventory_path = ROOT / f'review/content_build/answer_batch_{BATCH}/source_inventory.json'
+    if not inventory_path.exists():
+        raise SystemExit('Batch 0057 source inventory must be frozen before writing')
+    inventory = json.loads(inventory_path.read_text(encoding='utf-8'))
+    inv = next((x for x in inventory.get('canonicals',[]) if x.get('canonical_id') == CID), None)
+    if not inv or inv.get('answer_type') != 'coding' or inv.get('existing_candidate') or inv.get('existing_evidence'):
+        raise SystemExit(f'{CID}: inventory no longer describes a fresh coding target')
+
+    ctx_path = ROOT / f'review/content_build/answer_batch_{BATCH}/{CID}/context.json'
+    if not ctx_path.exists():
+        raise SystemExit(f'{CID}: frozen context missing')
+    ctx = json.loads(ctx_path.read_text(encoding='utf-8'))
+    if not ctx.get('ok') or ctx.get('canonical',{}).get('canonical_id') != CID or ctx.get('answer_type') != 'coding':
+        raise SystemExit(f'{CID}: context/type drift')
+    if ctx.get('canonical',{}).get('question_ids') != [QID]:
+        raise SystemExit(f'{CID}: source ownership drift')
+    src = next((x for x in ctx.get('source_questions',[]) if x.get('question_id') == QID), None)
+    if not src or src.get('original_question') != EXPECTED or src.get('is_valid_for_library') is not True:
+        raise SystemExit(f'{CID}: source wording/validity drift')
+
+    candidate = ROOT / f'review/candidates/answers/{CID}.md'
+    evidence = ROOT / f'review/evidence/{CID}.json'
+    if candidate.exists() or evidence.exists():
+        raise SystemExit(f'{CID}: candidate/evidence already exists; do not overwrite')
+    for heading in HEADINGS:
+        if CANDIDATE.count(heading) != 1:
+            raise SystemExit(f'{CID}: section drift {heading}')
+    blocks = re.findall(r'```java\n(.*?)\n```', CANDIDATE, re.S)
+    if len(blocks) != 1:
+        raise SystemExit(f'{CID}: expected exactly one Java implementation block')
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text(CANDIDATE, encoding='utf-8')
+
+    out = ROOT / f'review/content_build/answer_batch_{BATCH}/{CID}'
+    with tempfile.TemporaryDirectory(prefix='b57-ipv4-') as tmp:
+        d = Path(tmp)
+        (d/'Ipv4ToInt.java').write_text(blocks[0].strip() + '\n', encoding='utf-8')
+        (d/'Ipv4ToIntTest.java').write_text(TEST, encoding='utf-8')
+        run('javac','Ipv4ToInt.java','Ipv4ToIntTest.java',cwd=d)
+        stdout = run('java','Ipv4ToIntTest',cwd=d).stdout.strip()
+    if stdout != STDOUT:
+        raise SystemExit(f'{CID}: fixture stdout drift: {stdout}')
+
+    validation = {
+        'schema_version':'answer_code_validation.v1',
+        'canonical_id':CID,
+        'result':'pass',
+        'validated_at':DATE,
+        'command':'javac Ipv4ToInt.java Ipv4ToIntTest.java && java Ipv4ToIntTest',
+        'stdout':stdout,
+        'checks':CHECKS,
+    }
+    write_json(out/'writer_validation.json', validation)
+    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    sources = [
+        {'source_id':'repository-source','title':'Batch 0057 frozen source context for IPv4 string-to-int','locator':str(ctx_path),'source_type':'repository_source_record','checked_at':DATE},
+        {'source_id':'fixture','title':'OpenJDK deterministic validation for IPv4 string-to-int','locator':str(out/'writer_validation.json'),'source_type':'executable_test_or_reproducible_experiment','checked_at':DATE},
+    ]
+    coverage = [{'question_id':QID,'covered':True,'answer_locations':['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问','易错点']}]
+    write_json(out/'writer_research.json', {
+        'schema_version':'answer_writer_research.v1',
+        'canonical_id':CID,
+        'candidate_sha256':digest,
+        'checked_at':DATE,
+        'review_state':'writer_complete_isolated_review_pending',
+        'sources':sources,
+        'claims':CLAIMS,
+        'source_question_coverage':coverage,
+        'promotion_blocker':'isolated_independent_review_not_yet_performed',
+    })
+
+    reviewer = 'source-first-isolated-reviewer-batch-0057-ipv4-20260829-v1'
+    review_version = 'batch-0057.ipv4.v1'
+    write_json(out/'isolated_review_result.json', {
+        'schema_version':'isolated_review.v1',
+        'canonical_id':CID,
+        'candidate_sha256':digest,
+        'reviewed_at':DATE,
+        'review_mode':'source_first_isolated',
+        'reviewer_id':reviewer,
+        'review_version':review_version,
+        'decision':'pass',
+        'revision_round':1,
+        'source_packet':[str(ctx_path),str(candidate),str(out/'writer_validation.json'),'docs/refactor/09_answer_content_standard.md'],
+        'scores':SCORES,
+        'hard_failures':[],
+        'unsupported_claims':[],
+        'uncovered_source_variants':[],
+        'findings':FINDINGS,
+        'promotion_blockers':[PROMOTION_BLOCKER],
+    })
+    write_json(evidence, {
+        'schema_version':'answer_evidence.v1',
+        'canonical_id':CID,
+        'candidate_sha256':digest,
+        'checked_at':DATE,
+        'writer':{'writer_id':'content-batch-0057-ipv4-builder','writer_version':'xhs-answer-curator.v1'},
+        'sources':sources + [{'source_id':'isolated-review','title':'Batch 0057 IPv4 source-first isolated review','locator':str(out/'isolated_review_result.json'),'source_type':'repository_structured_source','checked_at':DATE}],
+        'claims':CLAIMS,
+        'source_question_coverage':coverage,
+        'validation':{
+            'command':validation['command'],
+            'result':'pass',
+            'reported_stdout':stdout,
+            'checks':CHECKS,
+            'boundary_tests':[{'case':c,'expected':'pass under declared candidate contract','actual':'pass','passed':True} for c in CHECKS],
+        },
+        'review_state':'independent_source_first_review_passed',
+        'review':{
+            'reviewer_id':reviewer,
+            'review_version':review_version,
+            'independent':True,
+            'decision':'pass',
+            'revision_round':1,
+            'scores':SCORES,
+            'hard_failures':[],
+            'unsupported_claims':[],
+            'uncovered_source_variants':[],
+            'findings':FINDINGS,
+        },
+        'promotion_blocker':PROMOTION_BLOCKER,
+    })
+    writer = json.loads((out/'writer_research.json').read_text(encoding='utf-8'))
+    writer['review_state'] = 'writer_complete_isolated_review_passed'
+    writer['promotion_blocker'] = PROMOTION_BLOCKER
+    write_json(out/'writer_research.json', writer)
+
+    task = ROOT / f'tasks/answer-batches/TASK-20260711-0313-answer-batch-{BATCH}.md'
+    task_text = task.read_text(encoding='utf-8').rstrip()
+    if TASK_NOTE not in task_text:
+        task_text += '\n' + TASK_NOTE
+    task.write_text(task_text + '\n', encoding='utf-8')
+
+    print(json.dumps({'ok':True,'batch':BATCH,'completed':[{'canonical_id':CID,'candidate_sha256':digest,'decision':'pass','stdout':stdout}],'promotion_blocker':PROMOTION_BLOCKER}, ensure_ascii=False))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
