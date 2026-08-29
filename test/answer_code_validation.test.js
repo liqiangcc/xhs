@@ -2,12 +2,34 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { compileJava, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
+const { compileJava, validatePython, parseSql, validateSpecializedCandidate } = require('../scripts/lib/answer_quality');
 
 test('Java validation compiles complete classes and rejects broken implementations', () => {
     assert.equal(compileJava('public class Solution { public static int add(int a, int b) { return a + b; } }').ok, true);
     assert.equal(compileJava('public class Solution { public static int add(int a, int b) { return a + ; } }').ok, false);
     assert.equal(compileJava('static int add(int a, int b) { return a + b; }').error, 'java_class_required');
+});
+
+
+test('Python validation recognizes python/py fences and rejects syntax errors', () => {
+    assert.equal(validatePython('def add(a, b):\n    return a + b').ok, true);
+    assert.equal(validatePython('def broken(:\n    pass').ok, false);
+    const context = { canonical: { canonical_title: 'Python 字典构造' }, primary_entities: ['python dict'], source_variants: ['在Python中建立字典对象有哪些方法？'] };
+    const evidence = { validation: { boundary_tests: [
+        { case: 'literal', expected: 'dict', passed: true },
+        { case: 'fromkeys mutable value', expected: 'shared', passed: true },
+        { case: 'comprehension mutable value', expected: 'independent', passed: true },
+    ] } };
+    for (const language of ['python', 'py']) {
+        const candidate = { metadata: { answer_type: 'coding' }, content: [
+            '## 核心结论', 'Python dict 可以通过字面量、dict 构造器和推导式建立。',
+            '## 常见追问', '- 问：fromkeys？答：可共享同一 value。', '- 问：独立 list？答：用推导式。', '- 问：关键字？答：生成字符串键。',
+            '## 3 分钟版', '```' + language, 'def build():\n    return {"a": 1}', '```',
+        ].join('\n') };
+        const result = validateSpecializedCandidate(candidate, evidence, context);
+        assert.equal(result.errors.some((row) => row.error === 'coding_block_required'), false, language);
+        assert.equal(result.errors.some((row) => row.error.endsWith('_validation_failed')), false, language);
+    }
 });
 
 test('SQL validation checks statement structure balance and placeholders', () => {
