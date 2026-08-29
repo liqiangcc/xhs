@@ -1,0 +1,105 @@
+name: Content Batch 0056 SQL and KMP Pair
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0056-sql-kmp-pair.yml
+      - scripts/content/build_batch_0056_sql_kmp_pair.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0056-sql-kmp-pair
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  build-review-validate-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Build, execute, and source-first review pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/build_batch_0056_sql_kmp_pair.py > /tmp/build.py
+          python3 -m py_compile /tmp/build.py
+          python3 /tmp/build.py
+
+      - name: Run candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for cid in \
+            cq_q_ffea95ccbbb749dac2669e262c61f5d5 \
+            cq_q_7daa5cfddb93ce44e349bd4978214d71; do
+            node scripts/xhs.js answer audit --candidate "review/candidates/answers/$cid.md" --require-evidence --noWrite --noDraftCheck
+          done
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Batch 0056 SQL/KMP build: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; retry against current state.'
+            exit 0
+          fi
+          for cid in \
+            cq_q_ffea95ccbbb749dac2669e262c61f5d5 \
+            cq_q_7daa5cfddb93ce44e349bd4978214d71; do
+            git add \
+              "review/candidates/answers/$cid.md" \
+              "review/content_build/answer_batch_0056/$cid" \
+              "review/evidence/$cid.json"
+          done
+          git add tasks/answer-batches/TASK-20260711-0313-answer-batch-0056.md
+          if git diff --cached --quiet; then
+            echo 'No Batch 0056 SQL/KMP changes to commit.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name xhs-content-builder
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: review batch 0056 SQL and KMP candidates'
+          git push origin "HEAD:$CONTENT_BRANCH"
