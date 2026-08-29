@@ -1,0 +1,156 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_f213ccebb77d694fa4eb9062e4f03a01",
+  "candidate_sha256": "478034e27436d737db410c7f0298ed7e19c332f853e74f5c48a8d243fb2bd590",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0054-slice-c-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0054 exact source context for cq_q_f213ccebb77d694fa4eb9062e4f03a01",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f213ccebb77d694fa4eb9062e4f03a01/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 deterministic validation for cq_q_f213ccebb77d694fa4eb9062e4f03a01",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f213ccebb77d694fa4eb9062e4f03a01/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0054 source-first isolated review for cq_q_f213ccebb77d694fa4eb9062e4f03a01",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f213ccebb77d694fa4eb9062e4f03a01/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source only asks to hand-write a blocking queue; boundedness, fairness, timeout, shutdown, and language are not preserved requirements.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "condition-mechanism",
+      "text": "The candidate protects ring-buffer state with one lock and waits in while loops on separate notEmpty/notFull Conditions.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "concurrency-integrity",
+      "text": "The executable validation demonstrates FIFO basics, actual producer/consumer blocking, interruption, and exactly-once delivery under a 4x4 concurrent stress case.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "f213ccebb77d694fa4eb9062e4f03a01",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac BoundedBlockingQueue.java BoundedBlockingQueueTest.java && java BoundedBlockingQueueTest",
+    "result": "pass",
+    "reported_stdout": "PASS fifo capacity-null producer-block consumer-block interruptible 4x4-20000-integrity",
+    "checks": [
+      "FIFO and capacity/null boundaries",
+      "producer blocks while full and resumes after take",
+      "consumer blocks while empty and resumes after put",
+      "waiting take is interruptible",
+      "4 producers x 4 consumers preserve exactly-once delivery for 20000 unique items"
+    ],
+    "boundary_tests": [
+      {
+        "case": "FIFO and capacity/null boundaries",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "producer blocks while full and resumes after take",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "consumer blocks while empty and resumes after put",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "waiting take is interruptible",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "4 producers x 4 consumers preserve exactly-once delivery for 20000 unique items",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0054-boundedblockingqueue-20260829-v1",
+    "review_version": "batch-0054.boundedblockingqueue.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate explicitly scopes a sparse source to a bounded interruptible FIFO contract instead of inventing timeout/fairness/close semantics.",
+      "Condition waits use while predicates and separate notEmpty/notFull wait sets, preserving the ring-buffer size invariant.",
+      "The implementation clears consumed slots and updates head/tail/size only under one lock.",
+      "OpenJDK 21 validation observes real blocking/unblocking and interruption rather than testing only sequential queue behavior.",
+      "A 4-producer/4-consumer 20000-item stress case verifies every unique value is delivered exactly once."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}

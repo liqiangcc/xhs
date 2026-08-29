@@ -1,0 +1,156 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_f4495c3cafbc49411bce1eab8525b2f0",
+  "candidate_sha256": "dc054195bbb86a1ecdd3235f4e39c3d1919d59b9c69d6bdd42f6fc2541009303",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0054-slice-c-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0054 exact source context for cq_q_f4495c3cafbc49411bce1eab8525b2f0",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f4495c3cafbc49411bce1eab8525b2f0/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 deterministic validation for cq_q_f4495c3cafbc49411bce1eab8525b2f0",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f4495c3cafbc49411bce1eab8525b2f0/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0054 source-first isolated review for cq_q_f4495c3cafbc49411bce1eab8525b2f0",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f4495c3cafbc49411bce1eab8525b2f0/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source only says multiple threads alternately print abc and 123; group granularity, first group, rounds, and synchronization primitive are not preserved requirements.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "state-machine",
+      "text": "The candidate explicitly models two states protected by one lock and two Conditions, so output ordering does not depend on thread start or OS scheduling order.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "determinism",
+      "text": "Executable validation checks exact abc123 repetition even when the number thread is started first and across long/repeated runs.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "f4495c3cafbc49411bce1eab8525b2f0",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac AlternatingPrinter.java AlternatingPrinterTest.java && java AlternatingPrinterTest",
+    "result": "pass",
+    "reported_stdout": "PASS negative zero one multi start-order 10000-rounds 200-repeat-runs",
+    "checks": [
+      "negative/zero/one-round boundaries",
+      "number thread deliberately starts first but abc group still prints first",
+      "exact abc123 group alternation for multiple rounds",
+      "10000-round stress output is exact",
+      "200 repeated runs across varied round counts are deterministic"
+    ],
+    "boundary_tests": [
+      {
+        "case": "negative/zero/one-round boundaries",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "number thread deliberately starts first but abc group still prints first",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "exact abc123 group alternation for multiple rounds",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "10000-round stress output is exact",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "200 repeated runs across varied round counts are deterministic",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0054-alternatingprinter-20260829-v1",
+    "review_version": "batch-0054.alternatingprinter.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate treats the source as sparse and explicitly selects group-level abc/123 alternation instead of inventing an unstated a1b2c3 contract.",
+      "Correctness is driven by a two-state predicate under one lock, not by sleep or assumed start order.",
+      "Both Condition waits use while loops and signal the opposite wait set only after the state transition.",
+      "OpenJDK 21 validation deliberately starts the number thread first and still requires abc to be the first observable group.",
+      "Long and repeated exact-output tests exercise scheduling variation while preserving the declared deterministic contract."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
