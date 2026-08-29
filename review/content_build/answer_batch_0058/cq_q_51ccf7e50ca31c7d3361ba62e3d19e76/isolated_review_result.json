@@ -1,0 +1,43 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_51ccf7e50ca31c7d3361ba62e3d19e76",
+  "candidate_sha256": "85a6fdaa36f83a5b207eab35d77a4386552f804f46ab330d085ac27606c848cc",
+  "reviewed_at": "2026-08-29",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0058-aqs-20260829-v1",
+  "review_version": "batch-0058.aqs-fairness.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0058/cq_q_51ccf7e50ca31c7d3361ba62e3d19e76/context.json",
+    "review/candidates/answers/cq_q_51ccf7e50ca31c7d3361ba62e3d19e76.md",
+    "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/concurrent/locks/ReentrantLock.java",
+    "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/concurrent/locks/AbstractQueuedSynchronizer.java",
+    "docs/refactor/09_answer_content_standard.md",
+    "config/answer_quality.json"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 19,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The candidate directly answers all frozen AQS/ReentrantLock fairness source variants and keeps the explanation on lock-admission mechanics rather than importing unrelated JUC topics.",
+    "OpenJDK 21 GA confirms that AQS supplies synchronization state plus FIFO wait-queue/acquire/release mechanics but does not itself enforce FIFO acquisition; the candidate preserves this mechanism-versus-policy boundary.",
+    "OpenJDK 21 GA confirms NonfairSync can CAS an available state without predecessor checks, while FairSync gates acquisition with hasQueuedThreads/hasQueuedPredecessors checks; the candidate explains the resulting barging boundary accurately.",
+    "The candidate correctly separates fairness from reentrancy and release semantics: owner reentry increments the AQS hold count and ownership is cleared only when the count reaches zero.",
+    "The answer explicitly bounds its concrete method discussion to OpenJDK 21 GA and correctly records that untimed tryLock() does not honor the fairness setting and that lock fairness is not JVM/OS scheduler fairness.",
+    "Mechanism completeness is sufficient for promotion scoring: participants, entry-to-result flow, state transitions, queue/blocking behavior, performance/resource trade-off, version boundary, and contention/fairness failure boundaries are all present without unsupported numeric claims.",
+    "No fabricated project experience is asserted; the project section is framed as an engineering selection and diagnosis method rather than a personal production story."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
