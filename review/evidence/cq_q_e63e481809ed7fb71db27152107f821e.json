@@ -1,0 +1,166 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_e63e481809ed7fb71db27152107f821e",
+  "candidate_sha256": "c34c00e97165460e5af289fc16bf391040adc998cc6198ad4395fe15c3e443a1",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0053-difference-two-pairs-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0053 exact difference-two-pairs source context",
+      "locator": "review/content_build/answer_batch_0053/cq_q_e63e481809ed7fb71db27152107f821e/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 difference-two-pairs deterministic validation",
+      "locator": "review/content_build/answer_batch_0053/cq_q_e63e481809ed7fb71db27152107f821e/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0053 difference-two-pairs source-first isolated review",
+      "locator": "review/content_build/answer_batch_0053/cq_q_e63e481809ed7fb71db27152107f821e/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks only to find and print all array pairs differing by two; it does not preserve pair identity semantics, duplicate handling, ordering, language, or null behavior.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "explicit-contract",
+      "text": "The candidate explicitly chooses unique value pairs, ascending deterministic output, empty-array success, and null as an illegal input.",
+      "source_ids": [
+        "repository-source",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "algorithm-behavior",
+      "text": "For each distinct left value, membership of left+2 in the value set exactly characterizes a unique difference-two value pair; long intermediate arithmetic prevents int overflow false matches.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "boundary-validation",
+      "text": "Executable validation covers duplicates, signed/extreme ints, null, 5000 deterministic random arrays against an independent oracle, and a 200000-element large case.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "e63e481809ed7fb71db27152107f821e",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac DifferenceTwoPairs.java DifferenceTwoPairsTest.java && java DifferenceTwoPairsTest",
+    "result": "pass",
+    "reported_stdout": "PASS directed duplicates extremes null 5000-random-oracle 200000-large",
+    "checks": [
+      "directed empty/single/positive/negative cases",
+      "duplicate input values still produce unique value pairs",
+      "integer boundary cases prove overflow-safe +2 computation",
+      "explicit null-input exception boundary",
+      "5000 deterministic random arrays agree with an independent sorted-set oracle",
+      "200000-element large case completes and produces no false positive pairs"
+    ],
+    "boundary_tests": [
+      {
+        "case": "duplicate values",
+        "expected": "unique value pairs only",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "extreme ints",
+        "expected": "no overflow-induced false pair",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "5000 deterministic random arrays",
+        "expected": "matches sorted-set oracle",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "200000-element large input",
+        "expected": "no false positive pair",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0053-difference-two-pairs-20260829-v1",
+    "review_version": "batch-0053.difference-two-pairs.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate does not invent missing pair/index semantics from the sparse source; it defines unique value-pair semantics explicitly.",
+      "Duplicate input values, deterministic ordering, null behavior, and non-mutating input handling are stated as candidate contract rather than source facts.",
+      "The HashSet solution directly reduces pair search to membership of a+2 and avoids quadratic all-pairs scanning under the chosen value-pair semantics.",
+      "The implementation uses long for the +2 intermediate so extreme int values cannot wrap into false matches.",
+      "OpenJDK 21 validation covers directed duplicates/extremes, 5000 deterministic random arrays against an independent TreeSet oracle, and a 200000-element large case.",
+      "Complexity wording separates average/expected hash work from O(k log k) deterministic result sorting.",
+      "The candidate clearly explains that index-pair semantics would require preserving multiplicity/indices and could have much larger output size."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
