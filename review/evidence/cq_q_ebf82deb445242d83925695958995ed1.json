@@ -1,0 +1,142 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_ebf82deb445242d83925695958995ed1",
+  "candidate_sha256": "fa942deec01229a0e3c662d3738c98d803f28e28fbedf0c4375b0b81ef22f332",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0054-slice-a-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0054 exact source context for cq_q_ebf82deb445242d83925695958995ed1",
+      "locator": "review/content_build/answer_batch_0054/cq_q_ebf82deb445242d83925695958995ed1/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 deterministic validation for cq_q_ebf82deb445242d83925695958995ed1",
+      "locator": "review/content_build/answer_batch_0054/cq_q_ebf82deb445242d83925695958995ed1/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0054 source-first isolated review for cq_q_ebf82deb445242d83925695958995ed1",
+      "locator": "review/content_build/answer_batch_0054/cq_q_ebf82deb445242d83925695958995ed1/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks for all non-duplicate subsets of a set; language, ordering, empty-result representation, and duplicate-array behavior are not preserved.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "mechanism",
+      "text": "Backtracking enumerates the binary include/exclude decision tree, producing one leaf per subset when input elements are unique.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "complexity",
+      "text": "Materializing all subsets is output-sensitive Θ(n*2^n) in the worst case; executable validation matches an independent bitmask oracle.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "ebf82deb445242d83925695958995ed1",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac DistinctSubsets.java DistinctSubsetsTest.java && java DistinctSubsetsTest",
+    "result": "pass",
+    "reported_stdout": "PASS empty directed duplicate-contract 2000-random-vs-bitmask",
+    "checks": [
+      "empty set returns one empty subset",
+      "duplicate input is rejected under set contract",
+      "2000 deterministic random distinct arrays match an independent bitmask oracle"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty set returns one empty subset",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "duplicate input is rejected under set contract",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "2000 deterministic random distinct arrays match an independent bitmask oracle",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0054-distinctsubsets-20260829-v1",
+    "review_version": "batch-0054.distinctsubsets.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate treats “集合” as a distinct-element contract and explicitly rejects duplicate input rather than silently changing to a duplicate-array subset problem.",
+      "The include/exclude recursion is complete and duplicate-free under the declared set contract.",
+      "The answer correctly counts materialized output cost as Θ(n·2^n) rather than only counting decision-tree leaves.",
+      "OpenJDK 21 validation covers the empty-set identity and 2000 deterministic random sets against an independent bitmask oracle.",
+      "Ordering and element type are declared implementation choices, not reconstructed source constraints."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
