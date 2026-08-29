@@ -1,0 +1,109 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_51ccf7e50ca31c7d3361ba62e3d19e76",
+  "checked_at": "2026-08-29",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0058/cq_q_51ccf7e50ca31c7d3361ba62e3d19e76/context.json",
+    "answer_type": "mechanism",
+    "question_ids": [
+      "03dab3852b6badd5deb4c9b5e3d1a119",
+      "51ccf7e50ca31c7d3361ba62e3d19e76",
+      "e4158ba658b260c52beff9556840619e"
+    ],
+    "preserved_question_intent": "Explain how AQS/ReentrantLock realizes fair versus non-fair lock acquisition."
+  },
+  "sources": [
+    {
+      "source_id": "openjdk-reentrantlock-jdk21ga",
+      "title": "OpenJDK 21 GA ReentrantLock.java",
+      "source_type": "primary_source_code",
+      "locator": "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/concurrent/locks/ReentrantLock.java",
+      "version": "jdk-21-ga",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "ReentrantLock.Sync",
+        "ReentrantLock.NonfairSync.initialTryLock",
+        "ReentrantLock.NonfairSync.tryAcquire",
+        "ReentrantLock.FairSync.initialTryLock",
+        "ReentrantLock.FairSync.tryAcquire",
+        "ReentrantLock.Sync.tryRelease",
+        "ReentrantLock(boolean fair)",
+        "ReentrantLock.tryLock()"
+      ]
+    },
+    {
+      "source_id": "openjdk-aqs-jdk21ga",
+      "title": "OpenJDK 21 GA AbstractQueuedSynchronizer.java",
+      "source_type": "primary_source_code",
+      "locator": "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/concurrent/locks/AbstractQueuedSynchronizer.java",
+      "version": "jdk-21-ga",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "class-level FIFO queue contract",
+        "acquire/release algorithm description",
+        "barging discussion",
+        "hasQueuedPredecessors"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "aqs-framework-boundary",
+      "text": "AQS supplies synchronization state plus FIFO wait-queue/blocking mechanics, but it does not by itself force FIFO acquisition policy; subclasses define tryAcquire/tryRelease and therefore the admission policy.",
+      "source_ids": ["openjdk-aqs-jdk21ga"],
+      "source_anchors": ["class-level FIFO queue contract", "acquire/release algorithm description", "barging discussion"]
+    },
+    {
+      "claim_id": "reentrantlock-selects-policy",
+      "text": "ReentrantLock delegates synchronization to an AQS-based Sync and chooses FairSync or NonfairSync from the constructor fairness flag; AQS state represents the reentrant hold count.",
+      "source_ids": ["openjdk-reentrantlock-jdk21ga"],
+      "source_anchors": ["ReentrantLock.Sync", "ReentrantLock(boolean fair)"]
+    },
+    {
+      "claim_id": "nonfair-barging-fast-path",
+      "text": "The non-fair path can acquire an available lock by CAS without first checking queued predecessors. In JDK 21 GA, NonfairSync.initialTryLock performs an unguarded first CAS and NonfairSync.tryAcquire likewise does not consult queue-predecessor state, so an arriving thread may barge ahead of queued waiters.",
+      "source_ids": ["openjdk-reentrantlock-jdk21ga", "openjdk-aqs-jdk21ga"],
+      "source_anchors": ["ReentrantLock.NonfairSync.initialTryLock", "ReentrantLock.NonfairSync.tryAcquire", "barging discussion"]
+    },
+    {
+      "claim_id": "fair-queue-gating",
+      "text": "The fair path adds queue-state admission checks before CAS: the immediate fair attempt requires no queued threads, and the queued acquisition path requires no queued predecessors. This prevents a newcomer from intentionally bypassing earlier queued waiters under the lock's fair acquisition policy.",
+      "source_ids": ["openjdk-reentrantlock-jdk21ga", "openjdk-aqs-jdk21ga"],
+      "source_anchors": ["ReentrantLock.FairSync.initialTryLock", "ReentrantLock.FairSync.tryAcquire", "hasQueuedPredecessors"]
+    },
+    {
+      "claim_id": "reentrancy-is-policy-independent",
+      "text": "Both fair and non-fair synchronizers preserve reentrancy: if the current thread is already the exclusive owner, acquisition increments the hold count instead of queueing behind itself.",
+      "source_ids": ["openjdk-reentrantlock-jdk21ga"],
+      "source_anchors": ["ReentrantLock.NonfairSync.initialTryLock", "ReentrantLock.FairSync.initialTryLock", "ReentrantLock.Sync"]
+    },
+    {
+      "claim_id": "release-and-handoff",
+      "text": "Release decrements the hold count; only when it reaches zero is the exclusive owner cleared and the synchronizer considered fully released, after which AQS release mechanics can signal the next eligible queued waiter.",
+      "source_ids": ["openjdk-reentrantlock-jdk21ga", "openjdk-aqs-jdk21ga"],
+      "source_anchors": ["ReentrantLock.Sync.tryRelease", "acquire/release algorithm description"]
+    },
+    {
+      "claim_id": "fairness-boundaries",
+      "text": "ReentrantLock fairness is a lock-admission policy under contention, not a guarantee of fair operating-system/JVM thread scheduling. The class documentation also states that untimed tryLock() does not honor the fairness setting and may acquire an available fair lock even when other threads are waiting.",
+      "source_ids": ["openjdk-reentrantlock-jdk21ga"],
+      "source_anchors": ["class fairness documentation", "ReentrantLock.tryLock()"]
+    },
+    {
+      "claim_id": "fairness-tradeoff",
+      "text": "The ReentrantLock documentation explicitly describes the usual tradeoff: fair locks can reduce variance/starvation risk for lock acquisition, but under heavy contention may have lower overall throughput than the default non-fair policy.",
+      "source_ids": ["openjdk-reentrantlock-jdk21ga"],
+      "source_anchors": ["class fairness documentation"]
+    }
+  ],
+  "writer_constraints": [
+    "Do not say that AQS itself automatically implements fairness; fairness comes from subclass admission checks around tryAcquire.",
+    "Do not simplify the difference to only 'queue vs no queue'; both policies use the AQS wait queue under contention. The key difference is whether a newcomer is allowed to barge when state becomes available.",
+    "Describe JDK 21 GA behavior explicitly when naming concrete methods such as initialTryLock, hasQueuedThreads, and hasQueuedPredecessors.",
+    "Keep reentrancy separate from fairness: owner reentry increments state in both policies.",
+    "State that untimed tryLock() can bypass the fair policy.",
+    "Do not claim fair ReentrantLock guarantees fair thread scheduling or absolute acquisition order independent of scheduler effects."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write source-bounded mechanism candidate, then perform isolated source-first review before evidence promotion"
+}
