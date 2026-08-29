@@ -1,0 +1,160 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_e0e0f8f47d472c391202d01620a967d2",
+  "candidate_sha256": "1eef7d032d0552921d3d64179ab896d05154caf42f4674882a66e03441587ae0",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0052-multithread-same-task-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0052 exact multi-thread same-task source context",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e0e0f8f47d472c391202d01620a967d2/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 coordinated-worker lifecycle and failure validation",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e0e0f8f47d472c391202d01620a967d2/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0052 multi-thread same-task source-first isolated review",
+      "locator": "review/content_build/answer_batch_0052/cq_q_e0e0f8f47d472c391202d01620a967d2/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-ambiguity",
+      "text": "The exact source asks multiple threads to process the same task and all complete together, but does not define physical simultaneity, start synchronization, task partitioning, failure, or return semantics.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "explicit-contract",
+      "text": "The candidate interprets the same task as one Runnable invoked once per worker, aligns readiness/start with latches, and defines “all complete” as the coordinator not continuing until every worker settles.",
+      "source_ids": [
+        "repository-source",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "failure-safety",
+      "text": "Completion countDown happens in finally and failures are accumulated, so an exception cannot strand the coordinator waiting for a missing completion signal.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "Executable validation checks exact worker execution count, wait-all return, failure settlement/propagation, lifecycle blocking, and invalid boundaries.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "e0e0f8f47d472c391202d01620a967d2",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac CoordinatedWorkers.java CoordinatedWorkersTest.java && java CoordinatedWorkersTest",
+    "result": "pass",
+    "reported_stdout": "PASS exact-worker-count wait-all failure-settlement external-gate lifecycle invalid-boundaries",
+    "checks": [
+      "the same Runnable is executed exactly once by every configured worker",
+      "the coordinator returns only after all workers settle",
+      "worker failures still decrement completion and are propagated after group settlement",
+      "an external blocking gate demonstrates coordinator lifecycle waiting without polling sleeps",
+      "invalid worker count and null task follow explicit candidate boundaries"
+    ],
+    "boundary_tests": [
+      {
+        "case": "8 workers same Runnable",
+        "expected": "8 invocations / 8 worker threads",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "worker exceptions",
+        "expected": "all 5 settle then failure propagates",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "external task gate",
+        "expected": "coordinator remains blocked until all four settle",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0052-multithread-same-task-20260829-v1",
+    "review_version": "batch-0052.multithread-same-task.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The answer does not falsely promise physical simultaneous completion; it translates the ambiguous wording into verifiable start-gate and wait-all semantics.",
+      "ready/start/done responsibilities are separated, and the fixed pool size is matched to worker count to avoid ready-latch thread-starvation deadlock.",
+      "Failure safety is designed into finally-based completion and post-settlement error aggregation instead of allowing one failure to hang peers.",
+      "OpenJDK 21 validation covers exact worker count, wait-all behavior, failure settlement, external blocking lifecycle, and invalid inputs.",
+      "The answer distinguishes coordinator join semantics from a true multi-phase worker barrier and names CyclicBarrier/Phaser only for the latter contract.",
+      "The project section avoids fabricated experience and notes task-level shared-state thread safety as a separate concern."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
