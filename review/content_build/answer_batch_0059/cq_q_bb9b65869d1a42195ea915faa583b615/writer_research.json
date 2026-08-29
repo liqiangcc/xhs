@@ -1,0 +1,97 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_bb9b65869d1a42195ea915faa583b615",
+  "candidate_sha256": "302dd3bb15c3e6d48656f97fd6bdbc6f52e4735a41bd11ceb176e5e3d929251c",
+  "checked_at": "2026-08-30",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0059 frozen 100k-QPS/OPS RPC-framework source context",
+      "locator": "review/content_build/answer_batch_0059/cq_q_bb9b65869d1a42195ea915faa583b615/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "primary-source-research",
+      "title": "Batch 0059 RPC-framework primary-source research packet",
+      "locator": "review/content_build/answer_batch_0059/cq_q_bb9b65869d1a42195ea915faa583b615/primary_source_research.json",
+      "source_type": "primary_source_research_record",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "writer-validation",
+      "title": "Deterministic Batch 0059 RPC candidate source/shape validation",
+      "locator": "GitHub Actions run 33282042318",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-30"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The two frozen source variants ask for an RPC framework at a stated 100k target but use different units, 100k OPS and 100k QPS, and preserve Netty, serialization, service-governance/load-balancing and high-performance-call concerns; they do not provide a production payload mix, node count, hardware profile, percentile SLO or measured per-instance throughput.",
+      "source_ids": ["repository-source"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "项目经验版"]
+    },
+    {
+      "claim_id": "capacity-and-latency-contract",
+      "text": "The candidate keeps QPS and OPS distinct, decomposes the end-to-end latency budget instead of using an average-only claim, and computes instance requirements from measured safe per-instance throughput plus failure-domain survival and headroom rather than inventing universal Netty or hardware capacity.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "项目经验版", "常见追问"]
+    },
+    {
+      "claim_id": "event-loop-and-worker-isolation",
+      "text": "The candidate uses Netty-style event loops for connection/IO state progression while keeping uncontrollable blocking business, storage and downstream work behind a bounded worker or asynchronous boundary, and makes event-loop utilization/lag and worker saturation separate observability/capacity dimensions.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "connection-protocol-and-codec-boundaries",
+      "text": "The candidate reuses persistent connection/channel state, models request correlation and bounded in-flight state explicitly, versions the RPC protocol/codec, and treats serialization/native transport as workload-measured optimizations rather than unconditional performance winners.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "项目经验版", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "service-governance",
+      "text": "The candidate separates name resolution/discovery, endpoint health/readiness and load-balancing selection, and puts per-method deadline/retry policy in the framework/control-plane contract instead of scattering it through business call sites.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "deadline-retry-idempotency-overload",
+      "text": "The candidate propagates a bounded end-to-end time budget, allows retries only for classified failures with remaining deadline/attempt budget and a safe idempotency boundary, and uses bounded in-flight/worker queues plus flow control or fast rejection to prevent retry/queue amplification during overload.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "rollout-and-proof",
+      "text": "The candidate treats endpoint draining, reconnect jitter, protocol/codec compatibility, steady-state plus overload/failover testing and per-method tail-latency/resource observability as part of the proof for the 100k/millisecond target, and explicitly refuses to fabricate company-specific topology, node counts or production latency numbers.",
+      "source_ids": ["primary-source-research", "writer-validation"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "项目经验版", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "bb9b65869d1a42195ea915faa583b615",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "cb14ccb8051901c448a5d13b0c3f8117",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "writer_validation": {
+    "candidate_sha256": "302dd3bb15c3e6d48656f97fd6bdbc6f52e4735a41bd11ceb176e5e3d929251c",
+    "run_id": 33282042318,
+    "source_and_structure_guard": "pass",
+    "candidate_audit_without_review_evidence": "expected_fail_missing_evidence_and_independent_review_only",
+    "observed_hard_failures": [
+      "missing_evidence",
+      "missing_independent_review"
+    ]
+  },
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
