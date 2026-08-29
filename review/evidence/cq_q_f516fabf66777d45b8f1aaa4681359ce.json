@@ -1,0 +1,160 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_f516fabf66777d45b8f1aaa4681359ce",
+  "candidate_sha256": "b3a8c7bc6fcd25225805d6be3d26fd5a36b5e4f9ffa0f78e853c3d1b049fe612",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0055-wrr-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0055 frozen WRR source context",
+      "locator": "review/content_build/answer_batch_0055/cq_q_f516fabf66777d45b8f1aaa4681359ce/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK deterministic Smooth WRR validation",
+      "locator": "review/content_build/answer_batch_0055/cq_q_f516fabf66777d45b8f1aaa4681359ce/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0055 WRR source-first isolated review",
+      "locator": "review/content_build/answer_batch_0055/cq_q_f516fabf66777d45b8f1aaa4681359ce/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source requires a weighted round-robin implementation with attention to dynamic weight-adjustment performance; it does not preserve language, service discovery, health checking, membership changes, concurrency model, or production QPS/SLO constraints.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "smooth-wrr-behavior",
+      "text": "Under the declared Java contract, the executable implementation produces the smooth 5:1:1 cycle AABACAA, exact proportional counts over complete periods, and correct behavior after dynamic weight changes.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "dynamic-update-integrity",
+      "text": "The implementation changes one indexed node plus totalWeight on update, and the executable concurrent test completes 24000 selections while 10000 update pairs run under the same synchronization boundary.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "f516fabf66777d45b8f1aaa4681359ce",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac SmoothWeightedRoundRobin.java SmoothWeightedRoundRobinTest.java && java SmoothWeightedRoundRobinTest",
+    "result": "pass",
+    "reported_stdout": "PASS boundaries smooth-5:1:1 dynamic-1:1:1 zero-weight 8-thread-24000-select 10000-update-integrity",
+    "checks": [
+      "empty/all-zero/negative weight boundaries are rejected",
+      "5:1:1 produces the deterministic smooth cycle AABACAA and exact long-run 5:1:1 counts",
+      "dynamic update from 5:1:1 to 1:1:1 converges immediately at a completed cycle boundary",
+      "zero weight removes a backend from selection without deleting its identity",
+      "8 selector threads complete 24000 selections while 10000 weight-update pairs execute under the same consistency lock"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty/all-zero/negative weight boundaries are rejected",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "5:1:1 produces the deterministic smooth cycle AABACAA and exact long-run 5:1:1 counts",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "dynamic update from 5:1:1 to 1:1:1 converges immediately at a completed cycle boundary",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "zero weight removes a backend from selection without deleting its identity",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "8 selector threads complete 24000 selections while 10000 weight-update pairs execute under the same consistency lock",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0055-wrr-20260829-v1",
+    "review_version": "batch-0055.wrr.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate stays inside the preserved WRR plus dynamic-weight source boundary and explicitly declines to invent service discovery, health-check, membership-change, or production performance requirements.",
+      "Smooth WRR maintains per-node current credit and subtracts total weight from the winner, producing the declared 5:1:1 smooth cycle and exact proportional counts over complete periods.",
+      "Dynamic weight adjustment touches one indexed node and totalWeight only, so the update path is O(1) while selection is intentionally O(N); the answer explains the opposite tradeoff of precomputed schedules.",
+      "A single synchronization boundary protects current, weight, and totalWeight, so selection and concurrent weight updates cannot observe torn scheduler state in this contract.",
+      "Executable OpenJDK validation covers deterministic distribution, dynamic updates, zero-weight behavior, invalid boundaries, and concurrent selection/update integrity without asserting unverifiable timing thresholds."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
