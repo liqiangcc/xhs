@@ -1,0 +1,141 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_7ffd77e47644a9811d55358f51bb54a7",
+  "candidate_sha256": "f4f303e5c304594fe928c152565650918a72f7b7a52b8e2f65c86c9483a51964",
+  "checked_at": "2026-08-30",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0059 frozen unread-message source context",
+      "locator": "review/content_build/answer_batch_0059/cq_q_7ffd77e47644a9811d55358f51bb54a7/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "primary-source-research",
+      "title": "500k-QPS/OPS unread-message primary-source research packet",
+      "locator": "review/content_build/answer_batch_0059/cq_q_7ffd77e47644a9811d55358f51bb54a7/primary_source_research.json",
+      "source_type": "primary_source_research_record",
+      "checked_at": "2026-08-30"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The frozen source variants ask for a 500k-QPS/OPS in-app unread-message system and preserve unread-message, recipient/inverted-index, sharded-storage, high-concurrency and Redis concerns; they do not provide a production traffic mix, node count, message size, retention, SLO or measured per-shard throughput.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "capacity-contract",
+      "text": "The candidate treats 500k as a system workload target that must be split into query, ingest, fanout and read-state rates, and derives resource counts from measured safe per-shard throughput plus headroom rather than inventing universal Redis/Kafka node throughput.",
+      "source_ids": [
+        "primary-source-research"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "durable-truth-and-redis-boundary",
+      "text": "The candidate keeps durable message/delivery/read-state facts separate from Redis materializations, uses Redis Cluster and sorted sets only as sharding/ordered-index primitives, and explicitly preserves Redis Cluster and WAIT write-safety/strong-consistency boundaries.",
+      "source_ids": [
+        "primary-source-research"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "replay-idempotency-and-non-regression",
+      "text": "Fanout is defined as replayable and acknowledged only after a durable or idempotent side effect, with event_id plus recipient identity for deduplication, monotonic read cursor/version semantics, and reconciliation so duplicates, late events and rebuilds cannot permanently double-count or resurrect read messages.",
+      "source_ids": [
+        "primary-source-research"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "fanout-skew-and-broadcast",
+      "text": "The candidate separates targeted recipient fanout from high-fanout/system broadcasts, explains recipient-key sharding locality without claiming uniform hashing removes hot-user skew, and uses shared broadcast/topic state plus cursor/segment materialization as an alternative to synchronous O(all users) fanout.",
+      "source_ids": [
+        "primary-source-research"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "operability-and-proof",
+      "text": "The candidate requires latency/throughput, queue lag, pending/retry, Redis hit/skew, durable-store latency, unread drift and rebuild metrics, and requires target-environment 500k load, failover, hot-key and backlog-recovery tests before claiming the capacity target is proven.",
+      "source_ids": [
+        "repository-source",
+        "primary-source-research"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "7ffd77e47644a9811d55358f51bb54a7",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "question_id": "9fd2e9d7869a759c9f64b4a938f45ffe",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
