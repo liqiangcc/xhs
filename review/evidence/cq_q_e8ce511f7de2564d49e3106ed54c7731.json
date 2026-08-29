@@ -1,0 +1,175 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_e8ce511f7de2564d49e3106ed54c7731",
+  "candidate_sha256": "8810e37b96e75e8b2123b610f2fc75c78d90a50744e12ec1c962d821e8816854",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0053-expression-calculator-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0053 exact expression-calculator source context",
+      "locator": "review/content_build/answer_batch_0053/cq_q_e8ce511f7de2564d49e3106ed54c7731/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK 21 expression-calculator deterministic validation",
+      "locator": "review/content_build/answer_batch_0053/cq_q_e8ce511f7de2564d49e3106ed54c7731/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0053 expression-calculator source-first isolated review",
+      "locator": "review/content_build/answer_batch_0053/cq_q_e8ce511f7de2564d49e3106ed54c7731/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source asks only for evaluating an arithmetic-expression string; it does not preserve operator set, numeric domain, parenthesis/unary support, overflow, invalid-input, or division semantics.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "explicit-contract",
+      "text": "The candidate explicitly chooses arbitrary-precision integers, + - * /, parentheses, unary signs, whitespace, truncating integer division, and strict syntax/error boundaries.",
+      "source_ids": [
+        "repository-source",
+        "fixture"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "parser-mechanism",
+      "text": "Recursive-descent grammar layers expression, term, unary, and primary so higher-precedence operations finish before lower-precedence callers consume them.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "validation",
+      "text": "Executable validation covers precedence, parentheses, unary signs, whitespace, division semantics, arbitrary precision, syntax failures, division by zero, 2000 deterministic generated AST cases, and 200-level nesting.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "e8ce511f7de2564d49e3106ed54c7731",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac ExpressionCalculator.java ExpressionCalculatorTest.java && java ExpressionCalculatorTest",
+    "result": "pass",
+    "reported_stdout": "PASS precedence parentheses unary whitespace division biginteger syntax divzero 2000-random-ast 200-deep",
+    "checks": [
+      "operator precedence and parenthesis grouping",
+      "unary signs and whitespace handling",
+      "integer division toward zero under explicit BigInteger contract",
+      "arbitrary-precision multiplication beyond long range",
+      "syntax rejection and division-by-zero boundary",
+      "2000 deterministic generated expression trees agree with independent AST values",
+      "200-level parenthesis nesting directed regression"
+    ],
+    "boundary_tests": [
+      {
+        "case": "precedence and parentheses",
+        "expected": "grammar-consistent exact values",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "syntax and trailing garbage",
+        "expected": "rejected",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "division by zero",
+        "expected": "ArithmeticException",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "2000 deterministic generated AST expressions",
+        "expected": "matches independent values",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "200-level nested parentheses",
+        "expected": "evaluates to 7",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0053-expression-calculator-20260829-v1",
+    "review_version": "batch-0053.expression-calculator.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate does not invent a hidden calculator grammar from the sparse source; every supported operator and numeric/error rule is labeled as explicit candidate contract.",
+      "Recursive-descent layers correctly encode multiplication/division precedence over addition/subtraction while parentheses re-enter the full expression grammar.",
+      "Unary signs are handled in their own layer, including cases such as 2*-3 and -(1+2), without confusing unary and binary minus.",
+      "BigInteger avoids an unstated fixed-width overflow policy and the answer clearly notes that decimal arithmetic would require a different precision/rounding contract.",
+      "The parser rejects trailing garbage and incomplete syntax rather than accepting a valid prefix.",
+      "OpenJDK 21 validation covers directed cases, 2000 deterministic generated AST expressions against independently computed values, arbitrary-precision arithmetic, error boundaries, and 200-level nesting.",
+      "The answer distinguishes recursive descent from stack/RPN alternatives and does not turn taxonomy entities into a fabricated source requirement."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
