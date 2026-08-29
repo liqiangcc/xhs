@@ -1,0 +1,160 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_b454431bf82c811ddfc2d5dd208269bc",
+  "candidate_sha256": "d4a48b562e8cc176731416b442b49ad2fbfb50c01d81bdac82e2bb367dae3b5d",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0057-concurrent-batch-cache-aside-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0057 frozen source context for concurrent-batch-cache-aside",
+      "locator": "review/content_build/answer_batch_0057/cq_q_b454431bf82c811ddfc2d5dd208269bc/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "Deterministic executable validation for concurrent-batch-cache-aside",
+      "locator": "review/content_build/answer_batch_0057/cq_q_b454431bf82c811ddfc2d5dd208269bc/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0057 concurrent-batch-cache-aside source-first isolated review",
+      "locator": "review/content_build/answer_batch_0057/cq_q_b454431bf82c811ddfc2d5dd208269bc/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The frozen source requires concurrent bounded batches, cache-first lookup, DB fallback, and merged output; timeout/retry/nonexistent-merchant and cross-request stampede semantics are not supplied, so the candidate declares them explicitly or leaves them to the application layer.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "concurrency-correctness",
+      "text": "The executable OpenJDK fixture verifies cache-first miss-only repository access, batch-size bounds, observed two-way DB concurrency, per-call deduplication, order restoration, cache write-back, unresolved-miss failure, and invalid-input rejection.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "b454431bf82c811ddfc2d5dd208269bc",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac MerchantBatchLookup.java MerchantBatchLookupTest.java && java MerchantBatchLookupTest",
+    "result": "pass",
+    "reported_stdout": "PASS cache-first misses-only batch-bound parallelism order duplicates cache-write missing-fails invalid-rejected",
+    "checks": [
+      "cache hit does not reach repository and only unique misses are loaded",
+      "every repository call stays within batch size",
+      "two repository batches are concurrently in flight under parallelism=2",
+      "original output order and duplicate IDs are preserved",
+      "database results are written back to cache",
+      "unresolved repository miss fails instead of silently disappearing",
+      "invalid batch size and null ID are rejected"
+    ],
+    "boundary_tests": [
+      {
+        "case": "cache hit does not reach repository and only unique misses are loaded",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "every repository call stays within batch size",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "two repository batches are concurrently in flight under parallelism=2",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "original output order and duplicate IDs are preserved",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "database results are written back to cache",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "unresolved repository miss fails instead of silently disappearing",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "invalid batch size and null ID are rejected",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0057-concurrent-batch-cache-aside-20260829-v1",
+    "review_version": "batch-0057.concurrent-batch-cache-aside.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate separates batch-size and concurrency limits instead of treating them as the same control.",
+      "Per-call deduplication prevents duplicate IDs from causing duplicate DB reads while original-order reconstruction preserves the API result contract.",
+      "The cache-aside batch path fails closed when DB does not resolve a miss and does not pretend to solve cross-request stampedes.",
+      "OpenJDK validation exercises cache hits, misses-only fallback, bounded batches, actual two-way concurrency, cache warming, duplicate IDs, order, missing data, and invalid input."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
