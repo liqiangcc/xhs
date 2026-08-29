@@ -1,0 +1,108 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_65d3c5ebd158ae8b41e0d2cea973ce90",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0059/cq_q_65d3c5ebd158ae8b41e0d2cea973ce90/context.json",
+    "answer_type": "mechanism",
+    "question_ids": [
+      "65d3c5ebd158ae8b41e0d2cea973ce90",
+      "6fa9860cd1ef62633a5c18f47c2aac2a",
+      "72635cea88de998cf6e6610deee0760c",
+      "79237909093bc557d8af0f1deee8e926"
+    ],
+    "preserved_question_intent": "Explain how the Spring IoC container resolves supported singleton-bean circular references and the limits of that mechanism."
+  },
+  "sources": [
+    {
+      "source_id": "spring-reference-current-di",
+      "title": "Spring Framework Reference: Dependency Injection — Circular dependencies",
+      "source_type": "official_documentation",
+      "locator": "https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html",
+      "version": "current reference checked 2026-08-30",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "constructor-injection circular dependency is unresolvable",
+        "BeanCurrentlyInCreationException",
+        "setter-injection circular dependency can be configured",
+        "one bean may be injected before full initialization"
+      ]
+    },
+    {
+      "source_id": "spring-main-default-singleton-registry",
+      "title": "Spring Framework main: DefaultSingletonBeanRegistry.java",
+      "source_type": "primary_source_code",
+      "locator": "https://github.com/spring-projects/spring-framework/blob/main/spring-beans/src/main/java/org/springframework/beans/factory/support/DefaultSingletonBeanRegistry.java",
+      "version": "spring-framework main checked 2026-08-30",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "singletonObjects final singleton map",
+        "singletonFactories early ObjectFactory registry",
+        "earlySingletonObjects early-reference map",
+        "addSingletonFactory early exposure",
+        "getSingleton early reference lookup and factory materialization",
+        "singletonsCurrentlyInCreation guard"
+      ]
+    },
+    {
+      "source_id": "spring-main-autowire-factory",
+      "title": "Spring Framework main: AbstractAutowireCapableBeanFactory.java",
+      "source_type": "primary_source_code",
+      "locator": "https://github.com/spring-projects/spring-framework/blob/main/spring-beans/src/main/java/org/springframework/beans/factory/support/AbstractAutowireCapableBeanFactory.java",
+      "version": "spring-framework main checked 2026-08-30",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "allowCircularReferences",
+        "earlySingletonExposure requires singleton and currently-in-creation",
+        "addSingletonFactory(beanName, () -> getEarlyBeanReference(...))",
+        "getEarlyBeanReference invokes SmartInstantiationAwareBeanPostProcessor",
+        "raw-injection versus wrapping safeguard"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "supported-cycle-boundary",
+      "text": "Spring Framework can resolve some circular references by exposing an early reference to a singleton bean after instantiation but before full initialization/property population; constructor-to-constructor cycles remain unresolvable because the required instance does not yet exist and can produce BeanCurrentlyInCreationException.",
+      "source_ids": ["spring-reference-current-di", "spring-main-autowire-factory"],
+      "source_anchors": ["constructor-injection circular dependency is unresolvable", "one bean may be injected before full initialization", "earlySingletonExposure requires singleton and currently-in-creation"]
+    },
+    {
+      "claim_id": "three-level-structure",
+      "text": "The interview shorthand 'three-level cache' maps in current Spring source to singletonObjects for fully registered singletons, earlySingletonObjects for materialized early references, and singletonFactories for lazy early-reference factories. The factory level is important because it can defer creation of the reference until another bean actually needs it.",
+      "source_ids": ["spring-main-default-singleton-registry"],
+      "source_anchors": ["singletonObjects final singleton map", "earlySingletonObjects early-reference map", "singletonFactories early ObjectFactory registry", "getSingleton early reference lookup and factory materialization"]
+    },
+    {
+      "claim_id": "creation-sequence",
+      "text": "During eligible singleton creation, AbstractAutowireCapableBeanFactory registers an ObjectFactory before dependency population. A dependent bean can call getSingleton for a bean currently in creation; the registry can invoke that factory once, move the result into the early-reference map, and later replace early state with the fully initialized singleton registration.",
+      "source_ids": ["spring-main-autowire-factory", "spring-main-default-singleton-registry"],
+      "source_anchors": ["addSingletonFactory(beanName, () -> getEarlyBeanReference(...))", "getSingleton early reference lookup and factory materialization", "addSingletonFactory early exposure"]
+    },
+    {
+      "claim_id": "proxy-boundary",
+      "text": "Early exposure is not necessarily the raw object: getEarlyBeanReference delegates through SmartInstantiationAwareBeanPostProcessor instances, allowing infrastructure such as auto-proxy creation to provide an early wrapped reference. Spring also guards against inconsistent raw injection when the final bean is wrapped.",
+      "source_ids": ["spring-main-autowire-factory"],
+      "source_anchors": ["getEarlyBeanReference invokes SmartInstantiationAwareBeanPostProcessor", "raw-injection versus wrapping safeguard"]
+    },
+    {
+      "claim_id": "scope-and-policy-boundary",
+      "text": "The early-exposure path is explicitly conditioned on singleton scope, allowCircularReferences and the bean being currently in creation; it is not a general algorithm that makes every constructor, prototype, proxy or arbitrary object-graph cycle valid.",
+      "source_ids": ["spring-main-autowire-factory", "spring-reference-current-di"],
+      "source_anchors": ["allowCircularReferences", "earlySingletonExposure requires singleton and currently-in-creation", "constructor-injection circular dependency is unresolvable"]
+    }
+  ],
+  "writer_constraints": [
+    "Treat '三级缓存' as interview shorthand for three singleton-exposure structures; do not claim Spring documentation formally defines all three as ordinary caches.",
+    "Explain the lifecycle ordering: instantiate -> register early-reference factory -> populate dependencies -> initialize -> publish final singleton.",
+    "Do not claim constructor-to-constructor cycles are solved by the three-level mechanism.",
+    "Do not generalize the singleton early-reference mechanism to prototype beans or every dependency graph.",
+    "Explain why singletonFactories exists instead of saying three Maps are needed only for performance: lazy early-reference creation also supports consistent early proxy exposure through SmartInstantiationAwareBeanPostProcessor.",
+    "Keep implementation statements version-bound to the checked Spring Framework main source because internal concurrency/locking details evolve.",
+    "Do not mix Spring Boot's application-level circular-reference defaults into the Spring Framework core mechanism unless explicitly marked as a separate product/version policy.",
+    "Do not recommend circular dependencies as design best practice; the official Framework API itself recommends refactoring rather than relying on them.",
+    "Do not fabricate project experience."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded Spring circular-dependency mechanism candidate and writer research, then perform isolated source-first review before evidence/promotion"
+}
