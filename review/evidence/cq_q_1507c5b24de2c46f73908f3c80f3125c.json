@@ -1,0 +1,166 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_1507c5b24de2c46f73908f3c80f3125c",
+  "candidate_sha256": "ac7896e1df99beb145dbb2f50a74553d5071090dd8b6c335424761e2a9b87285",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0058-synchronized-reentrantlock-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0058 frozen repository source context for synchronized versus ReentrantLock",
+      "locator": "review/content_build/answer_batch_0058/cq_q_1507c5b24de2c46f73908f3c80f3125c/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "jls-se21-synchronized",
+      "title": "Java Language Specification SE 21 synchronized statement and monitor rules",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.19",
+      "source_type": "language_specification",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "jls-se21-locks-memory",
+      "title": "Java Language Specification SE 21 threads, locks and happens-before",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html",
+      "source_type": "language_specification",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "lock-api-se21",
+      "title": "Java SE 21 Lock API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html",
+      "source_type": "official_api_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "reentrantlock-api-se21",
+      "title": "Java SE 21 ReentrantLock API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html",
+      "source_type": "official_api_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "condition-api-se21",
+      "title": "Java SE 21 Condition API",
+      "locator": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Condition.html",
+      "source_type": "official_api_documentation",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "openjdk-reentrantlock-jdk21ga",
+      "title": "OpenJDK 21 GA ReentrantLock.java",
+      "locator": "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/concurrent/locks/ReentrantLock.java",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0058 synchronized versus ReentrantLock source-first isolated review",
+      "locator": "review/content_build/answer_batch_0058/cq_q_1507c5b24de2c46f73908f3c80f3125c/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "All frozen source variants ask for the difference between synchronized and ReentrantLock; the candidate stays on that technical comparison and covers the mechanism-depth variant without inventing project history.",
+      "source_ids": ["repository-source"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "项目经验版"]
+    },
+    {
+      "claim_id": "monitor-lifecycle-reentrancy",
+      "text": "A synchronized statement locks the selected object's monitor, releases it after either normal or abrupt block completion, and permits the same thread to acquire the monitor repeatedly with balanced unlock effects.",
+      "source_ids": ["jls-se21-synchronized", "jls-se21-locks-memory"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问"]
+    },
+    {
+      "claim_id": "lock-lifecycle-capabilities",
+      "text": "Lock removes block-structured automatic release and therefore requires explicit unlock discipline, while exposing non-blocking tryLock, timed tryLock and lockInterruptibly acquisition forms not exposed as equivalent controls by synchronized syntax.",
+      "source_ids": ["lock-api-se21", "reentrantlock-api-se21"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "项目经验版", "常见追问"]
+    },
+    {
+      "claim_id": "memory-semantics",
+      "text": "Successful Lock lock/unlock operations are required to provide the same memory synchronization effects as built-in monitor lock/unlock, and an unlock on a monitor happens-before each subsequent lock on that monitor.",
+      "source_ids": ["lock-api-se21", "jls-se21-locks-memory"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "fairness-and-trylock-boundary",
+      "text": "ReentrantLock optionally uses a fair acquisition policy, but lock fairness is not thread-scheduler fairness; untimed tryLock may barge even on a fair lock, while timed acquisition can honor the fair policy.",
+      "source_ids": ["reentrantlock-api-se21", "openjdk-reentrantlock-jdk21ga"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "condition-model",
+      "text": "Condition factors Object monitor wait/notify behavior into Lock-associated condition objects, permits multiple wait-sets per Lock, and await atomically releases then reacquires the associated lock before return.",
+      "source_ids": ["condition-api-se21", "lock-api-se21"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问"]
+    },
+    {
+      "claim_id": "implementation-version-boundary",
+      "text": "OpenJDK 21 GA implements ReentrantLock with AbstractQueuedSynchronizer-backed Sync, FairSync and NonfairSync variants and state-backed hold counting; these are version-bound implementation mechanics rather than language-level synchronized guarantees.",
+      "source_ids": ["openjdk-reentrantlock-jdk21ga", "jls-se21-synchronized"],
+      "answer_locations": ["3 分钟版", "原理机制", "关键细节", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "1507c5b24de2c46f73908f3c80f3125c",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问"]
+    },
+    {
+      "question_id": "1b2a72e9861d5d01edc38582fcf33b5b",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "关键细节"]
+    },
+    {
+      "question_id": "478d66e323fd4c15f300b0ea0ef1d684",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "项目经验版"]
+    },
+    {
+      "question_id": "b1f6d9d99d023ec66d13b1d2ab889409",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问"]
+    },
+    {
+      "question_id": "b88de442145e28f43f13a559712b6fd0",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问"]
+    }
+  ],
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0058-synchronized-reentrantlock-20260829-v1",
+    "review_version": "batch-0058.synchronized-reentrantlock.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 19,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "All frozen source variants are covered, including the mechanism-depth source.",
+      "Monitor lifecycle/reentrancy, Lock memory semantics and acquisition capabilities, ReentrantLock fairness/tryLock boundaries, Condition wait-set semantics and OpenJDK 21 implementation boundaries are all primary-source supported.",
+      "The candidate does not confuse lock() with lockInterruptibly() and avoids universal performance claims.",
+      "No fabricated personal or production experience is present."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
