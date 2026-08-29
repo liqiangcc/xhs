@@ -1,0 +1,203 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_bb9b65869d1a42195ea915faa583b615",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0059/cq_q_bb9b65869d1a42195ea915faa583b615/context.json",
+    "answer_type": "scenario",
+    "question_ids": [
+      "bb9b65869d1a42195ea915faa583b615",
+      "cb14ccb8051901c448a5d13b0c3f8117"
+    ],
+    "preserved_question_intent": "Design an RPC framework for a stated 100k-OPS/100k-QPS target with millisecond-level calls, preserving the source-mentioned Netty, serialization, service governance and load-balancing concerns while keeping QPS and OPS distinct and treating the throughput/latency target as something to prove by workload-specific measurement rather than a guaranteed property of a framework component."
+  },
+  "sources": [
+    {
+      "source_id": "netty-42-release",
+      "title": "Netty 4.2.0.Final released",
+      "source_type": "upstream_source_code_or_release_note",
+      "locator": "https://netty.io/news/2025/04/03/4-2-0.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "Netty 4.2 is the feature line while 4.1 receives bug fixes for the stated support period",
+        "4.2 introduces MultiThreadIoEventLoopGroup and separates IO handling through injected handlers",
+        "4.2 exposes event-loop instrumentation points such as channel counts and IO-versus-task processing time"
+      ]
+    },
+    {
+      "source_id": "netty-42-eventloop",
+      "title": "Netty 4.2 MultiThreadIoEventLoopGroup API",
+      "source_type": "official_documentation",
+      "locator": "https://netty.io/4.2/api/io/netty/channel/MultiThreadIoEventLoopGroup.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "the group handles IO tasks with multiple event-loop threads",
+        "the number of event-loop threads is an explicit construction parameter",
+        "custom chooser strategies can be used, including utilization-oriented selection in current 4.2 API"
+      ]
+    },
+    {
+      "source_id": "netty-native-transport",
+      "title": "Netty native transports",
+      "source_type": "official_documentation",
+      "locator": "https://netty.io/wiki/native-transports.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "Netty provides platform-specific native transports",
+        "native transports expose platform features, can generate less garbage and may improve performance compared with NIO",
+        "native transport is a deployment option rather than proof of a fixed latency or throughput number"
+      ]
+    },
+    {
+      "source_id": "grpc-performance",
+      "title": "gRPC Performance Best Practices",
+      "source_type": "official_documentation",
+      "locator": "https://grpc.io/docs/guides/performance/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "reuse channels and stubs where possible instead of repeatedly rebuilding connection state",
+        "keepalive can reduce first-call delay after idle periods when configured appropriately",
+        "long-lived streaming can avoid repeated per-RPC initiation overhead but changes load-balancing and failure/debugging tradeoffs"
+      ]
+    },
+    {
+      "source_id": "grpc-deadlines",
+      "title": "gRPC Deadlines",
+      "source_type": "official_documentation",
+      "locator": "https://grpc.io/docs/guides/deadlines/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "clients should set realistic deadlines based on network/server behavior and validate them with load testing",
+        "deadline expiry prevents indefinite waiting and servers should stop unnecessary work after cancellation",
+        "deadline propagation can preserve a caller's remaining time budget across downstream calls"
+      ]
+    },
+    {
+      "source_id": "grpc-service-config",
+      "title": "gRPC Service Config",
+      "source_type": "official_documentation",
+      "locator": "https://grpc.io/docs/guides/service-config/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "client behavior can be governed per target through service configuration",
+        "load-balancing policy and per-method call behavior can be configured rather than hard-coded into business call sites",
+        "the default pick_first policy is not equivalent to distributing calls across all healthy backends"
+      ]
+    },
+    {
+      "source_id": "grpc-health",
+      "title": "gRPC Health Checking",
+      "source_type": "official_documentation",
+      "locator": "https://grpc.io/docs/guides/health-checking/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "gRPC defines a standard health service and client-side health checking can stop sending calls to unhealthy subchannels",
+        "streaming health updates are intended to scale better than fleets continuously polling unary health checks",
+        "health state affects backend eligibility but is separate from connection keepalive"
+      ]
+    },
+    {
+      "source_id": "grpc-flow-control",
+      "title": "gRPC Flow Control",
+      "source_type": "official_documentation",
+      "locator": "https://grpc.io/docs/guides/flow-control/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "flow control prevents a fast streaming sender from overwhelming a receiver",
+        "a write handed to the RPC framework is not the same as bytes already being transmitted by the OS",
+        "manual synchronous flow-control designs can deadlock if both sides write heavily without reading"
+      ]
+    },
+    {
+      "source_id": "grpc-retry",
+      "title": "gRPC Retry",
+      "source_type": "official_documentation",
+      "locator": "https://grpc.io/docs/guides/retry/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "retry policy is configurable per method with attempt/backoff/status-code controls",
+        "retries can add backend and network load and therefore must be budgeted rather than enabled blindly",
+        "application-visible side effects still need an idempotency contract when an RPC may be attempted again"
+      ]
+    },
+    {
+      "source_id": "grpc-graceful-shutdown",
+      "title": "gRPC Graceful Shutdown",
+      "source_type": "official_documentation",
+      "locator": "https://grpc.io/docs/guides/server-graceful-stop/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "graceful shutdown stops accepting new calls while allowing in-flight calls a bounded chance to finish",
+        "a forced shutdown deadline is still needed so draining cannot last forever",
+        "connection/server lifecycle is part of RPC reliability during rollout and failover"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "target-is-a-workload-contract-not-a-component-guarantee",
+      "text": "The 100k QPS/OPS and millisecond-latency wording is a target that must be decomposed by unary/streaming mix, payload size, connection count, serialization cost, business-handler time and latency percentile. Neither Netty nor a serializer supplies a universal 100k or millisecond guarantee; capacity must come from target-environment measurement with headroom.",
+      "source_ids": ["netty-42-release", "grpc-performance", "grpc-deadlines"],
+      "source_anchors": ["event-loop instrumentation points expose real processing behavior", "reuse channels and stubs where possible", "validate realistic deadlines with load testing"]
+    },
+    {
+      "claim_id": "event-loop-must-not-be-blocked-by-business-work",
+      "text": "An RPC data plane can use Netty event loops to multiplex many connections, but blocking serialization extensions, business handlers, disk calls or downstream waits must not monopolize IO event-loop threads. IO-loop utilization/queueing and worker-pool saturation are separate capacity dimensions and should be measured independently.",
+      "source_ids": ["netty-42-eventloop", "netty-42-release"],
+      "source_anchors": ["multiple event-loop threads handle IO tasks", "4.2 exposes IO-versus-task processing instrumentation"]
+    },
+    {
+      "claim_id": "persistent-connections-and-multiplexing-reduce-setup-overhead",
+      "text": "Clients should reuse connection/channel state and avoid connect/handshake/setup work on the hot path. Multiplexed or long-lived streams can reduce repeated initiation overhead for suitable traffic, while very long streams change balancing and recovery behavior and therefore cannot be a universal default.",
+      "source_ids": ["grpc-performance"],
+      "source_anchors": ["reuse channels and stubs", "streaming avoids repeated RPC initiation overhead but changes load-balancing and failure tradeoffs"]
+    },
+    {
+      "claim_id": "service-governance-is-client-routing-plus-health-plus-time-budget",
+      "text": "Service discovery/name resolution should feed a client routing policy over eligible connections; health checking determines whether a backend should receive new calls, while per-method deadlines bound the caller's latency/resource budget. Load balancing, health and timeout policy belong in framework/service configuration rather than ad-hoc business code.",
+      "source_ids": ["grpc-service-config", "grpc-health", "grpc-deadlines"],
+      "source_anchors": ["service config controls load balancing and per-method behavior", "client health checks stop sending to unhealthy subchannels", "deadline propagation preserves remaining call budget"]
+    },
+    {
+      "claim_id": "retries-and-hedging-require-a-load-and-idempotency-budget",
+      "text": "A low-latency RPC framework must not hide unlimited retries. Attempts, retryable failures and backoff require a bounded policy; application methods that may be replayed need an idempotency contract, and any retry or hedging strategy must include its extra backend/network load in capacity calculations.",
+      "source_ids": ["grpc-retry", "grpc-deadlines"],
+      "source_anchors": ["retry is configurable per method", "deadlines limit how long the caller is willing to wait"]
+    },
+    {
+      "claim_id": "backpressure-and-bounded-queues-protect-tail-latency",
+      "text": "Streaming paths need flow control/backpressure so a fast sender does not turn receiver memory/queues into an unbounded buffer. At framework boundaries, bounded pending-request and executor queues should reject or shed work before queueing delay makes the millisecond SLO impossible; acceptance policy and retries must be coordinated to avoid overload amplification.",
+      "source_ids": ["grpc-flow-control", "grpc-deadlines"],
+      "source_anchors": ["flow control prevents overwhelming the receiver", "deadlines prevent work from waiting indefinitely"]
+    },
+    {
+      "claim_id": "native-transport-and-serialization-are-optimizations-after-profile",
+      "text": "A native Netty transport can reduce garbage and improve some workloads, and compact/efficient serialization can reduce CPU and bytes, but both are deployment/profile choices. The design must benchmark representative message distributions and include encode/decode allocation, copy count and payload size in the latency breakdown instead of naming one transport or serializer as an unconditional winner.",
+      "source_ids": ["netty-native-transport", "netty-42-release"],
+      "source_anchors": ["native transports may generate less garbage and improve performance", "Netty 4.2 changes allocation and IO abstractions, so version/deployment must be bounded"]
+    },
+    {
+      "claim_id": "draining-is-part-of-reliable-low-latency-rollout",
+      "text": "During deployment or scale-in, endpoints should leave discovery/health eligibility, stop new calls and drain in-flight RPCs up to a deadline before force-close. Otherwise connection churn and abruptly failed calls can dominate tail latency even if steady-state transport performance is fast.",
+      "source_ids": ["grpc-graceful-shutdown", "grpc-health", "grpc-deadlines"],
+      "source_anchors": ["graceful shutdown drains in-flight calls while refusing new work", "health affects backend eligibility", "deadlines bound completion time"]
+    }
+  ],
+  "writer_constraints": [
+    "Preserve both source variants: one says 100k OPS and one 100k QPS. Do not silently collapse them. State that the target needs an operation mix before capacity arithmetic is meaningful.",
+    "Answer as an RPC framework/system design, not a Netty tutorial. Cover client stub/proxy, codec/protocol, connection/channel management, IO event loops, request correlation/in-flight table, server dispatcher, worker isolation, registry/resolver, load balancing, health and observability.",
+    "Make the latency budget explicit as a decomposition: client queue/encode, network, server IO queue/decode, handler/downstream work, encode/network response. Do not promise 'millisecond' without choosing a percentile and target environment.",
+    "Use persistent connections and multiplexing where the selected wire protocol supports them; do not create a TCP/TLS connection per call. Mention long-lived streams only as a workload-specific option because they change load balancing and failure recovery.",
+    "Keep blocking business/downstream work off IO event-loop threads. Define bounded worker/in-flight queues and overload rejection so queueing does not silently consume the latency budget.",
+    "Treat serialization as a versioned negotiated codec/profile. Benchmark bytes, encode/decode CPU and allocations with representative payloads; do not declare Kryo, Protobuf, Hessian or another codec universally fastest without a frozen workload.",
+    "Describe discovery/resolution separately from load balancing. Health and outlier signals determine endpoint eligibility; routing policy chooses among eligible endpoints. Avoid claiming a single algorithm is always optimal.",
+    "Every RPC needs a deadline/time budget. Retries require a retryable-error policy, attempt/backoff budget and idempotency boundary; do not hide retry storms behind framework defaults.",
+    "Cover flow control/backpressure for streaming and bounded queues for unary overload. Define what is rejected, retried, degraded or shed when client/server capacity is exhausted.",
+    "Cover connection lifecycle: keepalive/idle policy, reconnect with jitter, graceful drain during deployment, stale endpoints and registry partitions. Keepalive is not the same as application/service health.",
+    "Capacity proof must use measured safe per-instance throughput and concurrency under representative payload/business-handler distributions. Include CPU, event-loop utilization, worker saturation, GC/allocation, active connections, in-flight calls and downstream bottlenecks; apply headroom and failure-domain loss before computing instance count.",
+    "Observability must include per-method QPS/OPS, success/error codes, P50/P95/P99/P999, client/server queueing, encode/decode time, event-loop lag/utilization, in-flight count, connection churn, retry amplification, endpoint skew and dependency latency.",
+    "Do not fabricate Alibaba/ByteDance/CMB production topology, RPC framework internals, node counts, payload sizes, latency numbers or personal project experience. Any numeric example beyond the frozen 100k target must be explicitly illustrative."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded 100k-QPS/OPS millisecond RPC-framework scenario candidate and writer research, then perform isolated source-first review before evidence/promotion"
+}
