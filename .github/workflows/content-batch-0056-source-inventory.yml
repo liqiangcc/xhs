@@ -1,0 +1,94 @@
+name: Content Batch 0056 Source Inventory
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0056-source-inventory.yml
+      - scripts/content/build_batch_0056_source_inventory.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0056-source-inventory
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  freeze-validate-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze Batch 0056 source contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/build_batch_0056_source_inventory.py > /tmp/build.py
+          python3 -m py_compile /tmp/build.py
+          python3 /tmp/build.py
+
+      - name: Run normalization and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Batch 0056 source freeze: $base_head -> $remote_head"
+            echo 'Discard local source packet; retry against current state.'
+            exit 0
+          fi
+          git add review/content_build/answer_batch_0056 tasks/answer-batches/TASK-20260711-0313-answer-batch-0056.md
+          if git diff --cached --quiet; then
+            echo 'No Batch 0056 source inventory changes to commit.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name xhs-source-audit-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: freeze batch 0056 source inventory'
+          git push origin "HEAD:$CONTENT_BRANCH"
