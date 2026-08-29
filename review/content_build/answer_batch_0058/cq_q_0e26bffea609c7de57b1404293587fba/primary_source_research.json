@@ -1,0 +1,131 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_0e26bffea609c7de57b1404293587fba",
+  "checked_at": "2026-08-29",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0058/cq_q_0e26bffea609c7de57b1404293587fba/context.json",
+    "answer_type": "scenario",
+    "question_ids": [
+      "0e26bffea609c7de57b1404293587fba",
+      "5c9ddb3a4145c521fb657cded7effb3c",
+      "ba27eeb7fc05063edb7c1b5724d8e74c",
+      "bffc337104d5625d26539bf9764901ae"
+    ],
+    "preserved_question_intent": "The source variants ask how blue-green deployment was implemented at a previous company. The repository source records preserve the interview wording and technical entities, but do not contain verified personal implementation facts, responsibilities, architecture choices, traffic volumes, incident history, or outcomes for the candidate's actual previous employer."
+  },
+  "version_boundary": "Kubernetes current official documentation and Argo Rollouts stable documentation checked 2026-08-29; these are reference implementation sources, not evidence of the user's previous-company stack.",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0058 frozen repository source context for previous-company blue-green deployment",
+      "source_type": "repository_source_record",
+      "locator": "review/content_build/answer_batch_0058/cq_q_0e26bffea609c7de57b1404293587fba/context.json",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "four current Question IDs",
+        "previous-company wording",
+        "Kubernetes/Nginx/blue-green/gray/canary source entities",
+        "no verified personal implementation evidence"
+      ]
+    },
+    {
+      "source_id": "kubernetes-deployment",
+      "title": "Kubernetes Documentation — Deployments",
+      "source_type": "official_product_documentation",
+      "locator": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "Deployment manages Pods and ReplicaSets",
+        "native strategy type is Recreate or RollingUpdate",
+        "rollout status and rollback",
+        "maxSurge/maxUnavailable resource and availability boundaries"
+      ]
+    },
+    {
+      "source_id": "kubernetes-service",
+      "title": "Kubernetes API Reference — Service",
+      "source_type": "official_product_documentation",
+      "locator": "https://kubernetes.io/docs/reference/kubernetes-api/core/service-v1/",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "Service is a named abstraction behind a stable endpoint",
+        "selector determines which Pods answer requests"
+      ]
+    },
+    {
+      "source_id": "kubernetes-labels-selectors",
+      "title": "Kubernetes Documentation — Labels and Selectors",
+      "source_type": "official_product_documentation",
+      "locator": "https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "Service target Pod set is defined by label selector"
+      ]
+    },
+    {
+      "source_id": "argo-rollouts-bluegreen",
+      "title": "Argo Rollouts Documentation — BlueGreen Deployment Strategy",
+      "source_type": "official_product_documentation",
+      "locator": "https://argo-rollouts.readthedocs.io/en/stable/features/bluegreen/",
+      "checked_at": "2026-08-29",
+      "anchors": [
+        "required activeService",
+        "optional previewService",
+        "preview traffic before promotion",
+        "active Service switch at promotion",
+        "manual or automatic promotion",
+        "prePromotionAnalysis and postPromotionAnalysis",
+        "previewReplicaCount and scaleDownDelaySeconds"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "personal-fact-boundary",
+      "text": "The source asks for actual previous-company practice, but the repository packet does not verify what the candidate personally built, which routing layer was used, what capacity or SLOs applied, or what results were achieved; those facts must not be invented.",
+      "source_ids": ["repository-source"],
+      "source_anchors": ["previous-company wording", "no verified personal implementation evidence"]
+    },
+    {
+      "claim_id": "native-deployment-strategy-boundary",
+      "text": "A Kubernetes Deployment's native replacement strategy is Recreate or RollingUpdate; therefore a blue-green design should not be described as a built-in Deployment strategy unless an additional traffic-switch mechanism or progressive-delivery controller is explicitly identified.",
+      "source_ids": ["kubernetes-deployment"],
+      "source_anchors": ["native strategy type is Recreate or RollingUpdate"]
+    },
+    {
+      "claim_id": "service-selector-traffic-boundary",
+      "text": "Kubernetes Service provides a stable service abstraction whose selector determines the target Pods, so a blue-green reference design can switch production traffic by changing which version the production Service targets while keeping the client-facing Service identity stable.",
+      "source_ids": ["kubernetes-service", "kubernetes-labels-selectors"],
+      "source_anchors": ["selector determines which Pods answer requests", "Service target Pod set is defined by label selector"]
+    },
+    {
+      "claim_id": "argo-reference-sequence",
+      "text": "Argo Rollouts provides one documented blue-green reference implementation: activeService sends regular traffic to the active revision, optional previewService exposes the new revision for verification, promotion switches the active Service to the new revision, and pre/post promotion analysis plus delayed scale-down can gate or protect the cutover.",
+      "source_ids": ["argo-rollouts-bluegreen"],
+      "source_anchors": ["required activeService", "optional previewService", "active Service switch at promotion", "prePromotionAnalysis and postPromotionAnalysis", "scaleDownDelaySeconds"]
+    },
+    {
+      "claim_id": "capacity-and-cutover-boundary",
+      "text": "Blue-green operation can keep old and new revisions running concurrently during preview and cutover, so capacity planning must account for overlapping replicas; previewReplicaCount and delayed scale-down are explicit controls in the Argo reference design rather than evidence of any specific previous-company numbers.",
+      "source_ids": ["argo-rollouts-bluegreen"],
+      "source_anchors": ["previewReplicaCount and scaleDownDelaySeconds"]
+    },
+    {
+      "claim_id": "reference-not-history",
+      "text": "Kubernetes Service switching and Argo Rollouts are acceptable technical reference patterns for explaining how blue-green deployment can work, but they are not evidence that the candidate's previous company used Kubernetes, Argo Rollouts, Nginx, a particular release gate, or any particular traffic percentage.",
+      "source_ids": ["repository-source", "kubernetes-service", "argo-rollouts-bluegreen"],
+      "source_anchors": ["no verified personal implementation evidence", "selector determines which Pods answer requests", "required activeService"]
+    }
+  ],
+  "writer_constraints": [
+    "Preserve the source's previous-company intent, but do not write 'we used', 'I was responsible for', architecture components, traffic scale, failure rates, rollout timing, or outcome metrics without verified personal evidence.",
+    "If a candidate is staged before personal evidence exists, label the technical design as a reference scenario and explicitly separate it from the user's actual prior-company facts that still require attestation.",
+    "Do not imply that Kubernetes Deployment has a native blueGreen strategy; distinguish native Recreate/RollingUpdate from a Service-switch design or a controller such as Argo Rollouts.",
+    "Cover scenario requirements: release assumptions, active/preview data flow, capacity overlap, readiness/analysis gates, atomic traffic cutover, rollback window, observability, failure handling, and alternative rollout strategies with costs.",
+    "Distinguish blue-green from rolling update and canary/gray release: blue-green primarily switches between two complete revisions/environments, whereas rolling and canary progressively replace or expose traffic; exact implementation depends on infrastructure.",
+    "Do not treat Nginx, Kubernetes, Argo Rollouts, Service selector switching, or any other component as the user's historical stack merely because it appears in source entities or official reference documentation.",
+    "Formal ready/curated promotion remains blocked while the answer requires first-person previous-company claims that lack repository or human attestation."
+  ],
+  "research_state": "primary_sources_frozen_personal_fact_evidence_missing",
+  "next_gate": "Stage a non-fabricated scenario candidate that provides a technically complete reference blue-green design and an explicit personal-fact mapping boundary. Then perform an isolated source-first review. Do not promote to ready/curated until the repository human/personal-fact approval policy is satisfied."
+}
