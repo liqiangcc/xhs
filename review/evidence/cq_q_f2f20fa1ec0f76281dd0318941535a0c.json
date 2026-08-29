@@ -1,0 +1,156 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_f2f20fa1ec0f76281dd0318941535a0c",
+  "candidate_sha256": "86669fdde008739f1f892c10792b316d369c00795ca7793f048bf4445b7ac51c",
+  "checked_at": "2026-08-29",
+  "writer": {
+    "writer_id": "content-batch-0054-slice-d-artifact-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0054 exact source context for cq_q_f2f20fa1ec0f76281dd0318941535a0c",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f2f20fa1ec0f76281dd0318941535a0c/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "fixture",
+      "title": "SQLite in-memory deterministic validation for cq_q_f2f20fa1ec0f76281dd0318941535a0c",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f2f20fa1ec0f76281dd0318941535a0c/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-29"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0054 source-first isolated review for cq_q_f2f20fa1ec0f76281dd0318941535a0c",
+      "locator": "review/content_build/answer_batch_0054/cq_q_f2f20fa1ec0f76281dd0318941535a0c/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-29"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source asks about practical window-function applications but preserves no schema or exact output; the sales table is explicitly illustrative.",
+      "source_ids": [
+        "repository-source"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版"
+      ]
+    },
+    {
+      "claim_id": "window-semantics",
+      "text": "The candidate demonstrates partitioning, deterministic ordering, an explicit ROWS cumulative frame, and LAG while preserving detail rows.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "3 分钟版",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "top-n",
+      "text": "The executable example shows Top-N per group by calculating ROW_NUMBER in a CTE and filtering in an outer query.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "常见追问"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "f2f20fa1ec0f76281dd0318941535a0c",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "python3 scripts/content/validate_batch_0054_slice_d.py (stdlib sqlite3 in-memory fixture)",
+    "result": "pass",
+    "reported_stdout": "PASS row-number deterministic-ties running-rows-frame lag partition-reset top2-outer-filter",
+    "checks": [
+      "ROW_NUMBER partitioned by department",
+      "id tie-break makes equal amounts deterministic",
+      "explicit ROWS cumulative frame",
+      "LAG previous row and partition reset",
+      "Top-2 per group via outer filter"
+    ],
+    "boundary_tests": [
+      {
+        "case": "ROW_NUMBER partitioned by department",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "id tie-break makes equal amounts deterministic",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "explicit ROWS cumulative frame",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "LAG previous row and partition reset",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "Top-2 per group via outer filter",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0054-sql-535a0c-20260829-v2",
+    "review_version": "batch-0054.sql.535a0c.v2",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate answers an application-oriented sparse source without inventing a hidden business schema.",
+      "ROW_NUMBER ordering includes id as a deterministic tie-break for equal amounts.",
+      "The running total uses an explicit ROWS frame instead of relying on a default peer-sensitive frame.",
+      "SQLite validation covers LAG, partition reset, deterministic ties, running totals, and outer-query Top-2 filtering.",
+      "Dialect-specific QUALIFY and NULL ordering are described as boundaries rather than universal behavior."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
