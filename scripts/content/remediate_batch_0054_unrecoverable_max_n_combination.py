@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Retire Batch 0054 '最大为 N 的数字组合' singleton when the executable contract is not recoverable."""
+# Registered workflow trigger: 2026-08-29
 from __future__ import annotations
 import json,shutil,subprocess
 from pathlib import Path
