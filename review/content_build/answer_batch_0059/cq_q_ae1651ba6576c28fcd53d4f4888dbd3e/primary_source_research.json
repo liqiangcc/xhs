@@ -1,0 +1,117 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_ae1651ba6576c28fcd53d4f4888dbd3e",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0059/cq_q_ae1651ba6576c28fcd53d4f4888dbd3e/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "13d712dbbbe982e220bc87d74737abcd",
+      "1bb63b161281368c9e9095fa9bed3b90",
+      "ae1651ba6576c28fcd53d4f4888dbd3e"
+    ],
+    "preserved_question_intent": "Explain the differences among Java String, StringBuilder and StringBuffer without expanding the source into unrelated intern-pool, JVM-layout or microbenchmark claims unless they are clearly marked as follow-up/boundary material."
+  },
+  "sources": [
+    {
+      "source_id": "java26-string",
+      "title": "Java SE 26 String API",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/String.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "String represents character strings and String values cannot be changed after creation",
+        "String immutability allows sharing",
+        "string concatenation implementation is a compiler choice as long as language semantics are preserved"
+      ]
+    },
+    {
+      "source_id": "java26-stringbuilder",
+      "title": "Java SE 26 StringBuilder API",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/StringBuilder.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "StringBuilder is a mutable character sequence",
+        "its API is compatible with StringBuffer but it provides no synchronization guarantee",
+        "it is designed as the normal single-thread replacement for StringBuffer and is generally preferred when synchronization is unnecessary",
+        "StringBuilder has mutable length/content and an internal capacity that grows when needed"
+      ]
+    },
+    {
+      "source_id": "java26-stringbuffer",
+      "title": "Java SE 26 StringBuffer API",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/StringBuffer.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "StringBuffer is a thread-safe mutable character sequence",
+        "methods are synchronized where necessary so operations on one instance behave in a serial order consistent with each thread's calls",
+        "StringBuilder is generally preferred when synchronization is not required because it avoids that synchronization cost",
+        "StringBuffer also has capacity and grows its internal buffer when needed"
+      ]
+    },
+    {
+      "source_id": "jls26-string-concat",
+      "title": "Java Language Specification 26, 15.18.1 String Concatenation Operator +",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-15.html#jls-15.18.1",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "string concatenation produces a String result and generally a newly created String unless the expression is a constant expression",
+        "implementations may combine conversion/concatenation to avoid disposable intermediate strings",
+        "a compiler may use StringBuffer or a similar technique for repeated concatenation; source-level plus syntax does not mandate one concrete builder implementation"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "immutability-vs-mutability",
+      "text": "String is immutable: operations that appear to modify text produce or refer to another String value rather than mutating the existing String object's value. StringBuilder and StringBuffer are mutable character-sequence builders whose length/content can change through append/insert/delete-style operations.",
+      "source_ids": ["java26-string", "java26-stringbuilder", "java26-stringbuffer"],
+      "source_anchors": ["String values cannot be changed after creation", "StringBuilder is mutable", "StringBuffer is mutable"]
+    },
+    {
+      "claim_id": "synchronization-difference",
+      "text": "StringBuilder provides no synchronization guarantee and is intended for the common single-thread construction case. StringBuffer synchronizes where necessary so operations on one shared instance have a thread-safe serial-order contract. This does not mean every multi-threaded string-building design should automatically share one StringBuffer; ownership and contention still matter.",
+      "source_ids": ["java26-stringbuilder", "java26-stringbuffer"],
+      "source_anchors": ["StringBuilder has no synchronization guarantee", "StringBuffer is thread-safe with synchronized operations"]
+    },
+    {
+      "claim_id": "selection-rule",
+      "text": "For stable text values, use String. For incremental construction confined to one thread or otherwise externally confined, prefer StringBuilder. Use StringBuffer only when the design specifically requires multiple threads to share and mutate the same builder instance under its synchronization semantics; otherwise external ownership/aggregation often avoids the shared mutable object entirely.",
+      "source_ids": ["java26-string", "java26-stringbuilder", "java26-stringbuffer"],
+      "source_anchors": ["String is immutable/shareable", "StringBuilder is generally preferred when synchronization is unnecessary", "StringBuffer is synchronized/thread-safe"]
+    },
+    {
+      "claim_id": "performance-boundary",
+      "text": "It is safe to explain the structural reason that repeated mutation on a mutable builder can avoid creating a new logical String result for every append step, and that StringBuffer pays synchronization where needed. It is not safe to claim a universal fixed speed ratio or allocation count because compiler/JIT implementation, expression shape and workload can change the generated concatenation strategy.",
+      "source_ids": ["java26-string", "java26-stringbuilder", "java26-stringbuffer", "jls26-string-concat"],
+      "source_anchors": ["compiler chooses concatenation implementation", "JLS permits avoiding intermediate strings", "StringBuilder avoids synchronization guarantee", "StringBuffer synchronizes"]
+    },
+    {
+      "claim_id": "plus-operator-boundary",
+      "text": "Source-level String concatenation with + must preserve JLS String semantics, but the compiler is free to implement the operation using StringBuilder, StringBuffer, StringConcatFactory or another conforming strategy. Therefore 'the + operator always becomes StringBuilder' is version/implementation-sensitive and should not be taught as a language guarantee.",
+      "source_ids": ["java26-string", "jls26-string-concat"],
+      "source_anchors": ["String API says javac may use different strategies by JDK version", "JLS permits builder or similar optimization"]
+    },
+    {
+      "claim_id": "capacity-and-final-string",
+      "text": "StringBuilder/StringBuffer maintain mutable capacity and grow their backing storage as necessary, which makes them suitable for incremental construction; once a stable immutable result is needed, toString produces a String value for use by APIs that expect immutable text.",
+      "source_ids": ["java26-stringbuilder", "java26-stringbuffer"],
+      "source_anchors": ["builder/buffer capacity grows when needed", "both expose toString through their character-sequence APIs"]
+    }
+  ],
+  "writer_constraints": [
+    "Answer the direct comparison first: mutability, thread-safety/synchronization, performance reason and normal selection rule.",
+    "Do not say String is 'thread-safe because final'. Immutability is the relevant sharing property; final on the class prevents subclassing, not mutation of arbitrary object state.",
+    "Do not say StringBuilder is categorically unsafe in every multi-threaded program. The precise boundary is that it provides no synchronization guarantee for concurrent mutation of the same instance; thread-confined instances are normal.",
+    "Do not say StringBuffer makes compound multi-step business logic atomic. Its method synchronization protects operations on the buffer; a sequence of separate calls still needs an external higher-level atomicity design if other threads can interleave.",
+    "Do not teach that every String '+' expression is mechanically compiled to StringBuilder. Bind this to JLS/implementation freedom and mention that javac strategy varies by JDK/version.",
+    "Do not invent a universal StringBuilder-vs-StringBuffer speed multiplier. Explain the synchronization/allocation mechanism and use benchmark language only if a reproducible benchmark is actually supplied.",
+    "Keep String pool/intern, compact-string internal representation and JIT-specific implementation details as optional follow-ups unless directly sourced; they are not required to answer the frozen question variants.",
+    "Include the practical choice: String for values, StringBuilder for local incremental construction, StringBuffer only for a genuinely shared mutable builder contract that needs its synchronization semantics."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded concept candidate and writer research; then perform isolated source-first review before evidence/promotion"
+}
