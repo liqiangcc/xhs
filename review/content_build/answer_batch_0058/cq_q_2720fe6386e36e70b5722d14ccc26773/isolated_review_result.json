@@ -1,0 +1,47 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_2720fe6386e36e70b5722d14ccc26773",
+  "candidate_sha256": "1180dec0376c5395bea28b278b719fa88b1318a13954a06306e3925f074d18db",
+  "reviewed_at": "2026-08-29",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0058-hashmap-hashtable-20260829-v1",
+  "review_version": "batch-0058.hashmap-hashtable.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0058/cq_q_2720fe6386e36e70b5722d14ccc26773/context.json",
+    "review/candidates/answers/cq_q_2720fe6386e36e70b5722d14ccc26773.md",
+    "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html",
+    "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Hashtable.html",
+    "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collections.html#synchronizedMap(java.util.Map)",
+    "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/HashMap.java",
+    "https://github.com/openjdk/jdk/blob/jdk-21-ga/src/java.base/share/classes/java/util/Hashtable.java",
+    "docs/refactor/09_answer_content_standard.md",
+    "config/answer_quality.json"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 19,
+    "mechanism_and_causality": 14,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The candidate directly answers all four frozen HashMap/HashTable source variants and normalizes the Java type name to java.util.Hashtable without changing the source intent.",
+    "Java SE 21 documents HashMap as unsynchronized with null-key/null-value support and Hashtable as synchronized with non-null keys/values; the candidate preserves those observable API contracts without turning implementation details into universal rules.",
+    "Java SE 21 explicitly recommends ConcurrentHashMap when a thread-safe highly-concurrent map is desired, so the candidate's modern-selection guidance is primary-source supported rather than a generic performance slogan.",
+    "The Collections.synchronizedMap traversal caveat in the candidate is supported by the Java SE 21 Collections contract: traversal of collection views requires manual synchronization on the returned map.",
+    "OpenJDK 21 GA confirms the version-bound implementation distinction used by the candidate: HashMap contains tree-bin machinery while Hashtable retains synchronized legacy-table/rehash structure; the answer correctly keeps these details secondary to the cross-version API comparison.",
+    "The answer explicitly rejects two common correctness mistakes: treating HashMap fail-fast behavior as synchronization and treating per-method Hashtable synchronization as automatic atomicity for arbitrary multi-call business invariants.",
+    "Concept completeness is sufficient: one-line comparison, common dimensions, selection conditions, non-applicability boundaries, confusion counterexamples, implementation/version boundary, and targeted follow-up answers are all present.",
+    "No fabricated personal or production experience is asserted; the project section is framed as a decision checklist and project-mapping prompt."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
