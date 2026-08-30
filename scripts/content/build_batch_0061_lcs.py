@@ -54,7 +54,8 @@ CANDIDATE = r'''<!-- xhs-answer: {"schema_version":"answer.v1","canonical_id":"c
 下面用 Java 返回 LCS 的长度；来源没有指定语言，因此 Java 只是一个明确的可执行实现选择：
 
 ```java
-public static int longestCommonSubsequence(String a, String b) {
+public final class Solution {
+    public static int longestCommonSubsequence(String a, String b) {
     if (a == null || b == null) {
         throw new IllegalArgumentException("input must not be null");
     }
@@ -78,6 +79,7 @@ public static int longestCommonSubsequence(String a, String b) {
         }
     }
     return dp[b.length()];
+    }
 }
 ```
 

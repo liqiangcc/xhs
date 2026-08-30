@@ -1,0 +1,163 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_206301f6679d9047d406eb16ef08be5c",
+  "candidate_sha256": "cc1f2598adf96cd9239eac4894146bac03f60b02485dbdf24f9bc2825f7d4688",
+  "checked_at": "2026-08-31",
+  "writer": {
+    "writer_id": "content-batch-0061-lcs-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0061 frozen repository source context for LCS",
+      "locator": "review/content_build/answer_batch_0061/cq_q_206301f6679d9047d406eb16ef08be5c/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0061 frozen live source inventory",
+      "locator": "review/content_build/answer_batch_0061/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK differential validation for the exact one-dimensional LCS implementation",
+      "locator": "review/content_build/answer_batch_0061/cq_q_206301f6679d9047d406eb16ef08be5c/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0061 LCS source-first isolated review",
+      "locator": "review/content_build/answer_batch_0061/cq_q_206301f6679d9047d406eb16ef08be5c/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The two frozen source variants ask to solve Longest Common Subsequence and do not prescribe a programming language, API, reconstruction requirement, null contract, or Unicode element model; the candidate states its Java/length-only boundary explicitly.",
+      "source_ids": [
+        "repository-source",
+        "source-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "The exact one-dimensional Java implementation compiles, passes fixed boundary cases, rejects null under its declared contract, and matches an independently written two-dimensional DP oracle on 50,000 seeded random short-string pairs.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "项目经验版"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "206301f6679d9047d406eb16ef08be5c",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "question_id": "3e06d9a27b2adbb6c978d267ec2a9651",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac Solution.java SolutionTest.java && java SolutionTest",
+    "result": "pass",
+    "reported_stdout": "PASS fixed=7 null=rejected random=50000 oracle=2d-dp symmetry=checked",
+    "checks": [
+      "empty, identical, disjoint, repeated-character, and standard LCS boundary cases match expected lengths",
+      "null input is explicitly rejected by the declared candidate contract",
+      "50,000 seeded random short-string cases match an independent two-dimensional DP oracle",
+      "symmetry is checked on fixed cases while the implementation swaps inputs only to minimize memory"
+    ],
+    "boundary_tests": [
+      {
+        "case": "empty, identical, disjoint, repeated-character, and standard LCS boundary cases match expected lengths",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "null input is explicitly rejected by the declared candidate contract",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "50,000 seeded random short-string cases match an independent two-dimensional DP oracle",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "symmetry is checked on fixed cases while the implementation swaps inputs only to minimize memory",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0061-lcs-20260831-v1",
+    "review_version": "batch-0061.lcs.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate covers both frozen LCS source variants directly and does not substitute the different longest-common-substring problem.",
+      "The state definition and one-dimensional update preserve the required previous-row diagonal before overwriting the current cell.",
+      "The candidate clearly separates length-only computation from sequence reconstruction and makes the Java/null/UTF-16 boundaries explicit rather than presenting them as source constraints.",
+      "Executable validation compares the exact implementation with an independently written two-dimensional DP oracle over fixed boundaries and 50,000 seeded random short-string pairs.",
+      "The memory optimization is tied to using the shorter string as the DP-column dimension; swapping inputs does not alter the length contract.",
+      "No production or personal claim is fabricated from the source."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
