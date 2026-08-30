@@ -1,0 +1,112 @@
+name: Remediate Content Batch 0060 Stale ReviewProgress
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0060-stale-review-progress.yml
+      - scripts/content/retire_batch_0060_stale_review_progress.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0060-stale-review-progress
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Retire only zero-telemetry stale ReviewProgress
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin master
+          git show origin/master:scripts/content/retire_batch_0060_stale_review_progress.py > /tmp/retire-progress.py
+          python3 -m py_compile /tmp/retire-progress.py
+          python3 /tmp/retire-progress.py
+
+      - name: Verify exact ReviewProgress state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          old='cq_q_7960226d99224c6c8d4411110ff10c8b'
+          survivor='cq_q_d3fea003c007b50735b8e695473de9ac'
+          progress=json.loads(Path('review/progress.json').read_text(encoding='utf-8'))
+          items=progress.get('items',[])
+          if any(r.get('canonical_id')==old for r in items): raise SystemExit('stale ReviewProgress remains')
+          survivors=[r for r in items if r.get('canonical_id')==survivor]
+          if len(survivors)!=1: raise SystemExit(f'survivor ReviewProgress count invalid: {len(survivors)}')
+          record=json.loads(Path('review/content_build/answer_batch_0060/stale_review_progress_retirement.json').read_text(encoding='utf-8'))
+          if record.get('decision')!='retired_zero_telemetry_stale_progress': raise SystemExit('retirement record invalid')
+          snap=record.get('retired_progress_snapshot') or {}
+          if snap.get('status')!='new' or snap.get('review_count')!=0 or snap.get('last_reviewed_at') is not None or snap.get('mistake_count')!=0:
+              raise SystemExit(f'non-zero telemetry was retired: {snap}')
+          print('PASS exact Batch 0060 ReviewProgress retirement verified')
+          PY
+
+      - name: Run repository integrity gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during ReviewProgress remediation: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; retry against current state.'
+            exit 0
+          fi
+          git add review/progress.json review/content_build/answer_batch_0060/stale_review_progress_retirement.json
+          if git diff --cached --quiet; then
+            echo 'Stale ReviewProgress already retired.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name xhs-remediation-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: retire batch 0060 stale review progress'
+          git push origin "HEAD:$CONTENT_BRANCH"
