@@ -1,0 +1,146 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_ae1651ba6576c28fcd53d4f4888dbd3e",
+  "candidate_sha256": "3465f1d34bc88c20cee64364e7254ca34886afb57e519d015cf8483a17eb1c21",
+  "checked_at": "2026-08-30",
+  "writer": {
+    "writer_id": "content-batch-0059-4888dbd3e-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0059 frozen Java String/StringBuilder/StringBuffer repository context",
+      "locator": "review/content_build/answer_batch_0059/cq_q_ae1651ba6576c28fcd53d4f4888dbd3e/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "primary-source-packet",
+      "title": "Batch 0059 frozen Java SE 26/JLS 26 primary-source research packet",
+      "locator": "review/content_build/answer_batch_0059/cq_q_ae1651ba6576c28fcd53d4f4888dbd3e/primary_source_research.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "java26-string",
+      "title": "Java SE 26 String API",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/String.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "java26-stringbuilder",
+      "title": "Java SE 26 StringBuilder API",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/StringBuilder.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "java26-stringbuffer",
+      "title": "Java SE 26 StringBuffer API",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/StringBuffer.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "jls26-string-concat",
+      "title": "Java Language Specification 26, 15.18.1 String Concatenation Operator +",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/specs/jls/jls-15.html#jls-15.18.1",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh Batch 0059 Java string-builders isolated source-first review",
+      "locator": "review/content_build/answer_batch_0059/cq_q_ae1651ba6576c28fcd53d4f4888dbd3e/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-30"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary-and-comparison-core",
+      "text": "The frozen source variants ask only for the differences among String, StringBuilder and StringBuffer. The candidate keeps the answer on that comparison and organizes it around mutability, synchronization, performance mechanism and selection boundaries rather than expanding into unrelated String-pool or JVM-layout claims.",
+      "source_ids": ["repository-source", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "易错点"]
+    },
+    {
+      "claim_id": "immutability-vs-mutability",
+      "text": "String values are immutable after creation, while StringBuilder and StringBuffer are mutable character sequences whose content/length can change and whose capacity can grow during incremental construction.",
+      "source_ids": ["java26-string", "java26-stringbuilder", "java26-stringbuffer", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "synchronization-and-atomicity-boundary",
+      "text": "StringBuilder provides no synchronization guarantee for concurrent mutation of the same instance, whereas StringBuffer provides synchronized/thread-safe operations on a shared instance. That method-level contract does not make arbitrary multi-call business logic atomic, and thread-confined StringBuilder instances remain valid inside multithreaded applications.",
+      "source_ids": ["java26-stringbuilder", "java26-stringbuffer", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "selection-rule",
+      "text": "Use String for stable immutable text values, prefer StringBuilder for incremental thread-confined construction when synchronization is unnecessary, and consider StringBuffer only when the design genuinely requires multiple threads to share and mutate the same character buffer under its built-in synchronization semantics.",
+      "source_ids": ["java26-string", "java26-stringbuilder", "java26-stringbuffer", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "项目经验版", "常见追问"]
+    },
+    {
+      "claim_id": "performance-boundary",
+      "text": "Mutable builders can reuse and grow their current construction buffer, while StringBuffer additionally incurs synchronization where needed; the answer deliberately avoids universal speed ratios because allocation and concatenation behavior depend on expression shape, compiler/JDK implementation and workload.",
+      "source_ids": ["java26-stringbuilder", "java26-stringbuffer", "jls26-string-concat", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "plus-operator-boundary",
+      "text": "Source-level String concatenation with + is specified by Java language semantics, but the implementation may use a builder, a runtime concatenation facility or another conforming strategy. Therefore the candidate correctly rejects the claim that every String '+' expression is language-guaranteed to compile into StringBuilder.",
+      "source_ids": ["java26-string", "jls26-string-concat", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "13d712dbbbe982e220bc87d74737abcd",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "1bb63b161281368c9e9095fa9bed3b90",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "ae1651ba6576c28fcd53d4f4888dbd3e",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    }
+  ],
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0059-4888dbd3e-20260830-v1",
+    "review_version": "batch-0059.concepts.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The frozen repository context contains four equivalent source phrasings and three current Question IDs for the direct String/StringBuilder/StringBuffer comparison; the candidate answers that exact concept without drifting into unrelated pool, layout or microbenchmark material.",
+      "The Java SE 26 String, StringBuilder and StringBuffer APIs support the candidate's mutability and synchronization distinctions, capacity/building model and practical selection rule; the JLS 26 concatenation section supports the explicit boundary that source-level String '+' does not mandate one fixed builder lowering strategy.",
+      "The comparison is organized on common dimensions rather than three disconnected definitions: mutability, synchronization contract, performance mechanism and selection conditions are contrasted directly, with the important boundary that thread-confined StringBuilder use is normal even inside a multithreaded program.",
+      "The candidate correctly avoids the common atomicity overclaim for StringBuffer: synchronized operations on a shared buffer do not automatically make an arbitrary multi-call business invariant atomic. It also avoids the incorrect claim that String immutability follows merely from the class being final.",
+      "Performance claims are appropriately bounded: the answer explains mutable-capacity reuse and synchronization cost structurally while refusing universal speed multipliers, allocation counts or a fixed javac lowering strategy across JDK versions and workloads.",
+      "The project-experience section does not fabricate production results or personal ownership; it is framed as a practical mapping based on lifecycle and ownership, consistent with the repository no-fabrication rule.",
+      "The one-minute section has five concise comparison points, the three-minute section adds mechanism and selection detail rather than repeating the summary, and the six source-specific followups cover immutability, thread confinement, compound atomicity, selection, concatenation lowering and capacity tuning."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
