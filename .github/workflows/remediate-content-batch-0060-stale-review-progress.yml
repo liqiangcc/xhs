@@ -107,11 +107,32 @@ jobs:
           set -euo pipefail
           node scripts/xhs.js answer type-audit --check --noWrite
 
-      - name: Strict answer validation
+      - id: strict
+        name: Capture strict answer validation
         shell: bash
         run: |
-          set -euo pipefail
-          node scripts/xhs.js answer validate --strict --noWrite
+          set +e
+          node scripts/xhs.js answer validate --strict --noWrite > /tmp/strict-answer-validation.json 2>&1
+          rc=$?
+          cat /tmp/strict-answer-validation.json
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload strict answer validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-0060-strict-answer-validation
+          path: /tmp/strict-answer-validation.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce strict answer validation
+        if: steps.strict.outputs.rc != '0'
+        shell: bash
+        run: |
+          echo 'Strict answer validation failed; see diagnostic artifact.'
+          exit 1
 
       - name: Run aggregate validation
         shell: bash
