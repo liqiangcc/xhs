@@ -51,11 +51,12 @@ jobs:
           const mdPath=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(mdPath,'utf8');
           for(const section of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(section).length-1!==1) throw new Error(`section drift: ${section}`);
           for(const marker of ['Initial Mark','Remark','Region','Collection Set','evacuation','remembered set','concurrent mode failure','JDK 14']) if(!md.includes(marker)) throw new Error(`required mechanism marker missing: ${marker}`);
-          if((md.match(/^- \*\*问：/gm)||[]).length<5) throw new Error('followups insufficient');
+          const followupSection=md.match(/(?:^|\n)##\s+常见追问\s*\n([\s\S]*?)(?=\n##\s+|$)/)?.[1]||'';
+          if((followupSection.match(/^-\s*问[：:]/gm)||[]).length<5) throw new Error('followups insufficient');
           if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
           if(!md.includes('不是实时 GC')||!md.includes('不是硬 SLA')) throw new Error('pause-target boundary missing');
           const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
-          const expected='3d56c4edbe27598027ce635f23367712bbe054beabec79200a84d5265a2ebf95';
+          const expected='f4954d6d0045da06ad8f3aa24de26a80b31ead58be5cb6b22f8a5375f99b8a75';
           if(digest!==expected) throw new Error(`candidate digest drifted: ${digest}`);
           const writer=JSON.parse(fs.readFileSync(`${base}/writer_research.json`,'utf8'));
           if(writer.candidate_sha256!==digest||writer.review_state!=='writer_complete_isolated_review_pending') throw new Error('writer research/digest drift');
