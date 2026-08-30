@@ -1,0 +1,113 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_1e0183dc6029e9b676a96a73e9287af6",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0060/cq_q_1e0183dc6029e9b676a96a73e9287af6/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "1e0183dc6029e9b676a96a73e9287af6",
+      "93169ace3d77eeeabd99f371f1b8b7a3",
+      "e59de870f6c6ca0b184e9142fd69b986"
+    ],
+    "preserved_question_intent": "Explain the four InnoDB transaction isolation levels and identify the default level, with enough mechanism detail to distinguish READ COMMITTED and REPEATABLE READ without turning the answer into a generic ANSI anomaly table detached from MySQL behavior."
+  },
+  "sources": [
+    {
+      "source_id": "mysql84-isolation-levels",
+      "title": "MySQL 8.4 Reference Manual 17.7.2.1 Transaction Isolation Levels",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "InnoDB supports READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ and SERIALIZABLE",
+        "InnoDB default is REPEATABLE READ",
+        "READ COMMITTED creates a fresh snapshot for each consistent read",
+        "REPEATABLE READ consistent reads in one transaction use the snapshot established by the first consistent read",
+        "REPEATABLE READ locking/range operations use record/gap/next-key locking depending on the search condition",
+        "SERIALIZABLE is like REPEATABLE READ but may convert plain SELECT to SELECT FOR SHARE when autocommit is disabled"
+      ]
+    },
+    {
+      "source_id": "mysql84-transaction-isolation-variable",
+      "title": "MySQL 8.4 Reference Manual 7.1.8 transaction_isolation system variable",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/server-system-variables.html#sysvar_transaction_isolation",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "valid values are READ-UNCOMMITTED, READ-COMMITTED, REPEATABLE-READ and SERIALIZABLE",
+        "default value is REPEATABLE-READ",
+        "transaction isolation can be assigned at global/session/next-transaction scopes"
+      ]
+    },
+    {
+      "source_id": "mysql84-consistent-read",
+      "title": "MySQL 8.4 Reference Manual 17.7.2.3 Consistent Nonlocking Reads",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "InnoDB consistent reads use multi-versioning to present a snapshot",
+        "REPEATABLE READ ordinary consistent SELECT statements reuse the first consistent-read snapshot in a transaction",
+        "READ COMMITTED ordinary consistent SELECT statements create a fresh snapshot for each read",
+        "consistent nonlocking reads do not set row locks and are distinct from locking reads"
+      ]
+    },
+    {
+      "source_id": "mysql84-locking-reads",
+      "title": "MySQL 8.4 Reference Manual 17.7.2.4 Locking Reads",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "SELECT FOR SHARE and SELECT FOR UPDATE are locking reads",
+        "locking reads reserve rows against concurrent modification until commit or rollback",
+        "locking-read behavior must not be conflated with ordinary consistent snapshot SELECT behavior"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "four-levels-and-default",
+      "text": "InnoDB supports READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ and SERIALIZABLE. Its default transaction isolation level is REPEATABLE READ.",
+      "source_ids": ["mysql84-isolation-levels", "mysql84-transaction-isolation-variable"]
+    },
+    {
+      "claim_id": "read-uncommitted-boundary",
+      "text": "At READ UNCOMMITTED, ordinary SELECT can observe an earlier/uncommitted row version and reads are not consistent; this is the dirty-read level and otherwise behaves similarly to READ COMMITTED in the InnoDB description.",
+      "source_ids": ["mysql84-isolation-levels"]
+    },
+    {
+      "claim_id": "read-committed-snapshot",
+      "text": "At READ COMMITTED, each consistent nonlocking read creates and reads a fresh snapshot, so two ordinary SELECT statements in the same transaction need not see the same committed database state.",
+      "source_ids": ["mysql84-isolation-levels", "mysql84-consistent-read"]
+    },
+    {
+      "claim_id": "repeatable-read-snapshot-and-locking",
+      "text": "At the default REPEATABLE READ level, consistent nonlocking reads in one transaction use the snapshot established by the first consistent read. Locking reads and DML are a different access path and can use record/gap/next-key locking for ranges, so the answer must distinguish snapshot reads from locking reads instead of reducing MySQL RR to a one-line anomaly table.",
+      "source_ids": ["mysql84-isolation-levels", "mysql84-consistent-read", "mysql84-locking-reads"]
+    },
+    {
+      "claim_id": "serializable-boundary",
+      "text": "SERIALIZABLE is stricter than REPEATABLE READ; with autocommit disabled, InnoDB implicitly converts plain SELECT to SELECT FOR SHARE, increasing locking/serialization behavior and reducing concurrency.",
+      "source_ids": ["mysql84-isolation-levels", "mysql84-locking-reads"]
+    },
+    {
+      "claim_id": "configuration-scope",
+      "text": "The transaction isolation setting can be configured globally, per session, or for the next transaction, so the interview default should be stated as the InnoDB/server default rather than assuming every application connection necessarily uses it unchanged.",
+      "source_ids": ["mysql84-transaction-isolation-variable"]
+    }
+  ],
+  "writer_constraints": [
+    "Answer all three frozen source variants, including the default isolation level: REPEATABLE READ for InnoDB/MySQL's default transaction_isolation setting.",
+    "Name all four levels and explain them in increasing isolation order.",
+    "Use MySQL/InnoDB behavior, not only the textbook SQL-92 anomaly matrix. In particular, explain RC fresh-snapshot-per-consistent-read versus RR first-consistent-read snapshot reuse.",
+    "Keep ordinary consistent SELECT separate from SELECT FOR UPDATE/FOR SHARE and DML; MySQL RR locking behavior uses record/gap/next-key locks depending on the access path.",
+    "Do not state that RR universally prevents every possible form of phantom in every read/write pattern. Explain snapshot consistency and locking-read range protection precisely.",
+    "Do not claim isolation level alone solves all application concurrency anomalies such as lost updates; read-modify-write correctness also depends on locking/conditional updates/application protocol.",
+    "Mention that isolation can be changed per global/session/next transaction so 'default RR' is not proof of a given connection's current setting.",
+    "Do not fabricate production benchmarks or personal experience."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded MySQL isolation concept candidate and writer research, validate writer-stage audit, then perform isolated source-first review and evidence binding"
+}
