@@ -1,0 +1,41 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_1e0183dc6029e9b676a96a73e9287af6",
+  "candidate_sha256": "990b617b7946c1f0217a0ff099c41b8906118eb5fed4c3e829a9454d345fe8a7",
+  "reviewed_at": "2026-08-30",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0060-e9287af6-20260830-v1",
+  "review_version": "batch-0060.concepts.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0060/cq_q_1e0183dc6029e9b676a96a73e9287af6/context.json",
+    "review/content_build/answer_batch_0060/cq_q_1e0183dc6029e9b676a96a73e9287af6/primary_source_research.json",
+    "review/candidates/answers/cq_q_1e0183dc6029e9b676a96a73e9287af6.md",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 4
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The frozen repository context contains three equivalent MySQL isolation-level questions, including the explicit default-level variant. The candidate answers all three directly and identifies InnoDB/MySQL transaction_isolation default as REPEATABLE READ.",
+    "The MySQL 8.4 primary-source packet supports all four level names and the key InnoDB mechanisms used in the answer: READ COMMITTED creates a fresh snapshot for each consistent read; REPEATABLE READ reuses the snapshot established by the first consistent read; SERIALIZABLE adds stronger locking semantics; READ UNCOMMITTED permits dirty/inconsistent reads.",
+    "The answer avoids a common weak pattern of reproducing only an ANSI anomaly table. It explains the RC-versus-RR difference through read-view lifetime, which directly accounts for why two ordinary SELECT statements in one RC transaction can observe later commits while RR consistent reads remain on one snapshot.",
+    "The candidate preserves the critical MySQL boundary between consistent nonlocking reads and locking reads/DML. It does not claim that all RR behavior comes only from MVCC or only from next-key locking, and it correctly presents record/gap/next-key locking as relevant to locking/range access paths.",
+    "The phantom-read discussion is appropriately qualified rather than making the absolute interview claim that RR universally eliminates every phantom across all read/write patterns. It distinguishes snapshot stability from current-data range locking.",
+    "The configuration boundary is useful and source-supported: default RR is not treated as proof that a particular application session currently runs at RR because transaction isolation can be overridden at global, session or next-transaction scope.",
+    "The answer does not fabricate throughput gains or production incidents and explicitly refuses to treat isolation level as a substitute for application read-modify-write concurrency protocols. The one-minute section is concise; the three-minute section is longer than literal oral timing, so oral quality is scored 4/5."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
