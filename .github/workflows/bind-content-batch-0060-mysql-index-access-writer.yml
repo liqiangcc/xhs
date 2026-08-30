@@ -1,0 +1,119 @@
+name: Bind Content Batch 0060 MySQL Index Access Writer
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/bind-content-batch-0060-mysql-index-access-writer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0060-mysql-index-access-writer
+  cancel-in-progress: false
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_9f1cebe243538bbd9e494ea9d47e1a35
+
+jobs:
+  bind-writer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Guard frozen source and candidate then bind digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid="$CANONICAL_ID"
+          base="review/content_build/answer_batch_0060/$cid"
+          candidate="review/candidates/answers/$cid.md"
+          node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const qids=['9f1cebe243538bbd9e494ea9d47e1a35','e26ffaf82bff77ad2f0cc338cb9f7dd2'];
+          const base=`review/content_build/answer_batch_0060/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='concept'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify(qids)) throw new Error('context/ownership drift');
+          const p=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+          for(const id of ['mysql84-index-use','mysql84-multiple-column','mysql84-range','mysql84-type-conversion','mysql84-table-scan','mysql84-explain','mysql84-functional-index']) if(!(p.sources||[]).some(x=>x.source_id===id)) throw new Error(`primary source missing: ${id}`);
+          const md=fs.readFileSync(`review/candidates/answers/${cid}.md`,'utf8');
+          for(const section of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(section).length-1!==1) throw new Error(`section drift: ${section}`);
+          for(const marker of ['最左前缀','隐式类型转换','Skip Scan',"LIKE 'abc%'",'functional key parts','EXPLAIN ANALYZE','选择性','range interval']) if(!md.includes(marker)) throw new Error(`required MySQL marker missing: ${marker}`);
+          if((md.match(/^- 问：/gm)||[]).length<6) throw new Error('followups insufficient');
+          if(/生产环境里我|我负责过|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
+          for(const bad of ['!= 一定不走索引','<> 一定不走索引','OR 一定不走索引','IN 一定不走索引','范围后面的列全部失效','只要对列加函数就永远不能用索引']) if(md.includes(bad)) throw new Error(`over-absolute index rule present: ${bad}`);
+          if(!md.includes('不能用')||!md.includes('不值得用')) throw new Error('access-path versus cost distinction missing');
+          NODE
+          digest="$(sha256sum "$candidate" | awk '{print $1}')"
+          DIGEST="$digest" node <<'NODE'
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID,digest=process.env.DIGEST;
+          const base=`review/content_build/answer_batch_0060/${cid}`;
+          const out={
+            schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:digest,checked_at:'2026-08-30',review_state:'writer_complete_isolated_review_pending',
+            sources:[
+              {source_id:'repository-source',title:'Batch 0060 frozen MySQL index-access repository context',locator:`${base}/context.json`,source_type:'repository_source_record',checked_at:'2026-08-30'},
+              {source_id:'primary-source-research',title:'MySQL 8.4 official index-access primary-source research packet',locator:`${base}/primary_source_research.json`,source_type:'official_documentation',checked_at:'2026-08-30'}
+            ],
+            claims:[
+              {claim_id:'terminology-and-two-layer-model',text:'The candidate distinguishes an index that cannot form the desired lookup/range from an index that is structurally usable but not selected by the cost-based optimizer.',source_ids:['repository-source','primary-source-research'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制']},
+              {claim_id:'leftmost-prefix-and-skip-scan',text:'The answer covers ordinary leftmost-prefix behavior of composite indexes while retaining MySQL Skip Scan as an explicit boundary against an exception-free mnemonic.',source_ids:['primary-source-research'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','常见追问','易错点']},
+              {claim_id:'conversion-like-and-expression-boundaries',text:'The answer covers indexed-string versus numeric implicit conversion, distinguishes leading-wildcard LIKE from constant-prefix LIKE, and avoids the false rule that functions always make indexing impossible because functional key parts exist.',source_ids:['primary-source-research'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','常见追问']},
+              {claim_id:'range-and-cost-nuance',text:'The candidate separates range-interval construction from later filtering/coverage and explains that optimizer cost, selectivity, table size and statistics can make a scan preferable even when an index is usable.',source_ids:['primary-source-research'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']},
+              {claim_id:'plan-verification',text:'The candidate requires EXPLAIN and when appropriate EXPLAIN ANALYZE to verify the actual selected plan rather than declaring index use from memorized SQL-keyword rules.',source_ids:['primary-source-research'],answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','项目经验版','常见追问']}
+            ],
+            source_question_coverage:qids.map(qid=>({question_id:qid,covered:true,answer_locations:['核心结论','1 分钟版','3 分钟版','关键细节','原理机制','常见追问']})),
+            promotion_blocker:'isolated_independent_review_and_human_approval_not_yet_performed'
+          };
+          fs.writeFileSync(`${base}/writer_research.json`,JSON.stringify(out,null,2)+'\n');
+          console.log(`candidate_sha256=${digest}`);
+          NODE
+      - name: Writer-stage audit has only expected pre-review blockers
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --noWrite --noDraftCheck > /tmp/audit.json
+          rc=$?
+          set -e
+          cat /tmp/audit.json
+          test "$rc" -ne 0
+          node <<'NODE'
+          const fs=require('fs');
+          const report=JSON.parse(fs.readFileSync('/tmp/audit.json','utf8'));
+          const row=report.rows?.[0]; if(!row) throw new Error('audit row missing');
+          const actual=[...(row.hard_failures||[])].sort(),expected=['missing_evidence','missing_independent_review'].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`unexpected writer-stage hard failures: ${JSON.stringify(actual)}`);
+          for(const e of (row.errors||[]).map(x=>x.error)) if(!['missing_evidence','missing_dimension_score','review_not_passed','total_score_below_minimum'].includes(e)) throw new Error(`unexpected writer-stage audit error: ${e}`);
+          NODE
+      - name: Baseline repository invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+      - name: Commit writer research
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name xhs-content-builder
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git add "review/content_build/answer_batch_0060/$CANONICAL_ID/writer_research.json"
+          if git diff --cached --quiet; then
+            echo 'writer research already current'
+            exit 0
+          fi
+          git commit -m 'research: bind batch 0060 MySQL index-access writer evidence'
+          git push origin "HEAD:$CONTENT_BRANCH"
