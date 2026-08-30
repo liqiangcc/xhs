@@ -1,0 +1,34 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_0480feb81f0c7e5ce0bcb8778bced565",
+  "candidate_sha256": "aef654c982741071d7f433aa7e10bc112710aa7237b6cb5341c229eefd057fab",
+  "checked_at": "2026-08-30",
+  "writer": {"writer_id":"content-batch-0059-8bced565-writer","writer_version":"xhs-answer-curator.v1"},
+  "sources": [
+    {"source_id":"repository-source","title":"Batch 0059 frozen Java sleep/wait repository context","locator":"review/content_build/answer_batch_0059/cq_q_0480feb81f0c7e5ce0bcb8778bced565/context.json","source_type":"repository_source_record","checked_at":"2026-08-30"},
+    {"source_id":"primary-source-packet","title":"Batch 0059 Java SE 26/JLS 26 sleep-wait primary-source research packet","locator":"review/content_build/answer_batch_0059/cq_q_0480feb81f0c7e5ce0bcb8778bced565/primary_source_research.json","source_type":"repository_structured_source","checked_at":"2026-08-30"},
+    {"source_id":"java26-thread-sleep","title":"Java SE 26 Thread API: sleep","locator":"https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Thread.html","source_type":"official_documentation","checked_at":"2026-08-30"},
+    {"source_id":"java26-object-wait","title":"Java SE 26 Object API: wait/notify/notifyAll","locator":"https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Object.html","source_type":"official_documentation","checked_at":"2026-08-30"},
+    {"source_id":"jls26-waitsets","title":"JLS 26 §17.2 Wait Sets and Notification","locator":"https://docs.oracle.com/javase/specs/jls/se26/html/jls-17.html#jls-17.2","source_type":"official_specification_or_standard","checked_at":"2026-08-30"},
+    {"source_id":"isolated-review","title":"Fresh Batch 0059 sleep-wait isolated source-first review","locator":"review/content_build/answer_batch_0059/cq_q_0480feb81f0c7e5ce0bcb8778bced565/isolated_review_result.json","source_type":"repository_structured_source","checked_at":"2026-08-30"}
+  ],
+  "claims": [
+    {"claim_id":"ownership-and-release","text":"Thread.sleep pauses the current thread without requiring or releasing a target monitor. Object.wait requires ownership of the target object's monitor, joins that object's wait set and relinquishes synchronization claims on that object only; monitors on other objects remain held.","source_ids":["java26-thread-sleep","java26-object-wait","jls26-waitsets","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","原理机制","常见追问"]},
+    {"claim_id":"wake-reacquire-and-condition-loop","text":"sleep is duration-based subject to timer/scheduler precision, while wait is condition-notification oriented and may return via notification, interruption, timeout or spurious wakeup. A waiter must reacquire the object's monitor before proceeding, and the API recommends checking the condition in a while loop.","source_ids":["java26-thread-sleep","java26-object-wait","jls26-waitsets","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","原理机制","常见追问","易错点"]},
+    {"claim_id":"interruption","text":"Both sleep and wait have documented InterruptedException paths and clear interrupted status when that exception is thrown. For wait, the object's lock state is restored/reacquired before the exception is delivered.","source_ids":["java26-thread-sleep","java26-object-wait","jls26-waitsets","isolated-review"],"answer_locations":["1 分钟版","3 分钟版","关键细节","常见追问"]},
+    {"claim_id":"selection-boundary","text":"The candidate uses sleep for deliberate delay/backoff and wait/notify for monitor-protected condition coordination, with higher-level java.util.concurrent constructs framed only as engineering alternatives for more complex coordination rather than as a different definition of sleep or wait.","source_ids":["primary-source-packet","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","项目经验版"]}
+  ],
+  "source_question_coverage": [
+    {"question_id":"0480feb81f0c7e5ce0bcb8778bced565","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]},
+    {"question_id":"06feae2eef711e7543f771355b6c14be","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]},
+    {"question_id":"84e517a49a10c4eb9cd9d36d36aaa933","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]}
+  ],
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id":"source-first-isolated-reviewer-batch-0059-8bced565-20260830-v1",
+    "review_version":"batch-0059.concepts.v1","independent":true,"decision":"pass","revision_round":1,
+    "scores":{"facts_and_evidence":25,"directness_and_relevance":20,"type_specific_completeness":20,"mechanism_and_causality":15,"boundaries_and_tradeoffs":10,"followup_quality":5,"oral_quality":4},
+    "hard_failures":[],"unsupported_claims":[],"uncovered_source_variants":[]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
