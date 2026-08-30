@@ -1,0 +1,189 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_bb9b65869d1a42195ea915faa583b615",
+  "candidate_sha256": "302dd3bb15c3e6d48656f97fd6bdbc6f52e4735a41bd11ceb176e5e3d929251c",
+  "checked_at": "2026-08-30",
+  "writer": {
+    "writer_id": "content-batch-0059-583b615-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0059 frozen 100k-QPS/OPS RPC-framework source context",
+      "locator": "review/content_build/answer_batch_0059/cq_q_bb9b65869d1a42195ea915faa583b615/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "primary-source-packet",
+      "title": "Batch 0059 frozen RPC-framework primary-source research packet",
+      "locator": "review/content_build/answer_batch_0059/cq_q_bb9b65869d1a42195ea915faa583b615/primary_source_research.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "netty-42-release",
+      "title": "Netty 4.2.0.Final released",
+      "locator": "https://netty.io/news/2025/04/03/4-2-0.html",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "netty-42-eventloop",
+      "title": "Netty 4.2 MultiThreadIoEventLoopGroup API",
+      "locator": "https://netty.io/4.2/api/io/netty/channel/MultiThreadIoEventLoopGroup.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "netty-native-transport",
+      "title": "Netty native transports",
+      "locator": "https://netty.io/wiki/native-transports.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "grpc-performance",
+      "title": "gRPC Performance Best Practices",
+      "locator": "https://grpc.io/docs/guides/performance/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "grpc-deadlines",
+      "title": "gRPC Deadlines",
+      "locator": "https://grpc.io/docs/guides/deadlines/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "grpc-service-config",
+      "title": "gRPC Service Config",
+      "locator": "https://grpc.io/docs/guides/service-config/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "grpc-health",
+      "title": "gRPC Health Checking",
+      "locator": "https://grpc.io/docs/guides/health-checking/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "grpc-flow-control",
+      "title": "gRPC Flow Control",
+      "locator": "https://grpc.io/docs/guides/flow-control/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "grpc-retry",
+      "title": "gRPC Retry",
+      "locator": "https://grpc.io/docs/guides/retry/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "grpc-graceful-shutdown",
+      "title": "gRPC Graceful Shutdown",
+      "locator": "https://grpc.io/docs/guides/server-graceful-stop/",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Fresh Batch 0059 RPC-framework isolated source-first review",
+      "locator": "review/content_build/answer_batch_0059/cq_q_bb9b65869d1a42195ea915faa583b615/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-30"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary-and-target-contract",
+      "text": "The frozen source variants ask for an RPC framework at a stated 100k target but use distinct OPS and QPS units and preserve Netty, serialization, service-governance/load-balancing and high-performance-call concerns. They do not provide production payload mix, hardware, node count, percentile SLO or measured per-instance throughput, so the candidate treats the target as something to prove rather than inventing capacity numbers.",
+      "source_ids": ["repository-source", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "项目经验版", "易错点"]
+    },
+    {
+      "claim_id": "capacity-and-latency-proof",
+      "text": "The candidate decomposes end-to-end latency into queueing, codec, network, IO and handler segments, requires a percentile SLO, and sizes instances from target-environment safe measured throughput plus failure-domain survival and headroom instead of claiming a universal Netty/serializer throughput guarantee.",
+      "source_ids": ["grpc-deadlines", "grpc-performance", "netty-42-release", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "项目经验版", "常见追问"]
+    },
+    {
+      "claim_id": "event-loop-and-worker-isolation",
+      "text": "The design uses Netty event loops for connection and IO state progression while keeping uncontrollable blocking business, storage and downstream work behind bounded worker/asynchronous boundaries, and observes IO-loop utilization/lag separately from worker saturation and queueing.",
+      "source_ids": ["netty-42-eventloop", "netty-42-release", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "connection-codec-and-transport-boundaries",
+      "text": "Persistent channel/connection reuse removes repeated setup from the hot path, while codec choice and native transport are workload-dependent optimizations that must be benchmarked for bytes, CPU, allocations, compatibility and tail latency rather than named as unconditional winners. The candidate's request-correlation and protocol-version fields are explicit framework design choices, not claims that the cited projects mandate those exact wire representations.",
+      "source_ids": ["grpc-performance", "netty-native-transport", "netty-42-release", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "项目经验版", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "service-governance-and-health",
+      "text": "The candidate separates endpoint discovery/resolution, health/readiness eligibility and load-balancing selection, and treats per-method deadline/retry behavior as framework/service configuration rather than ad-hoc business-call policy; keepalive is kept distinct from service health.",
+      "source_ids": ["grpc-service-config", "grpc-health", "grpc-deadlines", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "deadline-retry-idempotency-and-overload",
+      "text": "The candidate propagates a bounded end-to-end time budget, permits retries only under classified retryable failures with remaining deadline/attempt budget and a safe idempotency boundary, and uses bounded in-flight/worker queues plus streaming flow control or fast rejection to prevent queue and retry amplification during overload.",
+      "source_ids": ["grpc-deadlines", "grpc-retry", "grpc-flow-control", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "rollout-failure-and-observability",
+      "text": "The candidate includes health-aware draining, bounded in-flight completion, reconnect backoff/jitter, protocol/codec compatibility, overload/failover testing, and per-method tail-latency/resource observability as part of proving the 100k/millisecond target while refusing to fabricate company-specific topology, node counts or production latency numbers.",
+      "source_ids": ["grpc-graceful-shutdown", "grpc-health", "grpc-deadlines", "primary-source-packet", "isolated-review"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "项目经验版", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "bb9b65869d1a42195ea915faa583b615",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "cb14ccb8051901c448a5d13b0c3f8117",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    }
+  ],
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0059-583b615-20260830-v1",
+    "review_version": "batch-0059.scenarios.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 24,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 4
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The frozen repository context preserves both 100k-OPS and 100k-QPS source variants plus the Netty, serialization, service-governance and load-balancing concerns; the candidate keeps the units distinct and refuses to invent payload, hardware, node-count or percentile-SLO facts that are absent from the sources.",
+      "The frozen primary-source packet supports the candidate's main performance and reliability mechanisms: channel reuse, deadline budgeting, health-aware routing, configurable load balancing and retries, streaming flow control, graceful draining, Netty event-loop organization and native transport as a measurable optimization rather than a fixed performance guarantee.",
+      "The scenario answer supplies an end-to-end data path and control plane instead of listing components: client stub, resolver/health/LB, persistent channel state, request correlation, codec/protocol versioning, Netty IO loops, bounded dispatch/worker isolation, response correlation, deadlines, retries and draining are connected by explicit call and failure state transitions.",
+      "Scenario completeness is strong: the candidate turns the 100k/millisecond wording into a measurable workload contract, provides a capacity formula based on safe measured per-instance throughput plus failure-domain/headroom factors, identifies IO-loop/worker/queue/GC/downstream bottlenecks, covers overload and failover, defines observability, and gives a canary/drain rollout strategy.",
+      "The candidate handles retry and overload boundaries correctly: attempts are gated by error class, remaining deadline, attempt budget and idempotency semantics; pending/in-flight and worker queues are bounded; streaming flow control and fast rejection are used to prevent queue and retry amplification.",
+      "The candidate preserves the no-fabrication boundary and treats codec, native transport, thread counts and load-balancing variants as workload-dependent choices. Some illustrative protocol fields and routing refinements are design choices rather than claims that the cited upstream projects mandate those exact representations, and the text consistently presents them as such.",
+      "The one-minute section has five source-specific oral points and the followups directly test event-loop isolation, capacity proof, retry amplification, codec selection, thread sizing, discovery-versus-balancing, draining, health and latency proof. The three-minute section is substantially more detailed than a literal three-minute recital, so oral-quality is scored 4/5 even though the material is well structured for selective delivery."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
