@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: content-batch-0060-heap-vs-stack-review
@@ -81,6 +81,28 @@ jobs:
       - name: CI validate closure
         shell: bash
         run: npm run ci:validate
+      - name: Refresh deterministic indexes if stale
+        shell: bash
+        run: |
+          set -euo pipefail
+          if npm run ci:index:check; then
+            echo 'Indexes already current.'
+            exit 0
+          fi
+          node scripts/xhs.js index build --noWrite
+          npm run ci:index:check
+          changed="$(git status --short -- data/indexes)"
+          test -n "$changed"
+          if [ -n "$(git status --porcelain --untracked-files=no | grep -vE '^.. data/indexes/(entity_index|company_index|domain_index|hotspot_index)\.json$' || true)" ]; then
+            echo 'Unexpected tracked changes outside deterministic indexes:' >&2
+            git status --short >&2
+            exit 1
+          fi
+          git config user.name 'xhs-index-builder'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add data/indexes/entity_index.json data/indexes/company_index.json data/indexes/domain_index.json data/indexes/hotspot_index.json
+          git commit -m 'data: refresh question indexes for batch 0060'
+          git push origin HEAD:content/quality-completion
       - name: CI index closure
         shell: bash
         run: npm run ci:index:check
