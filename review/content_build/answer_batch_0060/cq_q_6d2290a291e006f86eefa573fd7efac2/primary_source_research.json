@@ -1,0 +1,103 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_6d2290a291e006f86eefa573fd7efac2",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0060/cq_q_6d2290a291e006f86eefa573fd7efac2/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "6d2290a291e006f86eefa573fd7efac2",
+      "ba2dde3e156641a325fefe55deaea14c"
+    ],
+    "preserved_question_intent": "Define a MySQL covering index, explain why satisfying a query from one index tree can avoid an additional row lookup, how to recognize the access pattern in EXPLAIN, and key InnoDB boundaries such as secondary indexes containing the primary-key value."
+  },
+  "sources": [
+    {
+      "source_id": "mysql84-how-indexes-used",
+      "title": "MySQL 8.4 Reference Manual 10.3.1 How MySQL Uses Indexes",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/mysql-indexes.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "MySQL defines an index that provides all necessary results for a query as a covering index",
+        "if a query uses only columns included in one index, selected values can be retrieved from the index tree without consulting data rows",
+        "multiple-column index lookup capabilities follow leftmost-prefix rules, which is related to search access but is not the definition of covering"
+      ]
+    },
+    {
+      "source_id": "mysql84-explain-output",
+      "title": "MySQL 8.4 Reference Manual 10.8.2 EXPLAIN Output Format",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/explain-output.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "EXPLAIN Extra 'Using index' means column information is retrieved using only the index tree without an additional seek to read the actual row",
+        "the strategy can be used when a query uses only columns that are part of a single index",
+        "for InnoDB, a secondary index can cover a selected primary-key column because each secondary-index record stores the primary-key value",
+        "'Using index condition' is a different optimization: index tuples are tested before deciding whether to read full table rows"
+      ]
+    },
+    {
+      "source_id": "mysql84-column-indexes",
+      "title": "MySQL 8.4 Reference Manual 10.3.5 Column Indexes",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/column-indexes.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "index prefixes store only the indexed prefix of a string column",
+        "when a search term exceeds a configured index prefix length, remaining rows may need examination for exact matching",
+        "a prefix index therefore cannot automatically be assumed to contain a complete selected column value"
+      ]
+    },
+    {
+      "source_id": "mysql84-using-explain",
+      "title": "MySQL 8.4 Reference Manual 10.8.1 Optimizing Queries with EXPLAIN",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/using-explain.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "EXPLAIN exposes the optimizer execution plan and is the correct tool for checking whether a proposed index/access plan is actually selected",
+        "EXPLAIN ANALYZE can be used to compare optimizer expectations with actual execution timing and row counts"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "definition",
+      "text": "A covering index is an index that contains all column information needed to produce the query result for that table, allowing MySQL to retrieve the needed values from the index tree without an additional row lookup.",
+      "source_ids": ["mysql84-how-indexes-used", "mysql84-explain-output"]
+    },
+    {
+      "claim_id": "query-relative",
+      "text": "Covering is a property of an index relative to a particular query, not an intrinsic permanent label on an index: the same index may cover one SELECT and not another when an additional required column is requested.",
+      "source_ids": ["mysql84-how-indexes-used", "mysql84-explain-output"]
+    },
+    {
+      "claim_id": "innodb-primary-key-boundary",
+      "text": "For InnoDB, a secondary index may cover a query that also selects the primary key because the primary-key value is stored with each secondary-index record.",
+      "source_ids": ["mysql84-explain-output"]
+    },
+    {
+      "claim_id": "explain-boundary",
+      "text": "Traditional EXPLAIN 'Using index' is evidence of index-only column retrieval, whereas 'Using index condition' refers to Index Condition Pushdown and can still involve reading full table rows; these must not be treated as synonyms.",
+      "source_ids": ["mysql84-explain-output", "mysql84-using-explain"]
+    },
+    {
+      "claim_id": "tradeoff",
+      "text": "Adding columns to make an index cover more queries can reduce extra row lookups for those queries but makes the index wider and increases storage/write-maintenance costs; the optimizer should be checked with EXPLAIN rather than assuming the wider index is always chosen.",
+      "source_ids": ["mysql84-how-indexes-used", "mysql84-using-explain"]
+    }
+  ],
+  "writer_constraints": [
+    "Define covering relative to a specific query: all columns needed from the table are available from one index for the selected plan.",
+    "Explain the InnoDB benefit as avoiding an additional lookup of the clustered data row when a secondary index already supplies the required values; do not generalize storage-engine internals beyond InnoDB.",
+    "Do not conflate covering with leftmost-prefix lookup rules. An index can cover selected columns even when it is not the index used to narrow rows, and search usability is a separate question.",
+    "Do not conflate EXPLAIN 'Using index' with 'Using index condition'. The latter is ICP and may still read full rows.",
+    "Mention that InnoDB secondary indexes contain the primary-key value, which affects what a secondary index can cover.",
+    "Treat prefix indexes cautiously: a prefix does not necessarily contain the complete selected column value.",
+    "Include the write/storage tradeoff of widening indexes and verify plans with EXPLAIN/EXPLAIN ANALYZE instead of claiming covering is always faster.",
+    "Do not fabricate production QPS, I/O reduction percentages or schema sizes."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded covering-index concept candidate and writer research, validate writer stage, then perform isolated source-first review and evidence binding"
+}
