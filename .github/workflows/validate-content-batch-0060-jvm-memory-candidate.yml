@@ -50,7 +50,7 @@ jobs:
           for(const marker of ['Heap','JVM Stack','Method Area','pc Register','StackOverflowError','OutOfMemoryError','Metaspace']) if(!md.includes(marker)) throw new Error(`required JVM marker missing: ${marker}`);
           if((md.match(/^- 问：/gm)||[]).length<3) throw new Error('followups insufficient');
           if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
-          if(/Method Area\s*=\s*Metaspace|方法区就是\s*Metaspace/.test(md)) throw new Error('method-area implementation boundary collapsed');
+          if(!md.includes('Metaspace 是 HotSpot 的具体实现术语')||!md.includes('不能这么绝对说')) throw new Error('method-area implementation boundary missing');
           const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
           const expected='add37908f1935a8f06075de0313253b79ef8ec20d321c9dce4cf87cb9688e571';
           if(digest!==expected) throw new Error(`candidate digest drifted: ${digest}`);
