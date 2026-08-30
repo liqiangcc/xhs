@@ -51,13 +51,14 @@ jobs:
           for(const marker of ['最左前缀','隐式类型转换','Skip Scan',"LIKE 'abc%'",'functional key parts','EXPLAIN ANALYZE','选择性','range interval']) if(!md.includes(marker)) throw new Error(`required MySQL marker missing: ${marker}`);
           if((md.match(/^- 问：/gm)||[]).length<6) throw new Error('followups insufficient');
           if(/生产环境里我|我负责过|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
-          for(const bad of ['!= 一定不走索引','<> 一定不走索引','OR 一定不走索引','IN 一定不走索引','范围后面的列全部失效','只要对列加函数就永远不能用索引']) if(md.includes(bad)) throw new Error(`over-absolute index rule present: ${bad}`);
+          for(const boundary of ['不能把口诀说成绝对定律','也不能简单背成“必然不走索引”','不能说“只要有函数索引就废了”','不应该把它诊断成“索引坏了”']) if(!md.includes(boundary)) throw new Error(`optimizer nuance boundary missing: ${boundary}`);
           if(!md.includes('不能用')||!md.includes('不值得用')) throw new Error('access-path versus cost distinction missing');
           NODE
           digest="$(sha256sum "$candidate" | awk '{print $1}')"
           DIGEST="$digest" node <<'NODE'
           const fs=require('fs');
           const cid=process.env.CANONICAL_ID,digest=process.env.DIGEST;
+          const qids=['9f1cebe243538bbd9e494ea9d47e1a35','e26ffaf82bff77ad2f0cc338cb9f7dd2'];
           const base=`review/content_build/answer_batch_0060/${cid}`;
           const out={
             schema_version:'answer_writer_research.v1',canonical_id:cid,candidate_sha256:digest,checked_at:'2026-08-30',review_state:'writer_complete_isolated_review_pending',
