@@ -1,0 +1,156 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_9f1cebe243538bbd9e494ea9d47e1a35",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0060/cq_q_9f1cebe243538bbd9e494ea9d47e1a35/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "9f1cebe243538bbd9e494ea9d47e1a35",
+      "e26ffaf82bff77ad2f0cc338cb9f7dd2"
+    ],
+    "preserved_question_intent": "Explain common MySQL cases in which an existing index is not usable for the desired lookup or is not selected by the optimizer, especially leftmost-prefix violations and implicit type conversion, while preserving MySQL 8.4 nuances around ranges, LIKE, functional indexes, skip scan and cost-based plan choice."
+  },
+  "sources": [
+    {
+      "source_id": "mysql84-index-use",
+      "title": "MySQL 8.4 Reference Manual §10.3.1 How MySQL Uses Indexes",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/mysql-indexes.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "MySQL uses indexes for matching rows in WHERE conditions and may choose scans when an index does not reduce the search enough",
+        "comparison compatibility including string character set/collation matters for index lookup",
+        "multiple-column indexes are usable through leftmost prefixes"
+      ]
+    },
+    {
+      "source_id": "mysql84-multiple-column",
+      "title": "MySQL 8.4 Reference Manual §10.3.6 Multiple-Column Indexes",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "an index on (col1,col2,col3) has leftmost prefixes (col1), (col1,col2), and (col1,col2,col3)",
+        "predicates starting only from col2 or col2,col3 do not provide the ordinary leftmost-prefix lookup of that composite index"
+      ]
+    },
+    {
+      "source_id": "mysql84-range",
+      "title": "MySQL 8.4 Reference Manual §10.2.1.2 Range Optimization",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/range-optimization.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "BTREE range access can use LIKE when the pattern does not begin with a wildcard",
+        "for multi-part indexes equality-like constraints can extend an interval through additional key parts while a range operator limits how subsequent parts contribute to the same interval",
+        "operators such as !=, <>, IS NOT NULL and OR can still participate in range conditions in supported forms",
+        "Skip Scan can in some cases exploit a composite index even when the first key part lacks an equality predicate"
+      ]
+    },
+    {
+      "source_id": "mysql84-type-conversion",
+      "title": "MySQL 8.4 Reference Manual §14.3 Type Conversion in Expression Evaluation",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/type-conversion.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "an indexed string column compared with a numeric value cannot use that string-column index for fast lookup because multiple strings can convert to the same numeric value",
+        "comparison coercion rules can therefore make the indexed expression unsuitable for direct index lookup"
+      ]
+    },
+    {
+      "source_id": "mysql84-table-scan",
+      "title": "MySQL 8.4 Reference Manual §10.2.1.23 Avoiding Full Table Scans",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/table-scan-avoidance.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "the optimizer can choose a full table scan when a table is small or an indexed predicate is estimated to retrieve a large fraction of rows",
+        "ANALYZE TABLE can refresh index statistics used by the optimizer"
+      ]
+    },
+    {
+      "source_id": "mysql84-explain",
+      "title": "MySQL 8.4 Reference Manual §10.8.2 EXPLAIN Output Format and EXPLAIN ANALYZE",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/explain.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "EXPLAIN shows the optimizer's selected access plan",
+        "EXPLAIN ANALYZE executes the statement and provides actual timing and row information for plan validation"
+      ]
+    },
+    {
+      "source_id": "mysql84-functional-index",
+      "title": "MySQL 8.4 Reference Manual §15.1.15 CREATE INDEX Statement",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/create-index.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "MySQL supports functional key parts in indexes",
+        "therefore applying a function to a column is not a timeless rule that indexing is impossible; expression/index matching must be evaluated"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "leftmost-prefix",
+      "text": "For an ordinary composite BTREE lookup, predicates that do not preserve a usable leftmost prefix can prevent the expected direct index access, although MySQL features such as Skip Scan mean the interview mnemonic must not be stated as an exception-free optimizer law.",
+      "source_ids": [
+        "mysql84-index-use",
+        "mysql84-multiple-column",
+        "mysql84-range"
+      ]
+    },
+    {
+      "claim_id": "implicit-conversion",
+      "text": "Implicit type conversion can make an indexed expression unusable for fast lookup; MySQL explicitly documents the indexed-string-column versus numeric-value case.",
+      "source_ids": [
+        "mysql84-type-conversion"
+      ]
+    },
+    {
+      "claim_id": "like-range-nuance",
+      "text": "A leading-wildcard LIKE pattern cannot form the same BTREE prefix range as a constant-prefix pattern, while LIKE 'abc%' can participate in range access. Range predicates on a composite index constrain how later key parts contribute to the same interval rather than proving that the whole index is universally unusable.",
+      "source_ids": [
+        "mysql84-range"
+      ]
+    },
+    {
+      "claim_id": "function-boundary",
+      "text": "Wrapping an indexed column in an unmatched expression can defeat the original column-index lookup, but MySQL supports functional key parts, so 'functions always invalidate indexes' is not a correct universal rule.",
+      "source_ids": [
+        "mysql84-functional-index"
+      ]
+    },
+    {
+      "claim_id": "cost-based-choice",
+      "text": "An index can remain structurally usable yet not be selected because the optimizer estimates a table scan to be cheaper, for example on a small table or a predicate that matches much of the table; statistics influence that decision.",
+      "source_ids": [
+        "mysql84-index-use",
+        "mysql84-table-scan"
+      ]
+    },
+    {
+      "claim_id": "plan-verification",
+      "text": "Whether a query actually uses an index is a plan question that should be verified with EXPLAIN and, when appropriate, EXPLAIN ANALYZE rather than inferred only from memorized rules.",
+      "source_ids": [
+        "mysql84-explain"
+      ]
+    }
+  ],
+  "writer_constraints": [
+    "Use 'index not usable for this lookup', 'access path not chosen' or equivalent language instead of implying that the index object itself became invalid.",
+    "Cover the frozen entities explicitly: leftmost-prefix behavior and implicit type conversion.",
+    "Do not say !=, <>, IS NOT NULL, IN, OR, or range predicates always disable an index; MySQL range optimization can use several of these forms.",
+    "Explain that a range condition on an earlier composite-index key part can stop later parts from extending the same lookup interval, while later parts may still be applied for filtering/other optimization depending on the plan.",
+    "Distinguish leading-wildcard LIKE such as '%abc' from constant-prefix LIKE such as 'abc%'.",
+    "Do not say applying any function necessarily makes indexing impossible; MySQL supports functional key parts and expression matching matters.",
+    "Include optimizer cost/selectivity/statistics as a separate reason why a usable index may not be selected.",
+    "Recommend EXPLAIN/EXPLAIN ANALYZE and statistics inspection to validate the actual plan.",
+    "Do not fabricate table names, row counts, index names, latency improvements or production incidents."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded MySQL index-access concept candidate and writer research, validate writer stage, then perform isolated source-first review and evidence binding"
+}
