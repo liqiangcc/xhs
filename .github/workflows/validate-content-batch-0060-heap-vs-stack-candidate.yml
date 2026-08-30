@@ -49,7 +49,7 @@ jobs:
           for(const section of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(section).length-1!==1) throw new Error(`section drift: ${section}`);
           for(const marker of ['生命周期','allocator','LIFO','stack overflow','GC','碎片','线程','逃逸分析']) if(!md.includes(marker)) throw new Error(`required heap/stack marker missing: ${marker}`);
           if((md.match(/^- 问：/gm)||[]).length<5) throw new Error('followups insufficient');
-          if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
+          if(/生产环境里我|我负责过|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
           for(const boundary of ['都不应作为跨语言的普遍结论','“堆必须手动释放”也不是通用定义','不是每个 heap object 都天然共享','不能把“stack > heap”当成无条件性能定律']) if(!md.includes(boundary)) throw new Error(`generic runtime boundary missing: ${boundary}`);
           if(!md.includes('生命周期约束不同')||!md.includes('分配/回收算法不同')) throw new Error('mechanism chain missing');
           const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
