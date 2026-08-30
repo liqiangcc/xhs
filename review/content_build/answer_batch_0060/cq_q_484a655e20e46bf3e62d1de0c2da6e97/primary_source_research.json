@@ -1,0 +1,100 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_484a655e20e46bf3e62d1de0c2da6e97",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0060/cq_q_484a655e20e46bf3e62d1de0c2da6e97/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "484a655e20e46bf3e62d1de0c2da6e97",
+      "484cc261f2e058a639b84865778fbe1e"
+    ],
+    "preserved_question_intent": "Explain RocketMQ consumer message models. For the common interview meaning of consumption mode, distinguish Clustering from Broadcasting and keep this separate from Push/Pull consumer acquisition style and concurrent/orderly processing style."
+  },
+  "sources": [
+    {
+      "source_id": "rocketmq4-consumer-core-concept",
+      "title": "Apache RocketMQ 4.x Consumer Core Concept",
+      "source_type": "official_documentation",
+      "locator": "https://rocketmq.apache.org/docs/4.x/consumer/01concept2/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "RocketMQ documents two consumption modes: Clustering and Broadcasting",
+        "in Clustering, one message is processed by one consumer within the Consumer Group and consumers share the subscribed message volume",
+        "in Broadcasting, each consumer in the Consumer Group receives the full subscribed message volume",
+        "Clustering supports horizontal consumption-capacity scaling through consumers sharing work",
+        "the same document separately discusses Push and Pull as message-acquisition modes, so Push/Pull is a different classification dimension"
+      ]
+    },
+    {
+      "source_id": "rocketmq4-push-consumer",
+      "title": "Apache RocketMQ 4.x Push Consumer",
+      "source_type": "official_documentation",
+      "locator": "https://rocketmq.apache.org/docs/4.x/consumer/02push/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "DefaultMQPushConsumer uses cluster mode by default",
+        "MessageModel.CLUSTERING configures cluster consumption",
+        "MessageModel.BROADCASTING configures broadcast consumption",
+        "in broadcast mode every consumer in the consumer group consumes the full messages",
+        "concurrent consumption and orderly consumption are documented as a separate processing-mode distinction"
+      ]
+    },
+    {
+      "source_id": "rocketmq5-consumer-load-balancing",
+      "title": "Apache RocketMQ Consumer Load Balancing",
+      "source_type": "official_documentation",
+      "locator": "https://rocketmq.apache.org/docs/featureBehavior/08consumerloadbalance/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "current RocketMQ documentation still distinguishes broadcast consumption from cluster consumption",
+        "cluster consumption within a consumer group uses load balancing to allocate messages to consumers",
+        "broadcast-style delivery is suitable when each subscriber needs the full stream while cluster consumption is suitable for horizontal traffic partitioning and microservice decoupling"
+      ]
+    },
+    {
+      "source_id": "rocketmq5-consumer-domain-model",
+      "title": "Apache RocketMQ Consumer Domain Model",
+      "source_type": "official_documentation",
+      "locator": "https://rocketmq.apache.org/docs/domainModel/09consumer/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "current RocketMQ documents PushConsumer, SimpleConsumer and PullConsumer as consumer types",
+        "consumer type is a separate configuration dimension from cluster-versus-broadcast message model"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "two-message-models",
+      "text": "For the classic RocketMQ MessageModel/interview meaning of consumption mode, there are two modes: Clustering and Broadcasting.",
+      "source_ids": ["rocketmq4-consumer-core-concept", "rocketmq4-push-consumer", "rocketmq5-consumer-load-balancing"]
+    },
+    {
+      "claim_id": "clustering-semantics",
+      "text": "In Clustering mode, consumers in the same Consumer Group share the subscribed message volume so a message is handled by one consumer in that group; this supports horizontal consumption-capacity scaling and requires load balancing/rebalancing.",
+      "source_ids": ["rocketmq4-consumer-core-concept", "rocketmq4-push-consumer", "rocketmq5-consumer-load-balancing"]
+    },
+    {
+      "claim_id": "broadcasting-semantics",
+      "text": "In Broadcasting mode, each consumer in the Consumer Group receives the full subscribed message volume; adding consumers therefore does not divide that group's message workload in the same way as Clustering.",
+      "source_ids": ["rocketmq4-consumer-core-concept", "rocketmq4-push-consumer"]
+    },
+    {
+      "claim_id": "classification-boundary",
+      "text": "Push/Pull (and current PushConsumer/SimpleConsumer/PullConsumer APIs) describe how a consumer obtains messages, while concurrent/orderly describes processing behavior. These are different dimensions and must not be counted as extra Cluster/Broadcast message models.",
+      "source_ids": ["rocketmq4-consumer-core-concept", "rocketmq4-push-consumer", "rocketmq5-consumer-domain-model"]
+    }
+  ],
+  "writer_constraints": [
+    "Answer the interview wording first: if consumption mode means RocketMQ MessageModel, say there are two—Clustering and Broadcasting.",
+    "Explain the unit of sharing: consumers inside one Consumer Group share work in Clustering, while each consumer receives the full subscribed stream in Broadcasting.",
+    "State the operational consequence: Clustering can scale group throughput by adding consumers up to allocation limits; Broadcasting duplicates delivery across consumers and is not a way to partition the same workload.",
+    "Keep Push/Pull or PushConsumer/SimpleConsumer/PullConsumer as a separate consumer-type/acquisition dimension, not a third/fourth cluster-broadcast mode.",
+    "Keep concurrent-versus-orderly consumption as another separate processing dimension.",
+    "Use version-sensitive wording: 4.x Java PushConsumer exposes MessageModel.CLUSTERING/BROADCASTING directly; current RocketMQ documentation still discusses cluster and broadcast consumption but consumer APIs have evolved.",
+    "Do not fabricate production throughput, lag, retry counts or company-specific usage."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded RocketMQ consumption-mode concept candidate and writer research, validate writer stage, then perform isolated source-first review and evidence binding"
+}
