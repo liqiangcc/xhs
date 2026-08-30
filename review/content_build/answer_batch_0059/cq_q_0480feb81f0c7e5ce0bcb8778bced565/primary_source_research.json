@@ -1,0 +1,94 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_0480feb81f0c7e5ce0bcb8778bced565",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0059/cq_q_0480feb81f0c7e5ce0bcb8778bced565/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "0480feb81f0c7e5ce0bcb8778bced565",
+      "06feae2eef711e7543f771355b6c14be",
+      "84e517a49a10c4eb9cd9d36d36aaa933"
+    ],
+    "preserved_question_intent": "Compare Java Thread.sleep and Object.wait, especially monitor ownership/release, wake-up conditions, intended use and interruption behavior, without expanding into unrelated thread-state trivia or claiming scheduler timing guarantees."
+  },
+  "sources": [
+    {
+      "source_id": "java26-thread-sleep",
+      "title": "Java SE 26 Thread API: sleep",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Thread.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "Thread.sleep is static and causes the currently executing thread to sleep for the requested duration subject to timer/scheduler precision",
+        "sleep does not lose ownership of any monitors",
+        "interruption while sleeping throws InterruptedException and clears the interrupted status"
+      ]
+    },
+    {
+      "source_id": "java26-object-wait",
+      "title": "Java SE 26 Object API: wait/notify/notifyAll",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Object.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "the current thread must own the object's monitor before calling wait or IllegalMonitorStateException is thrown",
+        "wait puts the thread in this object's wait set and relinquishes synchronization claims on this object only; other object monitors remain held",
+        "wait can return due to notification, interruption, timeout or spurious wakeup and the API recommends checking the condition in a while loop",
+        "after notification a waiter still must reacquire the object's monitor before proceeding",
+        "interrupted wait throws InterruptedException and clears interrupted status after the object's lock status is restored"
+      ]
+    },
+    {
+      "source_id": "jls26-waitsets",
+      "title": "Java Language Specification 26 §17.2 Wait Sets and Notification",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se26/html/jls-17.html#jls-17.2",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "every object has an associated monitor and wait set",
+        "Object.wait/notify/notifyAll manipulate wait sets",
+        "wait and interruption/notification actions have defined ordering and monitor reacquisition behavior"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "ownership-and-release",
+      "text": "Thread.sleep does not require owning an object's monitor and does not release monitors the current thread already owns. Object.wait must be invoked by a thread that owns that object's monitor; it enters that object's wait set and releases synchronization claims on that object only, while other monitors remain held.",
+      "source_ids": ["java26-thread-sleep", "java26-object-wait", "jls26-waitsets"]
+    },
+    {
+      "claim_id": "wake-up-model",
+      "text": "sleep is primarily duration-based and becomes eligible to continue after the requested sleep period subject to scheduler/timer behavior or interruption. wait is condition/notification-oriented and may return due to notify/notifyAll, interruption, timeout on timed wait, or spurious wakeup; after wake-up it must reacquire the object's monitor before continuing.",
+      "source_ids": ["java26-thread-sleep", "java26-object-wait", "jls26-waitsets"]
+    },
+    {
+      "claim_id": "condition-loop",
+      "text": "Because Object.wait can wake spuriously and notification does not itself prove the application condition is true, condition waiting should check the predicate in a while loop around wait rather than using wait as a one-shot event flag.",
+      "source_ids": ["java26-object-wait"]
+    },
+    {
+      "claim_id": "interruption",
+      "text": "Both sleep and wait are interruptible and throw InterruptedException under their documented interruption conditions; the interrupted status is cleared when that exception is thrown. For wait, the object monitor is reacquired/restored before InterruptedException is delivered as specified.",
+      "source_ids": ["java26-thread-sleep", "java26-object-wait", "jls26-waitsets"]
+    },
+    {
+      "claim_id": "selection-rule",
+      "text": "Use sleep for deliberate timing/backoff/delay when holding monitors is not part of a coordination protocol. Use wait/notify only as monitor-based condition coordination while owning the monitor and protecting a predicate; for larger concurrency designs, higher-level java.util.concurrent constructs may provide clearer ownership and cancellation semantics, but that is an engineering selection boundary rather than a different definition of sleep/wait.",
+      "source_ids": ["java26-thread-sleep", "java26-object-wait", "jls26-waitsets"]
+    }
+  ],
+  "writer_constraints": [
+    "Lead with the monitor-release distinction but state it precisely: sleep releases no monitors; wait releases the monitor of the object on which wait is invoked, not every lock held by the thread.",
+    "State that wait belongs to Object, not Thread, and requires the current thread to own the target object's monitor; otherwise IllegalMonitorStateException is thrown.",
+    "Do not say notify immediately makes the waiting thread execute. A notified waiter must reacquire the object's monitor and compete before proceeding.",
+    "Do not promise exact sleep wake-up timing. The duration is subject to system timer/scheduler precision and the thread still needs scheduling after the sleep period.",
+    "Explain spurious wakeups and the API-recommended while-loop predicate pattern for wait.",
+    "Cover interruption for both methods and avoid the common oversimplification that one is interruptible and the other is not.",
+    "Keep thread-state labels secondary; answer the frozen comparison through purpose, owner, monitor behavior, wake conditions and use cases.",
+    "Do not fabricate project incidents or performance numbers."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded sleep-vs-wait concept candidate and writer research, then perform isolated source-first review before evidence/promotion"
+}
