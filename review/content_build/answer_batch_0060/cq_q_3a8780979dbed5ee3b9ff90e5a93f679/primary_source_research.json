@@ -1,0 +1,141 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_3a8780979dbed5ee3b9ff90e5a93f679",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0060/cq_q_3a8780979dbed5ee3b9ff90e5a93f679/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "3a8780979dbed5ee3b9ff90e5a93f679",
+      "591137feb08e703843f89eb573c5fe6b",
+      "a7bdf30ed9ccccfea86b0f3bc7260137"
+    ],
+    "preserved_question_intent": "Explain the JVM run-time data areas requested by the sources—heap, JVM stack, method area and per-thread pc register—with sharing/lifetime/content/error boundaries, while distinguishing the JVM specification's abstract method area from HotSpot-specific implementation terms."
+  },
+  "sources": [
+    {
+      "source_id": "jvms26-runtime-data-areas",
+      "title": "Java Virtual Machine Specification 26, Chapter 2 §2.5 Run-Time Data Areas",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "JVM run-time data areas include both JVM-lifetime shared areas and per-thread areas",
+        "per-thread data areas are created with a thread and destroyed when the thread terminates"
+      ]
+    },
+    {
+      "source_id": "jvms26-pc",
+      "title": "JVMS 26 §2.5.1 The pc Register",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.1",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "each JVM thread has its own pc register",
+        "for a non-native current method the pc register contains the address of the JVM instruction currently being executed",
+        "for a native current method the pc value is undefined by the specification"
+      ]
+    },
+    {
+      "source_id": "jvms26-jvm-stacks",
+      "title": "JVMS 26 §2.5.2 Java Virtual Machine Stacks",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.2",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "each JVM thread has a private JVM stack created with the thread",
+        "JVM stacks store frames and play a role in method invocation/return, local variables and partial results",
+        "excessive required stack depth can cause StackOverflowError",
+        "failure to allocate/grow a dynamically extensible stack can cause OutOfMemoryError"
+      ]
+    },
+    {
+      "source_id": "jvms26-heap",
+      "title": "JVMS 26 §2.5.3 Heap",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.3",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "the heap is shared among all JVM threads",
+        "class instances and arrays are allocated from the heap",
+        "heap storage is reclaimed by automatic storage management/garbage collection",
+        "the specification does not mandate one GC algorithm or contiguous heap memory",
+        "failure to make required heap memory available causes OutOfMemoryError"
+      ]
+    },
+    {
+      "source_id": "jvms26-method-area",
+      "title": "JVMS 26 §2.5.4 Method Area",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.4",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "the method area is shared among all JVM threads",
+        "it stores per-class structures including the run-time constant pool, field/method data and code for methods/constructors",
+        "the method area is logically part of the heap in the specification but its physical location/management policy is not mandated",
+        "failure to allocate required method-area memory causes OutOfMemoryError"
+      ]
+    },
+    {
+      "source_id": "jvms26-runtime-constant-pool",
+      "title": "JVMS 26 §2.5.5 Run-Time Constant Pool",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.5",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "each class or interface has a run-time constant pool representation",
+        "run-time constant pools are allocated from the JVM method area"
+      ]
+    },
+    {
+      "source_id": "jvms26-frames",
+      "title": "JVMS 26 §2.6 Frames",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.6",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "a new frame is created on each method invocation and destroyed when the invocation completes",
+        "a frame stores local variables, its operand stack and data used for dynamic linking/return/exception handling"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "shared-vs-thread-private",
+      "text": "The requested JVM memory areas split naturally by sharing scope: heap and method area are shared JVM-wide, while each thread has its own pc register and private JVM stack.",
+      "source_ids": ["jvms26-runtime-data-areas", "jvms26-pc", "jvms26-jvm-stacks", "jvms26-heap", "jvms26-method-area"]
+    },
+    {
+      "claim_id": "jvm-stack-and-frames",
+      "text": "A JVM stack is per-thread and stores method frames; frames are created for method invocations and contain local variables, an operand stack and linking/return support. Deep stack demand can cause StackOverflowError, while inability to allocate/grow a stack can cause OutOfMemoryError.",
+      "source_ids": ["jvms26-jvm-stacks", "jvms26-frames"]
+    },
+    {
+      "claim_id": "heap",
+      "text": "The JVM heap is shared among threads and is the specification-level run-time area from which class instances and arrays are allocated; automatic storage management reclaims storage and the specification does not mandate one collector or contiguous layout.",
+      "source_ids": ["jvms26-heap"]
+    },
+    {
+      "claim_id": "method-area",
+      "text": "The JVM method area is a shared specification-level area for per-class structures such as the run-time constant pool, field/method data and method/constructor code. The specification does not mandate its physical location or management policy, so 'method area equals metaspace' must not be stated as a universal JVM definition.",
+      "source_ids": ["jvms26-method-area", "jvms26-runtime-constant-pool"]
+    },
+    {
+      "claim_id": "pc-register",
+      "text": "Each JVM thread has its own pc register; when the current method is non-native it identifies the JVM instruction being executed, while the specification leaves its value undefined for a native current method.",
+      "source_ids": ["jvms26-pc"]
+    }
+  ],
+  "writer_constraints": [
+    "Answer the frozen source wording with heap, JVM stack, method area and pc register first; native method stacks may be mentioned only as an adjacent JVMS area, not as a reason to ignore the requested four.",
+    "Organize the answer by sharing scope, contents, lifetime and typical error conditions rather than memorized names only.",
+    "Say JVM stack, not a generic OS process stack, and explain frames/local variables/operand stack without claiming that every Java local variable's referenced object lives on the stack.",
+    "State that class instances and arrays are allocated from the specification-level heap; do not turn escape analysis/scalar replacement implementation optimizations into a contradiction of the abstract model.",
+    "Keep method area as a JVMS abstraction. Do not equate it universally with HotSpot metaspace or old PermGen; implementation choices can change across JVMs/versions.",
+    "Do not say the method area is simply the same physical memory as the heap. The JVMS says it is logically part of the heap but does not mandate physical location or management policy.",
+    "Mention pc is per-thread and the native-method pc value is undefined by the JVMS if discussing that edge case.",
+    "Do not fabricate production OOM incidents or specific JVM memory sizes."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded JVM runtime-data-area concept candidate and writer research, validate writer stage, then perform isolated source-first review and evidence binding"
+}
