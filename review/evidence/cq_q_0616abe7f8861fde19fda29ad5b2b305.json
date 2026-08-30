@@ -1,0 +1,193 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_0616abe7f8861fde19fda29ad5b2b305",
+  "candidate_sha256": "30a093e8b7cc83425acf40fd488229bbe59dd5b468a2135f365a64cda2aba3a6",
+  "checked_at": "2026-08-31",
+  "writer": {
+    "writer_id": "content-batch-0061-dcl-singleton-builder",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0061 frozen repository source context for Java DCL singleton",
+      "locator": "review/content_build/answer_batch_0061/cq_q_0616abe7f8861fde19fda29ad5b2b305/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0061 frozen live source inventory",
+      "locator": "review/content_build/answer_batch_0061/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "jls-17.4.5",
+      "title": "Java Language Specification SE 26 §17.4.5 Happens-before Order",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se26/html/jls-17.html#jls-17.4.5",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-31",
+      "claim": "A write to a volatile field happens-before every subsequent read of that field; monitor unlock happens-before every subsequent lock on that monitor."
+    },
+    {
+      "source_id": "jls-8.3.1.4",
+      "title": "Java Language Specification SE 26 §8.3.1.4 volatile Fields",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se26/html/jls-8.html#jls-8.3.1.4",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-31",
+      "claim": "The Java Memory Model gives volatile fields cross-thread visibility/consistency guarantees."
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK structural and concurrent stress validation for the exact DCL implementation",
+      "locator": "review/content_build/answer_batch_0061/cq_q_0616abe7f8861fde19fda29ad5b2b305/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0061 Java DCL singleton source-first isolated review",
+      "locator": "review/content_build/answer_batch_0061/cq_q_0616abe7f8861fde19fda29ad5b2b305/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source specifically requests a Java singleton implemented with DCL; reflection/serialization defenses, DI-container integration, and a particular API beyond getInstance are not preserved source requirements.",
+      "source_ids": [
+        "repository-source",
+        "source-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "memory-model",
+      "text": "JLS happens-before rules state that a volatile write happens-before every subsequent read of the same field and a monitor unlock happens-before a subsequent lock on that monitor; volatile fields receive Java Memory Model cross-thread consistency guarantees. These rules justify volatile publication plus synchronized initialization rather than treating a stress test as proof.",
+      "source_ids": [
+        "jls-17.4.5",
+        "jls-8.3.1.4"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "The exact candidate compiles; reflection verifies the private static volatile field and private constructor; 256 concurrently released threads perform 5,120,000 getInstance calls and observe one non-null object identity.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "项目经验版"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "0616abe7f8861fde19fda29ad5b2b305",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "question_id": "a5debbf3aaaeb184307a2e4f489f2141",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "validation": {
+    "command": "javac Singleton.java SingletonTest.java && java SingletonTest",
+    "result": "pass",
+    "reported_stdout": "PASS modifiers=private-static-volatile constructor=private threads=256 calls=5120000 identities=1",
+    "checks": [
+      "INSTANCE is reflectively verified private static volatile",
+      "constructor is reflectively verified private",
+      "256 threads start concurrently and execute 5,120,000 total getInstance calls",
+      "all observed references are non-null and share exactly one object identity"
+    ],
+    "boundary_tests": [
+      {
+        "case": "INSTANCE is reflectively verified private static volatile",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "constructor is reflectively verified private",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "256 threads start concurrently and execute 5,120,000 total getInstance calls",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      },
+      {
+        "case": "all observed references are non-null and share exactly one object identity",
+        "expected": "pass under declared candidate contract",
+        "actual": "pass",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0061-dcl-singleton-20260831-v1",
+    "review_version": "batch-0061.dcl-singleton.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The candidate directly implements the frozen Java DCL request instead of substituting a different singleton idiom.",
+      "The correctness argument is grounded in JLS volatile and monitor happens-before rules; concurrent stress is explicitly treated as implementation validation, not as proof that volatile is unnecessary.",
+      "The implementation performs the second shared-field read inside the synchronized block, publishes only after construction, and uses a local result only as an optional hot-path optimization.",
+      "Reflection verifies the field modifiers and private constructor, while a 256-thread/5,120,000-call stress run observes exactly one non-null identity.",
+      "Alternatives such as synchronized methods, static holder idiom, enum singleton, and DI are kept as tradeoffs rather than smuggled into the requested DCL contract.",
+      "No production or personal claim is fabricated from the source."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}

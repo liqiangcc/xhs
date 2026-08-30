@@ -14,8 +14,8 @@ ROOT = Path('.')
 DATE = '2026-08-31'
 BATCH = '0061'
 CID = 'cq_q_0616abe7f8861fde19fda29ad5b2b305'
-QIDS = ['0616abe7f8861fde19fda29ad5b2b305']
-EXPECTED_VARIANTS = {'算法手撕：使用 Java 实现基于 DCL（双重检查锁）的单例。'}
+QIDS = ['0616abe7f8861fde19fda29ad5b2b305', 'a5debbf3aaaeb184307a2e4f489f2141']
+EXPECTED_VARIANTS = {'算法：手写单例模式（双重检查锁）。', '算法：手写单例模式（懒汉式、双重检查锁）'}
 PROMOTION_BLOCKER = 'repository_human_approval_and_real_review_policy_not_yet_satisfied'
 HEADINGS = [
     '## 核心结论', '## 1 分钟版', '## 3 分钟版', '## 关键细节',
@@ -36,7 +36,7 @@ PRIMARY_SOURCES = [
         'source_id': 'jls-17.4.5',
         'title': 'Java Language Specification SE 26 §17.4.5 Happens-before Order',
         'locator': 'https://docs.oracle.com/javase/specs/jls/se26/html/jls-17.html#jls-17.4.5',
-        'source_type': 'external_primary_source',
+        'source_type': 'official_specification_or_standard',
         'checked_at': DATE,
         'claim': 'A write to a volatile field happens-before every subsequent read of that field; monitor unlock happens-before every subsequent lock on that monitor.',
     },
@@ -44,7 +44,7 @@ PRIMARY_SOURCES = [
         'source_id': 'jls-8.3.1.4',
         'title': 'Java Language Specification SE 26 §8.3.1.4 volatile Fields',
         'locator': 'https://docs.oracle.com/javase/specs/jls/se26/html/jls-8.html#jls-8.3.1.4',
-        'source_type': 'external_primary_source',
+        'source_type': 'official_specification_or_standard',
         'checked_at': DATE,
         'claim': 'The Java Memory Model gives volatile fields cross-thread visibility/consistency guarantees.',
     },

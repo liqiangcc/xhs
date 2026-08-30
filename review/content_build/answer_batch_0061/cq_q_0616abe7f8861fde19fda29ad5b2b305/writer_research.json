@@ -1,0 +1,118 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_0616abe7f8861fde19fda29ad5b2b305",
+  "candidate_sha256": "30a093e8b7cc83425acf40fd488229bbe59dd5b468a2135f365a64cda2aba3a6",
+  "checked_at": "2026-08-31",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0061 frozen repository source context for Java DCL singleton",
+      "locator": "review/content_build/answer_batch_0061/cq_q_0616abe7f8861fde19fda29ad5b2b305/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0061 frozen live source inventory",
+      "locator": "review/content_build/answer_batch_0061/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "jls-17.4.5",
+      "title": "Java Language Specification SE 26 §17.4.5 Happens-before Order",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se26/html/jls-17.html#jls-17.4.5",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-31",
+      "claim": "A write to a volatile field happens-before every subsequent read of that field; monitor unlock happens-before every subsequent lock on that monitor."
+    },
+    {
+      "source_id": "jls-8.3.1.4",
+      "title": "Java Language Specification SE 26 §8.3.1.4 volatile Fields",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se26/html/jls-8.html#jls-8.3.1.4",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-31",
+      "claim": "The Java Memory Model gives volatile fields cross-thread visibility/consistency guarantees."
+    },
+    {
+      "source_id": "fixture",
+      "title": "OpenJDK structural and concurrent stress validation for the exact DCL implementation",
+      "locator": "review/content_build/answer_batch_0061/cq_q_0616abe7f8861fde19fda29ad5b2b305/writer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-31"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The preserved source specifically requests a Java singleton implemented with DCL; reflection/serialization defenses, DI-container integration, and a particular API beyond getInstance are not preserved source requirements.",
+      "source_ids": [
+        "repository-source",
+        "source-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "3 分钟版",
+        "关键细节",
+        "项目经验版"
+      ]
+    },
+    {
+      "claim_id": "memory-model",
+      "text": "JLS happens-before rules state that a volatile write happens-before every subsequent read of the same field and a monitor unlock happens-before a subsequent lock on that monitor; volatile fields receive Java Memory Model cross-thread consistency guarantees. These rules justify volatile publication plus synchronized initialization rather than treating a stress test as proof.",
+      "source_ids": [
+        "jls-17.4.5",
+        "jls-8.3.1.4"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "claim_id": "reference-behavior",
+      "text": "The exact candidate compiles; reflection verifies the private static volatile field and private constructor; 256 concurrently released threads perform 5,120,000 getInstance calls and observe one non-null object identity.",
+      "source_ids": [
+        "fixture"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "项目经验版"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "0616abe7f8861fde19fda29ad5b2b305",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "question_id": "a5debbf3aaaeb184307a2e4f489f2141",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
