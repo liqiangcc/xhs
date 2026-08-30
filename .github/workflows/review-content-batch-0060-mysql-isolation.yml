@@ -1,0 +1,71 @@
+name: Review Content Batch 0060 MySQL Isolation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0060-mysql-isolation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-batch-0060-mysql-isolation-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_1e0183dc6029e9b676a96a73e9287af6
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Recheck source-first review boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID,qids=['1e0183dc6029e9b676a96a73e9287af6','93169ace3d77eeeabd99f371f1b8b7a3','e59de870f6c6ca0b184e9142fd69b986'];
+          const base=`review/content_build/answer_batch_0060/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='concept'||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify(qids)) throw new Error('context/ownership drift');
+          const p=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+          for(const id of ['mysql84-isolation-levels','mysql84-transaction-isolation-variable','mysql84-consistent-read','mysql84-locking-reads']) if(!(p.sources||[]).some(x=>x.source_id===id)) throw new Error(`primary source missing: ${id}`);
+          const path=`review/candidates/answers/${cid}.md`,digest=crypto.createHash('sha256').update(fs.readFileSync(path)).digest('hex');
+          if(digest!=='990b617b7946c1f0217a0ff099c41b8906118eb5fed4c3e829a9454d345fe8a7') throw new Error(`candidate digest drift: ${digest}`);
+          const r=JSON.parse(fs.readFileSync(`${base}/isolated_review_result.json`,'utf8'));
+          if(r.review_mode!=='source_first_isolated'||r.decision!=='pass'||r.candidate_sha256!==digest||r.hard_failures?.length||r.unsupported_claims?.length||r.uncovered_source_variants?.length) throw new Error('review drift');
+          if(Object.values(r.scores||{}).reduce((a,b)=>a+b,0)<90) throw new Error('review score below gate');
+          const e=JSON.parse(fs.readFileSync(`review/evidence/${cid}.json`,'utf8'));
+          if(e.review_state!=='independent_source_first_review_passed'||e.candidate_sha256!==digest||e.review?.decision!=='pass'||e.review?.independent!==true) throw new Error('evidence drift');
+          if(JSON.stringify((e.source_question_coverage||[]).map(x=>x.question_id))!==JSON.stringify(qids)) throw new Error('source coverage drift');
+          NODE
+      - name: Strict candidate audit
+        shell: bash
+        run: node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
+      - name: Repository closure gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
