@@ -1,0 +1,198 @@
+name: Remediate Content Batch 0061 LRU Relation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/remediate-content-batch-0061-lru-relation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0061-lru-relation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  TARGET_QID: 35c2d83b04a38c71b4cca1e3ed3f401b
+  TARGET_QID_2: 8e724cc524788dca8a06d93661fef37c
+  TARGET_CID: cq_q_35c2d83b04a38c71b4cca1e3ed3f401b
+  DUP_QID: 5fec9f875255be5ae3fa636523b24956
+  DUP_CID: cq_q_5fec9f875255be5ae3fa636523b24956
+
+jobs:
+  review-normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Freeze current source contexts and source-first relation conclusion
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0061/lru_relation'
+          mkdir -p "$out"
+          node scripts/xhs.js answer context --canonical-id "$TARGET_CID" --noWrite > "$out/target-context.json"
+          node scripts/xhs.js answer context --canonical-id "$DUP_CID" --noWrite > "$out/duplicate-context.json"
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q]));
+          const byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          const target=byC.get(process.env.TARGET_CID), dup=byC.get(process.env.DUP_CID);
+          if(!target||!dup) throw new Error('both LRU Canonicals must exist before bounded relation review');
+          const targetExpected=[process.env.TARGET_QID,process.env.TARGET_QID_2].sort();
+          const dupExpected=[process.env.DUP_QID];
+          const sort=x=>[...(x||[])].sort();
+          if(JSON.stringify(sort(target.question_ids))!==JSON.stringify(targetExpected)) throw new Error(`target ownership drifted: ${JSON.stringify(target.question_ids)}`);
+          if(JSON.stringify(sort(dup.question_ids))!==JSON.stringify(dupExpected)) throw new Error(`duplicate ownership drifted: ${JSON.stringify(dup.question_ids)}`);
+          const targetCtx=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0061/lru_relation/target-context.json','utf8'));
+          const dupCtx=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0061/lru_relation/duplicate-context.json','utf8'));
+          if(targetCtx.answer_type!=='coding'||dupCtx.answer_type!=='coding') throw new Error('both LRU relation sides must remain Coding');
+          const expectedTexts=new Map([
+            [process.env.TARGET_QID,'算法：实现一个 LRU 缓存？'],
+            [process.env.TARGET_QID_2,'算法：实现 LRU 缓存？'],
+            [process.env.DUP_QID,'算法：LRU 缓存'],
+          ]);
+          for(const ctx of [targetCtx,dupCtx]){
+            for(const src of ctx.source_questions||[]){
+              const row=byQ.get(src.question_id);
+              if(!row||row.canonical_id!==ctx.canonical.canonical_id||row.is_valid_for_library!==true||row.original_question!==src.original_question) throw new Error(`${src.question_id}: frozen Question/context drift`);
+              if(expectedTexts.get(src.question_id)!==src.original_question) throw new Error(`${src.question_id}: expected wording drifted: ${src.original_question}`);
+              const notePath=`note_tagged/${row.source_note_id}.json`;
+              if(!fs.existsSync(notePath)) throw new Error(`${src.question_id}: primary repository note missing`);
+              const note=JSON.parse(fs.readFileSync(notePath,'utf8'));
+              const found=note.tagged_questions?.some(q=>q.question_id===row.question_id&&q.original_question===row.original_question&&q.is_valid_for_library===true);
+              if(!found) throw new Error(`${src.question_id}: primary repository source wording drifted`);
+            }
+          }
+          const targetTexts=(targetCtx.source_questions||[]).map(q=>q.original_question);
+          const dupTexts=(dupCtx.source_questions||[]).map(q=>q.original_question);
+          const review=`# Batch 0061 LRU Source-First Relation Review\n\n`+
+            `## Primary-source facts\n\n`+
+            `- Survivor-side repository sources ask only to implement an LRU cache: ${targetTexts.map(x=>'“'+x+'”').join('；')}。\n`+
+            `- Duplicate-side repository source asks the same LRU-cache implementation operation: ${dupTexts.map(x=>'“'+x+'”').join('；')}。\n`+
+            `- No preserved source distinguishes capacity semantics, API shape, language, concurrency contract, TTL, persistence, or a different eviction policy. All three are Coding prompts for the same LRU cache operation.\n\n`+
+            `No historical relation/remediation record was consulted before this conclusion.\n\n`+
+            `## Decision\n\n`+
+            `Relation: \`same\`. Consolidate \`${process.env.DUP_CID}\` into survivor \`${process.env.TARGET_CID}\`; preserve all three valid source Questions under the survivor.\n\n`+
+            `## Content consequence\n\n`+
+            `Do not write two independent LRU answers. Regenerate Batch 0061 source inventory after normalization and write one source-bounded candidate for the survivor. This relation decision does not promote an Answer.\n`;
+          fs.writeFileSync('review/content_build/answer_batch_0061/lru_relation_review.md',review);
+          NODE
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+
+      - name: Select decide and apply reviewed relation
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='review/content_build/answer_batch_0061/lru_relation'
+          node scripts/xhs.js canonical suggest --question-ids "$TARGET_QID,$DUP_QID" --noManifest > "$out/suggest.json"
+          key="$(node - <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0061/lru_relation/suggest.json','utf8'));
+          if(!Array.isArray(r.relation_candidates)||r.relation_candidates.length!==1) throw new Error(`expected one RelationCandidate, got ${r.relation_candidates?.length}`);
+          const c=r.relation_candidates[0];
+          const actual=[...c.question_ids].sort(), expected=[process.env.TARGET_QID,process.env.DUP_QID].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`selected LRU pair drifted: ${JSON.stringify(actual)}`);
+          process.stdout.write(c.relation_candidate_key);
+          NODE
+          )"
+          node scripts/xhs.js dedup decide \
+            --relation-candidate-key "$key" \
+            --relation same \
+            --actor-type ai \
+            --actor-id batch-0061-lru-source-first-review \
+            --actor-display-name 'LRU source-first reviewer' \
+            --rationale 'Current frozen repository sources on both Canonicals ask for the same LRU-cache implementation operation; no source preserves a distinct API, capacity semantic, eviction policy, concurrency contract, or language boundary.' > "$out/decide.json"
+          node scripts/xhs.js dedup apply \
+            --relation-candidate-key "$key" \
+            --canonical-id "$TARGET_CID" \
+            --canonical-title '算法：实现一个 LRU 缓存？' > "$out/apply.json"
+
+      - name: Verify consolidation and regenerate Batch 0061 source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const byQ=new Map(questions.map(q=>[q.question_id,q])), byC=new Map(canonicals.map(c=>[c.canonical_id,c]));
+          if(byC.has(process.env.DUP_CID)) throw new Error('duplicate LRU Canonical survived consolidation');
+          const target=byC.get(process.env.TARGET_CID);
+          if(!target) throw new Error('LRU survivor missing');
+          const expected=[process.env.TARGET_QID,process.env.TARGET_QID_2,process.env.DUP_QID].sort();
+          const actual=[...(target.question_ids||[])].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`LRU survivor Question scope drifted: ${JSON.stringify(actual)}`);
+          for(const qid of expected) if(byQ.get(qid)?.canonical_id!==process.env.TARGET_CID) throw new Error(`${qid}: survivor ownership missing`);
+          const task='tasks/answer-batches/TASK-20260711-0313-answer-batch-0061.md';
+          let text=fs.readFileSync(task,'utf8');
+          const note='- [x] `cq_q_5fec9f875255be5ae3fa636523b24956` was reviewed source-first against `cq_q_35c2d83b04a38c71b4cca1e3ed3f401b`: all three preserved Questions ask for the same LRU-cache implementation operation and preserve no distinct API, capacity, concurrency, TTL, persistence, or eviction-policy contract. Relation is `same`; the duplicate Canonical is retired and all source Questions are consolidated under the survivor. Candidate writing must target only the survivor.';
+          if(!text.includes(note)) text=text.trimEnd()+`\n${note}\n`;
+          fs.writeFileSync(task,text);
+          NODE
+          python3 scripts/content/build_batch_0061_source_inventory.py
+
+      - name: Refresh audits and run full gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only from stable content head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse origin/$CONTENT_BRANCH)"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Batch 0061 LRU relation slice: $base_head -> $remote_head; fail closed without push."
+            exit 0
+          fi
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then echo 'No changes to commit.'; exit 0; fi
+          git config user.name 'xhs-remediation-bot'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git commit -m 'content: normalize batch 0061 LRU source relation'
+          git push origin "HEAD:$CONTENT_BRANCH"
