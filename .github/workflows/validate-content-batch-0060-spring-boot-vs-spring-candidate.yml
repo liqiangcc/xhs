@@ -1,0 +1,88 @@
+name: Validate Content Batch 0060 Spring Boot vs Spring Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/validate-content-batch-0060-spring-boot-vs-spring-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-batch-0060-spring-boot-vs-spring-candidate-validation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_749edd1b264c7f3a2e9fa03c8f784f3f
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Guard frozen source and candidate structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const qids=['5ea01f4bcfdcbee565a8b166c60d2171','749edd1b264c7f3a2e9fa03c8f784f3f','dd59cf628b0fb3e83f6b586b4b4f09c8'];
+          const variants=['SpringBoot和Spring区别是啥？','Spring Boot 跟 Spring 的区别是什么?','Spring 和 Spring Boot 的区别是什么？'].sort();
+          const base=`review/content_build/answer_batch_0060/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='concept'||ctx.canonical?.canonical_id!==cid) throw new Error('context/type drift');
+          if(JSON.stringify([...(ctx.canonical?.question_ids||[])].sort())!==JSON.stringify([...qids].sort())) throw new Error(`ownership drift: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          if(JSON.stringify([...(ctx.source_variants||[])].sort())!==JSON.stringify(variants)) throw new Error(`source wording drift: ${JSON.stringify(ctx.source_variants)}`);
+          const primary=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+          if(primary.schema_version!=='answer_primary_source_research.v1'||primary.canonical_id!==cid) throw new Error('primary research drift');
+          for(const sourceId of ['spring-framework-ioc','spring-boot-overview','spring-boot-auto-configuration','spring-boot-starters','spring-boot-actuator']) if(!(primary.sources||[]).some(x=>x.source_id===sourceId)) throw new Error(`primary source missing: ${sourceId}`);
+          const mdPath=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(mdPath,'utf8');
+          for(const section of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(section).length-1!==1) throw new Error(`section drift: ${section}`);
+          for(const marker of ['IoC/DI','Starter','Auto-configuration','non-invasive','Actuator','Spring Boot 不是 Spring Framework 的替代品']) if(!md.includes(marker)) throw new Error(`required marker missing: ${marker}`);
+          if((md.match(/^- 问：/gm)||[]).length<4) throw new Error('followups insufficient');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
+          if(!md.includes('Spring Framework 只能 XML')||!md.includes('运行性能一定更快')) throw new Error('misconception boundaries missing');
+          const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
+          const expected='86c87570aebbd579cd61a7f3233f2f47594c1b028898932da7185607db711ba0';
+          if(digest!==expected) throw new Error(`candidate digest drifted: ${digest}`);
+          const writer=JSON.parse(fs.readFileSync(`${base}/writer_research.json`,'utf8'));
+          if(writer.candidate_sha256!==digest||writer.review_state!=='writer_complete_isolated_review_pending') throw new Error('writer research/digest drift');
+          if(JSON.stringify([...(writer.source_question_coverage||[])].map(x=>x.question_id).sort())!==JSON.stringify([...qids].sort())) throw new Error('writer source coverage drift');
+          NODE
+      - name: Writer-stage audit has only expected pre-review blockers
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --noWrite --noDraftCheck > /tmp/audit.json
+          rc=$?
+          set -e
+          cat /tmp/audit.json
+          test "$rc" -ne 0
+          node <<'NODE'
+          const fs=require('fs');
+          const report=JSON.parse(fs.readFileSync('/tmp/audit.json','utf8'));
+          const row=report.rows?.[0]; if(!row) throw new Error('audit row missing');
+          const actual=[...(row.hard_failures||[])].sort(),expected=['missing_evidence','missing_independent_review'].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`unexpected writer-stage hard failures: ${JSON.stringify(actual)}`);
+          for(const e of (row.errors||[]).map(x=>x.error)) if(!['missing_evidence','missing_dimension_score','review_not_passed','total_score_below_minimum'].includes(e)) throw new Error(`unexpected writer-stage audit error: ${e}`);
+          NODE
+      - name: Baseline repository invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
