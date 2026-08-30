@@ -53,13 +53,17 @@ function verifyPrimaryRepositorySources(context, byQuestion) {
             throw new Error(`${source.question_id}: primary repository note missing`);
         }
         const note = JSON.parse(fs.readFileSync(notePath, 'utf8'));
-        const found = (note.tagged_questions || []).some((question) => (
-            question.question_id === row.question_id
-            && question.original_question === row.original_question
+        const tagged = note.tagged_questions || [];
+        const indexed = Number.isInteger(row.source_question_index) ? tagged[row.source_question_index] : null;
+        const indexedMatch = indexed
+            && indexed.original_question === row.original_question
+            && indexed.is_valid_for_library === true;
+        const wordingMatches = tagged.filter((question) => (
+            question.original_question === row.original_question
             && question.is_valid_for_library === true
         ));
-        if (!found) {
-            throw new Error(`${source.question_id}: primary repository source wording drifted`);
+        if (!indexedMatch && wordingMatches.length !== 1) {
+            throw new Error(`${source.question_id}: primary repository source wording drifted or is ambiguous`);
         }
     }
 }
