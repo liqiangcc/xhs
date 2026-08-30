@@ -1,0 +1,67 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_0480feb81f0c7e5ce0bcb8778bced565",
+  "candidate_sha256": "aef654c982741071d7f433aa7e10bc112710aa7237b6cb5341c229eefd057fab",
+  "checked_at": "2026-08-30",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0059 frozen Java sleep/wait repository context",
+      "locator": "review/content_build/answer_batch_0059/cq_q_0480feb81f0c7e5ce0bcb8778bced565/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-30"
+    },
+    {
+      "source_id": "primary-source-research",
+      "title": "Java SE 26 Thread/Object and JLS 26 wait-set primary-source research packet",
+      "locator": "review/content_build/answer_batch_0059/cq_q_0480feb81f0c7e5ce0bcb8778bced565/primary_source_research.json",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-30"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "ownership-and-monitor-release",
+      "text": "The candidate distinguishes Thread.sleep from Object.wait precisely: sleep requires no target monitor and releases no monitors, while wait requires ownership of the target object's monitor and relinquishes that object's monitor only while preserving other monitor ownership.",
+      "source_ids": ["repository-source", "primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "wake-and-reacquire-model",
+      "text": "The candidate treats sleep as duration/scheduler-based delay and wait as monitor condition waiting, including notification/interruption/timeout/spurious wakeup, monitor reacquisition before continuation, and the fact that notify does not immediately hand the monitor to a waiter.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "condition-loop-and-interruption",
+      "text": "The answer follows the Java API recommendation to wait in a while loop around a protected predicate because of spurious wakeups and condition changes before monitor reacquisition, and correctly notes that both sleep and wait can throw InterruptedException with interrupt status cleared under the documented interruption conditions.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["1 分钟版", "3 分钟版", "关键细节", "项目经验版", "常见追问", "易错点"]
+    },
+    {
+      "claim_id": "selection-boundary",
+      "text": "The candidate selects sleep for deliberate delay/backoff and wait/notify for synchronized monitor-based condition coordination, while presenting higher-level java.util.concurrent abstractions only as an engineering alternative for complex protocols rather than changing the core sleep/wait definition.",
+      "source_ids": ["primary-source-research"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "项目经验版"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "0480feb81f0c7e5ce0bcb8778bced565",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "06feae2eef711e7543f771355b6c14be",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    },
+    {
+      "question_id": "84e517a49a10c4eb9cd9d36d36aaa933",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "常见追问"]
+    }
+  ],
+  "promotion_blocker": "isolated_independent_review_and_human_approval_not_yet_performed"
+}
