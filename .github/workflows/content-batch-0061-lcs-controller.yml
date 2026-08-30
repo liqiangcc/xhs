@@ -46,6 +46,29 @@ jobs:
           go-version: '1.23.x'
           cache: false
 
+      - name: Normalize LCS Java candidate class boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/content/build_batch_0061_lcs.py')
+          text = p.read_text(encoding='utf-8')
+          old_open = "```java\npublic static int longestCommonSubsequence(String a, String b) {"
+          new_open = "```java\npublic final class Solution {\n    public static int longestCommonSubsequence(String a, String b) {"
+          old_close = "    return dp[b.length()];\n}\n```"
+          new_close = "    return dp[b.length()];\n    }\n}\n```"
+          if old_open in text:
+              text = text.replace(old_open, new_open, 1)
+          elif new_open not in text:
+              raise SystemExit('LCS markdown Java opening is not at an accepted state')
+          if old_close in text:
+              text = text.replace(old_close, new_close, 1)
+          elif new_close not in text:
+              raise SystemExit('LCS markdown Java closing is not at an accepted state')
+          p.write_text(text, encoding='utf-8')
+          PY
+
       - name: Build, execute, and source-first review LCS candidate
         shell: bash
         run: |
