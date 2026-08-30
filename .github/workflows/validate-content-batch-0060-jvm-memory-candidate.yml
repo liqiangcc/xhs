@@ -1,0 +1,86 @@
+name: Validate Content Batch 0060 JVM Memory Candidate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/validate-content-batch-0060-jvm-memory-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-batch-0060-jvm-memory-candidate-validation
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_3a8780979dbed5ee3b9ff90e5a93f679
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Guard frozen source and candidate structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto'),fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const qids=['3a8780979dbed5ee3b9ff90e5a93f679','591137feb08e703843f89eb573c5fe6b','a7bdf30ed9ccccfea86b0f3bc7260137'];
+          const base=`review/content_build/answer_batch_0060/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='concept'||ctx.canonical?.canonical_id!==cid) throw new Error('context/type drift');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify(qids)) throw new Error(`ownership drift: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          const primary=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+          if(primary.schema_version!=='answer_primary_source_research.v1'||primary.canonical_id!==cid) throw new Error('primary research drift');
+          for(const sourceId of ['jvms26-runtime-data-areas','jvms26-pc','jvms26-jvm-stacks','jvms26-heap','jvms26-method-area','jvms26-runtime-constant-pool','jvms26-frames']) if(!(primary.sources||[]).some(x=>x.source_id===sourceId)) throw new Error(`primary source missing: ${sourceId}`);
+          const mdPath=`review/candidates/answers/${cid}.md`,md=fs.readFileSync(mdPath,'utf8');
+          for(const section of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(section).length-1!==1) throw new Error(`section drift: ${section}`);
+          for(const marker of ['Heap','JVM Stack','Method Area','pc Register','StackOverflowError','OutOfMemoryError','Metaspace']) if(!md.includes(marker)) throw new Error(`required JVM marker missing: ${marker}`);
+          if((md.match(/^- 问：/gm)||[]).length<3) throw new Error('followups insufficient');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
+          if(/Method Area\s*=\s*Metaspace|方法区就是\s*Metaspace/.test(md)) throw new Error('method-area implementation boundary collapsed');
+          const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
+          const expected='add37908f1935a8f06075de0313253b79ef8ec20d321c9dce4cf87cb9688e571';
+          if(digest!==expected) throw new Error(`candidate digest drifted: ${digest}`);
+          const writer=JSON.parse(fs.readFileSync(`${base}/writer_research.json`,'utf8'));
+          if(writer.candidate_sha256!==digest||writer.review_state!=='writer_complete_isolated_review_pending') throw new Error('writer research/digest drift');
+          if(JSON.stringify((writer.source_question_coverage||[]).map(x=>x.question_id))!==JSON.stringify(qids)) throw new Error('writer source coverage drift');
+          NODE
+      - name: Writer-stage audit has only expected pre-review blockers
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --noWrite --noDraftCheck > /tmp/audit.json
+          rc=$?
+          set -e
+          cat /tmp/audit.json
+          test "$rc" -ne 0
+          node <<'NODE'
+          const fs=require('fs');
+          const report=JSON.parse(fs.readFileSync('/tmp/audit.json','utf8'));
+          const row=report.rows?.[0]; if(!row) throw new Error('audit row missing');
+          const actual=[...(row.hard_failures||[])].sort(),expected=['missing_evidence','missing_independent_review'].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`unexpected writer-stage hard failures: ${JSON.stringify(actual)}`);
+          for(const e of (row.errors||[]).map(x=>x.error)) if(!['missing_evidence','missing_dimension_score','review_not_passed','total_score_below_minimum'].includes(e)) throw new Error(`unexpected writer-stage audit error: ${e}`);
+          NODE
+      - name: Baseline repository invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
