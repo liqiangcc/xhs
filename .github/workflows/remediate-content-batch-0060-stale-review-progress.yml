@@ -77,6 +77,12 @@ jobs:
           print('PASS exact Batch 0060 ReviewProgress retirement verified')
           PY
 
+      - name: Refresh answer-type audit after canonical consolidation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer type-audit --noManifest
+
       - name: Run repository integrity gates
         shell: bash
         run: |
@@ -100,9 +106,9 @@ jobs:
             echo 'Discard verified local mutation; retry against current state.'
             exit 0
           fi
-          git add review/progress.json review/content_build/answer_batch_0060/stale_review_progress_retirement.json
+          git add review/progress.json review/content_build/answer_batch_0060/stale_review_progress_retirement.json data/manifests/quality/answer_type_audit.jsonl
           if git diff --cached --quiet; then
-            echo 'Stale ReviewProgress already retired.'
+            echo 'Stale ReviewProgress and answer-type audit are already current.'
             exit 0
           fi
           git diff --cached --check
