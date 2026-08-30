@@ -1,0 +1,41 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_484a655e20e46bf3e62d1de0c2da6e97",
+  "candidate_sha256": "0414ac51a45c6afc99644feec652e93de5628c8fb6a6ff528e95fa59bbde43e8",
+  "reviewed_at": "2026-08-30",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0060-c2da6e97-20260830-v1",
+  "review_version": "batch-0060.concepts.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0060/cq_q_484a655e20e46bf3e62d1de0c2da6e97/context.json",
+    "review/content_build/answer_batch_0060/cq_q_484a655e20e46bf3e62d1de0c2da6e97/primary_source_research.json",
+    "review/candidates/answers/cq_q_484a655e20e46bf3e62d1de0c2da6e97.md",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 4
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The frozen repository context contains two equivalent RocketMQ consumption-mode source wordings and no extra requirement that would justify broadening the Canonical into a general consumer-API survey. The candidate answers the common interview meaning immediately: Clustering and Broadcasting.",
+    "Apache RocketMQ 4.x official consumer documentation explicitly states that RocketMQ has two consumption modes, Clustering and Broadcasting. It supports the candidate's core distinction that same-group consumers share messages in Clustering while each same-group consumer receives the full message stream in Broadcasting.",
+    "The candidate correctly makes Consumer Group the comparison boundary. This prevents the common overstatement that a clustered message is consumed only once globally; different Consumer Groups can subscribe independently while the clustering/broadcasting distinction governs delivery inside the group.",
+    "The classification boundary is unusually important for this question and is handled well. Official RocketMQ documentation separately discusses Push/Pull and current PushConsumer/SimpleConsumer/PullConsumer consumer types, while the 4.x PushConsumer page separately distinguishes concurrent and orderly consumption. The answer therefore does not inflate the classic two MessageModel modes into four or more modes.",
+    "The 4.x API/version claim is scoped correctly: the candidate says the 4.x Java PushConsumer documentation exposes MessageModel.CLUSTERING/BROADCASTING and uses clustering by default, rather than asserting that this exact API surface is universal across all RocketMQ versions and client models.",
+    "The mechanism section explains why cluster mode needs load balancing/rebalancing and why adding a broadcast consumer duplicates full-stream processing rather than dividing one workload. The scaling boundary is stated with appropriate limits instead of promising linear throughput.",
+    "The project section does not fabricate production traffic, lag numbers, retries or company usage. It provides a decision mapping from delivery semantics to MessageModel and then to consumer type, concurrency/order, retry and idempotency. The three-minute section is longer than literal oral timing, so oral quality is scored 4/5."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
