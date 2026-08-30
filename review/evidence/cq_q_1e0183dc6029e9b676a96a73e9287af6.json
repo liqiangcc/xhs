@@ -1,0 +1,34 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_1e0183dc6029e9b676a96a73e9287af6",
+  "candidate_sha256": "990b617b7946c1f0217a0ff099c41b8906118eb5fed4c3e829a9454d345fe8a7",
+  "checked_at": "2026-08-30",
+  "writer": {"writer_id":"content-batch-0060-e9287af6-writer","writer_version":"xhs-answer-curator.v1"},
+  "sources": [
+    {"source_id":"repository-source","title":"Batch 0060 frozen MySQL isolation repository context","locator":"review/content_build/answer_batch_0060/cq_q_1e0183dc6029e9b676a96a73e9287af6/context.json","source_type":"repository_source_record","checked_at":"2026-08-30"},
+    {"source_id":"primary-source-packet","title":"Batch 0060 MySQL 8.4 isolation primary-source research packet","locator":"review/content_build/answer_batch_0060/cq_q_1e0183dc6029e9b676a96a73e9287af6/primary_source_research.json","source_type":"repository_structured_source","checked_at":"2026-08-30"},
+    {"source_id":"mysql84-isolation-levels","title":"MySQL 8.4 Reference Manual 17.7.2.1 Transaction Isolation Levels","locator":"https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html","source_type":"official_documentation","checked_at":"2026-08-30"},
+    {"source_id":"mysql84-transaction-isolation-variable","title":"MySQL 8.4 Reference Manual transaction_isolation system variable","locator":"https://dev.mysql.com/doc/refman/8.4/en/server-system-variables.html#sysvar_transaction_isolation","source_type":"official_documentation","checked_at":"2026-08-30"},
+    {"source_id":"mysql84-consistent-read","title":"MySQL 8.4 Reference Manual 17.7.2.3 Consistent Nonlocking Reads","locator":"https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html","source_type":"official_documentation","checked_at":"2026-08-30"},
+    {"source_id":"mysql84-locking-reads","title":"MySQL 8.4 Reference Manual 17.7.2.4 Locking Reads","locator":"https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html","source_type":"official_documentation","checked_at":"2026-08-30"},
+    {"source_id":"isolated-review","title":"Fresh Batch 0060 MySQL isolation isolated source-first review","locator":"review/content_build/answer_batch_0060/cq_q_1e0183dc6029e9b676a96a73e9287af6/isolated_review_result.json","source_type":"repository_structured_source","checked_at":"2026-08-30"}
+  ],
+  "claims": [
+    {"claim_id":"four-levels-default","text":"InnoDB supports READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ and SERIALIZABLE, with REPEATABLE READ as the default isolation level; a concrete connection can override the default through global/session/next-transaction configuration.","source_ids":["mysql84-isolation-levels","mysql84-transaction-isolation-variable","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","常见追问"]},
+    {"claim_id":"rc-rr-read-view","text":"READ COMMITTED creates a fresh snapshot for each InnoDB consistent read while REPEATABLE READ reuses the snapshot established by the first consistent read in the transaction, explaining the core repeatability difference for ordinary SELECT statements.","source_ids":["mysql84-isolation-levels","mysql84-consistent-read","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","原理机制","常见追问"]},
+    {"claim_id":"snapshot-locking-boundary","text":"Ordinary consistent nonlocking reads are distinct from SELECT FOR UPDATE/FOR SHARE and DML. Under RR, locking/range access can use record, gap or next-key locking, so phantom-related behavior must be analyzed by access path rather than reduced to a single MVCC-only or locking-only slogan.","source_ids":["mysql84-isolation-levels","mysql84-consistent-read","mysql84-locking-reads","isolated-review"],"answer_locations":["1 分钟版","3 分钟版","关键细节","原理机制","常见追问","易错点"]},
+    {"claim_id":"ru-serializable-boundaries","text":"READ UNCOMMITTED permits dirty/inconsistent reads, while SERIALIZABLE is stricter than RR and with autocommit disabled treats plain SELECT as SELECT FOR SHARE, increasing serialization and locking tradeoffs.","source_ids":["mysql84-isolation-levels","mysql84-locking-reads","isolated-review"],"answer_locations":["1 分钟版","3 分钟版","关键细节","常见追问"]}
+  ],
+  "source_question_coverage": [
+    {"question_id":"1e0183dc6029e9b676a96a73e9287af6","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]},
+    {"question_id":"93169ace3d77eeeabd99f371f1b8b7a3","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]},
+    {"question_id":"e59de870f6c6ca0b184e9142fd69b986","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]}
+  ],
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id":"source-first-isolated-reviewer-batch-0060-e9287af6-20260830-v1","review_version":"batch-0060.concepts.v1","independent":true,"decision":"pass","revision_round":1,
+    "scores":{"facts_and_evidence":25,"directness_and_relevance":20,"type_specific_completeness":20,"mechanism_and_causality":15,"boundaries_and_tradeoffs":10,"followup_quality":5,"oral_quality":4},
+    "hard_failures":[],"unsupported_claims":[],"uncovered_source_variants":[]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
