@@ -64,18 +64,25 @@ jobs:
       - name: Strict candidate audit
         shell: bash
         run: node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
-      - name: Repository closure gates
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/content/check_question_coverage.js --check
-          node scripts/xhs.js canonical check --noWrite
-          node scripts/xhs.js review integrity --noWrite
-          node scripts/xhs.js answer validate --strict --noWrite
-          node scripts/xhs.js validate all --noWrite
-          npm test
-          npm run ci:check
-          npm run ci:answer:semantic
-          npm run ci:answer:evidence
-          npm run ci:answer:code
-          npm run ci:answer:coverage
+      - name: Question coverage
+        run: node scripts/content/check_question_coverage.js --check
+      - name: Canonical integrity
+        run: node scripts/xhs.js canonical check --noWrite
+      - name: Review integrity
+        run: node scripts/xhs.js review integrity --noWrite
+      - name: Strict answer validation
+        run: node scripts/xhs.js answer validate --strict --noWrite
+      - name: Full repository validation
+        run: node scripts/xhs.js validate all --noWrite
+      - name: Unit tests
+        run: npm test
+      - name: CI check
+        run: npm run ci:check
+      - name: Semantic answer gate
+        run: npm run ci:answer:semantic
+      - name: Evidence answer gate
+        run: npm run ci:answer:evidence
+      - name: Code answer gate
+        run: npm run ci:answer:code
+      - name: Coverage answer gate
+        run: npm run ci:answer:coverage
