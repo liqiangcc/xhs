@@ -1,0 +1,113 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_96ce9da81bb3e87508f94b80b5cfb62d",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0060/cq_q_96ce9da81bb3e87508f94b80b5cfb62d/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "8d9ee90477e6807dd5fb3c3ff848b38c",
+      "96ce9da81bb3e87508f94b80b5cfb62d",
+      "e8f888efc320df32f6c1e52588d6b3f5"
+    ],
+    "preserved_question_intent": "Explain the generic memory-management distinction between heap and stack without silently narrowing the answer to one language/runtime. Compare lifetime, allocation/reclamation, organization, concurrency, failure modes and performance, and explicitly separate common implementation patterns from universal guarantees."
+  },
+  "sources": [
+    {
+      "source_id": "linux-man-pages-alloca",
+      "title": "Linux man-pages alloca(3)",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man3/alloca.3.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "alloca allocates size bytes in the stack frame of the caller",
+        "space allocated by alloca is automatically freed when the calling function returns",
+        "stack overflow behavior is possible when the stack frame cannot be extended"
+      ]
+    },
+    {
+      "source_id": "linux-man-pages-malloc",
+      "title": "Linux man-pages malloc(3)",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man3/malloc.3.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "malloc dynamically allocates memory and free releases a previously allocated block",
+        "allocation can fail when memory cannot be allocated",
+        "dynamic allocation has a lifetime independent of a single caller stack frame until released"
+      ]
+    },
+    {
+      "source_id": "jvms26-jvm-stacks",
+      "title": "Java Virtual Machine Specification 26 §2.5.2 Java Virtual Machine Stacks",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.2",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "each JVM thread has a private JVM stack created with the thread",
+        "JVM stacks store frames and are involved in method invocation and return",
+        "excessive stack-depth demand can cause StackOverflowError"
+      ]
+    },
+    {
+      "source_id": "jvms26-heap",
+      "title": "Java Virtual Machine Specification 26 §2.5.3 Heap",
+      "source_type": "official_specification_or_standard",
+      "locator": "https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.3",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "the JVM heap is shared among JVM threads",
+        "class instances and arrays are allocated from the JVM heap at the specification level",
+        "heap storage is reclaimed by automatic storage management and the specification does not mandate a particular GC algorithm or contiguous layout"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "lifetime-model",
+      "text": "The generic distinction is primarily a lifetime and management-model distinction: stack storage commonly follows structured call-frame lifetime, while dynamic/heap storage supports allocations whose lifetime need not end with the allocating call.",
+      "source_ids": [
+        "linux-man-pages-alloca",
+        "linux-man-pages-malloc"
+      ]
+    },
+    {
+      "claim_id": "allocation-reclamation",
+      "text": "Stack-frame storage can commonly be reclaimed as the call frame exits, whereas dynamic allocations require an independent release policy such as explicit free, ownership/region management or managed-runtime garbage collection.",
+      "source_ids": [
+        "linux-man-pages-alloca",
+        "linux-man-pages-malloc",
+        "jvms26-heap"
+      ]
+    },
+    {
+      "claim_id": "runtime-boundary",
+      "text": "Concrete runtimes may define the abstractions differently. The JVMS, for example, specifies a private JVM stack per thread and a shared managed heap for class instances and arrays; these JVM-specific guarantees must not be promoted to universal rules for every language/runtime.",
+      "source_ids": [
+        "jvms26-jvm-stacks",
+        "jvms26-heap"
+      ]
+    },
+    {
+      "claim_id": "failure-boundary",
+      "text": "Stack exhaustion and dynamic-allocation exhaustion are distinct failure classes, while their exact manifestation is language/runtime specific.",
+      "source_ids": [
+        "linux-man-pages-alloca",
+        "linux-man-pages-malloc",
+        "jvms26-jvm-stacks"
+      ]
+    }
+  ],
+  "writer_constraints": [
+    "Answer the frozen generic heap-vs-stack wording first; do not silently turn it into a JVM-only or C-only question.",
+    "Organize the distinction by lifetime, allocation/reclamation, organization, concurrency, failure modes and performance mechanisms.",
+    "Use wording such as usually/commonly when describing implementation patterns that are not language-independent guarantees.",
+    "Do not claim that every local variable is physically on a stack or every source-language object is physically allocated on a heap; compiler/runtime optimization can change physical placement or eliminate allocations.",
+    "Do not claim that every heap object is automatically shared by all threads; object sharing depends on reference publication and runtime semantics.",
+    "Do not claim stack allocation is universally faster; explain the common pointer/frame-management advantage while preserving implementation/workload dependence.",
+    "Do not attach fixed stack or heap sizes to the generic answer.",
+    "Do not fabricate production incidents, allocator settings, GC metrics or project experience."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded generic heap-vs-stack concept candidate and writer research, validate writer stage, then perform isolated source-first review and evidence binding"
+}
