@@ -1,0 +1,164 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_d3fea003c007b50735b8e695473de9ac",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0060/cq_q_d3fea003c007b50735b8e695473de9ac/context.json",
+    "answer_type": "mechanism",
+    "question_ids": [
+      "04d79b4f1d5942b0cb976a988536a3b2",
+      "0866c4b58bd2fb97cb4b5379e767d035",
+      "7960226d99224c6c8d4411110ff10c8b",
+      "82f00b764cb3e39680f5e559f2a2db67",
+      "d3fea003c007b50735b8e695473de9ac",
+      "fc4d287ddc9fb55fb09c4d1acc68398e"
+    ],
+    "preserved_question_intent": "Compare CMS and G1 mechanisms and explain scenario selection, covering the six frozen repository variants without expanding into a separate CMS-only or G1-only answer contract."
+  },
+  "sources": [
+    {
+      "source_id": "oracle-j8-cms",
+      "title": "Oracle Java 8 HotSpot VM GC Tuning Guide — Concurrent Mark Sweep (CMS) Collector",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/cms.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "CMS pauses application threads at the start and again near the middle of a major collection, while most tracing and sweeping run concurrently with the application.",
+        "Concurrent mode failure occurs when CMS cannot finish before the tenured generation fills or available free blocks cannot satisfy an allocation.",
+        "CMS concurrent tracing can leave floating garbage for a later cycle and concurrent GC threads consume processor resources that would otherwise be available to the application."
+      ]
+    },
+    {
+      "source_id": "oracle-j8-g1",
+      "title": "Oracle Java 8 HotSpot VM GC Tuning Guide — Garbage-First Garbage Collector",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/g1_gc.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "G1 uses a pause prediction model and selects how many regions to collect based on the pause target.",
+        "G1 evacuates live objects from selected regions, thereby compacting and freeing memory; Oracle explicitly contrasts this with CMS not doing compaction.",
+        "G1 is not a real-time collector and meeting the pause target is probabilistic, not an absolute guarantee."
+      ]
+    },
+    {
+      "source_id": "oracle-j8-g1-tuning",
+      "title": "Oracle Java 8 HotSpot VM GC Tuning Guide — Garbage-First Garbage Collector Tuning",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/g1_gc_tuning.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "G1 uses Region remembered sets and write barriers so selected regions can be collected without scanning the entire heap.",
+        "Young and mixed collections include stop-the-world evacuation pauses.",
+        "G1 uses SATB for concurrent marking and remembered-set maintenance has CPU/memory work."
+      ]
+    },
+    {
+      "source_id": "oracle-j25-g1-tuning",
+      "title": "Oracle Java 25 GC Tuning Guide — Garbage-First Garbage Collector Tuning",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/25/gctuning/garbage-first-garbage-collector-tuning.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "Remembered-set merge/scan work can be significant, and region size trades fewer cross-region references against more live data to evacuate.",
+        "Concurrent remembered-set refinement can consume substantial CPU; shifting that work into pauses trades throughput against latency.",
+        "MaxGCPauseMillis participates in the latency/throughput balance rather than providing a hard SLA."
+      ]
+    },
+    {
+      "source_id": "oracle-j9-cms-deprecation",
+      "title": "Oracle JDK 9 GC Tuning Guide — Available Collectors",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/javase/9/gctuning/available-collectors.htm",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "CMS is described as a shorter-pause collector that shares processor resources with the application.",
+        "CMS is deprecated as of JDK 9."
+      ]
+    },
+    {
+      "source_id": "oracle-j15-migration-g1-default",
+      "title": "Oracle JDK Migration Guide — Make G1 the Default Garbage Collector",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/15/migrate/",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "G1 is the default garbage collector in JDK 9 and later releases."
+      ]
+    },
+    {
+      "source_id": "oracle-j24-cms-removed",
+      "title": "Oracle JDK 24 Migration Guide — Removed Tools and Components",
+      "source_type": "official_documentation",
+      "locator": "https://docs.oracle.com/en/java/javase/24/migrate/removed-tools-and-components.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "The Concurrent Mark Sweep garbage collector was removed in JDK 14."
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "cms-concurrent-cycle",
+      "text": "CMS performs most old-generation tracing and sweeping concurrently with the application but still has stop-the-world initial-mark and remark pauses and consumes application-visible CPU during concurrent phases.",
+      "source_ids": [
+        "oracle-j8-cms",
+        "oracle-j9-cms-deprecation"
+      ]
+    },
+    {
+      "claim_id": "cms-space-failure",
+      "text": "Because CMS does not normally compact and must finish before old-generation space becomes unusable, its comparison should include fragmentation/free-block sensitivity, floating garbage, and concurrent mode failure rather than presenting concurrency as cost-free.",
+      "source_ids": [
+        "oracle-j8-cms",
+        "oracle-j8-g1"
+      ]
+    },
+    {
+      "claim_id": "g1-region-evacuation",
+      "text": "G1 partitions the heap into regions, uses marking information to select collection sets, and evacuates live objects from selected regions so reclamation also compacts memory.",
+      "source_ids": [
+        "oracle-j8-g1",
+        "oracle-j8-g1-tuning"
+      ]
+    },
+    {
+      "claim_id": "g1-pause-model",
+      "text": "G1 uses a history-based pause prediction model to size collection work against a soft pause target; young/mixed evacuation is stop-the-world and the target is not an absolute real-time guarantee.",
+      "source_ids": [
+        "oracle-j8-g1",
+        "oracle-j8-g1-tuning",
+        "oracle-j25-g1-tuning"
+      ]
+    },
+    {
+      "claim_id": "g1-remembered-set-cost",
+      "text": "Region-local collection depends on remembered sets and barriers for cross-region references, and remembered-set refinement/scan work can trade CPU, memory and pause time.",
+      "source_ids": [
+        "oracle-j8-g1-tuning",
+        "oracle-j25-g1-tuning"
+      ]
+    },
+    {
+      "claim_id": "version-selection",
+      "text": "G1 became the default collector in JDK 9 and later; CMS was deprecated in JDK 9 and removed in JDK 14, so modern selection advice must be version-aware and not treat CMS as a current JDK 14+ deployment option.",
+      "source_ids": [
+        "oracle-j9-cms-deprecation",
+        "oracle-j15-migration-g1-default",
+        "oracle-j24-cms-removed"
+      ]
+    }
+  ],
+  "writer_constraints": [
+    "Cover all six frozen CMS-versus-G1 source variants, including the scenario-selection variant.",
+    "Keep the answer comparative: do not duplicate the adjacent CMS-only execution-flow or G1-only mechanism Canonicals beyond the detail needed to explain the comparison.",
+    "Do not say CMS is pause-free; preserve initial-mark and remark stop-the-world boundaries.",
+    "Do not say G1 is pause-free or real-time; preserve stop-the-world evacuation and the soft/probabilistic pause target.",
+    "Explain Region, Collection Set, evacuation and remembered-set mechanics rather than only naming algorithms.",
+    "Include CMS concurrent-mode failure, floating-garbage/CPU tradeoffs, and non-compaction as relevant historical boundaries.",
+    "Include JDK lifecycle facts: G1 default from JDK 9+, CMS deprecated in JDK 9 and removed in JDK 14.",
+    "Do not fabricate production workload, pause, CPU, throughput or migration results; scenario advice must specify what to measure instead.",
+    "Do not claim G1 is universally faster or always lower-pause; recommend same-workload validation for historical JDK 8 migration decisions."
+  ],
+  "research_state": "primary_sources_frozen_candidate_written_isolated_review_pending",
+  "next_gate": "run a fresh isolated source-first review against the frozen six-question context and primary-source packet; bind evidence only if that independent review passes"
+}
