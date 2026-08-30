@@ -47,7 +47,7 @@ jobs:
           go-version: '1.23.x'
           cache: false
 
-      - name: Reconcile live DCL source ownership
+      - name: Reconcile live DCL source ownership and evidence vocabulary
         shell: bash
         run: |
           set -euo pipefail
@@ -59,9 +59,20 @@ jobs:
           new_qids = "QIDS = ['0616abe7f8861fde19fda29ad5b2b305', 'a5debbf3aaaeb184307a2e4f489f2141']"
           old_variants = "EXPECTED_VARIANTS = {'算法手撕：使用 Java 实现基于 DCL（双重检查锁）的单例。'}"
           new_variants = "EXPECTED_VARIANTS = {'算法：手写单例模式（双重检查锁）。', '算法：手写单例模式（懒汉式、双重检查锁）'}"
-          if old_qids not in text or old_variants not in text:
-              raise SystemExit('DCL builder source constants are not at the expected pre-reconciliation state')
-          text = text.replace(old_qids, new_qids, 1).replace(old_variants, new_variants, 1)
+          if old_qids in text:
+              text = text.replace(old_qids, new_qids, 1)
+          elif new_qids not in text:
+              raise SystemExit('DCL builder QID constants are not at an accepted state')
+          if old_variants in text:
+              text = text.replace(old_variants, new_variants, 1)
+          elif new_variants not in text:
+              raise SystemExit('DCL builder source variants are not at an accepted state')
+          old_type = "'source_type': 'external_primary_source'"
+          new_type = "'source_type': 'official_specification_or_standard'"
+          if old_type in text:
+              text = text.replace(old_type, new_type)
+          elif new_type not in text:
+              raise SystemExit('DCL primary-source type is not at an accepted state')
           p.write_text(text, encoding='utf-8')
           PY
 
