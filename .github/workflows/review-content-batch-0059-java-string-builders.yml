@@ -1,0 +1,90 @@
+name: Review Content Batch 0059 Java String Builders
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0059-java-string-builders.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: content-batch-0059-java-string-builders-review
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_ae1651ba6576c28fcd53d4f4888dbd3e
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Recheck source-first review boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto');
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const qids=['13d712dbbbe982e220bc87d74737abcd','1bb63b161281368c9e9095fa9bed3b90','ae1651ba6576c28fcd53d4f4888dbd3e'];
+          const base=`review/content_build/answer_batch_0059/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='concept'||ctx.canonical?.canonical_id!==cid) throw new Error('context/type drift');
+          if(JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify(qids)) throw new Error(`ownership drift: ${JSON.stringify(ctx.canonical?.question_ids)}`);
+          for(const qid of qids) if(!(ctx.source_questions||[]).some(x=>x.question_id===qid&&x.is_valid_for_library===true)) throw new Error(`valid source question missing: ${qid}`);
+          const primary=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+          if(primary.schema_version!=='answer_primary_source_research.v1'||primary.canonical_id!==cid||primary.source_boundary?.answer_type!=='concept') throw new Error('primary research drift');
+          for(const sourceId of ['java26-string','java26-stringbuilder','java26-stringbuffer','jls26-string-concat']) if(!(primary.sources||[]).some(x=>x.source_id===sourceId)) throw new Error(`primary source missing: ${sourceId}`);
+          const mdPath=`review/candidates/answers/${cid}.md`;
+          const md=fs.readFileSync(mdPath,'utf8');
+          for(const section of ['## 核心结论','## 1 分钟版','## 3 分钟版','## 关键细节','## 原理机制','## 项目经验版','## 常见追问','## 易错点']) if(md.split(section).length-1!==1) throw new Error(`section drift: ${section}`);
+          for(const marker of ['StringBuilder','StringBuffer','不可变','同步','capacity','String +']) if(!md.includes(marker)) throw new Error(`required concept marker missing: ${marker}`);
+          if((md.match(/^- 问：/gm)||[]).length<3) throw new Error('followups insufficient');
+          if(/生产环境里我|我负责过|我在线上|实际线上我们|我们项目中/.test(md)) throw new Error('fabricated experience risk');
+          const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
+          const expected='3465f1d34bc88c20cee64364e7254ca34886afb57e519d015cf8483a17eb1c21';
+          if(digest!==expected) throw new Error(`candidate digest drifted: ${digest}`);
+          const review=JSON.parse(fs.readFileSync(`${base}/isolated_review_result.json`,'utf8'));
+          if(review.review_mode!=='source_first_isolated'||review.decision!=='pass'||review.candidate_sha256!==digest||review.revision_round!==1||review.hard_failures?.length||review.unsupported_claims?.length||review.uncovered_source_variants?.length) throw new Error('isolated review drift');
+          const score=Object.values(review.scores||{}).reduce((a,b)=>a+b,0);
+          if(score<90) throw new Error(`isolated review score below gate: ${score}`);
+          const evidence=JSON.parse(fs.readFileSync(`review/evidence/${cid}.json`,'utf8'));
+          if(evidence.review_state!=='independent_source_first_review_passed'||evidence.candidate_sha256!==digest||evidence.review?.decision!=='pass'||evidence.review?.independent!==true||evidence.review?.revision_round!==1) throw new Error('evidence/review drift');
+          if(JSON.stringify((evidence.source_question_coverage||[]).map(x=>x.question_id))!==JSON.stringify(qids)) throw new Error('evidence source coverage drift');
+          NODE
+
+      - name: Strict candidate audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
+
+      - name: Repository closure gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
