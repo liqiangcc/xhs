@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: content-batch-0060-heap-vs-stack-review
@@ -57,79 +57,18 @@ jobs:
       - name: Strict candidate audit
         shell: bash
         run: node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
-      - name: Question coverage closure
-        shell: bash
-        run: node scripts/content/check_question_coverage.js --check
-      - name: Canonical closure
-        shell: bash
-        run: node scripts/xhs.js canonical check --noWrite
-      - name: Review integrity closure
-        shell: bash
-        run: node scripts/xhs.js review integrity --noWrite
-      - name: Strict answer validation closure
-        shell: bash
-        run: node scripts/xhs.js answer validate --strict --noWrite
-      - name: Repository validation closure
-        shell: bash
-        run: node scripts/xhs.js validate all --noWrite
-      - name: Unit and integration closure
-        shell: bash
-        run: npm test
-      - name: CI migrate closure
-        shell: bash
-        run: npm run ci:migrate:check
-      - name: CI validate closure
-        shell: bash
-        run: npm run ci:validate
-      - name: Refresh deterministic indexes if stale
+      - name: Repository closure gates
         shell: bash
         run: |
           set -euo pipefail
-          if npm run ci:index:check; then
-            echo 'Indexes already current.'
-            exit 0
-          fi
-          node scripts/xhs.js index build --noWrite
-          npm run ci:index:check
-          changed="$(git status --short -- data/indexes)"
-          test -n "$changed"
-          if [ -n "$(git status --porcelain --untracked-files=no | grep -vE '^.. data/indexes/(entity_index|company_index|domain_index|hotspot_index)\.json$' || true)" ]; then
-            echo 'Unexpected tracked changes outside deterministic indexes:' >&2
-            git status --short >&2
-            exit 1
-          fi
-          git config user.name 'xhs-index-builder'
-          git config user.email '43640935+liqiangcc@users.noreply.github.com'
-          git add data/indexes/entity_index.json data/indexes/company_index.json data/indexes/domain_index.json data/indexes/hotspot_index.json
-          git commit -m 'data: refresh question indexes for batch 0060'
-          git push origin HEAD:content/quality-completion
-      - name: CI index closure
-        shell: bash
-        run: npm run ci:index:check
-      - name: CI canonical closure
-        shell: bash
-        run: npm run ci:canonical:check
-      - name: CI answer validation closure
-        shell: bash
-        run: npm run ci:answer:validate
-      - name: CI strict answer validation closure
-        shell: bash
-        run: npm run ci:answer:validate:strict
-      - name: CI answer coverage precheck
-        shell: bash
-        run: npm run ci:answer:coverage
-      - name: CI check umbrella
-        shell: bash
-        run: npm run ci:check
-      - name: Answer semantic closure
-        shell: bash
-        run: npm run ci:answer:semantic
-      - name: Answer evidence closure
-        shell: bash
-        run: npm run ci:answer:evidence
-      - name: Answer code closure
-        shell: bash
-        run: npm run ci:answer:code
-      - name: Answer coverage closure
-        shell: bash
-        run: npm run ci:answer:coverage
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
