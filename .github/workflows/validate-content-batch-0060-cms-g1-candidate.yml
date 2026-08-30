@@ -2,12 +2,11 @@ name: Validate Content Batch 0060 CMS G1 Candidate
 
 on:
   push:
-    branches: [content/quality-completion]
+    branches: [master]
     paths:
       - .github/workflows/validate-content-batch-0060-cms-g1-candidate.yml
-      - review/candidates/answers/cq_q_d3fea003c007b50735b8e695473de9ac.md
-      - review/content_build/answer_batch_0060/cq_q_d3fea003c007b50735b8e695473de9ac/**
-  workflow_dispatch:
+  pull_request:
+    branches: [master]
 
 permissions:
   contents: read
@@ -17,16 +16,18 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  CONTENT_BRANCH: content/quality-completion
   CANONICAL_ID: cq_q_d3fea003c007b50735b8e695473de9ac
 
 jobs:
   validate:
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'content/quality-completion'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: content/quality-completion
+          ref: ${{ env.CONTENT_BRANCH }}
           fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
