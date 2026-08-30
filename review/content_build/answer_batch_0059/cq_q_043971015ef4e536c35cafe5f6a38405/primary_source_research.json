@@ -1,0 +1,168 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_043971015ef4e536c35cafe5f6a38405",
+  "checked_at": "2026-08-30",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0059/cq_q_043971015ef4e536c35cafe5f6a38405/context.json",
+    "answer_type": "concept",
+    "question_ids": [
+      "043971015ef4e536c35cafe5f6a38405",
+      "c7a18fa7e44c66a6239a5763fb7c03ca",
+      "cf09cc2e2c3948273856daa4a0ebc923"
+    ],
+    "preserved_question_intent": "Explain common operating-system IPC mechanisms and compare their communication model, synchronization needs and typical selection boundaries, without turning the answer into an exhaustive Linux API catalog or claiming one mechanism is universally fastest."
+  },
+  "sources": [
+    {
+      "source_id": "linux-pipe7",
+      "title": "Linux man-pages 6.18 pipe(7): pipes and FIFOs",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man7/pipe.7.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "pipes and FIFOs provide a unidirectional IPC channel with read and write ends",
+        "anonymous pipes are commonly used between related processes",
+        "FIFOs are named in the filesystem and have the same I/O semantics once opened",
+        "pipes have bounded capacity and blocking/nonblocking I/O behavior"
+      ]
+    },
+    {
+      "source_id": "linux-fifo7",
+      "title": "Linux man-pages 6.18 fifo(7): named pipes",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man7/fifo.7.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "a FIFO is a named pipe accessed through a filesystem entry",
+        "the filesystem entry is a rendezvous name; exchanged data is passed internally by the kernel rather than stored in that file"
+      ]
+    },
+    {
+      "source_id": "linux-mq7",
+      "title": "Linux man-pages 6.18 mq_overview(7): POSIX message queues",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man7/mq_overview.7.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "POSIX message queues exchange data as discrete messages",
+        "two processes can open the same named queue and use send/receive operations",
+        "messages have priorities and queues are kernel-managed resources with configured limits/persistence"
+      ]
+    },
+    {
+      "source_id": "linux-sysvipc7",
+      "title": "Linux man-pages 6.18 sysvipc(7): System V IPC mechanisms",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man7/sysvipc.7.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "System V IPC comprises message queues, semaphores and shared memory",
+        "message queues exchange units called messages",
+        "semaphores synchronize process actions",
+        "shared memory lets processes share a memory region"
+      ]
+    },
+    {
+      "source_id": "linux-shm7",
+      "title": "Linux man-pages 6.18 shm_overview(7): POSIX shared memory",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man7/shm_overview.7.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "POSIX shared memory communicates by sharing a memory region mapped into process address spaces",
+        "processes typically must synchronize access, for example with POSIX semaphores",
+        "shared-memory objects have explicit lifecycle and permissions"
+      ]
+    },
+    {
+      "source_id": "linux-sem7",
+      "title": "Linux man-pages 6.18 sem_overview(7): POSIX semaphores",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man7/sem_overview.7.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "POSIX semaphores allow processes and threads to synchronize their actions",
+        "sem_wait blocks when the semaphore value is zero and sem_post increments it",
+        "process-shared unnamed semaphores must live in shared memory"
+      ]
+    },
+    {
+      "source_id": "linux-unix7",
+      "title": "Linux man-pages 6.18 unix(7): UNIX domain sockets",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man7/unix.7.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "AF_UNIX sockets provide efficient local interprocess communication on the same machine",
+        "UNIX-domain sockets support stream, datagram and sequenced-packet communication models",
+        "they can pass file descriptors or process credentials using ancillary data"
+      ]
+    },
+    {
+      "source_id": "linux-signal7",
+      "title": "Linux man-pages 6.18 signal(7): signals",
+      "source_type": "official_documentation",
+      "locator": "https://man7.org/linux/man-pages/man7/signal.7.html",
+      "checked_at": "2026-08-30",
+      "anchors": [
+        "signals are asynchronous process/thread-directed notifications with dispositions and masks",
+        "signals can be pending while blocked and are delivered when eligible",
+        "standard signals are not a bulk-data transport and signal-handler work is constrained by async-signal-safety"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "common-ipc-families",
+      "text": "Common Unix/Linux IPC families include anonymous pipes/FIFOs, message queues, shared memory, synchronization primitives such as semaphores, local sockets and signals. System V additionally groups message queues, semaphores and shared memory under one IPC API family.",
+      "source_ids": ["linux-pipe7", "linux-sysvipc7", "linux-unix7", "linux-signal7"]
+    },
+    {
+      "claim_id": "pipe-and-fifo-model",
+      "text": "Pipes/FIFOs are byte-stream-like unidirectional channels with bounded kernel buffering. Anonymous pipes naturally fit related processes because descriptors can be inherited; FIFOs add a filesystem rendezvous name so permitted unrelated processes can open the same channel.",
+      "source_ids": ["linux-pipe7", "linux-fifo7"]
+    },
+    {
+      "claim_id": "message-queue-model",
+      "text": "Message queues preserve explicit message units and decouple sender/receiver through a kernel-managed queue, unlike a raw byte-stream pipe. POSIX and System V expose different APIs for this general model and have resource/lifecycle limits that should be treated as part of the design.",
+      "source_ids": ["linux-mq7", "linux-sysvipc7"]
+    },
+    {
+      "claim_id": "shared-memory-needs-synchronization",
+      "text": "Shared memory maps a region so processes exchange data through shared state rather than repeatedly transferring payload through a message channel. Correct concurrent access normally requires a separate synchronization protocol, for example semaphores, and lifecycle/visibility rules must be designed explicitly.",
+      "source_ids": ["linux-shm7", "linux-sem7"]
+    },
+    {
+      "claim_id": "semaphore-boundary",
+      "text": "Semaphores are primarily coordination/synchronization primitives rather than a general payload transport. They are commonly paired with shared memory or other shared state to express availability, mutual exclusion or counting conditions.",
+      "source_ids": ["linux-sem7", "linux-sysvipc7"]
+    },
+    {
+      "claim_id": "local-socket-model",
+      "text": "UNIX-domain sockets are a natural local client/server IPC mechanism because they support bidirectional stream/datagram/seqpacket semantics, endpoint naming and connection-oriented patterns on one machine; they can also carry file descriptors/credentials on Linux/Unix-domain APIs.",
+      "source_ids": ["linux-unix7"]
+    },
+    {
+      "claim_id": "signal-boundary",
+      "text": "Signals are best treated as lightweight asynchronous notifications/control events, not as a bulk structured-data channel. Their delivery/masking semantics and async-signal-safe handler restrictions make them suitable for wakeup/termination/control-style events rather than ordinary message payloads.",
+      "source_ids": ["linux-signal7"]
+    },
+    {
+      "claim_id": "selection-is-workload-dependent",
+      "text": "No IPC mechanism is universally fastest or simplest. Selection depends on payload size/shape, message-boundary needs, related-vs-unrelated processes, local client/server topology, synchronization requirements, backpressure/lifecycle and portability. Shared memory can reduce payload copying in the data path but introduces synchronization and shared-state complexity.",
+      "source_ids": ["linux-pipe7", "linux-mq7", "linux-shm7", "linux-sem7", "linux-unix7"]
+    }
+  ],
+  "writer_constraints": [
+    "Answer the frozen concept directly by grouping common IPC mechanisms by communication model and then compare selection boundaries.",
+    "Do not claim a universal exhaustive list across all operating systems; bind detailed behavior to Unix/Linux where the primary sources are Linux man-pages.",
+    "Do not describe semaphores as a bulk data-transfer channel. State that they synchronize actions and are often paired with shared memory.",
+    "Do not say shared memory is always the fastest IPC. Explain its low-copy data-path advantage together with synchronization, cache-coherence, lifecycle and correctness costs.",
+    "Keep pipe/FIFO directionality portable: POSIX requires only unidirectional pipe semantics; bidirectional communication needs two pipes or another IPC model.",
+    "Separate byte-stream channels from message-oriented queues and from shared-state IPC so the user can explain why each exists.",
+    "Cover UNIX-domain sockets as local request/response IPC and signals as asynchronous notification/control rather than payload transport.",
+    "Include a practical selection rule and at least one boundary/failure follow-up, but do not invent production benchmarks or personal project experience."
+  ],
+  "research_state": "primary_sources_frozen_candidate_not_yet_written",
+  "next_gate": "write a source-bounded IPC concept candidate and writer research, then perform isolated source-first review before evidence/promotion"
+}
