@@ -73,12 +73,13 @@ jobs:
           BASE_SHA: ${{ steps.base.outputs.sha }}
         run: |
           set -euo pipefail
-          git fetch origin content/quality-completion
-          remote="$(git rev-parse origin/content/quality-completion)"
-          test "$remote" = "$BASE_SHA" || { echo "branch moved during normalization: base=$BASE_SHA remote=$remote" >&2; exit 1; }
           git config user.name 'xhs-content-normalizer'
           git config user.email '43640935+liqiangcc@users.noreply.github.com'
           git add data/questions/questions.jsonl data/questions/canonical_questions.jsonl review/content_build/answer_batch_0060 tasks/answer-batches/TASK-20260711-0313-answer-batch-0060.md data/dedup
           git diff --cached --quiet && { echo 'no normalization changes'; exit 0; }
           git commit -m 'content: normalize batch 0060 CMS G1 duplicate canonical'
+          # Ordinary fast-forward push is the server-side compare-and-swap: this commit is
+          # parented directly on BASE_SHA, so any concurrent branch movement makes the
+          # push non-fast-forward and fail closed without overwriting another worker.
+          test "$(git rev-parse HEAD^)" = "$BASE_SHA"
           git push origin HEAD:content/quality-completion
