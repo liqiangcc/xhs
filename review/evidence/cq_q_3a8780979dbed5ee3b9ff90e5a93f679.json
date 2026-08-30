@@ -1,0 +1,38 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_3a8780979dbed5ee3b9ff90e5a93f679",
+  "candidate_sha256": "add37908f1935a8f06075de0313253b79ef8ec20d321c9dce4cf87cb9688e571",
+  "checked_at": "2026-08-30",
+  "writer": {"writer_id":"content-batch-0060-e5a93f679-writer","writer_version":"xhs-answer-curator.v1"},
+  "sources": [
+    {"source_id":"repository-source","title":"Batch 0060 frozen JVM memory-area repository context","locator":"review/content_build/answer_batch_0060/cq_q_3a8780979dbed5ee3b9ff90e5a93f679/context.json","source_type":"repository_source_record","checked_at":"2026-08-30"},
+    {"source_id":"primary-source-packet","title":"Batch 0060 Java SE 26 JVMS primary-source research packet","locator":"review/content_build/answer_batch_0060/cq_q_3a8780979dbed5ee3b9ff90e5a93f679/primary_source_research.json","source_type":"repository_structured_source","checked_at":"2026-08-30"},
+    {"source_id":"jvms26-runtime-data-areas","title":"Java Virtual Machine Specification 26 Chapter 2 section 2.5 Run-Time Data Areas","locator":"https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5","source_type":"official_specification_or_standard","checked_at":"2026-08-30"},
+    {"source_id":"jvms26-pc","title":"JVMS 26 section 2.5.1 The pc Register","locator":"https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.1","source_type":"official_specification_or_standard","checked_at":"2026-08-30"},
+    {"source_id":"jvms26-jvm-stacks","title":"JVMS 26 section 2.5.2 Java Virtual Machine Stacks","locator":"https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.2","source_type":"official_specification_or_standard","checked_at":"2026-08-30"},
+    {"source_id":"jvms26-heap","title":"JVMS 26 section 2.5.3 Heap","locator":"https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.3","source_type":"official_specification_or_standard","checked_at":"2026-08-30"},
+    {"source_id":"jvms26-method-area","title":"JVMS 26 section 2.5.4 Method Area","locator":"https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.4","source_type":"official_specification_or_standard","checked_at":"2026-08-30"},
+    {"source_id":"jvms26-runtime-constant-pool","title":"JVMS 26 section 2.5.5 Run-Time Constant Pool","locator":"https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.5.5","source_type":"official_specification_or_standard","checked_at":"2026-08-30"},
+    {"source_id":"jvms26-frames","title":"JVMS 26 section 2.6 Frames","locator":"https://docs.oracle.com/javase/specs/jvms/se26/html/jvms-2.html#jvms-2.6","source_type":"official_specification_or_standard","checked_at":"2026-08-30"},
+    {"source_id":"isolated-review","title":"Fresh Batch 0060 JVM memory isolated source-first review","locator":"review/content_build/answer_batch_0060/cq_q_3a8780979dbed5ee3b9ff90e5a93f679/isolated_review_result.json","source_type":"repository_structured_source","checked_at":"2026-08-30"}
+  ],
+  "claims": [
+    {"claim_id":"sharing-and-lifetime","text":"Heap and method area are shared JVM-wide runtime areas, while each thread has its own JVM stack and pc register; per-thread runtime data areas are created with the thread and destroyed when the thread terminates.","source_ids":["jvms26-runtime-data-areas","jvms26-pc","jvms26-jvm-stacks","jvms26-heap","jvms26-method-area","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","原理机制"]},
+    {"claim_id":"jvm-stack-and-frames","text":"Each JVM thread has a private JVM stack that stores frames. Frames are created for method invocations and contain local variables, an operand stack and data used for dynamic linking, method return and exception handling; excessive required stack depth can cause StackOverflowError and allocation/growth failure can cause OutOfMemoryError.","source_ids":["jvms26-jvm-stacks","jvms26-frames","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","常见追问","易错点"]},
+    {"claim_id":"heap-boundary","text":"The JVM heap is shared by all JVM threads and is the specification-level runtime area from which class instances and arrays are allocated. Automatic storage management reclaims heap storage, and the JVMS does not mandate a particular collector or contiguous heap layout.","source_ids":["jvms26-heap","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","项目经验版"]},
+    {"claim_id":"method-area-boundary","text":"The JVM method area is a shared specification-level area for per-class structures including the run-time constant pool, field and method data, and method/constructor code. It is logically part of the heap in the JVMS, but the specification does not mandate its physical location or management policy, so Method Area must not be universally equated with HotSpot Metaspace or historical PermGen.","source_ids":["jvms26-method-area","jvms26-runtime-constant-pool","isolated-review"],"answer_locations":["核心结论","1 分钟版","3 分钟版","关键细节","项目经验版","常见追问","易错点"]},
+    {"claim_id":"pc-and-error-boundaries","text":"Each JVM thread has its own pc register; for a non-native current method it contains the address of the JVM instruction currently being executed, while for a native current method its value is undefined. Heap and method-area allocation failure can result in OutOfMemoryError, while JVM-stack depth/allocation have StackOverflowError and OutOfMemoryError boundaries.","source_ids":["jvms26-pc","jvms26-jvm-stacks","jvms26-heap","jvms26-method-area","isolated-review"],"answer_locations":["1 分钟版","3 分钟版","关键细节","常见追问","易错点"]}
+  ],
+  "source_question_coverage": [
+    {"question_id":"3a8780979dbed5ee3b9ff90e5a93f679","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]},
+    {"question_id":"591137feb08e703843f89eb573c5fe6b","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]},
+    {"question_id":"a7bdf30ed9ccccfea86b0f3bc7260137","covered":true,"answer_locations":["核心结论","1 分钟版","3 分钟版","常见追问"]}
+  ],
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id":"source-first-isolated-reviewer-batch-0060-e5a93f679-20260830-v1","review_version":"batch-0060.concepts.v1","independent":true,"decision":"pass","revision_round":1,
+    "scores":{"facts_and_evidence":25,"directness_and_relevance":20,"type_specific_completeness":20,"mechanism_and_causality":15,"boundaries_and_tradeoffs":10,"followup_quality":5,"oral_quality":4},
+    "hard_failures":[],"unsupported_claims":[],"uncovered_source_variants":[]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
