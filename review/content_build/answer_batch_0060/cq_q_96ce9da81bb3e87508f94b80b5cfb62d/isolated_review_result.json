@@ -1,0 +1,42 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_96ce9da81bb3e87508f94b80b5cfb62d",
+  "candidate_sha256": "3f4814a4194bc2bf7901c191b542727f3ced8e72e54d6c40f2f34fcfc3e3c241",
+  "reviewed_at": "2026-08-31",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0060-b62d-20260831-v1",
+  "review_version": "batch-0060.concepts.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0060/cq_q_96ce9da81bb3e87508f94b80b5cfb62d/context.json",
+    "review/content_build/answer_batch_0060/cq_q_96ce9da81bb3e87508f94b80b5cfb62d/primary_source_research.json",
+    "review/candidates/answers/cq_q_96ce9da81bb3e87508f94b80b5cfb62d.md",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "scores": {
+    "facts_and_evidence": 24,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 19,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 4
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The frozen repository context contains three equivalent generic heap-versus-stack questions. The candidate answers the shared contract directly and does not silently narrow the explanation to C, C++, Java, or one operating-system ABI.",
+    "The primary-source packet supports the core lifetime distinction: alloca-style stack-frame storage is tied to the caller frame and released when the call returns, while malloc-style dynamic storage has an independently managed lifetime until released. The candidate makes this lifetime/management distinction the organizing principle rather than relying on size or speed mnemonics.",
+    "The JVM-specific sections are correctly bounded. JVMS 26 specifies a private JVM stack per thread, a shared JVM heap, frame push/pop behavior, StackOverflowError, managed heap reclamation, and implementation freedom around layout; the candidate uses these as runtime examples instead of promoting them to universal language-independent guarantees.",
+    "The candidate explicitly rejects the hard-failure patterns called out by the frozen writer constraints: it does not claim every local variable is physically on a stack, every object is physically on a heap, every heap object is shared, every heap requires manual free, fixed stack/heap sizes, or an unconditional stack-is-faster law.",
+    "The mechanism chain is strong: structured LIFO call-frame lifetime explains simple frame allocation/reclamation, while independently ordered object lifetimes require a separate dynamic allocator or managed-heap policy, which in turn explains metadata, fragmentation, concurrency and reclamation tradeoffs.",
+    "The answer covers allocation/reclamation, lifetime, organization, concurrency, failure modes and performance, and all three source variants are covered by the core, one-minute, three-minute, mechanism and follow-up sections. It also avoids fabricated production incidents and clearly labels the project section as generic diagnostic guidance rather than personal experience.",
+    "Some illustrative material such as C++ RAII, Go/GC, arena allocation, thread caches and escape-analysis examples is broader than the four frozen source anchors, so facts-and-evidence is scored 24/25 rather than perfect. These details are standard, explicitly scoped examples and do not change the source-backed core claim or create an unsupported material conclusion.",
+    "The one-minute section has six main bullets rather than the preferred three-to-five and the three-minute section is somewhat longer than literal oral timing, so type-specific completeness is scored 19/20 and oral quality 4/5. These are quality deductions, not hard failures."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
