@@ -1,0 +1,84 @@
+name: Content Batch 0060 CMS G1 Normalization
+
+on:
+  push:
+    branches: [content/quality-completion]
+    paths:
+      - .github/workflows/content-batch-0060-cms-g1-normalization.yml
+      - scripts/content/apply_batch_0060_cms_g1_relation.js
+      - scripts/content/build_batch_0060_source_inventory.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0060-cms-g1-normalization
+  cancel-in-progress: true
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: content/quality-completion
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - id: base
+        name: Freeze branch head
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Apply source-first duplicate normalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/apply_batch_0060_cms_g1_relation.js
+          python3 scripts/content/build_batch_0060_source_inventory.py
+      - name: Verify post-normalization ownership and gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require('fs');
+          const questions=fs.readFileSync('data/questions/questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const canonicals=fs.readFileSync('data/questions/canonical_questions.jsonl','utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+          const survivor='cq_q_d3fea003c007b50735b8e695473de9ac';
+          const retired='cq_q_7960226d99224c6c8d4411110ff10c8b';
+          const expected=['04d79b4f1d5942b0cb976a988536a3b2','0866c4b58bd2fb97cb4b5379e767d035','d3fea003c007b50735b8e695473de9ac','7960226d99224c6c8d4411110ff10c8b','82f00b764cb3e39680f5e559f2a2db67','fc4d287ddc9fb55fb09c4d1acc68398e'].sort();
+          if(canonicals.some(x=>x.canonical_id===retired)) throw new Error('retired duplicate canonical still exists');
+          const c=canonicals.find(x=>x.canonical_id===survivor);
+          if(!c) throw new Error('survivor missing');
+          const actual=[...(c.question_ids||[])].sort();
+          if(JSON.stringify(actual)!==JSON.stringify(expected)) throw new Error(`survivor scope drift: ${JSON.stringify(actual)}`);
+          for(const qid of expected){const q=questions.find(x=>x.question_id===qid);if(q?.canonical_id!==survivor)throw new Error(`${qid}: ownership not moved to survivor`);}
+          const inv=JSON.parse(fs.readFileSync('review/content_build/answer_batch_0060/source_inventory.json','utf8'));
+          if(inv.boundary_result!=='pass'||inv.active_canonical_count!==9||inv.remapped_count!==1||inv.source_question_count!==27) throw new Error(`inventory drift: ${JSON.stringify({active:inv.active_canonical_count,remapped:inv.remapped_count,sources:inv.source_question_count})}`);
+          const mapped=(inv.scheduled_resolutions||[]).find(x=>x.scheduled_canonical_id===retired);
+          if(mapped?.resolution!=='remapped_to_current_canonical'||mapped?.current_canonical_id!==survivor) throw new Error('retired schedule was not remapped to survivor');
+          NODE
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+      - name: Commit normalized SSOT atomically
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin content/quality-completion
+          remote="$(git rev-parse origin/content/quality-completion)"
+          test "$remote" = "$BASE_SHA" || { echo "branch moved during normalization: base=$BASE_SHA remote=$remote" >&2; exit 1; }
+          git config user.name 'xhs-content-normalizer'
+          git config user.email '43640935+liqiangcc@users.noreply.github.com'
+          git add data/questions/questions.jsonl data/questions/canonical_questions.jsonl review/content_build/answer_batch_0060 tasks/answer-batches/TASK-20260711-0313-answer-batch-0060.md data/dedup
+          git diff --cached --quiet && { echo 'no normalization changes'; exit 0; }
+          git commit -m 'content: normalize batch 0060 CMS G1 duplicate canonical'
+          git push origin HEAD:content/quality-completion
