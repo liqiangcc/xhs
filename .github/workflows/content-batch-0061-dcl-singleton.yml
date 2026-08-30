@@ -47,6 +47,24 @@ jobs:
           go-version: '1.23.x'
           cache: false
 
+      - name: Reconcile live DCL source ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/content/build_batch_0061_dcl_singleton.py')
+          text = p.read_text(encoding='utf-8')
+          old_qids = "QIDS = ['0616abe7f8861fde19fda29ad5b2b305']"
+          new_qids = "QIDS = ['0616abe7f8861fde19fda29ad5b2b305', 'a5debbf3aaaeb184307a2e4f489f2141']"
+          old_variants = "EXPECTED_VARIANTS = {'算法手撕：使用 Java 实现基于 DCL（双重检查锁）的单例。'}"
+          new_variants = "EXPECTED_VARIANTS = {'算法：手写单例模式（双重检查锁）。', '算法：手写单例模式（懒汉式、双重检查锁）'}"
+          if old_qids not in text or old_variants not in text:
+              raise SystemExit('DCL builder source constants are not at the expected pre-reconciliation state')
+          text = text.replace(old_qids, new_qids, 1).replace(old_variants, new_variants, 1)
+          p.write_text(text, encoding='utf-8')
+          PY
+
       - name: Build, execute, and source-first review candidate
         shell: bash
         run: |
@@ -91,6 +109,7 @@ jobs:
             exit 0
           fi
           git add \
+            scripts/content/build_batch_0061_dcl_singleton.py \
             "review/candidates/answers/$CANONICAL_ID.md" \
             "review/content_build/answer_batch_0061/$CANONICAL_ID" \
             "review/evidence/$CANONICAL_ID.json" \
