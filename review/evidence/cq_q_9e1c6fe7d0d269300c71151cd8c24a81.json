@@ -1,0 +1,179 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_9e1c6fe7d0d269300c71151cd8c24a81",
+  "candidate_sha256": "8d16da832eb96af86e90f3425322de076198708f413eea566c83bc7e04b88392",
+  "checked_at": "2026-08-31",
+  "writer": {
+    "writer_id": "content-batch-0062-lru-cache-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0062 frozen repository context for LRU cache",
+      "locator": "review/content_build/answer_batch_0062/cq_q_9e1c6fe7d0d269300c71151cd8c24a81/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0062 occurrence-aware frozen source inventory",
+      "locator": "review/content_build/answer_batch_0062/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent LRU list-map differential validation",
+      "locator": "review/content_build/answer_batch_0062/cq_q_9e1c6fe7d0d269300c71151cd8c24a81/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0062 LRU source-first isolated review",
+      "locator": "review/content_build/answer_batch_0062/cq_q_9e1c6fe7d0d269300c71151cd8c24a81/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The two frozen source occurrences ask for an LRU cache/eviction implementation and do not prescribe Java, miss semantics, invalid capacity handling, concurrency semantics, or concrete internal structures.",
+      "source_ids": [
+        "repository-source",
+        "source-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "lru-contract",
+      "text": "Under the declared positive-capacity single-threaded Java contract, the HashMap plus doubly-linked-list implementation matches an independent list-map LRU model on fixed boundaries and 40,000 random operations.",
+      "source_ids": [
+        "reviewer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "boundaries",
+      "text": "Independent validation covers miss behavior, access refresh, update refresh, capacity-one eviction and non-positive-capacity rejection while the answer keeps concurrency and richer cache policies outside the source contract.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "项目经验版",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "9e1c6fe7d0d269300c71151cd8c24a81",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "question_id": "b383dbafe3f6bd7d86fee7a8283bef19",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_occurrence_count": 2,
+  "validation": {
+    "validator": "independent_source_first_reviewer",
+    "result": "pass",
+    "artifact": "review/content_build/answer_batch_0062/cq_q_9e1c6fe7d0d269300c71151cd8c24a81/reviewer_validation.json",
+    "boundary_tests": [
+      {
+        "case": "get miss before insertion",
+        "expected": "null according to explicit candidate contract",
+        "passed": true
+      },
+      {
+        "case": "get refresh followed by overflow",
+        "expected": "recently read key survives while the older key is evicted",
+        "passed": true
+      },
+      {
+        "case": "put update followed by overflow",
+        "expected": "updated key refreshes to MRU and does not increase size",
+        "passed": true
+      },
+      {
+        "case": "capacity one",
+        "expected": "each distinct new key evicts the previous key",
+        "passed": true
+      },
+      {
+        "case": "zero or negative capacity",
+        "expected": "IllegalArgumentException according to explicit candidate contract",
+        "passed": true
+      },
+      {
+        "case": "40,000 seeded random operations",
+        "expected": "exact agreement with independent list-map LRU model",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0062-lru-cache-20260831-v1",
+    "review_version": "batch-0062.lru-cache.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "Both frozen source variants ask for an LRU cache/eviction implementation and are directly covered; neither prescribes language, API, miss value, capacity-zero behavior, concurrency semantics, or internal data structures.",
+      "The candidate clearly marks its positive-capacity, single-threaded Java API and null-on-miss behavior as answer-level assumptions rather than source facts.",
+      "The core LRU invariant is explicit: every cached key has exactly one map entry and one list node, with the doubly linked list ordered MRU to LRU.",
+      "Reads and updates both refresh recency, while overflow evicts tail.prev and removes the same key from the map, avoiding FIFO behavior and map/list divergence.",
+      "The executable implementation is independently revalidated against a simple HashMap plus explicit recency-list model rather than the writer LinkedHashMap oracle, including fixed boundaries and 40,000 random operations.",
+      "Complexity wording is appropriately scoped to expected O(1) HashMap operations plus O(1) linked-list relinking instead of claiming strict worst-case O(1) for every Java HashMap operation."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
