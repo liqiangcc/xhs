@@ -1,0 +1,155 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_ffe5f2da4a3ce9f56c51bce699ab1b13",
+  "candidate_sha256": "91ae31bbd3857643c12200428aa761e16f46bacdc29755fbe7bb3d8327ea9b67",
+  "checked_at": "2026-08-31",
+  "writer": {
+    "writer_id": "content-batch-0062-two-sum-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0062 frozen repository context for Two Sum",
+      "locator": "review/content_build/answer_batch_0062/cq_q_ffe5f2da4a3ce9f56c51bce699ab1b13/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0062 occurrence-aware frozen source inventory",
+      "locator": "review/content_build/answer_batch_0062/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent Java Two Sum differential validation against deterministic brute-force oracle",
+      "locator": "review/content_build/answer_batch_0062/cq_q_ffe5f2da4a3ce9f56c51bce699ab1b13/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0062 Two Sum source-first isolated review",
+      "locator": "review/content_build/answer_batch_0062/cq_q_ffe5f2da4a3ce9f56c51bce699ab1b13/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The two preserved source occurrences ask only for Two Sum; API, target guarantees, no-solution behavior, return form and multi-answer selection are not source constraints.",
+      "source_ids": [
+        "repository-source",
+        "source-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "hash-prefix-contract",
+      "text": "Under the declared Java contract, lookup-before-insert with first-occurrence preservation returns the deterministic earliest-right valid index pair and never reuses the current element.",
+      "source_ids": [
+        "reviewer-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "overflow-boundary",
+      "text": "Independent review covers duplicate values, multiple/no solutions, null/short inputs, integer-extreme complement arithmetic and input immutability.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "ffe5f2da4a3ce9f56c51bce699ab1b13",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_occurrence_count": 2,
+  "validation": {
+    "validator": "independent_source_first_reviewer",
+    "result": "pass",
+    "artifact": "review/content_build/answer_batch_0062/cq_q_ffe5f2da4a3ce9f56c51bce699ab1b13/reviewer_validation.json",
+    "boundary_tests": [
+      {
+        "case": "null/short/no-solution",
+        "expected": "empty result",
+        "passed": true
+      },
+      {
+        "case": "duplicates and multiple solutions",
+        "expected": "deterministic earliest-right/earliest-complement valid pair",
+        "passed": true
+      },
+      {
+        "case": "integer extremes",
+        "expected": "same pair as long-arithmetic brute-force oracle without false complement",
+        "passed": true
+      },
+      {
+        "case": "35,154 exhaustive plus 35,000 random cases",
+        "expected": "exact index-array equality with independent deterministic oracle and unchanged input",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0062-two-sum-20260831-v1",
+    "review_version": "batch-0062.two-sum.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "Both preserved primary-source occurrences ask the same Two Sum question and remain occurrence-distinct while sharing one normalized Question ID.",
+      "The candidate clearly labels API, deterministic multi-solution selection, no-solution behavior and index-return semantics as its executable contract rather than source facts.",
+      "The prefix-hash invariant is correct: lookup occurs before insertion, so a returned pair always uses two distinct positions; putIfAbsent preserves the earliest historical complement index.",
+      "Independent validation matches an earliest-right brute-force oracle on fixed cases, 35,154 exhaustive short array/target combinations and 35,000 separately seeded random cases.",
+      "Long complement arithmetic plus int-range checking is independently exercised on integer extremes, preventing overflow-induced false hits.",
+      "Expected O(n) hash time/O(n) space, the O(n^2) brute-force tradeoff, duplicate values, null/no-solution boundaries and non-mutating input behavior are explicit without fabricated production experience."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
