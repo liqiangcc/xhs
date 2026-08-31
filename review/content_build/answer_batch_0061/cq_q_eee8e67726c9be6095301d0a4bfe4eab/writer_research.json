@@ -1,0 +1,110 @@
+{
+  "schema_version": "answer_writer_research.v1",
+  "canonical_id": "cq_q_eee8e67726c9be6095301d0a4bfe4eab",
+  "checked_at": "2026-08-31",
+  "review_state": "writer_complete_isolated_review_pending",
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0061 frozen repository context for synchronized and ReentrantLock",
+      "locator": "review/content_build/answer_batch_0061/cq_q_eee8e67726c9be6095301d0a4bfe4eab/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0061 occurrence-aware frozen source inventory",
+      "locator": "review/content_build/answer_batch_0061/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "jls-17",
+      "title": "Java Language Specification SE 25, Chapter 17 Threads and Locks",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se25/html/jls-17.html#jls-17.1",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "jls-14",
+      "title": "Java Language Specification SE 25, synchronized Statement",
+      "locator": "https://docs.oracle.com/javase/specs/jls/se25/html/jls-14.html#jls-14.19",
+      "source_type": "official_specification_or_standard",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "lock-api",
+      "title": "Java SE Lock API memory synchronization contract",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/locks/Lock.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "reentrantlock-api",
+      "title": "Java SE 25 ReentrantLock API",
+      "locator": "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html",
+      "source_type": "official_documentation",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "openjdk-reentrantlock",
+      "title": "OpenJDK main-line ReentrantLock implementation",
+      "locator": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/locks/ReentrantLock.java",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "openjdk-aqs",
+      "title": "OpenJDK main-line AbstractQueuedSynchronizer implementation",
+      "locator": "https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/locks/AbstractQueuedSynchronizer.java",
+      "source_type": "upstream_source_code_or_release_note",
+      "checked_at": "2026-08-31"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The frozen Batch 0061 source contains three primary-source occurrences across two normalized Question IDs: one asks specifically for ReentrantLock implementation principles and two ask for synchronized/ReentrantLock principles and differences, so the candidate must cover both the ReentrantLock mechanism and the comparison rather than answer only the comparison surface.",
+      "source_ids": ["repository-source", "source-inventory"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制"]
+    },
+    {
+      "claim_id": "monitor-semantics",
+      "text": "Java synchronization is defined in terms of object monitors; synchronized statements lock the monitor associated with the evaluated non-null object, synchronized methods acquire the corresponding instance/Class monitor, and monitor unlock happens-before a subsequent lock of the same monitor.",
+      "source_ids": ["jls-17", "jls-14"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制"]
+    },
+    {
+      "claim_id": "lock-memory-semantics",
+      "text": "The Lock contract requires successful lock and unlock operations to provide the same memory synchronization effects as built-in monitor Lock and Unlock actions.",
+      "source_ids": ["lock-api"],
+      "answer_locations": ["核心结论", "1 分钟版", "关键细节", "原理机制", "常见追问"]
+    },
+    {
+      "claim_id": "reentrantlock-capabilities",
+      "text": "ReentrantLock is reentrant and provides explicit lock/unlock plus interruptible acquisition, immediate/timed tryLock, an optional fairness policy, Condition creation, and monitoring methods; fair scheduling is not equivalent to overall thread-scheduling fairness and untimed tryLock may barge.",
+      "source_ids": ["reentrantlock-api"],
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "常见追问"]
+    },
+    {
+      "claim_id": "openjdk-implementation-boundary",
+      "text": "In current OpenJDK main-line source ReentrantLock delegates synchronization mechanics to a Sync subclass of AbstractQueuedSynchronizer and uses synchronizer state to represent hold count; this is explicitly treated as an OpenJDK implementation fact rather than a Java-language requirement.",
+      "source_ids": ["openjdk-reentrantlock", "openjdk-aqs"],
+      "answer_locations": ["核心结论", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "de893ab175496df373c014d3ef73df95",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "原理机制", "常见追问"]
+    },
+    {
+      "question_id": "eee8e67726c9be6095301d0a4bfe4eab",
+      "covered": true,
+      "answer_locations": ["核心结论", "1 分钟版", "3 分钟版", "关键细节", "原理机制", "常见追问", "易错点"]
+    }
+  ],
+  "source_occurrence_count": 3,
+  "promotion_blocker": "isolated_independent_review_not_yet_performed"
+}
