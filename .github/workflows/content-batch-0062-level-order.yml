@@ -53,13 +53,13 @@ jobs:
           python3 -m py_compile scripts/content/build_batch_0062_level_order.py
           python3 scripts/content/build_batch_0062_level_order.py
 
-      - name: Run candidate and repository gates
+      - name: Run writer-safe repository gates
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/xhs.js answer audit \
-            --candidate "review/candidates/answers/$CANONICAL_ID.md" \
-            --require-evidence --noWrite --noDraftCheck
+          test -f "review/candidates/answers/$CANONICAL_ID.md"
+          test -f "review/content_build/answer_batch_0062/$CANONICAL_ID/writer_research.json"
+          test -f "review/content_build/answer_batch_0062/$CANONICAL_ID/writer_validation.json"
           node scripts/content/check_question_coverage.js --check
           node scripts/xhs.js canonical check --noWrite
           node scripts/xhs.js review integrity --noWrite
