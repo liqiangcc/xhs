@@ -1,0 +1,169 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_61d48051e02806afb811f793afd4a269",
+  "candidate_sha256": "e3a47e3c5f4d9776b31d2a2bc1efabc10f53a4502f683ae669cf280b12611281",
+  "checked_at": "2026-08-31",
+  "writer": {
+    "writer_id": "content-batch-0062-level-order-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0062 frozen repository context for binary-tree level-order traversal",
+      "locator": "review/content_build/answer_batch_0062/cq_q_61d48051e02806afb811f793afd4a269/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0062 occurrence-aware frozen source inventory",
+      "locator": "review/content_build/answer_batch_0062/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent Java level-order differential validation against DFS-by-depth oracle",
+      "locator": "review/content_build/answer_batch_0062/cq_q_61d48051e02806afb811f793afd4a269/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0062 level-order source-first isolated review",
+      "locator": "review/content_build/answer_batch_0062/cq_q_61d48051e02806afb811f793afd4a269/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The two frozen source occurrences ask for binary-tree level-order traversal and do not prescribe language, node API, null handling or output shape.",
+      "source_ids": [
+        "repository-source",
+        "source-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "bfs-level-contract",
+      "text": "Under the declared Java contract, the FIFO implementation with a frozen per-round queue size returns left-to-right values grouped by depth, returns empty for null, and preserves duplicate-valued nodes.",
+      "source_ids": [
+        "reviewer-validation"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制"
+      ]
+    },
+    {
+      "claim_id": "boundary-and-variant",
+      "text": "The independently validated implementation covers sparse and wide trees while the answer explicitly distinguishes grouped levels from a flat BFS output and identifies DFS-by-depth as an alternative.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "61d48051e02806afb811f793afd4a269",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    },
+    {
+      "question_id": "94d7a2ec2a34272114ec07d269f5d497",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_occurrence_count": 2,
+  "validation": {
+    "validator": "independent_source_first_reviewer",
+    "result": "pass",
+    "artifact": "review/content_build/answer_batch_0062/cq_q_61d48051e02806afb811f793afd4a269/reviewer_validation.json",
+    "boundary_tests": [
+      {
+        "case": "null tree",
+        "expected": "empty List<List<Integer>>",
+        "passed": true
+      },
+      {
+        "case": "sparse and wide-with-holes trees",
+        "expected": "same left-to-right depth groups as independent DFS-by-depth oracle",
+        "passed": true
+      },
+      {
+        "case": "duplicate-valued distinct nodes",
+        "expected": "all node occurrences preserved in their depth groups",
+        "passed": true
+      },
+      {
+        "case": "40,000 seeded random trees up to 90 nodes",
+        "expected": "exact match with independent DFS-by-depth oracle",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0062-level-order-20260831-v1",
+    "review_version": "batch-0062.level-order.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "Both frozen primary-source variants ask for binary-tree level-order traversal and are directly covered by the candidate.",
+      "The candidate declares its Java node/input/output/null contract instead of presenting unstated source constraints as facts.",
+      "The queue invariant is explicit: freeze the pre-round queue size, consume exactly that level, and append non-null children for the next level.",
+      "The implementation is runnable and independently revalidated against a DFS-by-depth oracle across fixed sparse/duplicate cases and 40,000 seeded random trees.",
+      "Time O(n) and auxiliary queue O(w) bounds are stated with returned output space separated from the queue cost.",
+      "The answer covers the one-dimensional-output variant, DFS-by-depth alternative, empty tree, sparse tree, duplicate-value and recursion-stack boundaries without fabricating production experience."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
