@@ -1,0 +1,50 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_004333ab8f1c0f22014765e4e6f7abb0",
+  "candidate_sha256": "4bbc4b1dafc16e5f9d6a02ace15952ddb17ef7288eb38a6c0508424c9cccf4bb",
+  "reviewed_at": "2026-08-31",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0062-slow-sql-20260831-v1",
+  "review_version": "batch-0062.slow-sql-scenario.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0062/cq_q_004333ab8f1c0f22014765e4e6f7abb0/context.json",
+    "review/content_build/answer_batch_0062/source_inventory.json",
+    "review/content_build/answer_batch_0062/cq_q_004333ab8f1c0f22014765e4e6f7abb0/primary_source_research.json",
+    "review/candidates/answers/cq_q_004333ab8f1c0f22014765e4e6f7abb0.md",
+    "docs/refactor/09_answer_content_standard.md",
+    "config/answer_quality.json"
+  ],
+  "forbidden_inputs_not_used": [
+    "review/content_build/answer_batch_0062/cq_q_004333ab8f1c0f22014765e4e6f7abb0/writer_research.json",
+    "writer self score",
+    "writer rationale",
+    "writer expected decision"
+  ],
+  "scores": {
+    "facts_and_evidence": 24,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 19,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 4
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "The single frozen source asks for a practical slow-SQL discovery/optimization method plus commands/tools; it does not provide a schema, data volume, QPS, latency threshold or personal production incident, and the candidate keeps those absent facts explicit instead of inventing them.",
+    "The MySQL 8.4 primary-source packet supports the discovery layer: slow-query logging exposes configured slow statements, statement digests group structurally similar SQL, and sys.statement_analysis provides normalized aggregated statistics for workload-level prioritization.",
+    "The answer provides a connected diagnostic data flow rather than a tool list: discover and rank statement families, freeze a representative case, inspect EXPLAIN, compare estimates with actual iterator evidence using EXPLAIN ANALYZE when execution is safe, then use optimizer_trace only when the optimizer decision itself needs deeper explanation.",
+    "The EXPLAIN ANALYZE boundary is explicit and materially correct for MySQL 8.4: the candidate states that it actually executes the statement and therefore must not be treated as a universally harmless production plan-inspection command.",
+    "Remediation is root-cause-specific rather than index-only. Indexes, query rewriting, access-pattern reduction, data-model changes, caching or precomputation are presented as alternatives with DML/storage, consistency/freshness and rollout costs; unnecessary-index cost is directly supported by the MySQL index documentation.",
+    "Scenario completeness is adequate for this diagnostic question: assumptions/version boundary, end-to-end diagnostic flow, workload-impact/capacity framing, side-effect/idempotency/consistency boundaries, timeout/retry/degradation stance, observability, representative before/after load validation, canary rollout and rollback are all present without turning disaster recovery into a fake SQL fix.",
+    "The answer closes the causal loop with comparable before/after metrics including tail latency, rows examined/returned, lock behavior and CPU/IO, and it requires continued digest monitoring after rollout rather than declaring success from a prettier EXPLAIN alone.",
+    "The one-minute answer has five topic-specific oral points and the followups test slow-log-versus-digest discovery, EXPLAIN ANALYZE execution risk, optimizer_trace use, index tradeoffs, verification, retries and cache consistency. The three-minute section is longer than literal recital length, so oral quality is scored 4/5 rather than 5/5."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
