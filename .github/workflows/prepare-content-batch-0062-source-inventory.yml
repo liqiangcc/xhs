@@ -1,0 +1,93 @@
+name: Prepare Content Batch 0062 Source Inventory
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/prepare-content-batch-0062-source-inventory.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepare-content-batch-0062-source-inventory
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+
+jobs:
+  reconcile-freeze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Reconcile and freeze source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/content/build_batch_0062_source_inventory.py
+          python3 scripts/content/build_batch_0062_source_inventory.py
+
+      - name: Verify repository source/type gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js validate all --noWrite
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('review/content_build/answer_batch_0062/source_inventory.json')
+          d=json.loads(p.read_text(encoding='utf-8'))
+          assert d['schema_version']=='answer_batch_source_inventory.v1'
+          assert d['batch']=='0062'
+          assert d['scheduled_count']==10
+          assert d['boundary_result']=='pass'
+          assert d['source_occurrence_count'] >= d['source_question_count'] >= d['active_canonical_count']
+          for item in d['canonicals']:
+              assert item['source_occurrence_count']==len(item['source_questions'])
+              assert set(item['question_ids'])=={x['question_id'] for x in item['source_questions']}
+          print('PASS occurrence-aware Batch 0062 source inventory invariants')
+          PY
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Batch 0062 source reconciliation: $base_head -> $remote_head"
+            echo 'Discard frozen inventory; retry against the new state.'
+            exit 0
+          fi
+          git add \
+            scripts/content/build_batch_0062_source_inventory.py \
+            review/content_build/answer_batch_0062 \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0062.md
+          if git diff --cached --quiet; then
+            echo 'No Batch 0062 source inventory changes to commit.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name xhs-source-audit-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: freeze batch 0062 source inventory'
+          git push origin "HEAD:$CONTENT_BRANCH"
