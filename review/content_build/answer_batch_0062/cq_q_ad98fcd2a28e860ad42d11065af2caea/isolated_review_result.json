@@ -1,0 +1,51 @@
+{
+  "schema_version": "isolated_review.v1",
+  "canonical_id": "cq_q_ad98fcd2a28e860ad42d11065af2caea",
+  "candidate_sha256": "567792c30d1c357c19808020e659afdfe5dced70902e06c18da236f713101e2a",
+  "reviewed_at": "2026-08-31",
+  "review_mode": "source_first_isolated",
+  "reviewer_id": "source-first-isolated-reviewer-batch-0062-doubly-linked-lru-20260831-v1",
+  "review_version": "batch-0062.doubly-linked-lru.v1",
+  "decision": "pass",
+  "revision_round": 1,
+  "source_packet": [
+    "review/content_build/answer_batch_0062/cq_q_ad98fcd2a28e860ad42d11065af2caea/context.json",
+    "review/content_build/answer_batch_0062/source_inventory.json",
+    "review/candidates/answers/cq_q_ad98fcd2a28e860ad42d11065af2caea.md",
+    "review/content_build/answer_batch_0062/cq_q_ad98fcd2a28e860ad42d11065af2caea/LRUCache.java",
+    "review/content_build/answer_batch_0062/cq_q_ad98fcd2a28e860ad42d11065af2caea/DoublyLinkedLRUReviewerTest.java",
+    "review/content_build/answer_batch_0062/cq_q_ad98fcd2a28e860ad42d11065af2caea/reviewer_validation.json",
+    "config/answer_quality.json",
+    "docs/refactor/09_answer_content_standard.md"
+  ],
+  "forbidden_inputs_not_used": [
+    "review/content_build/answer_batch_0062/cq_q_ad98fcd2a28e860ad42d11065af2caea/writer_research.json",
+    "review/content_build/answer_batch_0062/cq_q_ad98fcd2a28e860ad42d11065af2caea/writer_validation.json",
+    "writer self score",
+    "writer expected decision",
+    "historical review/remediation records"
+  ],
+  "scores": {
+    "facts_and_evidence": 25,
+    "directness_and_relevance": 20,
+    "type_specific_completeness": 20,
+    "mechanism_and_causality": 15,
+    "boundaries_and_tradeoffs": 10,
+    "followup_quality": 5,
+    "oral_quality": 5
+  },
+  "hard_failures": [],
+  "unsupported_claims": [],
+  "uncovered_source_variants": [],
+  "findings": [
+    "Both frozen primary-source occurrences carry the same question asking specifically for a doubly-linked-list LRU implementation; the duplicate occurrence is preserved rather than collapsed, while the source does not prescribe language, API, miss value, invalid-capacity behavior or concurrency semantics.",
+    "The candidate directly addresses the requested data structure by pairing a HashMap index with a sentinel-based doubly linked list ordered MRU to LRU, instead of answering only with a generic cache abstraction.",
+    "The positive-capacity, single-threaded Java API and null-on-miss behavior are explicitly labeled as answer-level contract choices rather than source facts.",
+    "Read hits and updates both refresh recency, overflow removes tail.prev, and eviction removes the same key from the map, preserving the one-map-entry/one-list-node invariant.",
+    "The executable implementation is independently revalidated against a simple HashMap plus explicit recency-list oracle rather than the writer LinkedHashMap oracle, including capacity-one boundaries and 45,000 random operations.",
+    "Complexity wording correctly distinguishes strict O(1) pointer relinking from expected O(1) HashMap operations, avoiding an unsupported worst-case claim."
+  ],
+  "promotion_blockers": [
+    "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+  ]
+}
