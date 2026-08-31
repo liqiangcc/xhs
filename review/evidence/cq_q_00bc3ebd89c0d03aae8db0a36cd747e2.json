@@ -1,0 +1,155 @@
+{
+  "schema_version": "answer_evidence.v1",
+  "canonical_id": "cq_q_00bc3ebd89c0d03aae8db0a36cd747e2",
+  "candidate_sha256": "600f349e564720b041d5a3a204993598031857e9d3acf8ee22c1495de87a8550",
+  "checked_at": "2026-08-31",
+  "writer": {
+    "writer_id": "content-batch-0062-nil-tree-level-order-writer",
+    "writer_version": "xhs-answer-curator.v1"
+  },
+  "sources": [
+    {
+      "source_id": "repository-source",
+      "title": "Batch 0062 frozen repository context for nil-tree construction and level order",
+      "locator": "review/content_build/answer_batch_0062/cq_q_00bc3ebd89c0d03aae8db0a36cd747e2/context.json",
+      "source_type": "repository_source_record",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "source-inventory",
+      "title": "Batch 0062 occurrence-aware frozen source inventory",
+      "locator": "review/content_build/answer_batch_0062/source_inventory.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "reviewer-validation",
+      "title": "Independent Go nil-tree parser/traversal differential validation",
+      "locator": "review/content_build/answer_batch_0062/cq_q_00bc3ebd89c0d03aae8db0a36cd747e2/reviewer_validation.json",
+      "source_type": "executable_test_or_reproducible_experiment",
+      "checked_at": "2026-08-31"
+    },
+    {
+      "source_id": "isolated-review",
+      "title": "Batch 0062 nil-tree source-first isolated review",
+      "locator": "review/content_build/answer_batch_0062/cq_q_00bc3ebd89c0d03aae8db0a36cd747e2/isolated_review_result.json",
+      "source_type": "repository_structured_source",
+      "checked_at": "2026-08-31"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "source-boundary",
+      "text": "The source requires a nil-containing array to be turned into a binary tree and traversed level-order, but does not preserve a specific sparse-array encoding convention.",
+      "source_ids": [
+        "repository-source",
+        "source-inventory"
+      ],
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节"
+      ]
+    },
+    {
+      "claim_id": "queue-consumption-contract",
+      "text": "Under the declared queue-consumption encoding, nil consumes one child slot without becoming a parent and unreachable non-nil slots are rejected.",
+      "source_ids": [
+        "reviewer-validation"
+      ],
+      "answer_locations": [
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问"
+      ]
+    },
+    {
+      "claim_id": "traversal-boundaries",
+      "text": "Independent validation covers empty/nil roots, sparse/duplicate trees, invalid encodings and exact level grouping against a DFS-based independent model.",
+      "source_ids": [
+        "reviewer-validation",
+        "isolated-review"
+      ],
+      "answer_locations": [
+        "1 分钟版",
+        "关键细节",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_question_coverage": [
+    {
+      "question_id": "00bc3ebd89c0d03aae8db0a36cd747e2",
+      "covered": true,
+      "answer_locations": [
+        "核心结论",
+        "1 分钟版",
+        "3 分钟版",
+        "关键细节",
+        "原理机制",
+        "常见追问",
+        "易错点"
+      ]
+    }
+  ],
+  "source_occurrence_count": 1,
+  "validation": {
+    "validator": "independent_source_first_reviewer",
+    "result": "pass",
+    "artifact": "review/content_build/answer_batch_0062/cq_q_00bc3ebd89c0d03aae8db0a36cd747e2/reviewer_validation.json",
+    "boundary_tests": [
+      {
+        "case": "empty/nil root",
+        "expected": "empty tree and empty levels",
+        "passed": true
+      },
+      {
+        "case": "unreachable non-nil slot",
+        "expected": "explicit error",
+        "passed": true
+      },
+      {
+        "case": "5,461 exhaustive short encodings",
+        "expected": "same validity and level groups as independent model",
+        "passed": true
+      },
+      {
+        "case": "30,000 random encodings",
+        "expected": "same validity and level groups as independent model",
+        "passed": true
+      }
+    ]
+  },
+  "review_state": "independent_source_first_review_passed",
+  "review": {
+    "reviewer_id": "source-first-isolated-reviewer-batch-0062-nil-tree-20260831-v1",
+    "review_version": "batch-0062.nil-tree-level-order.v1",
+    "independent": true,
+    "decision": "pass",
+    "revision_round": 1,
+    "scores": {
+      "facts_and_evidence": 25,
+      "directness_and_relevance": 20,
+      "type_specific_completeness": 20,
+      "mechanism_and_causality": 15,
+      "boundaries_and_tradeoffs": 10,
+      "followup_quality": 5,
+      "oral_quality": 5
+    },
+    "hard_failures": [],
+    "unsupported_claims": [],
+    "uncovered_source_variants": [],
+    "findings": [
+      "The single frozen source asks for constructing a binary tree from an array containing nil nodes and then performing level-order traversal; it does not fix the array encoding convention.",
+      "The candidate explicitly declares a queue-consumption encoding and contrasts it with heap-index 2*i+1/2*i+2 encoding, preventing an unstated sparse-tree assumption from being presented as source fact.",
+      "The construction invariant is consistent: only real parent nodes consume child slots, nil closes one edge without entering the parent queue, and unreachable non-nil trailing slots are rejected.",
+      "The traversal freezes the pre-round queue width and is independently checked against DFS-by-depth levels.",
+      "Independent validation covers 10 fixed boundaries, all 5,461 short token arrays in a bounded alphabet, and 30,000 separately seeded random encodings against an independent parser/model.",
+      "Empty/nil-root, duplicate values, trailing nil tolerance, invalid unreachable values, one-dimensional BFS variant and O(m+n)/O(w) bounds are explicit without fabricated project history."
+    ]
+  },
+  "promotion_blocker": "repository_human_approval_and_real_review_policy_not_yet_satisfied"
+}
