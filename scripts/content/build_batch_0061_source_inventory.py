@@ -53,27 +53,51 @@ def load_context(cid: str) -> dict | None:
     return ctx
 
 
+def occurrence_key(src: dict) -> tuple[str, str, str, str]:
+    """Return a stable primary-source occurrence identity.
+
+    A normalized Question ID may intentionally occur in more than one source note.
+    The inventory must therefore never use question_id alone as the source-row key.
+    """
+    return (
+        str(src.get('question_id') or ''),
+        str(src.get('source_note_id') or ''),
+        str(src.get('source_question_index') if src.get('source_question_index') is not None else ''),
+        str(src.get('original_question') or ''),
+    )
+
+
 def main() -> int:
     out = ROOT / f'review/content_build/answer_batch_{BATCH}'
     out.mkdir(parents=True, exist_ok=True)
 
-    question_rows: dict[str, dict] = {}
+    question_rows_by_id: dict[str, list[dict]] = {}
     with (ROOT / 'data/questions/questions.jsonl').open(encoding='utf-8') as handle:
         for raw in handle:
             raw = raw.strip()
             if raw:
                 row = json.loads(raw)
-                question_rows[row.get('question_id')] = row
+                question_rows_by_id.setdefault(row.get('question_id'), []).append(row)
 
     resolutions: list[dict] = []
     active_targets: dict[str, dict] = {}
     seen_source_qids: set[str] = set()
+    seen_source_occurrences: set[tuple[str, str, str, str]] = set()
 
     for scheduled_cid, scheduled_type in SCHEDULED_TYPES.items():
         scheduled_qid = scheduled_cid.removeprefix('cq_q_')
-        row = question_rows.get(scheduled_qid)
-        if row is None:
+        scheduled_rows = question_rows_by_id.get(scheduled_qid) or []
+        if not scheduled_rows:
             raise SystemExit(f'{scheduled_cid}: scheduled source Question row is missing')
+        # Scheduled rows sharing one normalized Question ID must agree on current
+        # ownership/validity. Wording may differ across primary-source occurrences.
+        current_cids = {row.get('canonical_id') for row in scheduled_rows}
+        validity = {row.get('is_valid_for_library') for row in scheduled_rows}
+        if len(current_cids) != 1:
+            raise SystemExit(f'{scheduled_cid}: source occurrences disagree on Canonical ownership: {sorted(current_cids)}')
+        if len(validity) != 1:
+            raise SystemExit(f'{scheduled_cid}: source occurrences disagree on validity: {sorted(validity, key=str)}')
+        row = scheduled_rows[0]
 
         direct = load_context(scheduled_cid)
         if direct is not None:
@@ -94,6 +118,7 @@ def main() -> int:
                     'secondary_coverage_required': scheduled_cid in SECONDARY_COVERAGE_REQUIRED,
                     'question': {
                         'original_question': row.get('original_question'),
+                        'source_occurrence_count': len(scheduled_rows),
                         'is_valid_for_library': row.get('is_valid_for_library'),
                         'invalid_reason': row.get('invalid_reason'),
                         'exclusion_reason': row.get('exclusion_reason'),
@@ -121,26 +146,47 @@ def main() -> int:
 
         qids = list(ctx.get('canonical', {}).get('question_ids') or [])
         sources = list(ctx.get('source_questions') or [])
-        by_qid = {x.get('question_id'): x for x in sources}
-        if not qids or set(qids) != set(by_qid):
-            raise SystemExit(f'{target_cid}: source-question/context ownership mismatch')
+        source_qids = {x.get('question_id') for x in sources}
+        if not qids or set(qids) != source_qids:
+            raise SystemExit(
+                f'{target_cid}: source-question/context ownership mismatch: '
+                f'canonical={sorted(qids)} source={sorted(source_qids)}'
+            )
         if scheduled_qid not in qids:
             raise SystemExit(f'{scheduled_cid}: resolved Canonical {target_cid} no longer owns scheduled source Question')
 
         source_questions = []
-        for qid in qids:
-            src = by_qid[qid]
+        for src in sources:
+            qid = src.get('question_id')
             wording = src.get('original_question')
             if not isinstance(wording, str) or not wording.strip():
                 raise SystemExit(f'{target_cid}/{qid}: empty source wording')
             if src.get('is_valid_for_library') is not True:
                 raise SystemExit(f'{target_cid}/{qid}: active Canonical owns invalid source')
-            source_questions.append({
+            rows = question_rows_by_id.get(qid) or []
+            matched = any(
+                candidate.get('canonical_id') == target_cid
+                and candidate.get('is_valid_for_library') is True
+                and candidate.get('original_question') == wording
+                and candidate.get('source_note_id') == src.get('source_note_id')
+                and candidate.get('source_question_index') == src.get('source_question_index')
+                for candidate in rows
+            )
+            if not matched:
+                raise SystemExit(
+                    f'{target_cid}/{qid}/{src.get("source_note_id")}/{src.get("source_question_index")}: '
+                    'source occurrence/context mismatch'
+                )
+            occurrence = {
                 'question_id': qid,
                 'original_question': wording,
                 'is_valid_for_library': True,
-            })
+                'source_note_id': src.get('source_note_id'),
+                'source_question_index': src.get('source_question_index'),
+            }
+            source_questions.append(occurrence)
             seen_source_qids.add(qid)
+            seen_source_occurrences.add(occurrence_key(src))
 
         if target_cid not in active_targets:
             cdir = out / target_cid
@@ -154,6 +200,8 @@ def main() -> int:
                 'canonical_title': ctx.get('canonical', {}).get('canonical_title'),
                 'question_ids': qids,
                 'source_questions': source_questions,
+                'source_question_count': len(set(qids)),
+                'source_occurrence_count': len(source_questions),
                 'existing_candidate': (ROOT / f'review/candidates/answers/{target_cid}.md').exists(),
                 'existing_evidence': (ROOT / f'review/evidence/{target_cid}.json').exists(),
                 'personal_fact_verification_required': scheduled_cid in PERSONAL_FACT_REQUIRED,
@@ -182,6 +230,8 @@ def main() -> int:
             'secondary_coverage_required': scheduled_cid in SECONDARY_COVERAGE_REQUIRED,
             'question': {
                 'original_question': row.get('original_question'),
+                'source_occurrence_count': len(scheduled_rows),
+                'source_wording_variants': sorted({x.get('original_question') for x in scheduled_rows if x.get('original_question')}),
                 'is_valid_for_library': row.get('is_valid_for_library'),
             },
         })
@@ -210,6 +260,7 @@ def main() -> int:
         'retired_invalid_or_noise_count': len(retired),
         'remapped_count': len(remapped),
         'source_question_count': len(seen_source_qids),
+        'source_occurrence_count': len(seen_source_occurrences),
         'source_type_resolution_count': len(type_overrides),
         'personal_fact_target_count': personal_targets,
         'secondary_coverage_target_count': secondary_targets,
@@ -221,10 +272,12 @@ def main() -> int:
         'current_type_counts': dict(sorted(current_type_counts.items())),
         'writer_rule': (
             'Writers must use these frozen current repository contexts as the source boundary. '
-            'Stale task Canonical IDs are not resurrected; invalid/noise Questions stay retired; remapped Questions '
-            'follow current Canonical ownership; task entries carrying mixed-source/type risk follow the current '
-            'answer-type audit. Personal-fact-sensitive targets require explicit verification before personal claims, '
-            'and secondary-coverage targets must close the flagged secondary source variants before review.'
+            'A normalized Question ID may have multiple primary-source occurrences; source_questions and '
+            'source_occurrence_count preserve every occurrence and writers/reviewers must not collapse them by '
+            'question_id alone. Stale task Canonical IDs are not resurrected; invalid/noise Questions stay retired; '
+            'remapped Questions follow current Canonical ownership; task entries carrying mixed-source/type risk follow '
+            'the current answer-type audit. Personal-fact-sensitive targets require explicit verification before personal '
+            'claims, and secondary-coverage targets must close the flagged secondary source variants before review.'
         ),
         'scheduled_resolutions': resolutions,
         'canonicals': list(active_targets.values()),
@@ -240,8 +293,9 @@ def main() -> int:
         f'`review/content_build/answer_batch_{BATCH}/source_inventory.json`: {len(active_targets)} active Canonicals, '
         f'{len(remapped)} stale assignments remapped to current ownership, {len(retired)} invalid/noise assignments kept retired, '
         f'{len(type_overrides)} mixed-source/type task entries resolved by the current answer-type audit, '
+        f'{len(seen_source_qids)} normalized source Questions across {len(seen_source_occurrences)} primary-source occurrences, '
         f'{personal_targets} personal-fact-sensitive targets, and {secondary_targets} secondary-coverage targets. '
-        'Candidate writing must use only the frozen current source packets and preserve these risk gates.'
+        'Candidate writing must use only the frozen current source packets, preserve every source occurrence, and preserve these risk gates.'
     )
     text = text.replace('- Status: `pending`', '- Status: `in_progress`', 1)
     if '## Source boundary' not in text:
@@ -254,7 +308,7 @@ def main() -> int:
         f'PASS batch={BATCH} scheduled={len(SCHEDULED_TYPES)} active={len(active_targets)} '
         f'remapped={len(remapped)} retired={len(retired)} type_resolutions={len(type_overrides)} '
         f'personal={personal_targets} secondary={secondary_targets} source_questions={len(seen_source_qids)} '
-        f'current_types={dict(sorted(current_type_counts.items()))}'
+        f'source_occurrences={len(seen_source_occurrences)} current_types={dict(sorted(current_type_counts.items()))}'
     )
     for resolution in resolutions:
         print(
@@ -263,6 +317,7 @@ def main() -> int:
             f"{resolution['resolution']}\t{resolution.get('current_canonical_id') or '-'}\t"
             f"personal={resolution.get('personal_fact_verification_required', False)}\t"
             f"secondary={resolution.get('secondary_coverage_required', False)}\t"
+            f"occurrences={resolution['question'].get('source_occurrence_count', 0)}\t"
             f"{resolution['question'].get('original_question') or ''}"
         )
     for item in active_targets.values():
@@ -270,7 +325,8 @@ def main() -> int:
         print(
             f"ACTIVE\t{item['canonical_id']}\t{item['answer_type']}\t"
             f"personal={item['personal_fact_verification_required']}\t"
-            f"secondary={item['secondary_coverage_required']}\t{source_text}"
+            f"secondary={item['secondary_coverage_required']}\t"
+            f"questions={item['source_question_count']}\toccurrences={item['source_occurrence_count']}\t{source_text}"
         )
     return 0
 
