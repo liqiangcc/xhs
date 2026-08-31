@@ -1,0 +1,167 @@
+{
+  "schema_version": "answer_primary_source_research.v1",
+  "canonical_id": "cq_q_004333ab8f1c0f22014765e4e6f7abb0",
+  "checked_at": "2026-08-31",
+  "source_boundary": {
+    "context_locator": "review/content_build/answer_batch_0062/cq_q_004333ab8f1c0f22014765e4e6f7abb0/context.json",
+    "answer_type": "scenario",
+    "question_ids": [
+      "004333ab8f1c0f22014765e4e6f7abb0"
+    ],
+    "preserved_question_intent": "Explain how to discover and optimize slow SQL, including practical diagnostic commands and tools, without inventing a production schema, workload, latency threshold, or personal incident."
+  },
+  "sources": [
+    {
+      "source_id": "mysql-84-slow-query-log",
+      "title": "MySQL 8.4 Reference Manual: The Slow Query Log",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/slow-query-log.html",
+      "checked_at": "2026-08-31",
+      "anchors": [
+        "slow_query_log controls whether the slow query log is enabled",
+        "long_query_time participates in deciding whether a statement is logged",
+        "slow log entries expose execution context such as Query_time, Lock_time, Rows_sent and Rows_examined",
+        "log_queries_not_using_indexes can additionally log statements that do not use indexes for row lookups, subject to its own controls"
+      ]
+    },
+    {
+      "source_id": "mysql-84-statement-digests",
+      "title": "MySQL 8.4 Reference Manual: Performance Schema Statement Digests and Sampling",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/performance-schema-statement-digests.html",
+      "checked_at": "2026-08-31",
+      "anchors": [
+        "statement normalization groups structurally similar SQL by digest while replacing literal values with parameter markers",
+        "events_statements_summary_by_digest aggregates statements per SCHEMA_NAME and DIGEST",
+        "digest summaries expose execution frequency plus wait, lock, row and index-use characteristics",
+        "QUERY_SAMPLE_TEXT stores a representative sampled statement for a digest"
+      ]
+    },
+    {
+      "source_id": "mysql-84-sys-statement-analysis",
+      "title": "MySQL 8.4 Reference Manual: statement_analysis and x$statement_analysis Views",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/sys-statement-analysis.html",
+      "checked_at": "2026-08-31",
+      "anchors": [
+        "statement_analysis lists normalized statements with aggregated statistics",
+        "rows are sorted by descending total latency by default",
+        "the view exposes fields such as full_scan, exec_count, latency, rows examined, temporary-table and sorting statistics"
+      ]
+    },
+    {
+      "source_id": "mysql-84-explain",
+      "title": "MySQL 8.4 Reference Manual: EXPLAIN Statement",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/explain.html",
+      "checked_at": "2026-08-31",
+      "anchors": [
+        "EXPLAIN shows optimizer plan information for supported statements",
+        "EXPLAIN ANALYZE actually runs the statement and reports iterator estimates alongside actual first-row/total timing, rows and loop counts",
+        "EXPLAIN ANALYZE always uses TREE output and therefore must be treated as an executing diagnostic, not a harmless plan-only command"
+      ]
+    },
+    {
+      "source_id": "mysql-84-optimizer-trace",
+      "title": "MySQL 8.4 Reference Manual: Optimizer Trace Typical Usage",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/optimizer-tracing-typical-usage.html",
+      "checked_at": "2026-08-31",
+      "anchors": [
+        "SET optimizer_trace=\"enabled=ON\" enables tracing for the current session",
+        "after executing a traceable statement, INFORMATION_SCHEMA.OPTIMIZER_TRACE exposes the trace",
+        "optimizer tracing is session-local and should be disabled after the diagnostic is complete"
+      ]
+    },
+    {
+      "source_id": "mysql-84-index-optimization",
+      "title": "MySQL 8.4 Reference Manual: Optimization and Indexes",
+      "source_type": "official_documentation",
+      "locator": "https://dev.mysql.com/doc/refman/8.4/en/optimization-indexes.html",
+      "checked_at": "2026-08-31",
+      "anchors": [
+        "indexes can accelerate row lookup for query predicates",
+        "unnecessary indexes consume space and add work to inserts, updates and deletes",
+        "index design is a balance rather than an instruction to add an index for every queried column"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "discover-by-impact-not-one-off-anecdote",
+      "text": "Slow-SQL diagnosis should start from production-observable statement populations: slow-query logging and Performance Schema/sys digest aggregation can reveal frequently executed or high-latency statement families, rows examined, lock time, scans and representative SQL instead of optimizing whichever query happened to be noticed first.",
+      "source_ids": [
+        "mysql-84-slow-query-log",
+        "mysql-84-statement-digests",
+        "mysql-84-sys-statement-analysis"
+      ],
+      "source_anchors": [
+        "Query_time/Lock_time/Rows_examined",
+        "events_statements_summary_by_digest aggregation",
+        "statement_analysis aggregated statistics"
+      ]
+    },
+    {
+      "claim_id": "plan-estimate-actual-diagnosis",
+      "text": "After selecting a representative statement and realistic parameters/data distribution, EXPLAIN is used to inspect the chosen plan; where it is safe to execute the statement, EXPLAIN ANALYZE can compare estimates with actual iterator timings, returned rows and loop counts, making cardinality or row-amplification mismatches visible.",
+      "source_ids": [
+        "mysql-84-explain"
+      ],
+      "source_anchors": [
+        "EXPLAIN plan information",
+        "EXPLAIN ANALYZE actual timing, rows and loops"
+      ]
+    },
+    {
+      "claim_id": "optimizer-trace-is-deep-reasoning-tool",
+      "text": "When the visible plan is not enough to explain why the optimizer selected or rejected an access path, MySQL 8.4 optimizer trace can be enabled for the current session, the target statement executed, and INFORMATION_SCHEMA.OPTIMIZER_TRACE inspected before tracing is disabled.",
+      "source_ids": [
+        "mysql-84-optimizer-trace"
+      ],
+      "source_anchors": [
+        "enable optimizer_trace",
+        "execute traceable statement",
+        "inspect INFORMATION_SCHEMA.OPTIMIZER_TRACE"
+      ]
+    },
+    {
+      "claim_id": "index-is-one-remediation-with-write-cost",
+      "text": "An index can reduce lookup work when it matches the query access pattern, but adding indexes blindly is not a complete optimization strategy because unnecessary indexes consume space and increase insert/update/delete maintenance work. Query rewrite, access-pattern reduction, data-model changes or caching/materialization are alternatives with different consistency and operational costs.",
+      "source_ids": [
+        "mysql-84-index-optimization"
+      ],
+      "source_anchors": [
+        "indexes improve lookup",
+        "unnecessary indexes waste space and add DML cost"
+      ]
+    },
+    {
+      "claim_id": "verify-before-after-and-bound-executing-tools",
+      "text": "Optimization is not complete when EXPLAIN merely looks different. The change must be verified under representative parameters/data/concurrency with before/after latency, rows examined/returned, lock behavior, CPU/IO and regression monitoring; executing diagnostics such as EXPLAIN ANALYZE must be bounded because they run the statement.",
+      "source_ids": [
+        "mysql-84-explain",
+        "mysql-84-sys-statement-analysis",
+        "mysql-84-statement-digests"
+      ],
+      "source_anchors": [
+        "EXPLAIN ANALYZE runs the statement",
+        "aggregated latency and rows-examined statistics",
+        "digest-level workload profile"
+      ]
+    }
+  ],
+  "writer_constraints": [
+    "Keep the source as a MySQL slow-SQL diagnostic scenario; do not invent table names, index definitions, QPS, data size, SLO, company topology or a personal production incident.",
+    "Use a closed diagnostic loop: discover -> rank impact -> reproduce representative case -> explain/measure -> classify root cause -> choose the smallest remediation -> verify/canary/rollback -> monitor regression.",
+    "Make MySQL 8.4 the explicit version boundary for named commands and system views. Do not present version-sensitive defaults as universal production configuration.",
+    "Treat slow query log, Performance Schema digest summaries and sys.statement_analysis as complementary discovery tools, not mutually exclusive replacements.",
+    "State explicitly that EXPLAIN ANALYZE executes the statement; use it only when execution side effects and cost are acceptable.",
+    "Use optimizer_trace only as a deeper reason-analysis tool after ordinary plan evidence is insufficient, and keep its session-local lifecycle explicit.",
+    "Do not reduce optimization to adding indexes. Cover query shape, cardinality/selectivity, joins, sorting/temp work, rows examined versus returned, lock waits, large result sets/pagination and alternative architecture choices.",
+    "Every index recommendation needs its DML/storage/rollout cost and a verification plan.",
+    "Scenario completeness must include assumptions, diagnostic data flow, capacity/bottleneck framing, consistency/side-effect boundary, timeout/retry/degradation stance, observability/load test/rollout, rollback and at least one alternative with cost.",
+    "Project experience section must remain a project-mapping checklist because no real user project facts were supplied."
+  ],
+  "research_state": "primary_sources_frozen_candidate_written",
+  "next_gate": "validate the source-bounded slow-SQL scenario candidate, then perform isolated source-first review and evidence/promotion gates"
+}
