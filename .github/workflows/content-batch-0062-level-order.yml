@@ -1,0 +1,100 @@
+name: Content Batch 0062 Level Order Writer
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/content-batch-0062-level-order.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: content-batch-0062-level-order-writer
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_61d48051e02806afb811f793afd4a269
+
+jobs:
+  build-validate-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Build source-bounded writer candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/content/build_batch_0062_level_order.py
+          python3 scripts/content/build_batch_0062_level_order.py
+
+      - name: Run candidate and repository gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit \
+            --candidate "review/candidates/answers/$CANONICAL_ID.md" \
+            --require-evidence --noWrite --noDraftCheck
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Batch 0062 level-order writer: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; retry against current state.'
+            exit 0
+          fi
+          git add \
+            "review/candidates/answers/$CANONICAL_ID.md" \
+            "review/content_build/answer_batch_0062/$CANONICAL_ID" \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0062.md
+          if git diff --cached --quiet; then
+            echo 'No Batch 0062 level-order writer changes to commit.'
+            exit 0
+          fi
+          git diff --cached --check
+          git config user.name xhs-content-builder
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'content: build batch 0062 level-order candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
