@@ -1,0 +1,114 @@
+name: Review Content Batch 0062 Slow SQL Scenario
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/review-content-batch-0062-slow-sql.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: review-content-batch-0062-slow-sql
+  cancel-in-progress: true
+
+env:
+  CONTENT_BRANCH: content/quality-completion
+  CANONICAL_ID: cq_q_004333ab8f1c0f22014765e4e6f7abb0
+
+jobs:
+  review-validate-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CONTENT_BRANCH }}
+          fetch-depth: 1
+      - id: base
+        shell: bash
+        run: echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run source-first isolated review
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/content/review_batch_0062_slow_sql.py
+          python3 scripts/content/review_batch_0062_slow_sql.py
+      - name: Recheck isolated review and evidence boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto=require('crypto');
+          const fs=require('fs');
+          const cid=process.env.CANONICAL_ID;
+          const qid='004333ab8f1c0f22014765e4e6f7abb0';
+          const base=`review/content_build/answer_batch_0062/${cid}`;
+          const ctx=JSON.parse(fs.readFileSync(`${base}/context.json`,'utf8'));
+          if(!ctx.ok||ctx.answer_type!=='scenario'||ctx.canonical?.canonical_id!==cid||JSON.stringify(ctx.canonical?.question_ids||[])!==JSON.stringify([qid])) throw new Error('context/type/ownership drift');
+          const primary=JSON.parse(fs.readFileSync(`${base}/primary_source_research.json`,'utf8'));
+          for(const sourceId of ['mysql-84-slow-query-log','mysql-84-statement-digests','mysql-84-sys-statement-analysis','mysql-84-explain','mysql-84-optimizer-trace','mysql-84-index-optimization']) if(!(primary.sources||[]).some(x=>x.source_id===sourceId)) throw new Error(`primary source missing: ${sourceId}`);
+          const mdPath=`review/candidates/answers/${cid}.md`;
+          const md=fs.readFileSync(mdPath,'utf8');
+          const digest=crypto.createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex');
+          const review=JSON.parse(fs.readFileSync(`${base}/isolated_review_result.json`,'utf8'));
+          if(review.review_mode!=='source_first_isolated'||review.decision!=='pass'||review.candidate_sha256!==digest||review.revision_round!==1||review.hard_failures?.length||review.unsupported_claims?.length||review.uncovered_source_variants?.length) throw new Error('isolated review drift');
+          if(!(review.forbidden_inputs_not_used||[]).some(x=>x.includes('writer_research.json'))) throw new Error('review isolation record missing');
+          const score=Object.values(review.scores||{}).reduce((a,b)=>a+b,0);
+          if(score<90) throw new Error(`isolated review score below gate: ${score}`);
+          const evidence=JSON.parse(fs.readFileSync(`review/evidence/${cid}.json`,'utf8'));
+          if(evidence.review_state!=='independent_source_first_review_passed'||evidence.candidate_sha256!==digest||evidence.review?.decision!=='pass'||evidence.review?.independent!==true||evidence.review?.revision_round!==1) throw new Error('evidence/review drift');
+          if(JSON.stringify((evidence.source_question_coverage||[]).map(x=>x.question_id))!==JSON.stringify([qid])) throw new Error('evidence source coverage drift');
+          for(const marker of ['MySQL 8.4','EXPLAIN ANALYZE','会真正执行语句','optimizer_trace','P95/P99','回滚','一致性']) if(!md.includes(marker)) throw new Error(`candidate boundary marker missing: ${marker}`);
+          if(/我负责过|我在线上|实际线上我们|我们项目中|我把 SQL 从/.test(md)) throw new Error('fabricated experience risk');
+          console.log(`PASS REVIEW_SHA256=${digest} SCORE=${score}`);
+          NODE
+      - name: Strict candidate audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/xhs.js answer audit --candidate "review/candidates/answers/$CANONICAL_ID.md" --require-evidence --noWrite --noDraftCheck
+      - name: Repository closure gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/content/check_question_coverage.js --check
+          node scripts/xhs.js canonical check --noWrite
+          node scripts/xhs.js review integrity --noWrite
+          node scripts/xhs.js answer type-audit --check --noWrite
+          node scripts/xhs.js answer validate --strict --noWrite
+          node scripts/xhs.js validate all --noWrite
+          npm test
+          npm run ci:check
+          npm run ci:answer:semantic
+          npm run ci:answer:evidence
+          npm run ci:answer:code
+          npm run ci:answer:coverage
+      - name: Commit only if content branch stayed stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin "$CONTENT_BRANCH"
+          remote_head="$(git rev-parse "origin/$CONTENT_BRANCH")"
+          base_head='${{ steps.base.outputs.head }}'
+          if [ "$remote_head" != "$base_head" ]; then
+            echo "Content branch advanced during Batch 0062 slow-SQL review: $base_head -> $remote_head"
+            echo 'Discard verified local mutation; retry against current state.'
+            exit 0
+          fi
+          git add \
+            scripts/content/review_batch_0062_slow_sql.py \
+            "review/content_build/answer_batch_0062/$CANONICAL_ID/isolated_review_result.json" \
+            "review/evidence/$CANONICAL_ID.json" \
+            tasks/answer-batches/TASK-20260711-0313-answer-batch-0062.md
+          if git diff --cached --quiet; then echo 'No Batch 0062 slow-SQL review changes to commit.'; exit 0; fi
+          git diff --cached --check
+          git config user.name xhs-review-bot
+          git config user.email 43640935+liqiangcc@users.noreply.github.com
+          git commit -m 'review: pass batch 0062 slow-sql scenario candidate'
+          git push origin "HEAD:$CONTENT_BRANCH"
